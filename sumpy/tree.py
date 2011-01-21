@@ -79,16 +79,16 @@ def test_tree():
             multip[8] += source[j,3] * dy * dz / 2
             multip[9] += source[j,3] * dz * dx / 2
 
-        target_dev = cl_array.to_device(ctx, queue, target)
-        source_dev = cl_array.to_device(ctx, queue, source)
+        target_dev = cl_array.to_device(queue, target)
+        source_dev = cl_array.to_device(queue, source)
 
         prg = cl.Program(ctx,DIRECT_KERNEL).build()
 
         sum_direct = prg.sum_direct
         sum_direct.set_scalar_arg_dtypes([None, None, None, np.uintp, np.uintp])
 
-        potential_dev = cl_array.empty(ctx, len(target), np.float32, queue=queue)
-        grp_size = 128
+        potential_dev = cl_array.empty(queue, len(target), np.float32)
+        grp_size = 1
         sum_direct(queue, ((len(target) + grp_size) // grp_size * grp_size,), (grp_size,),
                    potential_dev.data, target_dev.data, source_dev.data, len(source), len(target))
 
@@ -126,7 +126,7 @@ def test_tree():
         logging.debug('Potential Residual: %g' % residual)
         res.append(residual)
     res = np.array(res)
-    log.debug(res)
+    logging.debug(res)
     dist = np.sqrt(3*targetOffsets**2)
     intercept, slope = np.polyfit(np.log(dist), np.log(res), 1)
     if abs(slope + order+1) > 1.0e-1:
