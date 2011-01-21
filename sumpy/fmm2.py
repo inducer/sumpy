@@ -4,6 +4,7 @@ import pyopencl as cl
 import pyopencl.array as cl_array
 import numpy as np
 import numpy.linalg as la
+import sympy as sp
 
 DIRECT_KERNEL = """
     __kernel void sum_direct(
@@ -28,6 +29,30 @@ DIRECT_KERNEL = """
     """
 
 
+
+
+def generate_derivatives(dimensions, max_order):
+    from sumpy.fmm import make_sym_vector
+    x = make_sym_vector("x", dimensions)
+    func = 1/sp.sqrt((x.T*x)[0,0])
+
+    yield func
+
+    derivative_cache = {
+            dimensions*(0,): func
+            }
+    for order in range(max_order+1):
+        from pytools import (
+                generate_nonnegative_integer_tuples_summing_to_at_most
+                as gnitstam)
+        for idx in gnitstam(order, dimensions):
+
+
+
+
+
+
+
 def test_direct():
     target = -np.random.rand(50, 4).astype(np.float32)
     source = np.random.rand(50, 4).astype(np.float32)
@@ -48,6 +73,7 @@ def test_direct():
         multip[7] += source[j,3] * dx * dy / 2
         multip[8] += source[j,3] * dy * dz / 2
         multip[9] += source[j,3] * dz * dx / 2
+        # this one is \vec(x)^n / n!
 
     print "CTX"
     dev = cl.get_platforms()[0].get_devices()[1]
@@ -91,6 +117,8 @@ def test_direct():
         p += multip[7] * (3 * X * Y / R5)
         p += multip[8] * (3 * Y * Z / R5)
         p += multip[9] * (3 * Z * X / R5)
+        # this one is grad^n 1/R
+        # ok -- i'll go play with sympy on screen 1
         potential[i] = p
     for itarg in xrange(len(target)):
         potential_host[itarg] = np.sum(

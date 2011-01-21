@@ -51,7 +51,7 @@ def test_tree():
     np.random.seed(1)
     # Convergence study
     for target_offset in targetOffsets:
-        # (X,y,z,phi) for each target
+        # (x,y,z,phi) for each target
         xt = yt = zt = 0.5 - target_offset
         target = np.random.rand(50, 4).astype(np.float32)
         target[:,0] += xt - 0.5
