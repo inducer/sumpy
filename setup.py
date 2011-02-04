@@ -34,10 +34,10 @@ setup(name="exafmm",
         'Topic :: Utilities',
         ],
 
-      author="Rio Yokota, Andreas Kloeckner",
+      author="Rio Yokota, Andreas Kloeckner, Matthew Knepley",
       author_email="yokota@bu.edu",
       license = "MIT",
-      packages=["sumpy"],
+      packages=["exafmm"],
 
       # 2to3 invocation
       cmdclass={'build_py': build_py})
