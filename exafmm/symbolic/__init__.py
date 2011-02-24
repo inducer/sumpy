@@ -47,7 +47,11 @@ class IdentityMapper(SympyMapper):
     map_Function = map_Add
 
     def map_Rational(self, expr):
-        return type(expr)(self.rec(expr.p), self.rec(expr.q))
+
+        # Can't use type(expr) here because sympy has a class 'Half'
+        # that embodies just the rational number 1/2.
+
+        return sp.Rational(self.rec(expr.p), self.rec(expr.q))
 
     def map_Integer(self, expr):
         return expr
@@ -59,14 +63,52 @@ class IdentityMapper(SympyMapper):
 
 
 
-def make_coulomb_kernel(dimensions=3):
+def vector_subs(expr, old, new):
+    result = expr
+    for old_i, new_i in zip(old, new):
+        result = result.subs(old_i, new_i)
+
+    return result
+
+
+
+
+
+# Kernel symbolic variable name conventions:
+#
+# si: sources
+# ti: targets
+# ci: center of the expansion (xc in Rio's notes)
+#
+# di = ti - si
+# ai = ci - si    (x-X in Rio's notes)
+# bi = ti - ci    (X in Rio's notes)
+#
+# a takes you from source to center of expansion
+# b takes you from center of expansion to target
+# 
+# (i is an axis number, 0 for x, 1 for y, etc.)
+
+
+
+
+def make_coulomb_kernel_in(var_name, dimensions):
     from exafmm.symbolic import make_sym_vector
-    tgt = make_sym_vector("t", dimensions)
-    src = make_sym_vector("s", dimensions)
+    dist = make_sym_vector(var_name, dimensions)
 
-    return 1/sp.sqrt(((tgt-src).T*(tgt-src))[0,0])
+    if dimensions == 2:
+        return sp.log(sp.sqrt((dist.T*dist)[0,0]))
+    else:
+        return 1/sp.sqrt((dist.T*dist)[0,0])
 
 
 
 
+def make_coulomb_kernel_ts(dimensions):
+    old = make_sym_vector("d", dimensions)
+    new = (make_sym_vector("t", dimensions)
+            - make_sym_vector("s", dimensions))
+
+    return vector_subs(make_coulomb_kernel_in("d", dimensions),
+            old, new)
 

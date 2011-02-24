@@ -80,6 +80,7 @@ def gen_direct_sum_for_kernel(dimensions, expr, exclude_self=True):
 
 
 
+
 def test_direct():
     # FIXME handle source strengths
 
@@ -97,9 +98,9 @@ def test_direct():
 
 
 
-    from exafmm.symbolic import make_coulomb_kernel
+    from exafmm.symbolic import make_coulomb_kernel_ts
     kernel_text = gen_direct_sum_for_kernel(3,
-                    make_coulomb_kernel()
+                    make_coulomb_kernel_ts(3)
                     #.diff(sp.Symbol("t0"))
                     )
     print kernel_text
