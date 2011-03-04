@@ -6,7 +6,6 @@ import sympy as sp
 
 
 
-
 # {{{ multi_index helpers
 
 def mi_factorial(mi):
@@ -25,6 +24,40 @@ def mi_power(vector, mi):
 
 
 # }}}
+
+
+
+
+M2P_KERNEL = """
+
+__kernel void m2p(
+% for i in range(dimensions)
+  ${geometry_type} *c${i}_g,
+% endfor
+% for i in range(dimensions)
+  ${geometry_type} *t${i}_g,
+% endfor
+  ${offset_t} *mpole_offset_starts_g,
+  ${offset_t} *mpole_offset_g,
+  ${coeff_type} *mpole_coeff_g)
+{
+  // Each work group is responsible for accumulating one
+  // target cell.
+
+  // 
+  iblok = (N-1)/THREADS;
+  int index = offset + iblok * THREADS + threadIdx.x;
+  __syncthreads();
+  for( int i=0; i<13; i++ )
+    multipShrd[threadIdx.x*13+i] = multipGlob[index*13+i];
+  __syncthreads();
+  for( int i=0; i<N - (iblok * THREADS); i++ ) {
+    multipole(i,target,multipShrd);
+  }
+  targetGlob[blockIdx.x * THREADS + threadIdx.x] = target;
+}
+"""
+
 
 
 
@@ -92,13 +125,13 @@ def test_make_p2m():
     texp = TaylorExpansion(
             make_coulomb_kernel_in("b", dimensions),
             order=2, dimensions=dimensions)
-    #for mi, bi in zip(texp.multi_indices, texp.basis):
-        #print mi
-        #sp.pprint(bi)
+    for mi, bi in zip(texp.multi_indices, texp.basis):
+        print mi
+        sp.pprint(bi)
 
-    #for mi, ci in zip(texp.multi_indices, texp.coefficients):
-        #print mi
-        #sp.pprint(ci)
+    for mi, ci in zip(texp.multi_indices, texp.coefficients):
+        print mi
+        sp.pprint(ci)
 
     def gen_c_source_subst_map(dimensions):
         result = {}
