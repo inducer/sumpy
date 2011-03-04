@@ -18,16 +18,17 @@ class SympyMapper(object):
 
     def rec(self, expr, *args, **kwargs):
         mro = list(type(expr).__mro__)
+        dispatch_class = kwargs.pop("dispatch_class", type(self))
 
         while mro:
             method_name = "map_"+mro.pop(0).__name__
 
             try:
-                method = getattr(self, method_name)
+                method = getattr(dispatch_class, method_name)
             except AttributeError:
                 pass
             else:
-                return method(expr, *args, **kwargs)
+                return method(self, expr, *args, **kwargs)
 
         raise NotImplementedError(
                 "%s does not know how to map type '%s'"
@@ -73,21 +74,61 @@ def vector_subs(expr, old, new):
 
 
 
+class CSEMapper(IdentityMapper):
+    def __init__(self, to_eliminate, sym_gen):
+        self.to_eliminate = to_eliminate
+        self.sym_gen = sym_gen
 
-# Kernel symbolic variable name conventions:
-#
-# si: sources
-# ti: targets
-# ci: center of the expansion (xc in Rio's notes)
-#
-# di = ti - si
-# ai = ci - si    (x-X in Rio's notes)
-# bi = ti - ci    (X in Rio's notes)
-#
-# a takes you from source to center of expansion
-# b takes you from center of expansion to target
-# 
-# (i is an axis number, 0 for x, 1 for y, etc.)
+        self.cse_assignments = []
+        self.subexpr_symbols = {}
+
+    def get_cse(self, expr):
+        try:
+            return self.subexpr_symbols[expr]
+        except KeyError:
+            new_expr = self.rec(expr, dispatch_class=IdentityMapper)
+            new_sym = self.sym_gen.next()
+            self.cse_assignments.append(
+                (new_sym.name, expr))
+            self.subexpr_symbols[expr] = new_sym
+            return new_sym
+
+    def map_Add(self, expr):
+        if expr in self.to_eliminate:
+            return self.get_cse(expr)
+        else:
+            return IdentityMapper.map_Add(self, expr)
+
+    map_Mul = map_Add
+    map_Pow = map_Add
+    map_Function = map_Add
+
+    def map_Rational(self, expr):
+        if expr in self.to_eliminate:
+            return self.get_cse(expr)
+        else:
+            return IdentityMapper.map_Rational(self, expr)
+
+
+
+
+def eliminate_common_subexpressions(exprs, sym_gen):
+    from sympy.utilities.iterables import postorder_traversal
+
+    subexpr_count = {}
+    for expr in exprs:
+        for subexpr in postorder_traversal(expr):
+            if not subexpr.is_Symbol:
+                subexpr_count[subexpr] = \
+                    subexpr_count.get(subexpr, 0) + 1
+
+    cse_mapper = CSEMapper(
+        set([subexpr 
+        for subexpr, count in subexpr_count.iteritems()
+        if count > 1]),
+        sym_gen)
+    result = [cse_mapper(expr) for expr in exprs]
+    return cse_mapper.cse_assignments, result
 
 
 

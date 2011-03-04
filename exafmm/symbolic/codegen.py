@@ -63,12 +63,11 @@ class SquareRewriter(IdentityMapper):
         self.assignments.append((var_name, self.rec(expr)))
 
     def map_Pow(self, expr):
-        if expr.exp == 2:
+        if expr.exp == 2 and not isinstance(expr.base, sp.Symbol):
             new_base = self.get_var_for(expr.base)
             return new_base**2
         else:
             return IdentityMapper.map_Pow(self, expr)
-
 
 
 
@@ -78,22 +77,21 @@ def generate_cl_statements_from_assignments(assignments, subst_map={}):
     :param assignments: a list of tuples *(var_name, expr)*
     """
 
-    # {{{ perform CSE
-
-    from sympy.utilities.iterables import  numbered_symbols
+    from sympy.utilities.iterables import numbered_symbols
     sym_gen = numbered_symbols("cse")
 
-    new_assignments = []
-    for var_name, expr in assignments:
-        from sympy.simplify.cse_main import cse
-        replacements, reduced = cse([expr], sym_gen)
+    # {{{ perform CSE
 
-        new_assignments.extend(
-                (sym.name, expr) for sym, expr in replacements)
+    from exafmm.symbolic import eliminate_common_subexpressions
 
-        new_assignments.append((var_name, reduced[0]))
+    cses, exprs = eliminate_common_subexpressions(
+            [expr for var_name, expr in assignments],
+            sym_gen)
 
-    assignments = new_assignments
+    assignments = cses + [(name, new_expr)
+        for (name, old_expr), new_expr in
+        zip(assignments, exprs)]
+
     # }}}
 
     # {{{ rewrite squares
