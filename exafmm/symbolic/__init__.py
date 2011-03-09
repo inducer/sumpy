@@ -74,6 +74,20 @@ def vector_subs(expr, old, new):
 
 
 
+COMMUTATIVE_CLASSES = (sp.Add, sp.Mul)
+
+
+
+
+def get_normalized_cse_key(node):
+    if isinstance(node, COMMUTATIVE_CLASSES):
+        return type(node), frozenset(node.args)
+    else:
+        return node
+
+
+
+
 class CSEMapper(IdentityMapper):
     def __init__(self, to_eliminate, sym_gen):
         self.to_eliminate = to_eliminate
@@ -82,20 +96,25 @@ class CSEMapper(IdentityMapper):
         self.cse_assignments = []
         self.subexpr_symbols = {}
 
-    def get_cse(self, expr):
+    def get_cse(self, expr, key=None):
+        if key is None:
+            key = get_normalized_cse_key(expr)
+
         try:
-            return self.subexpr_symbols[expr]
+            return self.subexpr_symbols[key]
         except KeyError:
             new_expr = self.rec(expr, dispatch_class=IdentityMapper)
             new_sym = self.sym_gen.next()
             self.cse_assignments.append(
-                (new_sym.name, expr))
-            self.subexpr_symbols[expr] = new_sym
+                (new_sym.name, new_expr))
+            self.subexpr_symbols[key] = new_sym
             return new_sym
 
     def map_Add(self, expr):
-        if expr in self.to_eliminate:
-            return self.get_cse(expr)
+        key = get_normalized_cse_key(expr)
+        if key in self.to_eliminate:
+            result = self.get_cse(expr, key)
+            return result
         else:
             return IdentityMapper.map_Add(self, expr)
 
@@ -113,20 +132,37 @@ class CSEMapper(IdentityMapper):
 
 
 def eliminate_common_subexpressions(exprs, sym_gen):
-    from sympy.utilities.iterables import postorder_traversal
-
     subexpr_count = {}
-    for expr in exprs:
-        for subexpr in postorder_traversal(expr):
-            if not subexpr.is_Symbol:
-                subexpr_count[subexpr] = \
-                    subexpr_count.get(subexpr, 0) + 1
 
-    cse_mapper = CSEMapper(
-        set([subexpr 
-        for subexpr, count in subexpr_count.iteritems()
-        if count > 1]),
-        sym_gen)
+    def gather_use_counts(node):
+        """Like :func:`sympy.utilities.iterables.postorder_traversal`,
+        but returns tuples of (level, node) which indicate the level
+        of nesting.
+        """
+
+        key = get_normalized_cse_key(node)
+
+        if key in subexpr_count:
+            subexpr_count[key] += 1
+            # do not re-traverse (and thus re-count subexpressions)
+        else:
+            subexpr_count[key] = 1
+
+            if isinstance(node, sp.Basic):
+                iterable = node.args
+            else:
+                iterable = node
+
+            for arg in node.args:
+                gather_use_counts(arg)
+
+    for expr in exprs:
+        gather_use_counts(expr)
+
+    to_eliminate = set([subexpr_key
+        for subexpr_key, count in subexpr_count.iteritems()
+        if count > 1])
+    cse_mapper = CSEMapper(to_eliminate, sym_gen)
     result = [cse_mapper(expr) for expr in exprs]
     return cse_mapper.cse_assignments, result
 

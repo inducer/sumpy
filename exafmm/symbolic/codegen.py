@@ -42,20 +42,21 @@ class CLCodePrinter(BaseCodePrinter):
 
 
 
-
-
-class SquareRewriter(IdentityMapper):
+class PowRewriter(IdentityMapper):
     def __init__(self, symbol_gen, expr_to_var={}):
         self.assignments = []
         self.symbol_gen = iter(symbol_gen)
         self.expr_to_var = expr_to_var
 
     def get_var_for(self, expr):
+        if isinstance(expr, sp.Symbol):
+            return expr
+
         try:
             return self.expr_to_var[expr]
         except KeyError:
             sym = self.symbol_gen.next()
-            self.assignments.append((sym, expr))
+            self.assignments.append((sym.name, expr))
             self.expr_to_var[expr] = sym
             return sym
 
@@ -63,11 +64,29 @@ class SquareRewriter(IdentityMapper):
         self.assignments.append((var_name, self.rec(expr)))
 
     def map_Pow(self, expr):
-        if expr.exp == 2 and not isinstance(expr.base, sp.Symbol):
+        if (not isinstance(expr.base, sp.Symbol) 
+                and isinstance(expr.exp, int) and expr.exp > 1):
             new_base = self.get_var_for(expr.base)
-            return new_base**2
-        else:
-            return IdentityMapper.map_Pow(self, expr)
+            return new_base**expr.exp
+        if isinstance(expr.exp, sp.Rational) and abs(expr.exp.p) > 1:
+            if expr.exp.p < 0:
+                new_p = abs(expr.exp.p)
+                new_q = -expr.exp.q
+            else:
+                new_p = expr.exp.p
+                new_q = expr.exp.q
+
+            if new_q == 1:
+                new_base = self.get_var_for(expr.base)
+            else:
+                new_base = self.get_var_for(expr.base**(1/new_q))
+
+            if new_p == 1:
+                return new_base
+            else:
+                return new_base**new_p
+
+        return IdentityMapper.map_Pow(self, expr)
 
 
 
@@ -94,13 +113,15 @@ def generate_cl_statements_from_assignments(assignments, subst_map={}):
 
     # }}}
 
-    # {{{ rewrite squares
+    # {{{ rewrite powers
 
-    sq_rewriter = SquareRewriter(sym_gen, expr_to_var=dict(
+    sq_rewriter = PowRewriter(sym_gen, expr_to_var=dict(
         (expr, sp.Symbol(var_name)) for var_name, expr in assignments))
 
     for var_name, expr in assignments:
         sq_rewriter(var_name, expr)
+
+    assignments = sq_rewriter.assignments
 
     # }}}
 
@@ -108,6 +129,19 @@ def generate_cl_statements_from_assignments(assignments, subst_map={}):
 
     ccp = CLCodePrinter(subst_map=subst_map)
     return [(var_name, ccp.doprint(expr))
-            for var_name, expr in sq_rewriter.assignments]
+            for var_name, expr in assignments]
 
     # }}}
+
+
+
+
+def gen_c_source_subst_map(dimensions):
+    result = {}
+    for i in range(dimensions):
+        result["s%d" % i] = "src.s%d" % i
+        result["t%d" % i] = "tgt.s%d" % i
+        result["c%d" % i] = "ctr.s%d" % i
+
+    return result
+

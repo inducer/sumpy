@@ -4,8 +4,6 @@ from __future__ import division
 import pyopencl as cl
 import pyopencl.array as cl_array
 import numpy as np
-import sympy as sp
-import sympy.printing.ccode
 import numpy.linalg as la
 
 # TODO:

@@ -2,124 +2,12 @@ from __future__ import division
 
 from pytools import memoize_method
 import sympy as sp
+import numpy as np
 
 
 
 
-# {{{ multi_index helpers
-
-def mi_factorial(mi):
-    from pytools import factorial
-    result = 1
-    for mi_i in mi:
-        result *= factorial(mi_i)
-    return result
-
-def mi_power(vector, mi):
-    result = 1
-    for mi_i, vec_i in zip(mi, vector):
-        result *= vec_i**mi_i
-    return result
-
-
-
-# }}}
-
-
-
-
-M2P_KERNEL = """
-
-__kernel void m2p(
-% for i in range(dimensions)
-  ${geometry_type} *c${i}_g,
-% endfor
-% for i in range(dimensions)
-  ${geometry_type} *t${i}_g,
-% endfor
-  ${offset_t} *mpole_offset_starts_g,
-  ${offset_t} *mpole_offset_g,
-  ${coeff_type} *mpole_coeff_g)
-{
-  // Each work group is responsible for accumulating one
-  // target cell.
-
-  // 
-  iblok = (N-1)/THREADS;
-  int index = offset + iblok * THREADS + threadIdx.x;
-  __syncthreads();
-  for( int i=0; i<13; i++ )
-    multipShrd[threadIdx.x*13+i] = multipGlob[index*13+i];
-  __syncthreads();
-  for( int i=0; i<N - (iblok * THREADS); i++ ) {
-    multipole(i,target,multipShrd);
-  }
-  targetGlob[blockIdx.x * THREADS + threadIdx.x] = target;
-}
-"""
-
-
-
-
-
-class TaylorExpansion:
-    def __init__(self, kernel, order, dimensions):
-        """
-        :arg: kernel in terms of 'b' variable
-        """
-
-        self.order = order
-        self.kernel = kernel
-        self.dimensions = dimensions
-
-        from pytools import (
-                generate_nonnegative_integer_tuples_summing_to_at_most
-                as gnitstam)
-
-        self.multi_indices = sorted(gnitstam(self.order, self.dimensions), key=sum)
-
-        # given in terms of b variable
-        self.basis = [
-                self.diff_kernel(mi)
-                for mi in self.multi_indices]
-
-        # given in terms of a variable
-        from exafmm.symbolic import make_sym_vector
-
-        a = make_sym_vector("a", 3)
-        self.coefficients = [
-                mi_power(a, mi)/mi_factorial(mi)
-                for mi in self.multi_indices]
-
-    @memoize_method
-    def diff_kernel(self, multi_index):
-        if sum(multi_index) == 0:
-            return self.kernel
-
-        first_nonzero_axis = min(
-                i for i in range(self.dimensions)
-                if multi_index[i] > 0)
-
-        lowered_mi = list(multi_index)
-        lowered_mi[first_nonzero_axis] -= 1
-        lowered_mi = tuple(lowered_mi)
-
-        lower_diff_kernel = self.diff_kernel(lowered_mi)
-
-        return sp.diff(lower_diff_kernel,
-                sp.Symbol("b%d" % first_nonzero_axis))
-
-
-
-
-
-
-
-
-
-
-
-def test_make_p2m():
+def test_make_p2m_sym():
     dimensions = 3
     from exafmm.symbolic import make_coulomb_kernel_in
     texp = TaylorExpansion(
@@ -147,14 +35,14 @@ def test_make_p2m():
     from exafmm.symbolic.codegen import generate_cl_statements_from_assignments
     from exafmm.symbolic import vector_subs, make_sym_vector
 
-    # {{{ generate M2P
+    # {{{ generate P2M
 
     old_var = make_sym_vector("a", dimensions)
     new_var = (make_sym_vector("c", dimensions)
             - make_sym_vector("s", dimensions))
 
     print "-------------------------------"
-    print "M2P"
+    print "P2M"
     print "-------------------------------"
     vars_and_exprs = generate_cl_statements_from_assignments(
             [("mpole%d"% i, 
@@ -167,10 +55,10 @@ def test_make_p2m():
 
     # }}}
 
-    # {{{ generate P2M
+    # {{{ generate M2P
 
     print "-------------------------------"
-    print "P2M"
+    print "M2P"
     print "-------------------------------"
 
     old_var = make_sym_vector("b", dimensions)
@@ -192,8 +80,25 @@ def test_make_p2m():
 
 
 
+
+def test_make_m2p():
+    dimensions = 3
+    from exafmm.symbolic import make_coulomb_kernel_in
+    from exafmm.expansion import TaylorExpansion
+    texp = TaylorExpansion(
+            make_coulomb_kernel_in("b", dimensions),
+            order=2, dimensions=dimensions)
+
+    from exafmm.m2p import make_m2p_source
+    print make_m2p_source(np.float32, texp,
+        [lambda expr: expr,
+          lambda expr: sp.diff(expr, sp.Symbol("t0"))
+            ])
+
+
+
 if __name__ == "__main__":
-    test_make_p2m()
+    test_make_m2p()
 
 
 
