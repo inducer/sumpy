@@ -99,18 +99,6 @@ def generate_cl_statements_from_assignments(assignments, subst_map={}):
     from sympy.utilities.iterables import numbered_symbols
     sym_gen = numbered_symbols("cse")
 
-    # {{{ rewrite powers
-
-    sq_rewriter = PowRewriter(sym_gen, expr_to_var=dict(
-        (expr, sp.Symbol(var_name)) for var_name, expr in assignments))
-
-    for var_name, expr in assignments:
-        sq_rewriter(var_name, expr)
-
-    assignments = sq_rewriter.assignments
-
-    # }}}
-
     # {{{ perform CSE
 
     from exafmm.symbolic import eliminate_common_subexpressions
@@ -122,6 +110,18 @@ def generate_cl_statements_from_assignments(assignments, subst_map={}):
     assignments = cses + [(name, new_expr)
         for (name, old_expr), new_expr in
         zip(assignments, exprs)]
+
+    # }}}
+
+    # {{{ rewrite powers
+
+    sq_rewriter = PowRewriter(sym_gen, expr_to_var=dict(
+        (expr, sp.Symbol(var_name)) for var_name, expr in assignments))
+
+    for var_name, expr in assignments:
+        sq_rewriter(var_name, expr)
+
+    assignments = sq_rewriter.assignments
 
     # }}}
 
