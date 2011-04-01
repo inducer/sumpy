@@ -1,6 +1,7 @@
 from __future__ import division
 import sympy as sp
 from sympy.printing.codeprinter import CodePrinter as BaseCodePrinter
+from exafmm.symbolic import IdentityMapper
 
 
 
@@ -41,67 +42,21 @@ class CLCodePrinter(BaseCodePrinter):
 
 
 
-
-
-class SympyMapper(object):
-    def __call__(self, expr, *args, **kwargs):
-        return self.rec(expr, *args, **kwargs)
-
-    def rec(self, expr, *args, **kwargs):
-        mro = list(type(expr).__mro__)
-
-        while mro:
-            method_name = "map_"+mro.pop(0).__name__
-
-            try:
-                method = getattr(self, method_name)
-            except AttributeError:
-                pass
-            else:
-                return method(expr, *args, **kwargs)
-
-        raise NotImplementedError(
-                "%s does not know how to map type '%s'"
-                % (type(self).__name__,
-                    type(expr).__name__))
-
-
-
-
-
-class IdentityMapper(SympyMapper):
-    def map_Add(self, expr):
-        return type(expr)(*tuple(self.rec(arg) for arg in expr.args))
-
-    map_Mul = map_Add
-    map_Pow = map_Add
-    map_Function = map_Add
-
-    def map_Rational(self, expr):
-        return type(expr)(self.rec(expr.p), self.rec(expr.q))
-
-    def map_Integer(self, expr):
-        return expr
-    map_int = map_Integer
-
-    map_Symbol = map_Integer
-    map_Real = map_Integer
-
-
-
-
-class SquareRewriter(IdentityMapper):
+class PowRewriter(IdentityMapper):
     def __init__(self, symbol_gen, expr_to_var={}):
         self.assignments = []
         self.symbol_gen = iter(symbol_gen)
         self.expr_to_var = expr_to_var
 
     def get_var_for(self, expr):
+        if isinstance(expr, sp.Symbol):
+            return expr
+
         try:
             return self.expr_to_var[expr]
         except KeyError:
             sym = self.symbol_gen.next()
-            self.assignments.append((sym, expr))
+            self.assignments.append((sym.name, expr))
             self.expr_to_var[expr] = sym
             return sym
 
@@ -109,12 +64,29 @@ class SquareRewriter(IdentityMapper):
         self.assignments.append((var_name, self.rec(expr)))
 
     def map_Pow(self, expr):
-        if expr.exp == 2:
+        if (not isinstance(expr.base, sp.Symbol) 
+                and isinstance(expr.exp, int) and expr.exp > 1):
             new_base = self.get_var_for(expr.base)
-            return new_base**2
-        else:
-            return IdentityMapper.map_Pow(self, expr)
+            return new_base**expr.exp
+        if isinstance(expr.exp, sp.Rational) and abs(expr.exp.p) > 1:
+            if expr.exp.p < 0:
+                new_p = abs(expr.exp.p)
+                new_q = -expr.exp.q
+            else:
+                new_p = expr.exp.p
+                new_q = expr.exp.q
 
+            if new_q == 1:
+                new_base = self.get_var_for(expr.base)
+            else:
+                new_base = self.get_var_for(expr.base**(1/new_q))
+
+            if new_p == 1:
+                return new_base
+            else:
+                return new_base**new_p
+
+        return IdentityMapper.map_Pow(self, expr)
 
 
 
@@ -124,31 +96,32 @@ def generate_cl_statements_from_assignments(assignments, subst_map={}):
     :param assignments: a list of tuples *(var_name, expr)*
     """
 
-    # {{{ perform CSE
-
-    from sympy.utilities.iterables import  numbered_symbols
+    from sympy.utilities.iterables import numbered_symbols
     sym_gen = numbered_symbols("cse")
 
-    new_assignments = []
-    for var_name, expr in assignments:
-        from sympy.simplify.cse_main import cse
-        replacements, reduced = cse([expr], sym_gen)
+    # {{{ rewrite powers
 
-        new_assignments.extend(
-                (sym.name, expr) for sym, expr in replacements)
-
-        new_assignments.append((var_name, reduced[0]))
-
-    assignments = new_assignments
-    # }}}
-
-    # {{{ rewrite squares
-
-    sq_rewriter = SquareRewriter(sym_gen, expr_to_var=dict(
+    sq_rewriter = PowRewriter(sym_gen, expr_to_var=dict(
         (expr, sp.Symbol(var_name)) for var_name, expr in assignments))
 
     for var_name, expr in assignments:
         sq_rewriter(var_name, expr)
+
+    assignments = sq_rewriter.assignments
+
+    # }}}
+
+    # {{{ perform CSE
+
+    from exafmm.symbolic import eliminate_common_subexpressions
+
+    cses, exprs = eliminate_common_subexpressions(
+            [expr for var_name, expr in assignments],
+            sym_gen)
+
+    assignments = cses + [(name, new_expr)
+        for (name, old_expr), new_expr in
+        zip(assignments, exprs)]
 
     # }}}
 
@@ -156,6 +129,19 @@ def generate_cl_statements_from_assignments(assignments, subst_map={}):
 
     ccp = CLCodePrinter(subst_map=subst_map)
     return [(var_name, ccp.doprint(expr))
-            for var_name, expr in sq_rewriter.assignments]
+            for var_name, expr in assignments]
 
     # }}}
+
+
+
+
+def gen_c_source_subst_map(dimensions):
+    result = {}
+    for i in range(dimensions):
+        result["s%d" % i] = "src.s%d" % i
+        result["t%d" % i] = "tgt.s%d" % i
+        result["c%d" % i] = "ctr.s%d" % i
+
+    return result
+
