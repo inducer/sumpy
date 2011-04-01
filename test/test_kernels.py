@@ -21,7 +21,6 @@ if have_cl():
     import pyopencl as cl
     from pyopencl.tools import pytest_generate_tests_for_pyopencl \
             as pytest_generate_tests
-    from pyopencl.characterize import has_double_support
 
 
 
@@ -67,6 +66,35 @@ def test_p2p(ctx_getter):
     rel_err = la.norm(potential - potential_host)/la.norm(potential_host)
     assert rel_err < 1e-3
 
+
+
+
+@pytools.test.mark_test.opencl
+def test_m2p(ctx_getter):
+    ctx = ctx_getter()
+    queue = cl.CommandQueue(ctx)
+
+    dimensions = 3
+    n = 5000
+
+    from exafmm.symbolic import make_coulomb_kernel_in
+    from exafmm.expansion import TaylorExpansion
+    texp = TaylorExpansion(
+            make_coulomb_kernel_in("b", dimensions),
+            order=2, dimensions=dimensions)
+
+    from exafmm.m2p import M2PKernel
+    knl = M2PKernel(ctx, texp,
+            output_maps=[
+                lambda expr: expr,
+                lambda expr: sp.diff(expr, sp.Symbol("t0"))])
+
+    targets = np.random.rand(dimensions, n).astype(np.float32)
+
+    from exafmm.tools import vector_to_device
+    targets_dev = vector_to_device(queue, targets)
+
+    knl(targets_dev, None, None, targets_dev[0], None, None)
 
 
 

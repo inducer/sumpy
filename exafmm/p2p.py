@@ -108,7 +108,7 @@ class P2PKernel(object):
         self.strength_usage = strength_usage
         self.strength_count = max(strength_usage)+1
 
-        self.exclude_self = exclude_self,
+        self.exclude_self = exclude_self
         self.options = options
         self.name = name
 
