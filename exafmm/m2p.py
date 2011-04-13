@@ -1,7 +1,6 @@
 from __future__ import division
 
 import numpy as np
-import sympy as sp
 from mako.template import Template
 from pytools import memoize_method
 
@@ -15,7 +14,8 @@ from exafmm.kernel_common import COMMON_PREAMBLE
 M2P_KERNEL = Template(
 COMMON_PREAMBLE +
 """
-typedef uint32_t offset_t;
+typedef uint offset_t;
+typedef uint mpole_offset_t;
 typedef ${coefficient_type} coeff_t;
 typedef ${geometry_type} geometry_t;
 typedef ${geometry_type}${dimensions} geometry_vec_t;
@@ -40,22 +40,22 @@ void m2p(
   global const mpole_offset_t *m2p_ilist_mpole_offsets_g,
   global const coeff_t *mpole_coeff_g,
   global const offset_t *cell_idx_to_particle_offset_g,
-  global const uint32_t *cell_idx_to_particle_cnt_g
+  global const uint *cell_idx_to_particle_cnt_g
   )
 
 {
-  uint32_t lid = get_local_id(0) + ${coef_cnt_padded} * get_local_id(1);
+  uint lid = get_local_id(0) + ${coef_cnt_padded} * get_local_id(1);
 
   offset_t ilist_start = m2p_ilist_starts_g[TGT_CELL];
   offset_t ilist_end = m2p_ilist_starts_g[TGT_CELL+1];
 
   offset_t tgt_cell_particle_offset = cell_idx_to_particle_offset_g[TGT_CELL];
-  uint32_t tgt_cell_particle_count = cell_idx_to_particle_cnt_g[TGT_CELL];
+  uint tgt_cell_particle_count = cell_idx_to_particle_cnt_g[TGT_CELL];
 
   __local coeff_t mpole_coeff_l[${par_cell_cnt} * ${coef_cnt_padded}];
 
   // index into this cell's list of particles
-  uint32_t plist_idx = lid;
+  uint plist_idx = lid;
 
   // loop over particle batches
   while (plist_idx < tgt_cell_particle_count)
@@ -78,9 +78,9 @@ void m2p(
       mpole_coeff_l[lid] = mpole_coeff_g[mpole_offset + get_local_id(0)];
       barrier(CLK_LOCAL_MEM_FENCE);
 
-      for (uint32_t src_cell = 0; src_cell < ${par_cell_cnt}; ++src_cell)
+      for (uint src_cell = 0; src_cell < ${par_cell_cnt}; ++src_cell)
       {
-        uint32_t loc_mpole_base = src_cell*${coef_cnt_padded};
+        uint loc_mpole_base = src_cell*${coef_cnt_padded};
         geometry_vec_t ctr;
         % for i in range(dimensions):
           ctr.s${i} = mpole_coeff_l[loc_mpole_base+${i}];
@@ -114,6 +114,10 @@ void m2p(
 class M2PKernel(object):
     def __init__(self, ctx, expansion, output_maps=[lambda x: x],
             options=[], name="m2p"):
+        """
+        :output_maps: A list of functions which will be applied to basis functions
+          in the expansion, each generating a different output array.
+        """
         self.context = ctx
         self.expansion = expansion
         self.output_maps = output_maps
@@ -173,8 +177,7 @@ class M2PKernel(object):
         prg = cl.Program(self.context, kernel_src).build(self.options)
         kernel = getattr(prg, self.name)
         kernel.set_scalar_arg_dtypes(
-                [np.uint32, np.uint32]
-                + [None]*( 2*self.dimensions + self.strength_count + len(self.exprs)))
+                [None]*(dimensions + len(self.output_maps) + 5))
 
         return kernel
 
