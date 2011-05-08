@@ -20,64 +20,110 @@ from exafmm.kernel_common import COMMON_PREAMBLE
 
 P2P_KERNEL = Template(
     COMMON_PREAMBLE +
-    """
+    r"""//CL//
     typedef ${geometry_type} geometry_t;
     typedef ${geometry_type}${dimensions} geometry_vec_t;
     typedef ${output_type} output_t;
 
-    __kernel void ${name}(
+    __kernel
+    __attribute__((reqd_work_group_size(${wg_size}, 1, 1)))
+    void ${name}(
       uint ntarget
       , uint nsource
       % for i in range(dimensions):
-        , global const geometry_t *restrict t${i}_g
+          , global const geometry_t *restrict t_g${i}
       % endfor
       % for i in range(dimensions):
-        , global const geometry_t *restrict s${i}_g
+          , global const geometry_t *restrict s_g${i}
       % endfor
       % for i in range(strength_count):
-        , global const output_t *restrict strength${i}_g
+          , global const output_t *restrict strength_g${i}
       % endfor
       % for i in range(output_count):
-        , global output_t *restrict output${i}_g
+          , global output_t *restrict output_g${i}
       % endfor
       )
     {
-      int itarget = get_global_id(0);
-      if (itarget >= ntarget) return;
+        int itarget = get_global_id(0);
 
-      geometry_vec_t tgt;
-      ${load_vector("tgt", "t", "itarget")}
+        geometry_vec_t tgt;
 
-      % for i in range(output_count):
-        output_t output${i} = 0;
-      %endfor
+        if (itarget < ntarget)
+        {
+            ${load_vector("tgt", "t_g", "itarget")}
+        }
 
-      for(int isource=0; isource<nsource; isource++ )
-      {
-        %if exclude_self:
-          if (isource == itarget)
-            continue;
-        %endif
+        % for i in range(output_count):
+            output_t output${i} = 0;
+        %endfor
 
-        geometry_vec_t src;
-        ${load_vector("src", "s", "isource")}
-
+        % for i in range(dimensions):
+            local geometry_t s_l${i}[${wg_size}];
+        % endfor
         % for i in range(strength_count):
-          output_t strength${i} = strength${i}_g[isource];
+            local output_t strength_l${i}[${wg_size}];
         % endfor
 
-        % for var_name, expr in vars_and_exprs:
-          % if var_name.startswith("output"):
-            ${var_name} += ${expr};
-          % else:
-            output_t ${var_name} = ${expr};
-          % endif
-        % endfor
-      }
+        <%self:chunk_for_with_tail loop_var="isource_base" start="${0}" 
+        chunk_size="${wg_size}" end="nsource" args="is_tail, chunk_length">
 
-      % for i in range(output_count):
-        output${i}_g[itarget] = output${i};
-      %endfor
+            // {{{ load sources and strengths into local
+
+            {
+                uint isource_load = isource_base + get_local_id(0);
+
+                barrier(CLK_LOCAL_MEM_FENCE);
+                % if is_tail:
+                    if (isource_load < nsource)
+                    {
+                % endif
+
+                % for i in range(dimensions):
+                    s_l${i}[get_local_id(0)] = s_g${i}[isource_load];
+                % endfor
+                % for i in range(strength_count):
+                    strength_l${i}[get_local_id(0)] = strength_g${i}[isource_load];
+                % endfor
+
+                % if is_tail:
+                    }
+                % endif
+                barrier(CLK_LOCAL_MEM_FENCE);
+            }
+
+            // }}}
+
+            for (uint isource_local = 0; isource_local < ${chunk_length}; ++isource_local)
+            {
+                %if exclude_self:
+                    uint isource = source_base + isource_local;
+                    if (isource == itarget)
+                        continue;
+                %endif
+
+                geometry_vec_t src;
+                ${load_vector("src", "s_l", "isource_local")}
+                % for i in range(strength_count):
+                    output_t strength${i} = strength_l${i}[isource_local];
+                % endfor
+
+                % for var_name, expr in vars_and_exprs:
+                    % if var_name.startswith("output"):
+                        ${var_name} += ${expr};
+                    % else:
+                        output_t ${var_name} = ${expr};
+                    % endif
+                % endfor
+            }
+
+        </%self:chunk_for_with_tail>
+
+        if (itarget < ntarget)
+        {
+            % for i in range(output_count):
+                output_g${i}[itarget] = output${i};
+            %endfor
+        }
     }
     """, strict_undefined=True, disable_unicode=True)
 
@@ -85,7 +131,7 @@ P2P_KERNEL = Template(
 
 
 class P2PKernel(object):
-    def __init__(self, ctx, dimensions, exprs, strength_usage=None, 
+    def __init__(self, ctx, dimensions, exprs, strength_usage=None,
             exclude_self=True, options=[], name="p2p"):
         """
         :arg exprs: kernels which are to be evaluated for each source-target
@@ -115,7 +161,7 @@ class P2PKernel(object):
         self.max_wg_size = min(dev.max_work_group_size for dev in ctx.devices)
 
     @memoize_method
-    def get_kernel(self, geometry_dtype, output_dtype):
+    def get_kernel(self, geometry_dtype, output_dtype, wg_size):
         from exafmm.symbolic.codegen import (
                 generate_cl_statements_from_assignments,
                 gen_c_source_subst_map)
@@ -137,7 +183,8 @@ class P2PKernel(object):
                 strength_count=self.strength_count,
                 output_count=len(self.exprs),
                 double_support=all(
-                    has_double_support(dev) for dev in self.context.devices))
+                    has_double_support(dev) for dev in self.context.devices),
+                wg_size=wg_size)
 
         prg = cl.Program(self.context, kernel_src).build(self.options)
         kernel = getattr(prg, self.name)
@@ -147,7 +194,11 @@ class P2PKernel(object):
 
         return kernel
 
-    def __call__(self, targets, sources, src_strengths, queue=None, allocator=None):
+    def __call__(self, targets, sources, src_strengths,
+            allocator=None,
+            queue=None, wait_for=None):
+        wg_size = min(self.max_wg_size, 128) # FIXME: Tune?
+
         target_count, = targets[0].shape
         source_count, = sources[0].shape
 
@@ -168,9 +219,7 @@ class P2PKernel(object):
             cl_array.empty(queue, target_count, output_dtype)
             for expr in self.exprs])
 
-        kernel = self.get_kernel(targets[0].dtype, output_dtype)
-
-        wg_size = min(self.max_wg_size, 128) # FIXME: Tune?
+        kernel = self.get_kernel(targets[0].dtype, output_dtype, wg_size)
 
         from pytools import div_ceil
         kernel(
@@ -180,6 +229,9 @@ class P2PKernel(object):
                     [tgt_i.data for tgt_i in targets]
                     + [src_i.data for src_i in sources]
                     + [str_i.data for str_i in src_strengths]
-                    + [out_i.data for out_i in outputs]))
+                    + [out_i.data for out_i in outputs]),
+                wait_for=wait_for)
 
         return outputs
+
+# vim: foldmethod=marker filetype=pyopencl.python
