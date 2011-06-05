@@ -27,7 +27,7 @@ typedef ${output_type} output_t;
 
 
 #define TGT_CELL get_group_id(0)
-<% wg_size = coeff_cnt_padded*par_cell_cnt %>
+<% wg_size = ctr_coeff_cnt_size*par_cell_cnt %>
 
 // Work partition:
 // ---------------
@@ -38,23 +38,23 @@ typedef ${output_type} output_t;
 // cell batches" orchestrates cooperative loading of multipole coefficients.
 
 __kernel
-__attribute__((reqd_work_group_size(${coeff_cnt_padded}, ${par_cell_cnt}, 1)))
+__attribute__((reqd_work_group_size(${ctr_coeff_cnt_size}, ${par_cell_cnt}, 1)))
 void m2p(
-% for i in range(dimensions):
-  global const geometry_t *t${i}_g,
-% endfor
-% for i in range(output_count):
-  global output_t *output${i}_g,
-% endfor
-  global const offset_t *m2p_ilist_starts_g,
-  global const mpole_offset_t *m2p_ilist_mpole_offsets_g,
-  global const coeff_t *mpole_coeff_g,
-  global const offset_t *cell_idx_to_particle_offset_g,
-  global const uint *cell_idx_to_particle_cnt_g
-  )
+    % for i in range(dimensions):
+        global const geometry_t *t${i}_g,
+    % endfor
+    % for i in range(output_count):
+        global output_t *output${i}_g,
+    % endfor
+    global const offset_t *m2p_ilist_starts_g,
+    global const mpole_offset_t *m2p_ilist_mpole_offsets_g,
+    global const coeff_t *mpole_coeff_g,
+    global const offset_t *cell_idx_to_particle_offset_g,
+    global const uint *cell_idx_to_particle_cnt_g
+    )
 
 {
-    uint lid = get_local_id(0) + ${coeff_cnt_padded} * get_local_id(1);
+    uint lid = get_local_id(0) + ${ctr_coeff_cnt_size} * get_local_id(1);
 
     offset_t ilist_start = m2p_ilist_starts_g[TGT_CELL];
     offset_t ilist_end = m2p_ilist_starts_g[TGT_CELL+1];
@@ -62,7 +62,7 @@ void m2p(
     offset_t tgt_cell_particle_offset = cell_idx_to_particle_offset_g[TGT_CELL];
     uint tgt_cell_particle_count = cell_idx_to_particle_cnt_g[TGT_CELL];
 
-    __local coeff_t mpole_coeff_l[${par_cell_cnt} * ${coeff_cnt_padded}];
+    __local coeff_t mpole_coeff_l[${par_cell_cnt} * ${ctr_coeff_cnt_size}];
 
     // index into this cell's list of particles
     uint plist_idx = lid;
@@ -91,12 +91,14 @@ void m2p(
             // loop over source cells
             for (uint src_cell = 0; src_cell < ${par_cell_cnt}; ++src_cell)
             {
-                uint loc_mpole_base = src_cell*${coeff_cnt_padded};
+                uint loc_mpole_base = src_cell*${ctr_coeff_cnt_size};
                 geometry_vec_t ctr;
                 % for i in range(dimensions):
                     ctr.s${i} = mpole_coeff_l[loc_mpole_base+${i}];
                 % endfor
                 loc_mpole_base += ${dimensions};
+
+                // FIXME: Are mpole_coeff_l actually used?
 
                 % for var, expr in vars_and_exprs:
                     % if var.startswith("output"):
@@ -141,7 +143,7 @@ class M2PKernel(object):
 
     @memoize_method
     def get_kernel(self, geometry_dtype, coeff_dtype, output_dtype, 
-            par_cell_cnt, coeff_cnt_padded):
+            par_cell_cnt, ctr_coeff_cnt_size):
         dimensions = self.expansion.dimensions
 
         from exafmm.symbolic.codegen import generate_cl_statements_from_assignments
@@ -175,7 +177,7 @@ class M2PKernel(object):
                 vars_and_exprs=vars_and_exprs,
                 type_declarations="",
                 par_cell_cnt=par_cell_cnt,
-                coeff_cnt_padded=coeff_cnt_padded,
+                ctr_coeff_cnt_size=ctr_coeff_cnt_size,
                 output_count=len(self.output_maps),
                 double_support=all(
                     has_double_support(dev) for dev in self.context.devices),
@@ -208,7 +210,7 @@ class M2PKernel(object):
         if output_dtype is None:
             output_dtype = coeff_dtype
 
-        coeff_cnt_padded = self.expansion.padded_coefficient_count(
+        ctr_coeff_cnt_size = self.expansion.padded_coefficient_count_with_center(
                     coeff_dtype)
 
         # }}}
@@ -217,8 +219,8 @@ class M2PKernel(object):
 
         wg_size = min(self.max_wg_size, 256) # FIXME: Tune?
         from pytools import div_ceil
-        par_cell_cnt = div_ceil(wg_size, coeff_cnt_padded)
-        wg_size = par_cell_cnt * coeff_cnt_padded
+        par_cell_cnt = div_ceil(wg_size, ctr_coeff_cnt_size)
+        wg_size = par_cell_cnt * ctr_coeff_cnt_size
 
         # }}}
 
@@ -233,9 +235,9 @@ class M2PKernel(object):
 
         tgt_cell_count = len(m2p_ilist_starts) - 1
         kernel = self.get_kernel(geometry_dtype, coeff_dtype, output_dtype,
-                par_cell_cnt, coeff_cnt_padded)
+                par_cell_cnt, ctr_coeff_cnt_size)
 
-        wg_dim = np.array([coeff_cnt_padded, par_cell_cnt])
+        wg_dim = np.array([ctr_coeff_cnt_size, par_cell_cnt])
         global_dim = wg_dim * np.array([tgt_cell_count, 1])
 
         kernel(queue, global_dim, wg_dim,

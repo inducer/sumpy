@@ -28,6 +28,9 @@ if have_cl():
 @pytools.test.mark_test.opencl
 def test_p2p(ctx_getter):
     ctx = ctx_getter()
+
+    print ctx.devices[0].name
+
     queue = cl.CommandQueue(ctx)
 
     dimensions = 3

@@ -7,8 +7,13 @@ import sympy as sp
 
 
 class Expansion(object):
-    def padded_coefficient_count(self, dtype):
-        coeff_count = len(self.coefficients)
+    def padded_coefficient_count_with_center(self, dtype):
+        # cell centers are saved with expansion coefficients
+        coeff_count = len(self.coefficients) + self.dimensions
+
+        # FIXME: coefficients might be complex, cell centers
+        # certainly not.
+
         coeff_size = dtype.itemsize
         align_to = 64 # bytes
 
