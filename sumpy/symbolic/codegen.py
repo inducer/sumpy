@@ -1,7 +1,7 @@
 from __future__ import division
 import sympy as sp
 from sympy.printing.codeprinter import CodePrinter as BaseCodePrinter
-from exafmm.symbolic import IdentityMapper
+from sumpy.symbolic import IdentityMapper
 
 
 
@@ -101,7 +101,7 @@ def generate_cl_statements_from_assignments(assignments, subst_map={}):
 
     # {{{ perform CSE
 
-    from exafmm.symbolic import eliminate_common_subexpressions
+    from sumpy.symbolic import eliminate_common_subexpressions
 
     cses, exprs = eliminate_common_subexpressions(
             [expr for var_name, expr in assignments],

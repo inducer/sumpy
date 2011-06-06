@@ -12,7 +12,7 @@ except ImportError:
     # 2.x
     from distutils.command.build_py import build_py
 
-setup(name="exafmm",
+setup(name="sumpy",
       version="2011.1",
       description="Fast summation in Python",
       long_description="""
@@ -37,7 +37,7 @@ setup(name="exafmm",
       author="Rio Yokota, Andreas Kloeckner, Matthew Knepley",
       author_email="yokota@bu.edu",
       license = "MIT",
-      packages=["exafmm"],
+      packages=["sumpy"],
 
       # 2to3 invocation
       cmdclass={'build_py': build_py})

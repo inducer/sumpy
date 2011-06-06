@@ -7,7 +7,7 @@ import pyopencl as cl
 import pyopencl.array as cl_array
 from pytools import memoize_method
 
-from exafmm.kernel_common import COMMON_PREAMBLE
+from sumpy.kernel_common import COMMON_PREAMBLE
 
 
 
@@ -162,7 +162,7 @@ class P2PKernel(object):
 
     @memoize_method
     def get_kernel(self, geometry_dtype, output_dtype, wg_size):
-        from exafmm.symbolic.codegen import (
+        from sumpy.symbolic.codegen import (
                 generate_cl_statements_from_assignments,
                 gen_c_source_subst_map)
         vars_and_exprs = generate_cl_statements_from_assignments(

@@ -7,7 +7,7 @@ from pytools import memoize_method
 import pyopencl as cl
 import pyopencl.array as cl_array
 
-from exafmm.kernel_common import (
+from sumpy.kernel_common import (
         COMMON_PREAMBLE, FMMParameters)
 
 
@@ -96,8 +96,8 @@ class P2MKernel(object):
     def get_kernel(self, geometry_dtype, coeff_dtype, coeff_cnt_padded):
         dimensions = self.expansion.dimensions
 
-        from exafmm.symbolic.codegen import generate_cl_statements_from_assignments
-        from exafmm.symbolic import vector_subs, make_sym_vector
+        from sumpy.symbolic.codegen import generate_cl_statements_from_assignments
+        from sumpy.symbolic import vector_subs, make_sym_vector
 
         old_var = make_sym_vector("a", dimensions)
         new_var = (make_sym_vector("c", dimensions)
@@ -114,7 +114,7 @@ class P2MKernel(object):
                 for output_idx, output_map in enumerate(self.output_maps)
                 ]
 
-        from exafmm.symbolic.codegen import gen_c_source_subst_map
+        from sumpy.symbolic.codegen import gen_c_source_subst_map
         subst_map = gen_c_source_subst_map(dimensions)
 
         vars_and_exprs = generate_cl_statements_from_assignments(

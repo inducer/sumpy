@@ -48,10 +48,10 @@ class TaylorExpansion(Expansion):
                 for mi in self.multi_indices]
 
         # given in terms of a variable
-        from exafmm.symbolic import make_sym_vector
+        from sumpy.symbolic import make_sym_vector
 
         a = make_sym_vector("a", 3)
-        from exafmm.tools import mi_power, mi_factorial
+        from sumpy.tools import mi_power, mi_factorial
         self.coefficients = [
                 mi_power(a, mi)/mi_factorial(mi)
                 for mi in self.multi_indices]

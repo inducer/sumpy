@@ -36,17 +36,17 @@ def test_p2p(ctx_getter):
     dimensions = 3
     n = 5000
 
-    from exafmm.symbolic import make_coulomb_kernel_ts
+    from sumpy.symbolic import make_coulomb_kernel_ts
     coulomb_knl = make_coulomb_kernel_ts(dimensions)
     exprs = [coulomb_knl, coulomb_knl.diff(sp.Symbol("t0"))]
 
-    from exafmm.p2p import P2PKernel
+    from sumpy.p2p import P2PKernel
     knl = P2PKernel(ctx, dimensions, exprs, exclude_self=False)
 
     targets = np.random.rand(dimensions, n).astype(np.float32)
     sources = np.random.rand(dimensions, n).astype(np.float32)
 
-    from exafmm.tools import vector_to_device
+    from sumpy.tools import vector_to_device
     targets_dev = vector_to_device(queue, targets)
     sources_dev = vector_to_device(queue, sources)
     strengths_dev = cl_array.empty(queue, n, dtype=np.float32)
@@ -80,13 +80,13 @@ def test_m2p(ctx_getter):
     dimensions = 3
     n = 5000
 
-    from exafmm.symbolic import make_coulomb_kernel_in
-    from exafmm.expansion import TaylorExpansion
+    from sumpy.symbolic import make_coulomb_kernel_in
+    from sumpy.expansion import TaylorExpansion
     texp = TaylorExpansion(
             make_coulomb_kernel_in("b", dimensions),
             order=2, dimensions=dimensions)
 
-    from exafmm.m2p import M2PKernel
+    from sumpy.m2p import M2PKernel
     knl = M2PKernel(ctx, texp,
             output_maps=[
                 lambda expr: expr,
@@ -94,7 +94,7 @@ def test_m2p(ctx_getter):
 
     targets = np.random.rand(dimensions, n).astype(np.float32)
 
-    from exafmm.tools import vector_to_device
+    from sumpy.tools import vector_to_device
     targets_dev = vector_to_device(queue, targets)
 
     knl(targets_dev, None, None, targets_dev[0], None, None)

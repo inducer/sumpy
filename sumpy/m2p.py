@@ -7,7 +7,7 @@ from pytools import memoize_method
 import pyopencl as cl
 import pyopencl.array as cl_array
 
-from exafmm.kernel_common import (
+from sumpy.kernel_common import (
         COMMON_PREAMBLE, FMMParameters)
 
 
@@ -146,8 +146,8 @@ class M2PKernel(object):
             par_cell_cnt, ctr_coeff_cnt_size):
         dimensions = self.expansion.dimensions
 
-        from exafmm.symbolic.codegen import generate_cl_statements_from_assignments
-        from exafmm.symbolic import vector_subs, make_sym_vector
+        from sumpy.symbolic.codegen import generate_cl_statements_from_assignments
+        from sumpy.symbolic import vector_subs, make_sym_vector
 
         old_var = make_sym_vector("b", dimensions)
         new_var = (make_sym_vector("t", dimensions)
@@ -164,7 +164,7 @@ class M2PKernel(object):
                 for output_idx, output_map in enumerate(self.output_maps)
                 ]
 
-        from exafmm.symbolic.codegen import gen_c_source_subst_map
+        from sumpy.symbolic.codegen import gen_c_source_subst_map
         subst_map = gen_c_source_subst_map(dimensions)
 
         vars_and_exprs = generate_cl_statements_from_assignments(

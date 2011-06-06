@@ -9,7 +9,7 @@ import numpy as np
 
 def test_make_p2m_sym():
     dimensions = 3
-    from exafmm.symbolic import make_coulomb_kernel_in
+    from sumpy.symbolic import make_coulomb_kernel_in
     texp = TaylorExpansion(
             make_coulomb_kernel_in("b", dimensions),
             order=2, dimensions=dimensions)
@@ -32,8 +32,8 @@ def test_make_p2m_sym():
 
     subst_map = gen_c_source_subst_map(dimensions)
 
-    from exafmm.symbolic.codegen import generate_cl_statements_from_assignments
-    from exafmm.symbolic import vector_subs, make_sym_vector
+    from sumpy.symbolic.codegen import generate_cl_statements_from_assignments
+    from sumpy.symbolic import vector_subs, make_sym_vector
 
     # {{{ generate P2M
 
@@ -65,8 +65,8 @@ def test_make_p2m_sym():
     new_var = (make_sym_vector("t", dimensions)
             - make_sym_vector("c", dimensions))
 
-    from exafmm.symbolic import vector_subs
-    from exafmm.symbolic.codegen import generate_cl_statements_from_assignments
+    from sumpy.symbolic import vector_subs
+    from sumpy.symbolic.codegen import generate_cl_statements_from_assignments
     vars_and_exprs = generate_cl_statements_from_assignments(
             [("contrib%d" % i, 
                 vector_subs(basis_i, old_var, new_var))
@@ -83,13 +83,13 @@ def test_make_p2m_sym():
 
 def test_make_m2p():
     dimensions = 3
-    from exafmm.symbolic import make_coulomb_kernel_in
-    from exafmm.expansion import TaylorExpansion
+    from sumpy.symbolic import make_coulomb_kernel_in
+    from sumpy.expansion import TaylorExpansion
     texp = TaylorExpansion(
             make_coulomb_kernel_in("b", dimensions),
             order=2, dimensions=dimensions)
 
-    from exafmm.m2p import make_m2p_source
+    from sumpy.m2p import make_m2p_source
     print make_m2p_source(np.float32, texp,
         [lambda expr: expr,
           lambda expr: sp.diff(expr, sp.Symbol("t0"))

@@ -170,7 +170,7 @@ def eliminate_common_subexpressions(exprs, sym_gen):
 
 
 def make_coulomb_kernel_in(var_name, dimensions):
-    from exafmm.symbolic import make_sym_vector
+    from sumpy.symbolic import make_sym_vector
     dist = make_sym_vector(var_name, dimensions)
 
     if dimensions == 2:
