@@ -4,8 +4,8 @@ import numpy as np
 
 
 class FMMParameters:
-    offset_t = np.uint32
-    mpole_offset_t = np.uint32
+    offset_type = np.uint32
+    mpole_offset_type = np.uint32
 
 
 
@@ -15,9 +15,9 @@ COMMON_PREAMBLE = r"""//CL//
     #pragma OPENCL EXTENSION cl_khr_fp64: enable
 % endif
 
-<%def name="load_vector(tgt_name, src_name, src_base_offset)">
+<%def name="load_vector_g(tgt_name, src_name, src_base_offset)">
   % for i in range(dimensions):
-    ${tgt_name}.s${i} = ${src_name}${i}[${src_base_offset}];
+    ${tgt_name}.s${i} = ${src_name}${i}_g[${src_base_offset}];
   % endfor
 </%def>
 

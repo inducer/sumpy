@@ -71,7 +71,7 @@ void m2p(
     while (plist_idx < tgt_cell_particle_count)
     {
         geometry_vec_t tgt;
-        ${load_vector("tgt", "t", "tgt_cell_particle_offset + plist_idx")}
+        ${load_vector_g("tgt", "t", "tgt_cell_particle_offset + plist_idx")}
 
         % for i in range(output_count):
             output_t output${i} = 0;
@@ -255,4 +255,4 @@ class M2PKernel(object):
 
 
 
-# vim: foldmethod=marker filetype=pyopencl.python
+# vim: foldmethod=marker filetype=pyopencl

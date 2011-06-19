@@ -73,12 +73,31 @@ def test_p2p(ctx_getter):
 
 
 @pytools.test.mark_test.opencl
-def test_m2p(ctx_getter):
+def test_p2m2p(ctx_getter):
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
 
     dimensions = 3
-    n = 5000
+    sources = np.random.rand(dimensions, 5).astype(np.float32)
+    targets = np.random.rand(dimensions, 10).astype(np.float32)
+    targets[0] += 2
+    centers = np.array([[0.5]]*dimensions).astype(np.float32)
+
+    from sumpy.tools import vector_to_device
+    targets_dev = vector_to_device(queue, targets)
+    sources_dev = vector_to_device(queue, sources)
+    centers_dev = vector_to_device(queue, centers)
+    strengths_dev = cl_array.empty(queue, sources.shape[1], dtype=np.float32)
+    strengths_dev.fill(1)
+
+    cell_idx_to_particle_offset = np.array([0], dtype=np.uint32)
+    cell_idx_to_particle_cnt_src = np.array([sources.shape[1]], dtype=np.uint32)
+    cell_idx_to_particle_cnt_tgt = np.array([targets.shape[1]], dtype=np.uint32)
+
+    from pyopencl.array import to_device
+    cell_idx_to_particle_offset_dev = to_device(queue, cell_idx_to_particle_offset)
+    cell_idx_to_particle_cnt_src_dev = to_device(queue, cell_idx_to_particle_cnt_src)
+    cell_idx_to_particle_cnt_tgt_dev = to_device(queue, cell_idx_to_particle_cnt_tgt)
 
     from sumpy.symbolic import make_coulomb_kernel_in
     from sumpy.expansion import TaylorExpansion
@@ -86,18 +105,34 @@ def test_m2p(ctx_getter):
             make_coulomb_kernel_in("b", dimensions),
             order=2, dimensions=dimensions)
 
+    coeff_dtype = np.float64
+
+    from sumpy.p2m import P2MKernel
+    p2m = P2MKernel(ctx, texp)
+    mpole_coeff = p2m(cell_idx_to_particle_offset_dev,
+            cell_idx_to_particle_cnt_src_dev,
+            sources_dev, strengths_dev, centers_dev, coeff_dtype)
+
+    queue.finish()
+    print "P2M finished"
+
+    output_maps = [
+            lambda expr: expr,
+            lambda expr: sp.diff(expr, sp.Symbol("t0"))
+            ]
+
+    m2p_ilist_starts = np.array([0, 1], dtype=np.uint32)
+    m2p_ilist_mpole_offsets = np.array([0], dtype=np.uint32)
+
+    m2p_ilist_starts_dev = to_device(queue, m2p_ilist_starts)
+    m2p_ilist_mpole_offsets_dev = to_device(queue, m2p_ilist_mpole_offsets)
+
     from sumpy.m2p import M2PKernel
-    knl = M2PKernel(ctx, texp,
-            output_maps=[
-                lambda expr: expr,
-                lambda expr: sp.diff(expr, sp.Symbol("t0"))])
+    m2p = M2PKernel(ctx, texp, output_maps=output_maps)
+    output = m2p(targets_dev, m2p_ilist_starts, m2p_ilist_mpole_offsets, mpole_coeff, 
+            cell_idx_to_particle_offset_dev,
+            cell_idx_to_particle_cnt_tgt)
 
-    targets = np.random.rand(dimensions, n).astype(np.float32)
-
-    from sumpy.tools import vector_to_device
-    targets_dev = vector_to_device(queue, targets)
-
-    knl(targets_dev, None, None, targets_dev[0], None, None)
 
 
 

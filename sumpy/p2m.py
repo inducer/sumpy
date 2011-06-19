@@ -23,7 +23,7 @@ typedef ${geometry_type} geometry_t;
 typedef ${geometry_type}${dimensions} geometry_vec_t;
 
 
-#define CELL_INDEX get_group_id(0)
+#define CELL_INDEX get_global_id(0)
 
 
 // Work partition:
@@ -35,6 +35,7 @@ typedef ${geometry_type}${dimensions} geometry_vec_t;
 
 __kernel
 void p2m(
+    unsigned cell_count,
     global const offset_t *cell_idx_to_particle_offset_g,
     global const uint *cell_idx_to_particle_cnt_g,
     % for i in range(dimensions):
@@ -46,34 +47,42 @@ void p2m(
     % endfor
     global coeff_t *mpole_coeff_g)
 {
+    if (CELL_INDEX < cell_count)
+        return;
+
     % for i in range(coeff_cnt):
         coeff_t mpole_coeff${i} = 0;
     % endfor
 
-    uint particle_start = cell_idx_to_particle_cnt_g[CELL_INDEX];
+    uint particle_start = cell_idx_to_particle_offset_g[CELL_INDEX];
     uint particle_cnt = cell_idx_to_particle_cnt_g[CELL_INDEX];
 
-    ${load_vector("ctr", "c_g", "CELL_INDEX")}
+    geometry_vec_t ctr;
+    ${load_vector_g("ctr", "c", "CELL_INDEX")}
 
     for (uint particle_idx = particle_start; 
         particle_idx < particle_start+particle_cnt; ++particle_idx)
     {
         geometry_vec_t src;
-        ${load_vector("src", "s_g", "particle_idx")}
+        ${load_vector_g("src", "s", "particle_idx")}
 
         coeff_t strength = strength_g[particle_idx];
 
         % for var_name, expr in vars_and_exprs:
-            % if var_name.startswith("output"):
+            % if var_name.startswith("mpole_coeff"):
                 ${var_name} += ${expr};
             % else:
-                coeff_t ${var_name} = ${expr};
+                coeff_t ${var_name} = strength * ${expr};
             % endif
         % endfor
     }
 
+    % for i in range(dimensions):
+        mpole_coeff_g[CELL_INDEX * ${coeff_cnt_padded} + ${i}] = ctr.s${i};
+    % endfor
     % for i in range(coeff_cnt):
-        mpole_coeff_g[CELL_INDEX * ${coef_cnt_padded} + ${i}] = mpole_coeff${i};
+        mpole_coeff_g[CELL_INDEX * ${coeff_cnt_padded} + ${dimensions} + ${i}]
+          = mpole_coeff${i};
     % endfor
 }
 """, strict_undefined=True, disable_unicode=True)
@@ -108,10 +117,8 @@ class P2MKernel(object):
                 for basis_fun in self.expansion.coefficients]
 
         outputs = [
-                ("output%d" % output_idx,
-                    output_map(sum(tc_basis_fun for tc_basis_fun in cs_coeffs)))
-
-                for output_idx, output_map in enumerate(self.output_maps)
+                ("mpole_coeff%d" % coeff_idx, cs_coeff)
+                for coeff_idx, cs_coeff in enumerate(cs_coeffs)
                 ]
 
         from sumpy.symbolic.codegen import gen_c_source_subst_map
@@ -126,6 +133,7 @@ class P2MKernel(object):
                 dimensions=dimensions,
                 vars_and_exprs=vars_and_exprs,
                 type_declarations="",
+                coeff_cnt=len(self.expansion.coefficients),
                 coeff_cnt_padded=coeff_cnt_padded,
                 double_support=all(
                     has_double_support(dev) for dev in self.context.devices),
@@ -137,12 +145,14 @@ class P2MKernel(object):
                 )
 
         prg = cl.Program(self.context, kernel_src).build(self.options)
-        return getattr(prg, self.name)
+        knl = getattr(prg, self.name)
+        knl.set_scalar_arg_dtypes([np.uint32] + [None]*(4+2*dimensions))
+        return knl
 
     def __call__(self,
             cell_idx_to_particle_offset, cell_idx_to_particle_cnt,
-            sources, cell_centers, coeff_dtype,
-            output_dtype=None, allocator=None, 
+            sources, strength, cell_centers, coeff_dtype,
+            output_dtype=None, allocator=None,
             queue=None, wait_for=None):
 
         # {{{ type processing
@@ -150,7 +160,7 @@ class P2MKernel(object):
         geometry_dtype = sources[0].dtype
         coeff_dtype = np.dtype(coeff_dtype)
 
-        coeff_cnt_padded = self.expansion.padded_coefficient_count(
+        coeff_cnt_padded = self.expansion.padded_coefficient_count_with_center(
                     coeff_dtype)
 
         # }}}
@@ -160,34 +170,32 @@ class P2MKernel(object):
 
         cell_count = len(cell_centers[0])
 
-        mpole_coeff = np.empty((cell_count, coeff_cnt_padded),
+        mpole_coeff = cl_array.empty(queue, (cell_count, coeff_cnt_padded),
                 dtype=coeff_dtype)
-        from pytools.obj_array import make_obj_array
-        outputs = make_obj_array([
-            cl_array.empty(queue, target_count, output_dtype,
-                allocator=allocator)
-            for expr in self.output_maps])
 
-        tgt_cell_count = len(m2p_ilist_starts) - 1
-        kernel = self.get_kernel(geometry_dtype, coeff_dtype, output_dtype,
-                par_cell_cnt, coeff_cnt_padded)
+        kernel = self.get_kernel(geometry_dtype, coeff_dtype, coeff_cnt_padded)
 
-        wg_size = kernel.get_work_group_info(cl.kernel_work_group_info.WORK_GROUP_SIZE)
+        wg_size = kernel.get_work_group_info(
+                cl.kernel_work_group_info.WORK_GROUP_SIZE,
+                queue.device)
 
-        wg_dim = np.array([coeff_cnt_padded, par_cell_cnt])
-        global_dim = wg_dim * np.array([tgt_cell_count, 1])
+        from pytools import div_ceil
+        wg_count = div_ceil(cell_count, wg_size)
 
-        kernel(queue, global_dim, wg_dim,
+        kernel(queue, (wg_count*wg_size,), (wg_size,),
                 *(
-                    [tgt_i.data for tgt_i in targets]
-                    + [out_i.data for out_i in outputs]
-                    + [m2p_ilist_starts.data, m2p_ilist_mpole_offsets.data,
-                        mpole_coeff.data, 
-                        cell_idx_to_particle_offset.data,
+                    [len(cell_centers)]
+                    + [cell_idx_to_particle_offset.data,
                         cell_idx_to_particle_cnt.data]
+                    + [src_i.data for src_i in sources]
+                    + [strength.data]
+                    + [ctr_i.data for ctr_i in cell_centers]
+                    + [mpole_coeff.data]
                     ), wait_for=wait_for)
 
-        return outputs
+        return mpole_coeff
 
 
-# vim: foldmethod=marker filetype=pyopencl.python
+
+
+# vim: foldmethod=marker filetype=pyopencl
