@@ -47,7 +47,7 @@ void p2m(
     % endfor
     global coeff_t *mpole_coeff_g)
 {
-    if (CELL_INDEX < cell_count)
+    if (CELL_INDEX >= cell_count)
         return;
 
     % for i in range(coeff_cnt):
@@ -184,7 +184,7 @@ class P2MKernel(object):
 
         kernel(queue, (wg_count*wg_size,), (wg_size,),
                 *(
-                    [len(cell_centers)]
+                    [cell_count]
                     + [cell_idx_to_particle_offset.data,
                         cell_idx_to_particle_cnt.data]
                     + [src_i.data for src_i in sources]

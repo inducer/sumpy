@@ -237,10 +237,7 @@ class M2PKernel(object):
         kernel = self.get_kernel(geometry_dtype, coeff_dtype, output_dtype,
                 par_cell_cnt, ctr_coeff_cnt_size)
 
-        wg_dim = np.array([ctr_coeff_cnt_size, par_cell_cnt])
-        global_dim = wg_dim * np.array([tgt_cell_count, 1])
-
-        kernel(queue, global_dim, wg_dim,
+        kernel(queue, (tgt_cell_count, 1), (ctr_coeff_cnt_size, par_cell_cnt),
                 *(
                     [tgt_i.data for tgt_i in targets]
                     + [out_i.data for out_i in outputs]
@@ -248,7 +245,7 @@ class M2PKernel(object):
                         mpole_coeff.data, 
                         cell_idx_to_particle_offset.data,
                         cell_idx_to_particle_cnt.data]
-                    ), wait_for=wait_for)
+                    ), wait_for=wait_for, g_times_l=True)
 
         return outputs
 

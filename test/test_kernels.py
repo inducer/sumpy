@@ -28,9 +28,6 @@ if have_cl():
 @pytools.test.mark_test.opencl
 def test_p2p(ctx_getter):
     ctx = ctx_getter()
-
-    print ctx.devices[0].name
-
     queue = cl.CommandQueue(ctx)
 
     dimensions = 3
@@ -107,14 +104,17 @@ def test_p2m2p(ctx_getter):
 
     coeff_dtype = np.float64
 
+    # {{{ apply P2M
+
     from sumpy.p2m import P2MKernel
     p2m = P2MKernel(ctx, texp)
     mpole_coeff = p2m(cell_idx_to_particle_offset_dev,
             cell_idx_to_particle_cnt_src_dev,
             sources_dev, strengths_dev, centers_dev, coeff_dtype)
 
-    queue.finish()
-    print "P2M finished"
+    # }}}
+
+    # {{{ apply M2P
 
     output_maps = [
             lambda expr: expr,
@@ -129,9 +129,26 @@ def test_p2m2p(ctx_getter):
 
     from sumpy.m2p import M2PKernel
     m2p = M2PKernel(ctx, texp, output_maps=output_maps)
-    output = m2p(targets_dev, m2p_ilist_starts, m2p_ilist_mpole_offsets, mpole_coeff, 
+    potential_dev, x_derivative = m2p(targets_dev, m2p_ilist_starts_dev, m2p_ilist_mpole_offsets_dev, mpole_coeff, 
             cell_idx_to_particle_offset_dev,
-            cell_idx_to_particle_cnt_tgt)
+            cell_idx_to_particle_cnt_tgt_dev)
+
+    # }}}
+
+    # {{{ compute (direct) reference solution
+
+    from sumpy.p2p import P2PKernel
+    from sumpy.symbolic import make_coulomb_kernel_ts
+    coulomb_knl = make_coulomb_kernel_ts(dimensions)
+
+    knl = P2PKernel(ctx, dimensions, 
+            exprs=[f(coulomb_knl) for f in output_maps], exclude_self=False)
+
+    potential_dev_direct, x_derivative_dir = knl(targets_dev, sources_dev, strengths_dev)
+
+    print potential_dev - potential_dev_direct
+
+    # }}}
 
 
 
@@ -151,3 +168,5 @@ if __name__ == "__main__":
     else:
         from py.test.cmdline import main
         main([__file__])
+
+# vim: fdm=marker
