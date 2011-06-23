@@ -74,10 +74,12 @@ def test_p2m2p(ctx_getter):
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
 
+    res = 10
+
     dimensions = 3
     sources = np.random.rand(dimensions, 5).astype(np.float32)
-    targets = np.random.rand(dimensions, 10).astype(np.float32)
-    targets[0] += 2
+    #targets = np.random.rand(dimensions, 10).astype(np.float32)
+    targets = np.mgrid[-2:2:res*1j, -2:2:res*1j, 2:2:1j].reshape(3, -1).astype(np.float32)
     centers = np.array([[0.5]]*dimensions).astype(np.float32)
 
     from sumpy.tools import vector_to_device
@@ -102,7 +104,7 @@ def test_p2m2p(ctx_getter):
             make_coulomb_kernel_in("b", dimensions),
             order=2, dimensions=dimensions)
 
-    coeff_dtype = np.float64
+    coeff_dtype = np.float32
 
     # {{{ apply P2M
 
@@ -146,7 +148,17 @@ def test_p2m2p(ctx_getter):
 
     potential_dev_direct, x_derivative_dir = knl(targets_dev, sources_dev, strengths_dev)
 
-    print potential_dev - potential_dev_direct
+    if 0:
+        import matplotlib.pyplot as pt
+        pt.imshow(potential_dev_direct.get().reshape(res, res))
+        pt.show()
+        pt.imshow(potential_dev.get().reshape(res, res))
+        pt.show()
+
+    print potential_dev-potential_dev_direct
+    print potential_dev
+    print potential_dev_direct
+    #print mpole_coeff
 
     # }}}
 

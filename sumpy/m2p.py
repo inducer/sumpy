@@ -1,6 +1,7 @@
 from __future__ import division
 
 import numpy as np
+import sympy as sp
 from mako.template import Template
 from pytools import memoize_method
 
@@ -15,7 +16,7 @@ from sumpy.kernel_common import (
 
 M2P_KERNEL = Template(
 COMMON_PREAMBLE +
-"""//CL//
+r"""//CL//
 typedef ${offset_type} offset_t;
 typedef ${mpole_offset_type} mpole_offset_t;
 typedef ${coefficient_type} coeff_t;
@@ -33,7 +34,7 @@ typedef ${output_type} output_t;
 // ---------------
 // Each work item is responsible for computing the summed-up multipole expansions
 // at one target point. Each work group is responsible for one target cell.
-// To achieve the, the kernel loops first over batches of particles within the target
+// To achieve this, the kernel loops first over batches of particles within the target
 // cell (if necessary) and then over source cells. The outer "loop over source
 // cell batches" orchestrates cooperative loading of multipole coefficients.
 
@@ -65,31 +66,50 @@ void m2p(
     __local coeff_t mpole_coeff_l[${par_cell_cnt} * ${ctr_coeff_cnt_size}];
 
     // index into this cell's list of particles
-    uint plist_idx = lid;
+    uint plist_base = 0;
 
     // loop over particle batches
-    while (plist_idx < tgt_cell_particle_count)
+
+    // NOTE: Since there is barrier synchronization at the innermost 
+    // level of the loop, all work items must participate until the
+    // end of the loop, whether they need to or not.
+
+    // TODO: Convert to batched loop
+    while (plist_base < tgt_cell_particle_count)
     {
+        uint plist_idx = plist_base+lid;
         geometry_vec_t tgt;
-        ${load_vector_g("tgt", "t", "tgt_cell_particle_offset + plist_idx")}
+
+        if (plist_idx < tgt_cell_particle_count)
+        {
+            ${load_vector_g("tgt", "t", "tgt_cell_particle_offset + plist_idx")}
+        }
 
         % for i in range(output_count):
             output_t output${i} = 0;
         % endfor
 
-        // index into overall M2P interaction list
-        offset_t ilist_idx = ilist_start + get_local_id(1);
+        offset_t ilist_base = ilist_start;
 
         // loop over source cell batches
-        while (ilist_idx < ilist_end)
+        // TODO: Convert to batched loop
+        while (ilist_base < ilist_end)
         {
+            // index into overall M2P interaction list
+            offset_t ilist_idx = ilist_base + get_local_id(1);
+
             barrier(CLK_LOCAL_MEM_FENCE);
-            mpole_offset_t mpole_offset = m2p_ilist_mpole_offsets_g[ilist_idx];
-            mpole_coeff_l[lid] = mpole_coeff_g[mpole_offset + get_local_id(0)];
+            if (ilist_idx < ilist_end)
+            {
+                mpole_offset_t mpole_offset = m2p_ilist_mpole_offsets_g[ilist_idx];
+                mpole_coeff_l[lid] = mpole_coeff_g[mpole_offset + get_local_id(0)];
+            }
             barrier(CLK_LOCAL_MEM_FENCE);
 
+            uint batch_cell_cnt = min(${par_cell_cnt}, ilist_end-ilist_base);
+
             // loop over source cells
-            for (uint src_cell = 0; src_cell < ${par_cell_cnt}; ++src_cell)
+            for (uint src_cell = 0; src_cell < batch_cell_cnt; ++src_cell)
             {
                 uint loc_mpole_base = src_cell*${ctr_coeff_cnt_size};
                 geometry_vec_t ctr;
@@ -98,7 +118,7 @@ void m2p(
                 % endfor
                 loc_mpole_base += ${dimensions};
 
-                // FIXME: Are mpole_coeff_l actually used?
+                #define COEFF(i) mpole_coeff_l[loc_mpole_base+${dimensions}+i]
 
                 % for var, expr in vars_and_exprs:
                     % if var.startswith("output"):
@@ -107,16 +127,19 @@ void m2p(
                         output_t ${var} = ${expr};
                     % endif
                 % endfor
-          }
+            }
 
-          ilist_idx += ${par_cell_cnt};
+            ilist_base += ${par_cell_cnt};
         }
 
-        % for i in range(output_count):
-          output${i}_g[tgt_cell_particle_offset + plist_idx] = output${i};
-        % endfor
+        if (plist_idx < tgt_cell_particle_count)
+        {
+            % for i in range(output_count):
+              output${i}_g[tgt_cell_particle_offset + plist_idx] = output${i};
+            % endfor
+        }
 
-        plist_idx += ${wg_size};
+        plist_base += ${wg_size};
     }
 }
 """, strict_undefined=True, disable_unicode=True)
@@ -159,7 +182,9 @@ class M2PKernel(object):
 
         outputs = [
                 ("output%d" % output_idx,
-                    output_map(sum(tc_basis_fun for tc_basis_fun in tc_basis)))
+                    output_map(sum(
+                        sp.Symbol("COEFF(%d)" % i)*tc_basis_fun
+                        for i, tc_basis_fun in enumerate(tc_basis))))
 
                 for output_idx, output_map in enumerate(self.output_maps)
                 ]
@@ -189,6 +214,7 @@ class M2PKernel(object):
                 output_type=dtype_to_ctype(output_dtype),
                 )
 
+        print kernel_src
         prg = cl.Program(self.context, kernel_src).build(self.options)
         kernel = getattr(prg, self.name)
         kernel.set_scalar_arg_dtypes(

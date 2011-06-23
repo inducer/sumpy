@@ -182,7 +182,7 @@ class P2MKernel(object):
         from pytools import div_ceil
         wg_count = div_ceil(cell_count, wg_size)
 
-        kernel(queue, (wg_count*wg_size,), (wg_size,),
+        kernel(queue, (wg_count,), (wg_size,),
                 *(
                     [cell_count]
                     + [cell_idx_to_particle_offset.data,
@@ -191,7 +191,7 @@ class P2MKernel(object):
                     + [strength.data]
                     + [ctr_i.data for ctr_i in cell_centers]
                     + [mpole_coeff.data]
-                    ), wait_for=wait_for)
+                    ), wait_for=wait_for, g_times_l=True)
 
         return mpole_coeff
 
