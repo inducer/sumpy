@@ -74,7 +74,7 @@ def test_p2m2p(ctx_getter):
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
 
-    res = 10
+    res = 100
 
     dimensions = 3
     sources = np.random.rand(dimensions, 5).astype(np.float32)
@@ -102,7 +102,7 @@ def test_p2m2p(ctx_getter):
     from sumpy.expansion import TaylorExpansion
     texp = TaylorExpansion(
             make_coulomb_kernel_in("b", dimensions),
-            order=2, dimensions=dimensions)
+            order=3, dimensions=dimensions)
 
     coeff_dtype = np.float32
 
@@ -150,17 +150,11 @@ def test_p2m2p(ctx_getter):
 
     if 0:
         import matplotlib.pyplot as pt
-        pt.imshow(potential_dev_direct.get().reshape(res, res))
-        pt.show()
-        pt.imshow(potential_dev.get().reshape(res, res))
+        pt.imshow((potential_dev-potential_dev_direct).get().reshape(res, res))
+        pt.colorbar()
         pt.show()
 
-    print potential_dev-potential_dev_direct
-    print potential_dev
-    print potential_dev_direct
-    #print mpole_coeff
-
-    # }}}
+    assert la.norm((potential_dev-potential_dev_direct).get())/res**2 < 1e-3
 
 
 

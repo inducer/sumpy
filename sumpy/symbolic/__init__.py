@@ -175,8 +175,10 @@ def make_coulomb_kernel_in(var_name, dimensions):
 
     if dimensions == 2:
         return sp.log(sp.sqrt((dist.T*dist)[0,0]))
-    else:
+    elif dimensions == 3:
         return 1/sp.sqrt((dist.T*dist)[0,0])
+    else:
+        raise RuntimeError("unsupported dimensionality")
 
 
 

@@ -118,7 +118,7 @@ void m2p(
                 % endfor
                 loc_mpole_base += ${dimensions};
 
-                #define COEFF(i) mpole_coeff_l[loc_mpole_base+${dimensions}+i]
+                #define COEFF(i) mpole_coeff_l[loc_mpole_base+i]
 
                 % for var, expr in vars_and_exprs:
                     % if var.startswith("output"):
