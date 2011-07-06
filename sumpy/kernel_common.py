@@ -14,7 +14,7 @@ COMMON_PREAMBLE = r"""//CL//
 % if double_support:
     #pragma OPENCL EXTENSION cl_khr_fp64: enable
 % endif
-#pragma OPENCL EXTENSION cl_amd_printf: enable
+## #pragma OPENCL EXTENSION cl_amd_printf: enable
 
 <%def name="load_vector_g(tgt_name, src_name, src_base_offset)">
   % for i in range(dimensions):

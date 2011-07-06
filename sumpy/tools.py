@@ -5,6 +5,9 @@ from __future__ import division
 
 # {{{ multi_index helpers
 
+def add_mi(mi1, mi2):
+    return tuple(mi1i+mi2i for mi1i, mi2i in zip(mi1, mi2))
+
 def mi_factorial(mi):
     from pytools import factorial
     result = 1
