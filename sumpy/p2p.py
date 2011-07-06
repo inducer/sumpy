@@ -31,16 +31,16 @@ P2P_KERNEL = Template(
       uint ntarget
       , uint nsource
       % for i in range(dimensions):
-          , global const geometry_t *restrict t_g${i}
+          , global const geometry_t *restrict t${i}_g
       % endfor
       % for i in range(dimensions):
-          , global const geometry_t *restrict s_g${i}
+          , global const geometry_t *restrict s${i}_g
       % endfor
       % for i in range(strength_count):
-          , global const output_t *restrict strength_g${i}
+          , global const output_t *restrict strength${i}_g
       % endfor
       % for i in range(output_count):
-          , global output_t *restrict output_g${i}
+          , global output_t *restrict output${i}_g
       % endfor
       )
     {
@@ -50,7 +50,7 @@ P2P_KERNEL = Template(
 
         if (itarget < ntarget)
         {
-            ${load_vector("tgt", "t_g", "itarget")}
+            ${load_vector_g("tgt", "t", "itarget")}
         }
 
         % for i in range(output_count):
@@ -58,7 +58,7 @@ P2P_KERNEL = Template(
         %endfor
 
         % for i in range(dimensions):
-            local geometry_t s_l${i}[${wg_size}];
+            local geometry_t s${i}_l[${wg_size}];
         % endfor
         % for i in range(strength_count):
             local output_t strength_l${i}[${wg_size}];
@@ -79,10 +79,10 @@ P2P_KERNEL = Template(
                 % endif
 
                 % for i in range(dimensions):
-                    s_l${i}[get_local_id(0)] = s_g${i}[isource_load];
+                    s${i}_l[get_local_id(0)] = s${i}_g[isource_load];
                 % endfor
                 % for i in range(strength_count):
-                    strength_l${i}[get_local_id(0)] = strength_g${i}[isource_load];
+                    strength_l${i}[get_local_id(0)] = strength${i}_g[isource_load];
                 % endfor
 
                 % if is_tail:
@@ -102,7 +102,7 @@ P2P_KERNEL = Template(
                 %endif
 
                 geometry_vec_t src;
-                ${load_vector("src", "s_l", "isource_local")}
+                ${load_vector_l("src", "s", "isource_local")}
                 % for i in range(strength_count):
                     output_t strength${i} = strength_l${i}[isource_local];
                 % endfor
@@ -121,7 +121,7 @@ P2P_KERNEL = Template(
         if (itarget < ntarget)
         {
             % for i in range(output_count):
-                output_g${i}[itarget] = output${i};
+                output${i}_g[itarget] = output${i};
             %endfor
         }
     }

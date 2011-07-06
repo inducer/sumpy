@@ -47,7 +47,7 @@ void p2m(
     % endfor
     global coeff_t *mpole_coeff_g)
 {
-    if (CELL_INDEX < cell_count)
+    if (CELL_INDEX >= cell_count)
         return;
 
     % for i in range(coeff_cnt):
@@ -182,16 +182,16 @@ class P2MKernel(object):
         from pytools import div_ceil
         wg_count = div_ceil(cell_count, wg_size)
 
-        kernel(queue, (wg_count*wg_size,), (wg_size,),
+        kernel(queue, (wg_count,), (wg_size,),
                 *(
-                    [len(cell_centers)]
+                    [cell_count]
                     + [cell_idx_to_particle_offset.data,
                         cell_idx_to_particle_cnt.data]
                     + [src_i.data for src_i in sources]
                     + [strength.data]
                     + [ctr_i.data for ctr_i in cell_centers]
                     + [mpole_coeff.data]
-                    ), wait_for=wait_for)
+                    ), wait_for=wait_for, g_times_l=True)
 
         return mpole_coeff
 
