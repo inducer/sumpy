@@ -1,5 +1,6 @@
 from __future__ import division
 import sympy as sp
+from pytools import memoize
 
 
 
@@ -165,6 +166,40 @@ def eliminate_common_subexpressions(exprs, sym_gen):
     cse_mapper = CSEMapper(to_eliminate, sym_gen)
     result = [cse_mapper(expr) for expr in exprs]
     return cse_mapper.cse_assignments, result
+
+
+
+
+def find_power_of(base, prod):
+    remdr = sp.Wild("remdr")
+    power = sp.Wild("power")
+    result = prod.match(remdr*base**power)
+    if result is None:
+        return 0
+    return result[power]
+
+
+
+
+@memoize
+def diff_multi_index(expr, multi_index, var_name):
+    dimensions = len(multi_index)
+
+    if sum(multi_index) == 0:
+        return expr
+
+    first_nonzero_axis = min(
+            i for i in range(dimensions)
+            if multi_index[i] > 0)
+
+    lowered_mi = list(multi_index)
+    lowered_mi[first_nonzero_axis] -= 1
+    lowered_mi = tuple(lowered_mi)
+
+    lower_diff_expr = diff_multi_index(expr, lowered_mi, var_name)
+
+    return sp.diff(lower_diff_expr,
+            sp.Symbol("%s%d" % (var_name, first_nonzero_axis)))
 
 
 
