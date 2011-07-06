@@ -26,7 +26,7 @@ class Expansion(object):
 
 
 
-class TaylorExpansion(Expansion):
+class TaylorMultipoleExpansion(Expansion):
     def __init__(self, kernel, order, dimensions):
         """
         :arg: kernel in terms of 'b' variable
@@ -41,36 +41,97 @@ class TaylorExpansion(Expansion):
                 as gnitstam)
 
         self.multi_indices = sorted(gnitstam(self.order, self.dimensions), key=sum)
+        self.mi_to_index = dict(
+                (mi, i) for i, mi in enumerate(self.multi_indices))
 
         # given in terms of b variable
+        from sumpy.symbolic import diff_multi_index
         self.basis = [
-                self.diff_kernel(mi)
+                diff_multi_index(kernel, mi, "b")
                 for mi in self.multi_indices]
 
         # given in terms of a variable
         from sumpy.symbolic import make_sym_vector
 
-        a = make_sym_vector("a", 3)
+        a = make_sym_vector("a", dimensions)
         from sumpy.tools import mi_power, mi_factorial
         self.coefficients = [
                 mi_power(a, mi)/mi_factorial(mi)
                 for mi in self.multi_indices]
 
-    @memoize_method
-    def diff_kernel(self, multi_index):
-        if sum(multi_index) == 0:
-            return self.kernel
+    def m2m_exprs(self, get_coefficient_expr):
+        """Expressions for coefficients of shifted expansion, in terms of s
+        (the shift from the old center to the new center), as well as the
+        coefficients returned by *get_coefficient_expr* for each multi-index.
+        """
 
-        first_nonzero_axis = min(
-                i for i in range(self.dimensions)
-                if multi_index[i] > 0)
+        from sumpy.symbolic import make_sym_vector
+        a = make_sym_vector("a", self.dimensions)
+        s = make_sym_vector("s", self.dimensions)
+        # new center = c+s
 
-        lowered_mi = list(multi_index)
-        lowered_mi[first_nonzero_axis] -= 1
-        lowered_mi = tuple(lowered_mi)
+        from sumpy.symbolic import IdentityMapper, find_power_of
+        class ToCoefficientMapper(IdentityMapper):
+            def map_Mul(subself, expr):
+                a_powers = tuple(int(find_power_of(ai, expr)) for ai in a)
 
-        lower_diff_kernel = self.diff_kernel(lowered_mi)
+                return (
+                        expr/mi_power(a, a_powers)
+                        * get_coefficient_expr(self.mi_to_index[a_powers]))
 
-        return sp.diff(lower_diff_kernel,
-                sp.Symbol("b%d" % first_nonzero_axis))
+            map_Symbol = map_Mul
 
+        tcm = ToCoefficientMapper()
+
+        from sumpy.tools import mi_power
+        return [tcm(mi_power(a+s, mi).expand()) for mi in self.multi_indices]
+
+    def m2l_exprs(self, loc_exp, get_coefficient_expr):
+        """Expressions for coefficients of the local expansion *loc_exp* of the
+        multipole expansion *self*, whose coefficients are obtained by
+        *get_coefficient_expr* for each coefficient index. The expressions are
+        given in terms of *s* (the shift from the multipole center to the local
+        center).
+        """
+
+        b2s_map = dict(
+                (sp.Symbol("b%d" % i), sp.Symbol("s%d" % i))
+                for i in range(self.dimensions))
+
+        expansion = sum(
+            get_coefficient_expr(i)
+            * basis_func.subs(b2s_map)
+            for i, basis_func in enumerate(self.basis))
+
+        from sumpy.symbolic import diff_multi_index
+        from sumpy.tools import mi_factorial
+        return [diff_multi_index(expansion, loc_mi, "s") / mi_factorial(loc_mi)
+                for loc_mi in loc_exp.multi_indices]
+
+
+
+
+
+
+class TaylorLocalExpansion(Expansion):
+    def __init__(self, order, dimensions):
+        self.order = order
+        self.dimensions = dimensions
+
+        from pytools import (
+                generate_nonnegative_integer_tuples_summing_to_at_most
+                as gnitstam)
+
+        self.multi_indices = sorted(gnitstam(self.order, self.dimensions), key=sum)
+        self.mi_to_index = dict(
+                (mi, i) for i, mi in enumerate(self.multi_indices))
+
+        from sumpy.symbolic import make_sym_vector
+
+        from sumpy.tools import mi_power, mi_factorial
+
+        # given in terms of b variable
+        b = make_sym_vector("b", dimensions)
+        self.basis = [
+                mi_power(b, mi)/mi_factorial(mi)
+                for mi in self.multi_indices]
