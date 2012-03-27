@@ -88,6 +88,10 @@ class PowRewriter(IdentityMapper):
 
         return IdentityMapper.map_Pow(self, expr)
 
+    def map_Subs(self, expr):
+        return expr
+
+
 
 
 

@@ -21,6 +21,12 @@ def mi_power(vector, mi):
         result *= vec_i**mi_i
     return result
 
+def mi_derivative(expr, vector, mi):
+    for mi_i, vec_i in zip(mi, vector):
+        expr = expr.diff(vec_i, mi_i)
+    return expr
+
+
 # }}}
 
 

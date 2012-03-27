@@ -156,6 +156,8 @@ def test_p2m2p(ctx_getter):
 
     assert la.norm((potential_dev-potential_dev_direct).get())/res**2 < 1e-3
 
+    # }}}
+
 
 
 
@@ -262,6 +264,8 @@ def test_p2m2m2p(ctx_getter):
         pt.show()
 
     assert la.norm((potential_dev-potential_dev_direct).get())/res**2 < 1e-3
+
+    # }}}
 
 
 

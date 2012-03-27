@@ -61,7 +61,7 @@ class IdentityMapper(SympyMapper):
 
     map_Symbol = map_Integer
     map_Real = map_Integer
-
+    map_ImaginaryUnit = map_Integer
 
 
 
@@ -129,6 +129,9 @@ class CSEMapper(IdentityMapper):
         else:
             return IdentityMapper.map_Rational(self, expr)
 
+    def map_Subs(self, expr):
+        return expr
+
 
 
 
@@ -154,7 +157,7 @@ def eliminate_common_subexpressions(exprs, sym_gen):
             else:
                 iterable = node
 
-            for arg in node.args:
+            for arg in iterable:
                 gather_use_counts(arg)
 
     for expr in exprs:
@@ -204,16 +207,54 @@ def diff_multi_index(expr, multi_index, var_name):
 
 
 
-def make_coulomb_kernel_in(var_name, dimensions):
-    from sumpy.symbolic import make_sym_vector
-    dist = make_sym_vector(var_name, dimensions)
+def make_coulomb_kernel(dist_vec):
+    dimensions = len(dist_vec)
+    r = sp.sqrt((dist_vec.T*dist_vec)[0,0])
 
     if dimensions == 2:
-        return sp.log(sp.sqrt((dist.T*dist)[0,0]))
+        return sp.log(r)
     elif dimensions == 3:
-        return 1/sp.sqrt((dist.T*dist)[0,0])
+        return 1/r
     else:
         raise RuntimeError("unsupported dimensionality")
+
+
+
+
+
+def make_helmholtz_kernel(dist_vec):
+    dimensions = len(dist_vec)
+    r = sp.sqrt((dist_vec.T*dist_vec)[0,0])
+
+    i = sp.sqrt(-1)
+    k = sp.Symbol("k")
+
+    if dimensions == 2:
+        return i/4 * sp.Function("H1_0")(k*r)
+    elif dimensions == 3:
+        return sp.exp(i*k*r)/r
+    else:
+        raise RuntimeError("unsupported dimensionality")
+
+
+
+
+def make_coulomb_kernel_in(var_name, dimensions):
+    from warnings import warn
+    warn("make_coulomb_kernel_in is deprecated", DeprecationWarning, stacklevel=2)
+
+    from sumpy.symbolic import make_sym_vector
+    return make_coulomb_kernel(make_sym_vector(var_name, dimensions))
+
+
+
+
+def make_helmholtz_kernel_in(var_name, dimensions):
+    from warnings import warn
+    warn("make_helmholtz_kernel_in is deprecated", DeprecationWarning, stacklevel=2)
+
+    from sumpy.symbolic import make_sym_vector
+    return make_helmholtz_kernel(make_sym_vector(var_name, dimensions))
 
 
 
