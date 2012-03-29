@@ -207,7 +207,7 @@ def diff_multi_index(expr, multi_index, var_name):
 
 
 
-def make_coulomb_kernel(dist_vec):
+def make_laplace_kernel(dist_vec):
     dimensions = len(dist_vec)
     r = sp.sqrt((dist_vec.T*dist_vec)[0,0])
 
@@ -244,7 +244,7 @@ def make_coulomb_kernel_in(var_name, dimensions):
     warn("make_coulomb_kernel_in is deprecated", DeprecationWarning, stacklevel=2)
 
     from sumpy.symbolic import make_sym_vector
-    return make_coulomb_kernel(make_sym_vector(var_name, dimensions))
+    return make_laplace_kernel(make_sym_vector(var_name, dimensions))
 
 
 
