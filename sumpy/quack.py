@@ -3,6 +3,7 @@ from __future__ import division
 import numpy as np
 import loopy as lp
 import pyopencl as cl
+import pyopencl.tools
 import sympy as sp
 
 from pymbolic.mapper import IdentityMapper
@@ -33,18 +34,52 @@ def quack_expand(kernel, order, avec, bvec):
 
 # {{{ hankel handling
 
+HANKEL_PREAMBLE = """//CL//
+
+#include "hank103.cl"
+
+typedef struct hank1_01_result_str
+{
+    cdouble_t order0, order1;
+} hank1_01_result;
+
+hank1_01_result hank1_01(cdouble_t z)
+{
+    int ifexpon ;
+    hank1_01_result result;
+    hank103(z, &result.order0, &result.order1, /*ifexpon*/ 1);
+    return result;
+}
+"""
+
+hank1_01_result_dtype = np.dtype([
+    ("order0", np.complex128),
+    ("order1", np.complex128),
+    ])
+cl.tools.register_dtype(hank1_01_result_dtype,
+        "hank1_01_result")
+
+
+
 class HankelGetter(object):
     @memoize_method
     def hank1_01(self, arg):
-        return prim.CommonSubexpression(
-                prim.Variable("hank1_01")(arg))
+        from loopy.symbolic import TypedCSE
+        return TypedCSE(
+                prim.Variable("hank1_01")(arg),
+                dtype=hank1_01_result_dtype)
 
     @memoize_method
     def hank1(self, order, arg):
+        from loopy.symbolic import TypedCSE
         if order == 0:
-            return prim.Lookup(self.hank1_01(arg), "order0")
+            return TypedCSE(
+                    prim.Lookup(self.hank1_01(arg), "order0"),
+                    dtype=np.complex128)
         elif order == 1:
-            return prim.Lookup(self.hank1_01(arg), "order1")
+            return TypedCSE(
+                    prim.Lookup(self.hank1_01(arg), "order1"),
+                    dtype=np.complex128)
         elif order < 0:
             # AS (9.1.6)
             nu = -order
@@ -170,12 +205,16 @@ def test_quack(ctx_factory):
 
     dimensions = 2
 
-    from sumpy.symbolic import make_sym_vector, make_helmholtz_kernel
+    from sumpy.symbolic import (
+            make_sym_vector,
+            make_laplace_kernel,
+            make_helmholtz_kernel)
+
     avec = make_sym_vector("a", dimensions)
     bvec = make_sym_vector("b", dimensions)
     kernel = make_helmholtz_kernel(avec)
 
-    texp = quack_expand(kernel, 4, avec, bvec)
+    texp = quack_expand(kernel, 6, avec, bvec)
 
     from pymbolic.sympy_conv import ToPymbolicMapper
     texp = ToPymbolicMapper()(texp)
@@ -186,29 +225,21 @@ def test_quack(ctx_factory):
     texp = HankelSubstitutor(HankelGetter())(texp)
 
     from pymbolic.cse import tag_common_subexpressions
-    texp = tag_common_subexpressions([texp])
+    texp, = tag_common_subexpressions([texp])
 
-    from pymbolic.mapper.c_code import CCodeMapper
-    ccm = CCodeMapper()
-    expr = ccm(texp)
-    for name, rhs in ccm.cse_name_list:
-        print "%s = %s" % (name, rhs)
-    print expr
-    1/0
-
-
-
-    from sumpy.symbolic.codegen import generate_cl_statements_from_assignments
-    stmts = generate_cl_statements_from_assignments([("result", texp)])
-    for lhs, rhs in stmts:
-        print "%s = %s" % (lhs, rhs)
-    1/0
-
-
-
+    from pymbolic import parse
     knl = lp.make_kernel(ctx.devices[0],
-            "[nsrc,ntgt] -> {[isrc,itgt,]: 0<=itgt<ntgt and 0<=isrc<nsrc}",
-           exprs, [
+            "[nsrc,ntgt] -> {[isrc,itgt]: 0<=itgt<ntgt and 0<=isrc<nsrc}",
+            [
+            "<float64> a0 = center[itgt,0] - src[isrc,0]",
+            "<float64> a1 = center[itgt,1] - src[isrc,1]",
+            "<float64> b0 = tgt[itgt,0] - center[itgt,0]",
+            "<float64> b1 = tgt[itgt,1] - center[itgt,1]",
+            lp.Instruction(id=None,
+                assignee=parse("pairpot"), expression=texp,
+                temp_var_type=np.complex128),
+            "pot[itgt] = sum_complex128(isrc, pairpot)"
+            ], [
                lp.ArrayArg("density", geo_dtype, shape="nsrc", order="C"),
                lp.ArrayArg("src", geo_dtype, shape=("nsrc", dimensions), order="C"),
                lp.ArrayArg("tgt", geo_dtype, shape=("ntgt", dimensions), order="C"),
@@ -216,47 +247,31 @@ def test_quack(ctx_factory):
                lp.ArrayArg("pot", value_dtype, shape="ntgt", order="C"),
                lp.ScalarArg("nsrc", np.int32),
                lp.ScalarArg("ntgt", np.int32),
+               lp.ScalarArg("k", np.complex128),
                ],
-           name="quack", assumptions="nsrc>=1 and ntgt>=1")
+           name="quack", assumptions="nsrc>=1 and ntgt>=1",
+           preamble=["""
+           #define PYOPENCL_DEFINE_CDOUBLE
+           #include "pyopencl-complex.h"
+           //#include "hank103.h"
+           """, HANKEL_PREAMBLE])
 
-    seq_knl = knl
+    ref_knl = knl
 
-    def variant_1(knl):
-        knl = lp.split_dimension(knl, "i", 256,
-                outer_tag="g.0", inner_tag="l.0",
-                slabs=(0,1))
-        knl = lp.split_dimension(knl, "j", 256, slabs=(0,1))
-        return knl, []
+    knl = lp.split_dimension(knl, "itgt", 1024, outer_tag="g.0")
 
-    def variant_cpu(knl):
-        knl = lp.expand_subst(knl)
-        knl = lp.split_dimension(knl, "i", 1024,
-                outer_tag="g.0", slabs=(0,1))
-        knl = lp.add_prefetch(knl, "x[i,k]", ["k"], default_tag=None)
-        return knl, []
+    nsrc = 3000
+    ntgt = 3000
 
-    def variant_gpu(knl):
-        knl = lp.expand_subst(knl)
-        knl = lp.split_dimension(knl, "i", 256,
-                outer_tag="g.0", inner_tag="l.0", slabs=(0,1))
-        knl = lp.split_dimension(knl, "j", 256, slabs=(0,1))
-        knl = lp.add_prefetch(knl, "x[i,k]", ["k"], default_tag=None)
-        knl = lp.add_prefetch(knl, "x[j,k]", ["j_inner", "k"],
-                ["x_fetch_j", "x_fetch_k"])
-        knl = lp.tag_dimensions(knl, dict(x_fetch_k="unr"))
-        return knl, ["j_outer", "j_inner"]
+    par_values = dict(nsrc=nsrc, ntgt=ntgt, k=1)
 
-    n = 3000
+    kernel_gen = lp.generate_loop_schedules(knl)
+    kernel_gen = lp.check_kernels(kernel_gen, par_values)
 
-    for variant in [variant_1, variant_cpu, variant_gpu]:
-        variant_knl, loop_prio = variant(knl)
-        kernel_gen = lp.generate_loop_schedules(variant_knl,
-                loop_priority=loop_prio)
-        kernel_gen = lp.check_kernels(kernel_gen, dict(N=n))
-
-        lp.auto_test_vs_ref(seq_knl, ctx, kernel_gen,
-                op_count=n**2*1e-6, op_label="M particle pairs",
-                parameters={"N": n}, print_ref_code=True)
+    lp.auto_test_vs_ref(ref_knl, ctx, kernel_gen,
+            op_count=[nsrc*ntgt], op_label=["point pairs"],
+            parameters=par_values, print_ref_code=True,
+            codegen_kwargs=dict(allow_complex=True))
 
 
 
