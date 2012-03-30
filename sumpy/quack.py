@@ -3,18 +3,12 @@ from __future__ import division
 import numpy as np
 import loopy as lp
 import pyopencl as cl
-import pyopencl.tools
-import sympy as sp
-
-from pymbolic.mapper import IdentityMapper
-import pymbolic.primitives as prim
-
-from pytools import memoize_method
 
 
 
 
-def quack_expand(kernel, order, avec, bvec):
+
+def pop_expand(kernel, order, avec, bvec):
     dimensions = len(avec)
     from pytools import (
             generate_nonnegative_integer_tuples_summing_to_at_most
@@ -32,246 +26,268 @@ def quack_expand(kernel, order, avec, bvec):
 
 
 
-# {{{ hankel handling
+class _KernelComputation:
+    def __init__(self, kernel_getters, strength_usage,
+            value_dtypes=np.float64, strength_dtypes=None):
+        # {{{ process value_dtypes
 
-HANKEL_PREAMBLE = """//CL//
+        if not isinstance(value_dtypes, (list, tuple)):
+            value_dtypes = [np.dtype(value_dtypes)] * len(kernel_getters)
+        value_dtypes = [np.dtype(vd) for vd in value_dtypes]
 
-#include "hank103.cl"
+        # }}}
 
-typedef struct hank1_01_result_str
-{
-    cdouble_t order0, order1;
-} hank1_01_result;
+        # {{{ process strength_usage
 
-hank1_01_result hank1_01(cdouble_t z)
-{
-    int ifexpon ;
-    hank1_01_result result;
-    hank103(z, &result.order0, &result.order1, /*ifexpon*/ 1);
-    return result;
-}
-"""
+        if strength_usage is None:
+            strength_usage = [0] * len(kernel_getters)
 
-hank1_01_result_dtype = np.dtype([
-    ("order0", np.complex128),
-    ("order1", np.complex128),
-    ])
-cl.tools.register_dtype(hank1_01_result_dtype,
-        "hank1_01_result")
+        if len(kernel_getters) != len(strength_usage):
+            raise ValueError("exprs and strength_usage must have the same length")
+        strength_count = max(strength_usage)+1
 
+        # }}}
 
+        # {{{ process strength_dtypes
 
-class HankelGetter(object):
-    @memoize_method
-    def hank1_01(self, arg):
-        from loopy.symbolic import TypedCSE
-        return TypedCSE(
-                prim.Variable("hank1_01")(arg),
-                dtype=hank1_01_result_dtype)
+        if strength_dtypes is None:
+            strength_dtypes = value_dtypes[0]
 
-    @memoize_method
-    def hank1(self, order, arg):
-        from loopy.symbolic import TypedCSE
-        if order == 0:
-            return TypedCSE(
-                    prim.Lookup(self.hank1_01(arg), "order0"),
-                    dtype=np.complex128)
-        elif order == 1:
-            return TypedCSE(
-                    prim.Lookup(self.hank1_01(arg), "order1"),
-                    dtype=np.complex128)
-        elif order < 0:
-            # AS (9.1.6)
-            nu = -order
-            return prim.wrap_in_cse(
-                    (-1)**nu * self.hank1(nu, arg),
-                    "hank1_neg%d" % nu)
-        elif order > 1:
-            # AS (9.1.27)
-            nu = order-1
-            return prim.CommonSubexpression(
-                    2*nu/arg*self.hank1(nu, arg)
-                    - self.hank1(nu-1, arg),
-                    "hank1_%d" % order)
-        else:
-            assert False
+        if not isinstance(strength_dtypes, (list, tuple)):
+            strength_dtypes = [np.dtype(strength_dtypes)] * strength_count
 
-    @memoize_method
-    def hank1_deriv(self, order, arg, n_derivs):
-        # AS (9.1.31)
-        k = n_derivs
-        nu = order
-        return prim.CommonSubexpression(
-                2**(-k)*sum(
-                    (-1)**idx*int(sp.binomial(k, idx)) * self.hank1(i, arg)
-                    for idx, i in enumerate(range(nu-k, nu+k+1, 2))),
-                "d%d_hank1_%d" % (n_derivs, order))
+        if len(strength_dtypes) != strength_count:
+            raise ValueError("exprs and strength_usage must have the same length")
+
+        # }}}
+
+        self.kernel_getters = kernel_getters
+        self.value_dtypes = value_dtypes
+        self.strength_usage = strength_usage
+        self.strength_dtypes = strength_dtypes
 
 
 
 
+def get_direct_loopy_kernel(cl_device, dimensions,
+        kernel_getters, strength_usage=None,
+        geo_dtype=np.float64, value_dtypes=np.float64,
+        strength_dtypes=None):
+    """
+    :arg kernel_getters: functions which return kernels as sympy expressions
+      when given a :class:`sympy.Matrix`-type vector.
+    :arg strength_usage: A list of integers indicating which expression
+      uses which source strength indicator. This implicitly specifies the
+      number of strength arrays that need to be passed.
+      Default: all kernels use the same strength.
+    """
+    geo_dtype = np.dtype(geo_dtype)
 
-class HankelSubstitutor(IdentityMapper):
-    def __init__(self, hank_getter):
-        self.hank_getter = hank_getter
+    ki = _KernelComputation(kernel_getters, strength_usage,
+            value_dtypes, strength_dtypes)
 
-    def map_call(self, expr):
-        if isinstance(expr.function, prim.Variable) and expr.function.name == "H1_0":
-            hank_arg, = expr.parameters
-            return self.hank_getter.hank1(0, hank_arg)
-        else:
-            return IdentityMapper.map_call(self, expr)
+    from sumpy.symbolic import make_sym_vector
 
+    avec = make_sym_vector("d", dimensions)
 
-    def map_substitution(self, expr):
-        assert isinstance(expr.child, prim.Derivative)
-        call = expr.child.child
+    kernels = [kg(avec) for kg in kernel_getters]
+    from sumpy.codegen import (
+            HANKEL_PREAMBLE, sympy_to_pymbolic_for_code)
+    exprs = sympy_to_pymbolic_for_code([k for  k in kernels])
+    from pymbolic import var
+    exprs = [var("strength_%d" % i)[var("isrc")]*expr
+            for i, expr in enumerate(exprs)]
 
-        if isinstance(call.function, prim.Variable) and call.function.name == "H1_0":
-            hank_arg, = expr.values
-            return self.hank_getter.hank1_deriv(0, hank_arg,
-                    len(expr.child.variables))
-        else:
-            return IdentityMapper.map_substitution(self, expr)
-
-# }}}
-
-
-
-
-class PowerRewriter(IdentityMapper):
-    def map_power(self, expr):
-        exp = expr.exponent
-        if isinstance(exp, int):
-            new_base = prim.wrap_in_cse(expr.base)
-
-            if exp > 1:
-                return self.rec(prim.wrap_in_cse(new_base**(exp-1))*new_base)
-            elif exp == 1:
-                return new_base
-            elif exp < 0:
-                return self.rec((1/new_base)**(-exp))
-
-        if (isinstance(expr.exponent, prim.Quotient)
-                and isinstance(expr.exponent.numerator, int)
-                and isinstance(expr.exponent.denominator, int)):
-
-            p, q = expr.exponent.numerator, expr.exponent.denominator
-            if q < 0:
-                q *= -1
-                p *= -1
-
-            if q == 1:
-                return self.rec(new_base**p)
-
-            if q == 2:
-                assert p != 0
-
-                if p > 0:
-                    orig_base = prim.wrap_in_cse(expr.base)
-                    new_base = prim.wrap_in_cse(
-                            prim.Variable("rsqrt")(orig_base) * orig_base)
-                else:
-                    new_base = prim.wrap_in_cse(prim.Variable("rsqrt")(expr.base))
-                    p *= -1
-
-                return self.rec(new_base**p)
-
-        return IdentityMapper.map_power(self, expr)
-
-
-
-
-
-class FractionKiller(IdentityMapper):
-    def map_quotient(self, expr):
-        num = expr.numerator
-        denom = expr.denominator
-
-        if isinstance(num, int) and isinstance(denom, int):
-            if num % denom == 0:
-                return num // denom
-            return int(expr.numerator) / int(expr.denominator)
-
-        return IdentityMapper.map_quotient(self, expr)
-
-
-
-
-def test_quack(ctx_factory):
-    geo_dtype = np.float64
-    value_dtype = np.complex128
-    ctx = ctx_factory()
-
-    dimensions = 2
-
-    from sumpy.symbolic import (
-            make_sym_vector,
-            make_laplace_kernel,
-            make_helmholtz_kernel)
-
-    avec = make_sym_vector("a", dimensions)
-    bvec = make_sym_vector("b", dimensions)
-    kernel = make_helmholtz_kernel(avec)
-
-    texp = quack_expand(kernel, 6, avec, bvec)
-
-    from pymbolic.sympy_conv import ToPymbolicMapper
-    texp = ToPymbolicMapper()(texp)
-
-    texp = PowerRewriter()(texp)
-    texp = FractionKiller()(texp)
-
-    texp = HankelSubstitutor(HankelGetter())(texp)
-
-    from pymbolic.cse import tag_common_subexpressions
-    texp, = tag_common_subexpressions([texp])
-
-    from pymbolic import parse
-    knl = lp.make_kernel(ctx.devices[0],
-            "[nsrc,ntgt] -> {[isrc,itgt]: 0<=itgt<ntgt and 0<=isrc<nsrc}",
+    arguments = (
             [
-            "<float64> a0 = center[itgt,0] - src[isrc,0]",
-            "<float64> a1 = center[itgt,1] - src[isrc,1]",
-            "<float64> b0 = tgt[itgt,0] - center[itgt,0]",
-            "<float64> b1 = tgt[itgt,1] - center[itgt,1]",
-            lp.Instruction(id=None,
-                assignee=parse("pairpot"), expression=texp,
-                temp_var_type=np.complex128),
-            "pot[itgt] = sum_complex128(isrc, pairpot)"
-            ], [
-               lp.ArrayArg("density", geo_dtype, shape="nsrc", order="C"),
                lp.ArrayArg("src", geo_dtype, shape=("nsrc", dimensions), order="C"),
                lp.ArrayArg("tgt", geo_dtype, shape=("ntgt", dimensions), order="C"),
-               lp.ArrayArg("center", geo_dtype, shape=("ntgt", dimensions), order="C"),
-               lp.ArrayArg("pot", value_dtype, shape="ntgt", order="C"),
                lp.ScalarArg("nsrc", np.int32),
                lp.ScalarArg("ntgt", np.int32),
                lp.ScalarArg("k", np.complex128),
-               ],
-           name="quack", assumptions="nsrc>=1 and ntgt>=1",
+            ]+[
+               lp.ArrayArg("strength_%d" % i, dtype, shape="nsrc", order="C")
+               for i, dtype in enumerate(ki.strength_dtypes)
+            ]+[
+               lp.ArrayArg("result_%d" % i, dtype, shape="ntgt", order="C")
+               for i, dtype in enumerate(ki.value_dtypes)
+               ])
+
+    from pymbolic import parse
+    knl = lp.make_kernel(cl_device,
+            "[nsrc,ntgt] -> {[isrc,itgt,idim]: 0<=itgt<ntgt and 0<=isrc<nsrc "
+            "and 0<=idim<%d}" % dimensions,
+            [
+            "[|idim] <%s> d[idim] = tgt[itgt,idim] - src[isrc,idim]" % geo_dtype.name,
+            ]+[
+            lp.Instruction(id=None,
+                assignee=parse("pair_result_%d" % i), expression=expr,
+                temp_var_type=dtype)
+            for i, (expr, dtype) in enumerate(zip(exprs, ki.value_dtypes))
+            ]+[
+            "result_%d[itgt] = sum_%s(isrc, pair_result_%d)" % (i, dtype.name, i)
+            for i, (expr, dtype) in enumerate(zip(exprs, ki.value_dtypes))],
+            arguments,
+           name="direct", assumptions="nsrc>=1 and ntgt>=1",
            preamble=["""
            #define PYOPENCL_DEFINE_CDOUBLE
            #include "pyopencl-complex.h"
-           //#include "hank103.h"
            """, HANKEL_PREAMBLE])
+
+    return knl
+
+
+
+
+def get_pop_loopy_kernel(cl_device, dimensions,
+        kernel_getters, order, strength_usage=None,
+        geo_dtype=np.float64, value_dtypes=np.float64,
+        strength_dtypes=None):
+    """
+    :arg kernel_getters: functions which return kernels as sympy expressions
+      when given a :class:`sympy.Matrix`-type vector.
+    :arg strength_usage: A list of integers indicating which expression
+      uses which source strength indicator. This implicitly specifies the
+      number of strength arrays that need to be passed.
+      Default: all kernels use the same strength.
+    """
+    geo_dtype = np.dtype(geo_dtype)
+
+    ki = _KernelComputation(kernel_getters, strength_usage,
+            value_dtypes, strength_dtypes)
+
+    from sumpy.symbolic import make_sym_vector
+
+    avec = make_sym_vector("a", dimensions)
+    bvec = make_sym_vector("b", dimensions)
+
+    kernels = [kg(avec) for kg in kernel_getters]
+    from sumpy.codegen import (
+            HANKEL_PREAMBLE, sympy_to_pymbolic_for_code)
+    exprs = sympy_to_pymbolic_for_code(
+            [pop_expand(k, order, avec, bvec)
+                for i, k in enumerate(kernels)])
+    from pymbolic import var
+    exprs = [var("strength_%d" % i)[var("isrc")]*expr
+            for i, expr in enumerate(exprs)]
+
+    arguments = (
+            [
+               lp.ArrayArg("src", geo_dtype, shape=("nsrc", dimensions), order="C"),
+               lp.ArrayArg("tgt", geo_dtype, shape=("ntgt", dimensions), order="C"),
+               lp.ArrayArg("center", geo_dtype, shape=("ntgt", dimensions), order="C"),
+               lp.ScalarArg("nsrc", np.int32),
+               lp.ScalarArg("ntgt", np.int32),
+               lp.ScalarArg("k", np.complex128),
+            ]+[
+               lp.ArrayArg("strength_%d" % i, dtype, shape="nsrc", order="C")
+               for i, dtype in enumerate(ki.strength_dtypes)
+            ]+[
+               lp.ArrayArg("result_%d" % i, dtype, shape="ntgt", order="C")
+               for i, dtype in enumerate(ki.value_dtypes)
+               ])
+
+    from pymbolic import parse
+    knl = lp.make_kernel(cl_device,
+            "[nsrc,ntgt] -> {[isrc,itgt,idim]: 0<=itgt<ntgt and 0<=isrc<nsrc "
+            "and 0<=idim<%d}" % dimensions,
+            [
+            "[|idim] <%s> a[idim] = center[itgt,idim] - src[isrc,idim]" % geo_dtype.name,
+            "[|idim] <%s> b[idim] = tgt[itgt,idim] - center[itgt,idim]" % geo_dtype.name,
+            ]+[
+            lp.Instruction(id=None,
+                assignee=parse("pair_result_%d" % i), expression=expr,
+                temp_var_type=dtype)
+            for i, (expr, dtype) in enumerate(zip(exprs, ki.value_dtypes))
+            ]+[
+            "result_%d[itgt] = sum_%s(isrc, pair_result_%d)" % (i, dtype.name, i)
+            for i, (expr, dtype) in enumerate(zip(exprs, ki.value_dtypes))],
+            arguments,
+           name="pop", assumptions="nsrc>=1 and ntgt>=1",
+           preamble=["""
+           #define PYOPENCL_DEFINE_CDOUBLE
+           #include "pyopencl-complex.h"
+           """, HANKEL_PREAMBLE])
+
+    return knl
+
+
+
+
+def test_pop_kernel(ctx_factory):
+    ctx = ctx_factory()
+    dimensions = 2
+
+    from sumpy.symbolic import make_helmholtz_kernel
+
+    knl = get_pop_loopy_kernel(ctx.devices[0], dimensions,
+            [make_helmholtz_kernel], 5, value_dtypes=np.complex128)
 
     ref_knl = knl
 
-    knl = lp.split_dimension(knl, "itgt", 1024, outer_tag="g.0")
+    def variant_1(knl):
+        knl = lp.split_dimension(knl, "itgt", 1024, outer_tag="g.0")
+        return knl
+
+    def variant_2(knl):
+        knl = lp.split_dimension(knl, "itgt", 256,
+                outer_tag="g.0", inner_tag="l.0", slabs=(0,1))
+        knl = lp.split_dimension(knl, "isrc", 256, slabs=(0,1))
+        knl = lp.add_prefetch(knl, "tgt[itgt,k]", ["k"], default_tag=None)
+        #knl = lp.add_prefetch(knl, "x[j,k]", ["j_inner", "k"],
+                #["x_fetch_j", "x_fetch_k"])
+
+        return knl
+
+    knl = variant_1(knl)
 
     nsrc = 3000
     ntgt = 3000
 
-    par_values = dict(nsrc=nsrc, ntgt=ntgt, k=1)
+    fake_par_values = dict(nsrc=nsrc, ntgt=ntgt, k=1)
 
     kernel_gen = lp.generate_loop_schedules(knl)
-    kernel_gen = lp.check_kernels(kernel_gen, par_values)
+    kernel_gen = lp.check_kernels(kernel_gen, fake_par_values)
 
     lp.auto_test_vs_ref(ref_knl, ctx, kernel_gen,
             op_count=[nsrc*ntgt], op_label=["point pairs"],
-            parameters=par_values, print_ref_code=True,
+            parameters=fake_par_values, print_ref_code=True,
             codegen_kwargs=dict(allow_complex=True))
+
+
+
+
+def test_direct(ctx_factory):
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    dimensions = 2
+
+    from sumpy.symbolic import make_laplace_kernel
+
+    knl = get_direct_loopy_kernel(ctx.devices[0], dimensions,
+            [make_laplace_kernel], value_dtypes=np.complex128)
+    knl = lp.split_dimension(knl, "itgt", 1024, outer_tag="g.0")
+
+    cknl = lp.CompiledKernel(ctx, knl)
+
+    src = np.random.randn(300, 2)*3
+    src[1] = 1
+    charge = np.ones((len(src),), dtype=np.complex128)
+
+    center = np.asarray([0,0], dtype=np.float64)
+    from hellskitchen.visualization import FieldPlotter
+    fp = FieldPlotter(center, points=1000, extent=5)
+
+    tgt = fp.points.copy()
+
+    evt, pot = cknl(queue, src=src, tgt=tgt, nsrc=len(src), ntgt=len(tgt), k=17,
+            strength_0=charge, out_host=True)
+
+    plotval = np.log(1e-15+np.abs(pot))
+    fp.show_scalar_in_matplotlib(plotval.real)
+    import matplotlib.pyplot as pt
+    pt.show()
 
 
 

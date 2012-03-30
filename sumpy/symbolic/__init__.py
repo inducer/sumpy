@@ -12,7 +12,6 @@ def make_sym_vector(name, components):
 
 
 
-
 class SympyMapper(object):
     def __call__(self, expr, *args, **kwargs):
         return self.rec(expr, *args, **kwargs)

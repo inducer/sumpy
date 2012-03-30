@@ -106,7 +106,7 @@ void m2p(
             }
             barrier(CLK_LOCAL_MEM_FENCE);
 
-            uint batch_cell_cnt = min(${par_cell_cnt}, ilist_end-ilist_base);
+            uint batch_cell_cnt = min(${par_cell_cnt}u, ilist_end-ilist_base);
 
             // loop over source cells
             for (uint src_cell = 0; src_cell < batch_cell_cnt; ++src_cell)
