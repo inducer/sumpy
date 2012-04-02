@@ -20,7 +20,7 @@ def pop_expand(kernel, order, avec, bvec):
     from sumpy.tools import mi_factorial, mi_power, mi_derivative
     return sum(
             mi_power(bvec, mi)/mi_factorial(mi) 
-            * (-1)**sum(mi) # we're expanding K(-a)
+            #* (-1)**sum(mi) # we're expanding K(-a)
             * mi_derivative(kernel, avec, mi)
             for mi in multi_indices)
 
@@ -60,7 +60,12 @@ class LayerPotential(KernelComputation):
                 [pop_expand(k.get_expression(avec), self.order, avec, bvec)
                     for i, k in enumerate(self.kernels)])
         from pymbolic import var
-        exprs = [var("density_%d" % i)[var("isrc")]*expr
+        isrc_sym = var("isrc")
+        exprs = [
+                expr
+                * var("density_%d" % i)[isrc_sym]
+                * var("speed")[isrc_sym]
+                * var("weights")[isrc_sym]
                 for i, expr in enumerate(exprs)]
 
         geo_dtype = self.geometry_dtype
@@ -69,6 +74,8 @@ class LayerPotential(KernelComputation):
                    lp.ArrayArg("src", geo_dtype, shape=("nsrc", self.dimensions), order="C"),
                    lp.ArrayArg("tgt", geo_dtype, shape=("ntgt", self.dimensions), order="C"),
                    lp.ArrayArg("center", geo_dtype, shape=("ntgt", self.dimensions), order="C"),
+                   lp.ArrayArg("speed", geo_dtype, shape="nsrc", order="C"),
+                   lp.ArrayArg("weights", geo_dtype, shape="nsrc", order="C"),
                    lp.ScalarArg("nsrc", np.int32),
                    lp.ScalarArg("ntgt", np.int32),
                 ]+[
@@ -106,11 +113,14 @@ class LayerPotential(KernelComputation):
         knl = lp.split_dimension(knl, "itgt", 1024, outer_tag="g.0")
         return knl
 
-    def __call__(self, queue, targets, sources, centers, densities, **kwargs):
+    def __call__(self, queue, targets, sources, centers, densities,
+            speed, weights, **kwargs):
         cknl = self.get_compiled_kernel()
+        #print cknl.code
 
         for i, dens in enumerate(densities):
             kwargs["density_%d" % i] = dens
 
         return cknl(queue, src=sources, tgt=targets, center=centers,
-                nsrc=len(sources), ntgt=len(targets), **kwargs)
+                speed=speed, weights=weights, nsrc=len(sources), ntgt=len(targets),
+                **kwargs)

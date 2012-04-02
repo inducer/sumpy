@@ -160,8 +160,3 @@ class KernelComputation:
     @memoize_method
     def get_compiled_kernel(self):
         return lp.CompiledKernel(self.context, self.get_optimized_kernel())
-
-
-
-
-
