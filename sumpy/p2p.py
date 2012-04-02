@@ -61,7 +61,7 @@ class P2P(KernelComputation):
                    lp.ArrayArg("result_%d" % i, dtype, shape="ntgt", order="C")
                    for i, dtype in enumerate(self.value_dtypes)
                    ]
-                + self.gather_arguments())
+                + self.gather_kernel_arguments())
 
         if self.exclude_self:
             from pymbolic.primitives import If, ComparisonOperator, Variable
@@ -88,12 +88,16 @@ class P2P(KernelComputation):
                 for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))],
                 arguments,
                 name=self.name, assumptions="nsrc>=1 and ntgt>=1",
-                preamble=self.gather_preambles())
+                preamble=self.gather_kernel_preambles())
 
     def get_optimized_kernel(self):
         knl = self.get_kernel()
         knl = lp.split_dimension(knl, "itgt", 1024, outer_tag="g.0")
         return knl
+
+    @memoize_method
+    def get_compiled_kernel(self):
+        return lp.CompiledKernel(self.context, self.get_optimized_kernel())
 
     def __call__(self, queue, targets, sources, src_strengths, **kwargs):
         cknl = self.get_compiled_kernel()

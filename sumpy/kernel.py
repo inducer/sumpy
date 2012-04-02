@@ -22,6 +22,10 @@ class Kernel:
         """
         raise NotImplementedError
 
+    def get_scaling(self):
+        """Return a global scaling of the kernel."""
+        return 1
+
     def get_args(self):
         """Return list of :cls:`loopy.Argument` instances describing 
         extra arguments used by kernel.
@@ -44,12 +48,21 @@ class LaplaceKernel(Kernel):
         r = sp.sqrt((dist_vec.T*dist_vec)[0,0])
 
         if self.dimensions == 2:
-            return sp.log(r) / (2*sp.pi)
+            return sp.log(r)
         elif self.dimensions == 3:
             return 1/r
         else:
             raise RuntimeError("unsupported dimensionality")
 
+    def get_scaling(self):
+        """Return a global scaling of the kernel."""
+
+        if self.dimensions == 2:
+            return 1/(2*sp.pi)
+        elif self.dimensions == 3:
+            return 1/(4*sp.pi)
+        else:
+            raise RuntimeError("unsupported dimensionality")
 
 
 
@@ -68,6 +81,16 @@ class HelmholtzKernel(Kernel):
             return i/4 * sp.Function("H1_0")(k*r)
         elif self.dimensions == 3:
             return sp.exp(i*k*r)/r
+        else:
+            raise RuntimeError("unsupported dimensionality")
+
+    def get_scaling(self):
+        """Return a global scaling of the kernel."""
+
+        if self.dimensions == 2:
+            return sp.sqrt(-1)/4
+        elif self.dimensions == 3:
+            return 1/(4*sp.pi)
         else:
             raise RuntimeError("unsupported dimensionality")
 

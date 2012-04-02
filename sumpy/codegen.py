@@ -195,6 +195,11 @@ class VectorComponentRewriter(IdentityMapper):
 
 
 def sympy_to_pymbolic_for_code(sympy_exprs):
+    unwrap = False
+    if not isinstance(sympy_exprs, (list, tuple)):
+        sympy_exprs = [sympy_exprs]
+        unwrap = True
+
     from pymbolic.sympy_conv import SympyToPymbolicMapper
     exprs = [SympyToPymbolicMapper()(se) for se in sympy_exprs]
 
@@ -205,4 +210,9 @@ def sympy_to_pymbolic_for_code(sympy_exprs):
     exprs = [HankelSubstitutor(HankelGetter())(expr) for expr in exprs]
 
     from pymbolic.cse import tag_common_subexpressions
-    return tag_common_subexpressions(exprs)
+    exprs = tag_common_subexpressions(exprs)
+
+    if unwrap:
+        exprs, = exprs
+
+    return exprs

@@ -18,10 +18,12 @@ def pop_expand(kernel, order, avec, bvec):
     multi_indices = sorted(gnitstam(order, dimensions), key=sum)
 
     from sumpy.tools import mi_factorial, mi_power, mi_derivative
+    from pymbolic.sympy_conv import make_cse
     return sum(
             mi_power(bvec, mi)/mi_factorial(mi) 
             #* (-1)**sum(mi) # we're expanding K(-a)
-            * mi_derivative(kernel, avec, mi)
+            * make_cse(mi_derivative(kernel, avec, mi),
+                "taylor_" + "_".join(str(mi_i) for mi_i in mi))
             for mi in multi_indices)
 
 
@@ -85,26 +87,26 @@ class LayerPotential(KernelComputation):
                    lp.ArrayArg("result_%d" % i, dtype, shape="ntgt", order="C")
                    for i, dtype in enumerate(self.value_dtypes)
                    ]
-                + self.gather_arguments())
+                + self.gather_kernel_arguments())
 
-        from pymbolic import parse
         knl = lp.make_kernel(self.device,
                 "[nsrc,ntgt] -> {[isrc,itgt,idim]: 0<=itgt<ntgt and 0<=isrc<nsrc "
                 "and 0<=idim<%d}" % self.dimensions,
                 [
                 "[|idim] <%s> a[idim] = center[itgt,idim] - src[isrc,idim]" % geo_dtype.name,
                 "[|idim] <%s> b[idim] = tgt[itgt,idim] - center[itgt,idim]" % geo_dtype.name,
-                ]+[
+                ]+self.get_kernel_scaling_assignments()+[
                 lp.Instruction(id=None,
-                    assignee=parse("pair_result_%d" % i), expression=expr,
+                    assignee="pair_result_%d" % i, expression=expr,
                     temp_var_type=dtype)
                 for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
                 ]+[
-                "result_%d[itgt] = sum_%s(isrc, pair_result_%d)" % (i, dtype.name, i)
+                "result_%d[itgt] = knl_%d_scaling*sum_%s(isrc, pair_result_%d)"
+                % (i, i, dtype.name, i)
                 for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))],
                 arguments,
                 name="layerpot", assumptions="nsrc>=1 and ntgt>=1",
-                preamble=self.gather_preambles())
+                preamble=self.gather_kernel_preambles())
 
         return knl
 
@@ -113,10 +115,13 @@ class LayerPotential(KernelComputation):
         knl = lp.split_dimension(knl, "itgt", 1024, outer_tag="g.0")
         return knl
 
+    @memoize_method
+    def get_compiled_kernel(self):
+        return lp.CompiledKernel(self.context, self.get_optimized_kernel())
+
     def __call__(self, queue, targets, sources, centers, densities,
             speed, weights, **kwargs):
         cknl = self.get_compiled_kernel()
-        #print cknl.code
 
         for i, dens in enumerate(densities):
             kwargs["density_%d" % i] = dens

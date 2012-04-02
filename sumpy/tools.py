@@ -118,15 +118,6 @@ class KernelComputation:
 
         self.name = name
 
-    def gather_arguments(self):
-        result = {}
-        for knl in self.kernels:
-            for arg in knl.get_args():
-                result[arg.name] = arg
-                # FIXME: possibly check that arguments match before overwriting
-
-        return sorted(result.itervalues(), key=lambda arg: arg.name)
-
     def gather_dtypes(self):
         result = set()
         for dtype in self.strength_dtypes:
@@ -136,7 +127,16 @@ class KernelComputation:
         result.add(self.geometry_dtype)
         return result
 
-    def gather_preambles(self):
+    def gather_kernel_arguments(self):
+        result = {}
+        for knl in self.kernels:
+            for arg in knl.get_args():
+                result[arg.name] = arg
+                # FIXME: possibly check that arguments match before overwriting
+
+        return sorted(result.itervalues(), key=lambda arg: arg.name)
+
+    def gather_kernel_preambles(self):
         result = []
 
         dtypes = self.gather_dtypes()
@@ -157,6 +157,10 @@ class KernelComputation:
 
         return result
 
-    @memoize_method
-    def get_compiled_kernel(self):
-        return lp.CompiledKernel(self.context, self.get_optimized_kernel())
+    def get_kernel_scaling_assignments(self):
+        from sumpy.codegen import sympy_to_pymbolic_for_code
+        return [lp.Instruction(id=None,
+                    assignee="knl_%d_scaling" % i,
+                    expression=sympy_to_pymbolic_for_code(kernel.get_scaling()),
+                    temp_var_type=lp.infer_type)
+                    for i, kernel in enumerate(self.kernels)]
