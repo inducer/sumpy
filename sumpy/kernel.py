@@ -44,7 +44,7 @@ class LaplaceKernel(Kernel):
         r = sp.sqrt((dist_vec.T*dist_vec)[0,0])
 
         if self.dimensions == 2:
-            return sp.log(r)
+            return sp.log(r) / (2*sp.pi)
         elif self.dimensions == 3:
             return 1/r
         else:
