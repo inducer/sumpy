@@ -78,19 +78,21 @@ class P2P(KernelComputation):
                 [
                 "[|idim] <%s> d[idim] = tgt[itgt,idim] - src[isrc,idim]" 
                 % self.geometry_dtype.name,
-                ]+[
+                ]+self.get_kernel_scaling_assignments()+[
                 lp.Instruction(id=None,
                     assignee=parse("pair_result_%d" % i), expression=expr,
                     temp_var_type=dtype)
                 for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
                 ]+[
-                "result_%d[itgt] = sum_%s(isrc, pair_result_%d)" % (i, dtype.name, i)
+                "result_%d[itgt] = knl_%d_scaling*sum_%s(isrc, pair_result_%d)"
+                % (i, i, dtype.name, i)
                 for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))],
                 arguments,
                 name=self.name, assumptions="nsrc>=1 and ntgt>=1",
                 preamble=self.gather_kernel_preambles())
 
     def get_optimized_kernel(self):
+        # FIXME
         knl = self.get_kernel()
         knl = lp.split_dimension(knl, "itgt", 1024, outer_tag="g.0")
         return knl
@@ -101,6 +103,8 @@ class P2P(KernelComputation):
 
     def __call__(self, queue, targets, sources, src_strengths, **kwargs):
         cknl = self.get_compiled_kernel()
+        #print cknl.code
+        #1/0
 
         for i, sstr in enumerate(src_strengths):
             kwargs["strength_%d" % i] = sstr
