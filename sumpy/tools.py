@@ -56,6 +56,15 @@ class KernelComputation:
             value_dtypes, strength_dtypes,
             geometry_dtype,
             name="kernel", options=[], device=None):
+        """
+        :arg kernels: list of :class:`sumpy.kernel.Kernel` instances
+            :class:`sumpy.kernel.TargetDerivative` wrappers should be
+            the outermost kernel wrappers, if present.
+        :arg strength_usage: A list of integers indicating which expression
+          uses which density. This implicitly specifies the
+          number of density arrays that need to be passed.
+          Default: all kernels use the same density.
+        """
 
         if geometry_dtype is None:
             geometry_dtype = np.float64
@@ -136,19 +145,20 @@ class KernelComputation:
 
         return sorted(result.itervalues(), key=lambda arg: arg.name)
 
-    def gather_kernel_preambles(self):
-        result = []
-
+    def gather_dtype_preambles(self):
         dtypes = self.gather_dtypes()
         if np.dtype(np.complex128) in dtypes:
-            result.append("""
+            return ["""
                #define PYOPENCL_DEFINE_CDOUBLE
                #include "pyopencl-complex.h"
-               """)
+               """]
         elif np.dtype(np.complex64) in dtypes:
-            result.append("""
+            return ["""
                #include "pyopencl-complex.h"
-               """)
+               """]
+
+    def gather_kernel_preambles(self):
+        result = []
 
         for knl in self.kernels:
             for preamble in knl.get_preambles():

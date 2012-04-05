@@ -3,6 +3,7 @@ from __future__ import division
 import numpy as np
 import loopy as lp
 from pytools import memoize_method
+from pymbolic import parse
 
 from sumpy.tools import KernelComputation
 
@@ -11,6 +12,13 @@ from sumpy.tools import KernelComputation
 
 def pop_expand(kernel, order, avec, bvec):
     dimensions = len(avec)
+
+    tgt_derivative_multi_index = [0] * dimensions
+    from sumpy.kernel import TargetDerivative
+    while isinstance(kernel, TargetDerivative):
+        tgt_derivative_multi_index[kernel.axis] += 1
+        kernel = kernel.kernel
+
     from pytools import (
             generate_nonnegative_integer_tuples_summing_to_at_most
             as gnitstam)
@@ -19,9 +27,10 @@ def pop_expand(kernel, order, avec, bvec):
 
     from sumpy.tools import mi_factorial, mi_power, mi_derivative
     from pymbolic.sympy_conv import make_cse
+
     return sum(
-            mi_power(bvec, mi)/mi_factorial(mi) 
-            #* (-1)**sum(mi) # we're expanding K(-a)
+            mi_derivative(mi_power(bvec, mi), bvec, tgt_derivative_multi_index)
+            / mi_factorial(mi)
             * make_cse(mi_derivative(kernel, avec, mi),
                 "taylor_" + "_".join(str(mi_i) for mi_i in mi))
             for mi in multi_indices)
@@ -29,20 +38,15 @@ def pop_expand(kernel, order, avec, bvec):
 
 
 
+# {{{ layer potential applier
+
 class LayerPotential(KernelComputation):
     def __init__(self, ctx, kernels, order, density_usage=None,
-            value_dtypes=None, strength_dtypes=None,
+            value_dtypes=None, density_dtypes=None,
             geometry_dtype=None,
             options=[], name="layerpot", device=None):
-        """
-        :arg kernels: list of :class:`sumpy.kernel.Kernel` instances
-        :arg density_usage: A list of integers indicating which expression
-          uses which density. This implicitly specifies the
-          number of density arrays that need to be passed.
-          Default: all kernels use the same density.
-        """
         KernelComputation.__init__(self, ctx, kernels, density_usage,
-                value_dtypes, strength_dtypes, geometry_dtype,
+                value_dtypes, density_dtypes, geometry_dtype,
                 name, options, device)
 
         from pytools import single_valued
@@ -61,11 +65,13 @@ class LayerPotential(KernelComputation):
         exprs = sympy_to_pymbolic_for_code(
                 [pop_expand(k.get_expression(avec), self.order, avec, bvec)
                     for i, k in enumerate(self.kernels)])
+        exprs = [knl.transform_to_code(expr) for knl, expr in zip(
+            self.kernels, exprs)]
         from pymbolic import var
         isrc_sym = var("isrc")
         exprs = [
                 expr
-                * var("density_%d" % i)[isrc_sym]
+                * var("density_%d" % self.strength_usage[i])[isrc_sym]
                 * var("speed")[isrc_sym]
                 * var("weights")[isrc_sym]
                 for i, expr in enumerate(exprs)]
@@ -105,14 +111,18 @@ class LayerPotential(KernelComputation):
                 % (i, i, dtype.name, i)
                 for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))],
                 arguments,
-                name="layerpot", assumptions="nsrc>=1 and ntgt>=1",
-                preamble=self.gather_kernel_preambles())
+                name=self.name, assumptions="nsrc>=1 and ntgt>=1",
+                preamble=(
+                    self.gather_dtype_preambles()
+                    + self.gather_kernel_preambles()
+                    ))
 
         return knl
 
     def get_optimized_kernel(self):
+        # FIXME specialize/tune for GPU/CPU
         knl = self.get_kernel()
-        knl = lp.split_dimension(knl, "itgt", 1024, outer_tag="g.0")
+        knl = lp.split_dimension(knl, "itgt", 128, outer_tag="g.0")
         return knl
 
     @memoize_method
