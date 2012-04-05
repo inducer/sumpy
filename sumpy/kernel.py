@@ -58,7 +58,7 @@ class LaplaceKernel(Kernel):
         """Return a global scaling of the kernel."""
 
         if self.dimensions == 2:
-            return 1/(2*sp.pi)
+            return 1/(-2*sp.pi)
         elif self.dimensions == 3:
             return 1/(4*sp.pi)
         else:
