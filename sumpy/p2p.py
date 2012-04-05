@@ -45,7 +45,7 @@ class P2P(KernelComputation):
         exprs = sympy_to_pymbolic_for_code(
                 [k.get_expression(avec) for  k in self.kernels])
         from pymbolic import var
-        exprs = [var("strength_%d" % i)[var("isrc")]*expr
+        exprs = [var("strength_%d" % self.strength_usage[i])[var("isrc")]*expr
                 for i, expr in enumerate(exprs)]
 
         arguments = (
@@ -89,7 +89,10 @@ class P2P(KernelComputation):
                 for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))],
                 arguments,
                 name=self.name, assumptions="nsrc>=1 and ntgt>=1",
-                preamble=self.gather_kernel_preambles())
+                preamble=(
+                    self.gather_dtype_preambles()
+                    + self.gather_kernel_preambles()
+                    ))
 
     def get_optimized_kernel(self):
         # FIXME
