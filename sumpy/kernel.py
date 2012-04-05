@@ -78,7 +78,7 @@ class HelmholtzKernel(Kernel):
         k = sp.Symbol("k")
 
         if self.dimensions == 2:
-            return i/4 * sp.Function("H1_0")(k*r)
+            return sp.Function("H1_0")(k*r)
         elif self.dimensions == 3:
             return sp.exp(i*k*r)/r
         else:
