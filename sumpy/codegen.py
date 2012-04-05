@@ -5,6 +5,8 @@ import sympy as sp
 import pyopencl as cl
 import pyopencl.tools
 
+import re
+
 from pymbolic.mapper import IdentityMapper
 import pymbolic.primitives as prim
 
@@ -175,21 +177,16 @@ class FractionKiller(IdentityMapper):
 
 
 
+INDEXED_VAR_RE = re.compile("^([a-zA-Z_]+)([0-9]+)$")
+
 class VectorComponentRewriter(IdentityMapper):
-    def __init__(self, vec_names=["a", "b", "d"]):
-        self.vec_names = vec_names
-
     def map_variable(self, expr):
-        for vn in self.vec_names:
-            if expr.name.startswith(vn):
-                try:
-                    subscript = int(expr.name[len(vn):])
-                except TypeError:
-                    continue
-                else:
-                    return prim.Variable(vn)[subscript]
+        match_obj = INDEXED_VAR_RE.match(expr.name)
+        if match_obj is not None:
+            return prim.Variable(match_obj.group(1))[int(match_obj.group(2))]
+        else:
+            return IdentityMapper.map_variable(self, expr)
 
-        return IdentityMapper.map_variable(self, expr)
 
 
 
