@@ -3,6 +3,7 @@ from __future__ import division
 import sympy as sp
 import loopy as lp
 import numpy as np
+from pymbolic.mapper import IdentityMapper
 
 
 
@@ -24,7 +25,14 @@ class Kernel:
 
     def get_scaling(self):
         """Return a global scaling of the kernel."""
-        return 1
+        raise NotImplementedError
+
+    def transform_to_code(self, expr):
+        """Postprocess the :mod:`pymbolic` expression
+        generated from the result of :meth:`get_expression`
+        on the way to code generation.
+        """
+        return expr
 
     def get_args(self):
         """Return list of :cls:`loopy.Argument` instances describing 
@@ -105,20 +113,20 @@ class HelmholtzKernel(Kernel):
 
 # }}}
 
-# {{{ derivatives
-
-class TargetDerivative(Kernel):
-    def __init__(self, axis, kernel):
+class KernelWrapper(Kernel):
+    def __init__(self, kernel):
         Kernel.__init__(self, kernel.dimensions)
         self.kernel = kernel
-        self.axis = axis
 
     @property
     def is_complex(self):
         return self.kernel.is_complex
 
-    def get_expression(self, dist_vec):
-        return self.kernel.get_expression(dist_vec).diff(dist_vec[self.axis])
+    def get_scaling(self):
+        return self.kernel.get_scaling()
+
+    def transform_to_code(self, expr):
+        return self.kernel.transform_to_code(expr)
 
     def get_args(self):
         return self.kernel.get_args()
@@ -126,38 +134,59 @@ class TargetDerivative(Kernel):
     def get_preambles(self):
         return self.kernel.get_preambles()
 
+# {{{ derivatives
+
+class TargetDerivative(KernelWrapper):
+    def __init__(self, axis, kernel):
+        KernelWrapper.__init__(self, kernel)
+        self.axis = axis
+
+    def get_expression(self, dist_vec):
+        return self.kernel.get_expression(dist_vec).diff(dist_vec[self.axis])
 
 
 
-class SourceDerivative(Kernel):
-    def __init__(self, kernel, dir_vec_name="deriv_dir", dir_vec_dtype=np.float64):
-        Kernel.__init__(self, kernel.dimensions)
 
-        self.kernel = kernel
+class _SourceDerivativeToCodeMapper(IdentityMapper):
+    def __init__(self, vec_name):
+        self.vec_name = vec_name
+
+    def map_subscript(self, expr):
+        from pymbolic.primitives import Variable
+        if expr.aggregate.name == self.vec_name:
+            return expr.aggregate[
+                    (Variable("isrc"), expr.index)]
+        else:
+            return IdentityMapper.map_subscript(self, expr)
+
+
+
+
+class SourceDerivative(KernelWrapper):
+    def __init__(self, kernel, dir_vec_name="src_derivative_dir", dir_vec_dtype=np.float64):
+        KernelWrapper.__init__(self, kernel)
         self.dir_vec_name = dir_vec_name
         self.dir_vec_dtype = dir_vec_dtype
 
-    @property
-    def is_complex(self):
-        return self.kernel.is_complex
-
     def get_expression(self, dist_vec):
         dimensions = len(dist_vec)
+        assert dimensions == self.dimensions
 
         knl = self.kernel.get_expression(dist_vec)
         from sumpy.symbolic import make_sym_vector
-        dir_vec = make_sym_vector(self.deriv_dir, dimensions)
+        dir_vec = make_sym_vector(self.dir_vec_name, dimensions)
 
-        # dist_vec = tgt-src -> minus sign
-        return sum(-dir_vec[axis]*knl.diff(axis) for axis in range(dimensions))
+        # dist_vec = tgt-src -> minus sign from chain rule
+        return sum(-dir_vec[axis]*knl.diff(dist_vec[axis]) for axis in range(dimensions))
+
+    def transform_to_code(self, expr):
+        return _SourceDerivativeToCodeMapper(self.dir_vec_name)(
+                self.kernel.transform_to_code(expr))
 
     def get_args(self):
         return self.kernel.get_args() + [
             lp.ArrayArg(self.dir_vec_name, self.dir_vec_dtype,
                 shape=("nsrc", self.dimensions), order="C")]
-
-    def get_preambles(self):
-        return self.kernel.get_preambles()
 
 # }}}
 
