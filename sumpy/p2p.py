@@ -45,20 +45,22 @@ class P2P(KernelComputation):
         exprs = sympy_to_pymbolic_for_code(
                 [k.get_expression(avec) for  k in self.kernels])
         from pymbolic import var
+        exprs = [knl.transform_to_code(expr) for knl, expr in zip(
+            self.kernels, exprs)]
         exprs = [var("strength_%d" % self.strength_usage[i])[var("isrc")]*expr
                 for i, expr in enumerate(exprs)]
 
         arguments = (
                 [
-                   lp.ArrayArg("src", self.geometry_dtype, shape=("nsrc", self.dimensions), order="C"),
-                   lp.ArrayArg("tgt", self.geometry_dtype, shape=("ntgt", self.dimensions), order="C"),
+                   lp.GlobalArg("src", self.geometry_dtype, shape=("nsrc", self.dimensions), order="C"),
+                   lp.GlobalArg("tgt", self.geometry_dtype, shape=("ntgt", self.dimensions), order="C"),
                    lp.ScalarArg("nsrc", np.int32),
                    lp.ScalarArg("ntgt", np.int32),
                 ]+[
-                   lp.ArrayArg("strength_%d" % i, dtype, shape="nsrc", order="C")
+                   lp.GlobalArg("strength_%d" % i, dtype, shape="nsrc", order="C")
                    for i, dtype in enumerate(self.strength_dtypes)
                 ]+[
-                   lp.ArrayArg("result_%d" % i, dtype, shape="ntgt", order="C")
+                   lp.GlobalArg("result_%d" % i, dtype, shape="ntgt", order="C")
                    for i, dtype in enumerate(self.value_dtypes)
                    ]
                 + self.gather_kernel_arguments())
@@ -67,32 +69,28 @@ class P2P(KernelComputation):
             from pymbolic.primitives import If, ComparisonOperator, Variable
             exprs = [
                     If(
-                        ComparisonOperator(Variable("i"), "!=", Variable("j")),
+                        ComparisonOperator(Variable("isrc"), "!=", Variable("itgt")),
                         expr, 0)
                     for expr in exprs]
 
-        from pymbolic import parse
         return lp.make_kernel(self.device,
                 "[nsrc,ntgt] -> {[isrc,itgt,idim]: 0<=itgt<ntgt and 0<=isrc<nsrc "
                 "and 0<=idim<%d}" % self.dimensions,
+                self.get_kernel_scaling_assignments()+
                 [
-                "[|idim] <%s> d[idim] = tgt[itgt,idim] - src[isrc,idim]" 
-                % self.geometry_dtype.name,
-                ]+self.get_kernel_scaling_assignments()+[
+                "[|idim] <> d[idim] = tgt[itgt,idim] - src[isrc,idim]",
+                ]+[
                 lp.Instruction(id=None,
-                    assignee=parse("pair_result_%d" % i), expression=expr,
+                    assignee="pair_result_%d" % i, expression=expr,
                     temp_var_type=dtype)
                 for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
                 ]+[
-                "result_%d[itgt] = knl_%d_scaling*sum_%s(isrc, pair_result_%d)"
-                % (i, i, dtype.name, i)
-                for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))],
+                "result_{KNLIDX}[itgt] = knl_{KNLIDX}_scaling*sum(isrc, pair_result_{KNLIDX})"
+                ],
                 arguments,
                 name=self.name, assumptions="nsrc>=1 and ntgt>=1",
-                preamble=(
-                    self.gather_dtype_preambles()
-                    + self.gather_kernel_preambles()
-                    ))
+                preambles=self.gather_kernel_preambles(),
+                defines=dict(KNLIDX=range(len(exprs))))
 
     def get_optimized_kernel(self):
         # FIXME

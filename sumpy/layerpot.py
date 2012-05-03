@@ -4,13 +4,38 @@ import numpy as np
 import loopy as lp
 from pytools import memoize_method
 from pymbolic import parse
+import sympy as sp
 
 from sumpy.tools import KernelComputation
 
 
 
 
-def pop_expand(kernel, order, avec, bvec):
+def expand_line(kernel, order, avec, bvec):
+    from pymbolic.sympy_conv import make_cse
+    from pytools import factorial
+
+    tau = sp.Symbol("tau")
+    avec_line = avec + tau*bvec
+
+    kernel_expr = kernel.get_expression(avec)
+
+    from sumpy.symbolic import vector_subs
+    line_kernel = vector_subs(kernel_expr, avec, avec_line)
+
+    from sumpy.tools import DerivativeCache
+    dcache = DerivativeCache(line_kernel)
+
+    return sum(
+            sp.sympify(1) # tau^n for tau = 1
+            / factorial(i)
+            * make_cse(dcache.diff_scalar(tau, i).subs(tau, 0), "taylor_%d" % i)
+            for i in range(order+1))
+
+
+
+
+def expand_volume(kernel, order, avec, bvec):
     dimensions = len(avec)
 
     tgt_derivative_multi_index = [0] * dimensions
@@ -18,6 +43,8 @@ def pop_expand(kernel, order, avec, bvec):
     while isinstance(kernel, TargetDerivative):
         tgt_derivative_multi_index[kernel.axis] += 1
         kernel = kernel.kernel
+
+    kernel_expr = kernel.get_expression(avec)
 
     from pytools import (
             generate_nonnegative_integer_tuples_summing_to_at_most
@@ -28,10 +55,13 @@ def pop_expand(kernel, order, avec, bvec):
     from sumpy.tools import mi_factorial, mi_power, mi_derivative
     from pymbolic.sympy_conv import make_cse
 
+    from sumpy.tools import DerivativeCache
+    dcache = DerivativeCache(kernel_expr)
+
     return sum(
             mi_derivative(mi_power(bvec, mi), bvec, tgt_derivative_multi_index)
             / mi_factorial(mi)
-            * make_cse(mi_derivative(kernel, avec, mi),
+            * make_cse(dcache.diff_vector(avec, mi),
                 "taylor_" + "_".join(str(mi_i) for mi_i in mi))
             for mi in multi_indices)
 
@@ -63,7 +93,7 @@ class LayerPotential(KernelComputation):
 
         from sumpy.codegen import sympy_to_pymbolic_for_code
         exprs = sympy_to_pymbolic_for_code(
-                [pop_expand(k.get_expression(avec), self.order, avec, bvec)
+                [expand_line(k, self.order, avec, bvec)
                     for i, k in enumerate(self.kernels)])
         exprs = [knl.transform_to_code(expr) for knl, expr in zip(
             self.kernels, exprs)]
@@ -79,18 +109,18 @@ class LayerPotential(KernelComputation):
         geo_dtype = self.geometry_dtype
         arguments = (
                 [
-                   lp.ArrayArg("src", geo_dtype, shape=("nsrc", self.dimensions), order="C"),
-                   lp.ArrayArg("tgt", geo_dtype, shape=("ntgt", self.dimensions), order="C"),
-                   lp.ArrayArg("center", geo_dtype, shape=("ntgt", self.dimensions), order="C"),
-                   lp.ArrayArg("speed", geo_dtype, shape="nsrc", order="C"),
-                   lp.ArrayArg("weights", geo_dtype, shape="nsrc", order="C"),
+                   lp.GlobalArg("src", geo_dtype, shape=("nsrc", self.dimensions), order="C"),
+                   lp.GlobalArg("tgt", geo_dtype, shape=("ntgt", self.dimensions), order="C"),
+                   lp.GlobalArg("center", geo_dtype, shape=("ntgt", self.dimensions), order="C"),
+                   lp.GlobalArg("speed", geo_dtype, shape="nsrc", order="C"),
+                   lp.GlobalArg("weights", geo_dtype, shape="nsrc", order="C"),
                    lp.ScalarArg("nsrc", np.int32),
                    lp.ScalarArg("ntgt", np.int32),
                 ]+[
-                   lp.ArrayArg("density_%d" % i, dtype, shape="nsrc", order="C")
+                   lp.GlobalArg("density_%d" % i, dtype, shape="nsrc", order="C")
                    for i, dtype in enumerate(self.strength_dtypes)
                 ]+[
-                   lp.ArrayArg("result_%d" % i, dtype, shape="ntgt", order="C")
+                   lp.GlobalArg("result_%d" % i, dtype, shape="ntgt", order="C")
                    for i, dtype in enumerate(self.value_dtypes)
                    ]
                 + self.gather_kernel_arguments())
@@ -112,10 +142,7 @@ class LayerPotential(KernelComputation):
                 for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))],
                 arguments,
                 name=self.name, assumptions="nsrc>=1 and ntgt>=1",
-                preamble=(
-                    self.gather_dtype_preambles()
-                    + self.gather_kernel_preambles()
-                    ))
+                preambles=self.gather_kernel_preambles())
 
         return knl
 
@@ -227,7 +254,7 @@ class _JumpTermSymbolicArgumentProvider(object):
     @memoize_method
     def density(self):
         self.arguments[self.density_var_name] = \
-                lp.ArrayArg(self.density_var_name, self.density_dtype,
+                lp.GlobalArg(self.density_var_name, self.density_dtype,
                         shape="ntgt", order="C")
         return parse("%s[itgt]" % self.density_var_name)
 
@@ -236,7 +263,7 @@ class _JumpTermSymbolicArgumentProvider(object):
     def density_prime(self):
         prime_var_name = self.density_var_name+"_prime"
         self.arguments[prime_var_name] = \
-                lp.ArrayArg(prime_var_name, self.density_dtype,
+                lp.GlobalArg(prime_var_name, self.density_dtype,
                         shape="ntgt", order="C")
         return parse("%s[itgt]" % prime_var_name)
 
@@ -244,7 +271,7 @@ class _JumpTermSymbolicArgumentProvider(object):
     @memoize_method
     def side(self):
         self.arguments["side"] = \
-                lp.ArrayArg("side", self.geometry_dtype, shape="ntgt", order="C")
+                lp.GlobalArg("side", self.geometry_dtype, shape="ntgt", order="C")
         return parse("side[itgt]")
 
 
@@ -252,7 +279,7 @@ class _JumpTermSymbolicArgumentProvider(object):
     @memoize_method
     def normal(self):
         self.arguments["normal"] = \
-                lp.ArrayArg("normal", self.geometry_dtype,
+                lp.GlobalArg("normal", self.geometry_dtype,
                         shape=("ntgt", self.dimensions), order="C")
         from pytools.obj_array import make_obj_array
         return make_obj_array([
@@ -263,7 +290,7 @@ class _JumpTermSymbolicArgumentProvider(object):
     @memoize_method
     def tangent(self):
         self.arguments["tangent"] = \
-                lp.ArrayArg("tangent", self.geometry_dtype,
+                lp.GlobalArg("tangent", self.geometry_dtype,
                         shape=("ntgt", self.dimensions), order="C")
         from pytools.obj_array import make_obj_array
         return make_obj_array([
@@ -274,7 +301,7 @@ class _JumpTermSymbolicArgumentProvider(object):
     @memoize_method
     def mean_curvature(self):
         self.arguments["mean_curvature"] = \
-                lp.ArrayArg("mean_curvature",
+                lp.GlobalArg("mean_curvature",
                         self.geometry_dtype, shape="ntgt",
                         order="C")
         return parse("mean_curvature[itgt]")
@@ -283,7 +310,7 @@ class _JumpTermSymbolicArgumentProvider(object):
     @memoize_method
     def src_derivative_dir(self):
         self.arguments["src_derivative_dir"] = \
-                lp.ArrayArg("src_derivative_dir",
+                lp.GlobalArg("src_derivative_dir",
                         self.geometry_dtype, shape=("ntgt", self.dimensions), order="C")
         from pytools.obj_array import make_obj_array
         return make_obj_array([
@@ -322,10 +349,10 @@ class JumpTermApplier(KernelComputation):
         data_args = list(data_args.itervalues())
 
         operand_args = [
-            lp.ArrayArg("result_%d" % i, dtype, shape="ntgt", order="C")
+            lp.GlobalArg("result_%d" % i, dtype, shape="ntgt", order="C")
             for i, dtype in enumerate(self.value_dtypes)
             ]+[
-            lp.ArrayArg("limit_%d" % i, dtype, shape="ntgt", order="C")
+            lp.GlobalArg("limit_%d" % i, dtype, shape="ntgt", order="C")
             for i, dtype in enumerate(self.value_dtypes)]
 
         # FIXME (fast) special case for jump term == 0
@@ -342,8 +369,7 @@ class JumpTermApplier(KernelComputation):
                 [
                    lp.ScalarArg("ntgt", np.int32),
                 ] + operand_args + data_args,
-                name=self.name, assumptions="ntgt>=1",
-                preamble=self.gather_dtype_preambles())
+                name=self.name, assumptions="ntgt>=1")
 
         return knl, data_args
 
