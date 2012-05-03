@@ -109,7 +109,7 @@ class HelmholtzKernel(Kernel):
 
     def get_preambles(self):
         from sumpy.codegen import HANKEL_PREAMBLE
-        return [HANKEL_PREAMBLE]
+        return [("sumpy-hankel", HANKEL_PREAMBLE)]
 
 # }}}
 

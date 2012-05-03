@@ -187,15 +187,6 @@ class KernelComputation:
 
         self.name = name
 
-    def gather_dtypes(self):
-        result = set()
-        for dtype in self.strength_dtypes:
-            result.add(dtype)
-        for dtype in self.value_dtypes:
-            result.add(dtype)
-        result.add(self.geometry_dtype)
-        return result
-
     def gather_kernel_arguments(self):
         result = {}
         for knl in self.kernels:
@@ -205,25 +196,11 @@ class KernelComputation:
 
         return sorted(result.itervalues(), key=lambda arg: arg.name)
 
-    def gather_dtype_preambles(self):
-        dtypes = self.gather_dtypes()
-        if np.dtype(np.complex128) in dtypes:
-            return ["""
-               #define PYOPENCL_DEFINE_CDOUBLE
-               #include "pyopencl-complex.h"
-               """]
-        elif np.dtype(np.complex64) in dtypes:
-            return ["""
-               #include "pyopencl-complex.h"
-               """]
-
     def gather_kernel_preambles(self):
         result = []
 
         for knl in self.kernels:
-            for preamble in knl.get_preambles():
-                if preamble not in result:
-                    result.append(preamble)
+            result.extend(knl.get_preambles())
 
         return result
 
