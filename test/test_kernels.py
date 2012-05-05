@@ -2,7 +2,6 @@ from __future__ import division
 
 import numpy as np
 import numpy.linalg as la
-import sympy as sp
 import sys
 import pytools.test
 
@@ -33,23 +32,24 @@ def test_p2p(ctx_getter):
     dimensions = 3
     n = 5000
 
-    from sumpy.symbolic import make_coulomb_kernel_ts
-    coulomb_knl = make_coulomb_kernel_ts(dimensions)
-    exprs = [coulomb_knl, coulomb_knl.diff(sp.Symbol("t0"))]
+    from sumpy.kernel import LaplaceKernel, TargetDerivative
+    from sumpy.p2p import P2P
+    lknl = LaplaceKernel(dimensions)
+    knl = P2P(ctx, [lknl, TargetDerivative(0, lknl)], exclude_self=False)
 
-    from sumpy.p2p import P2PKernel
-    knl = P2PKernel(ctx, dimensions, exprs, exclude_self=False)
+    targets = np.random.rand(dimensions, n)
+    sources = np.random.rand(dimensions, n)
 
-    targets = np.random.rand(dimensions, n).astype(np.float32)
-    sources = np.random.rand(dimensions, n).astype(np.float32)
-
-    from sumpy.tools import vector_to_device
-    targets_dev = vector_to_device(queue, targets)
-    sources_dev = vector_to_device(queue, sources)
-    strengths_dev = cl_array.empty(queue, n, dtype=np.float32)
+    #from sumpy.tools import vector_to_device
+    #targets_dev = vector_to_device(queue, targets)
+    #sources_dev = vector_to_device(queue, sources)
+    targets_dev = cl_array.to_device(queue, targets.T.copy())
+    sources_dev = cl_array.to_device(queue, sources.T.copy())
+    strengths_dev = cl_array.empty(queue, n, dtype=np.float64)
     strengths_dev.fill(1)
 
-    potential_dev, x_derivative = knl(targets_dev, sources_dev, strengths_dev)
+    evt, (potential_dev, x_derivative) = knl(
+            queue, targets_dev, sources_dev, [strengths_dev])
 
     potential = potential_dev.get()
     potential_host = np.empty_like(potential)
@@ -63,7 +63,9 @@ def test_p2p(ctx_getter):
                 /
                 np.sum((targets[itarg] - sources)**2, axis=-1)**0.5)
 
+    potential_host *= 1/(4*np.pi)
     rel_err = la.norm(potential - potential_host)/la.norm(potential_host)
+    print rel_err
     assert rel_err < 1e-3
 
 
