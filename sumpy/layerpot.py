@@ -3,8 +3,7 @@ from __future__ import division
 import numpy as np
 import loopy as lp
 from pytools import memoize_method
-from pymbolic import parse
-import sympy as sp
+from pymbolic import parse, var
 
 from sumpy.tools import KernelComputation
 
@@ -12,10 +11,7 @@ from sumpy.tools import KernelComputation
 
 
 def expand_line(kernel, order, avec, bvec):
-    from pymbolic.sympy_conv import make_cse
-    from pytools import factorial
-
-    tau = sp.Symbol("tau")
+    tau = var("tau")
     avec_line = avec + tau*bvec
 
     kernel_expr = kernel.get_expression(avec)
@@ -23,14 +19,24 @@ def expand_line(kernel, order, avec, bvec):
     from sumpy.symbolic import vector_subs
     line_kernel = vector_subs(kernel_expr, avec, avec_line)
 
-    from sumpy.tools import DerivativeCache
-    dcache = DerivativeCache(line_kernel)
+    # maxima symbols
+    m_sum = var("sum")
+    m_factorial = var("factorial")
+    m_subst = var("my_subst")
+    m_diff = var("diff")
 
-    return sum(
-            sp.sympify(1) # tau^n for tau = 1
-            / factorial(i)
-            * make_cse(dcache.diff_scalar(tau, i).subs(tau, 0), "taylor_%d" % i)
-            for i in range(order+1))
+    assignments = (
+            "my_subst(what, expr):=subst("
+                "makelist(what[i][1]=what[i][2], i, 1, length(what)),"
+                "expr)",)
+
+    i = var("i")
+    from pymbolic.maxima import eval_expr_with_setup
+    return eval_expr_with_setup(assignments,
+            m_sum(
+                1 / m_factorial(i)
+                * m_subst([[tau,0]], m_diff(line_kernel, tau, i)),
+                i, 0, order))
 
 
 
@@ -86,18 +92,17 @@ class LayerPotential(KernelComputation):
 
     @memoize_method
     def get_kernel(self):
-        from sumpy.symbolic import make_sym_vector
+        from pymbolic.primitives import make_sym_vector
 
         avec = make_sym_vector("a", self.dimensions)
         bvec = make_sym_vector("b", self.dimensions)
 
-        from sumpy.codegen import sympy_to_pymbolic_for_code
-        exprs = sympy_to_pymbolic_for_code(
+        from sumpy.codegen import prepare_for_code
+        exprs = prepare_for_code(
                 [expand_line(k, self.order, avec, bvec)
                     for i, k in enumerate(self.kernels)])
         exprs = [knl.transform_to_code(expr) for knl, expr in zip(
             self.kernels, exprs)]
-        from pymbolic import var
         isrc_sym = var("isrc")
         exprs = [
                 expr
@@ -142,7 +147,8 @@ class LayerPotential(KernelComputation):
                 for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))],
                 arguments,
                 name=self.name, assumptions="nsrc>=1 and ntgt>=1",
-                preambles=self.gather_kernel_preambles())
+                preambles=self.gather_kernel_preambles()
+                )
 
         return knl
 
@@ -159,6 +165,8 @@ class LayerPotential(KernelComputation):
     def __call__(self, queue, targets, sources, centers, densities,
             speed, weights, **kwargs):
         cknl = self.get_compiled_kernel()
+        #print cknl.code
+        #1/0
 
         for i, dens in enumerate(densities):
             kwargs["density_%d" % i] = dens

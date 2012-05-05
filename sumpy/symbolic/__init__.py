@@ -1,5 +1,4 @@
 from __future__ import division
-import sympy as sp
 from pytools import memoize
 
 
@@ -65,11 +64,10 @@ class IdentityMapper(SympyMapper):
 
 
 def vector_subs(expr, old, new):
-    result = expr
-    for old_i, new_i in zip(old, new):
-        result = result.subs(old_i, new_i)
-
-    return result
+    from pymbolic.mapper.substitutor import substitute
+    return substitute(expr, dict(
+        (old_i, new_i)
+        for old_i, new_i in zip(old, new)))
 
 
 

@@ -1,7 +1,6 @@
 from __future__ import division
 
 import numpy as np
-import sympy as sp
 import pyopencl as cl
 import pyopencl.tools
 
@@ -80,9 +79,10 @@ class HankelGetter(object):
         # AS (9.1.31)
         k = n_derivs
         nu = order
+        from pytools import comb
         return prim.CommonSubexpression(
                 2**(-k)*sum(
-                    (-1)**idx*int(sp.binomial(k, idx)) * self.hank1(i, arg)
+                    (-1)**idx*int(comb(k, idx)) * self.hank1(i, arg)
                     for idx, i in enumerate(range(nu-k, nu+k+1, 2))),
                 "d%d_hank1_%d" % (n_derivs, order))
 
@@ -95,23 +95,12 @@ class HankelSubstitutor(IdentityMapper):
         self.hank_getter = hank_getter
 
     def map_call(self, expr):
-        if isinstance(expr.function, prim.Variable) and expr.function.name == "H1_0":
-            hank_arg, = expr.parameters
-            return self.hank_getter.hank1(0, hank_arg)
+        if isinstance(expr.function, prim.Variable) and expr.function.name == "hankel_1":
+            hank_order, hank_arg = expr.parameters
+            result = self.hank_getter.hank1(hank_order, hank_arg)
+            return result
         else:
             return IdentityMapper.map_call(self, expr)
-
-
-    def map_substitution(self, expr):
-        assert isinstance(expr.child, prim.Derivative)
-        call = expr.child.child
-
-        if isinstance(call.function, prim.Variable) and call.function.name == "H1_0":
-            hank_arg, = expr.values
-            return self.hank_getter.hank1_deriv(0, hank_arg,
-                    len(expr.child.variables))
-        else:
-            return IdentityMapper.map_substitution(self, expr)
 
 # }}}
 
@@ -190,21 +179,28 @@ class VectorComponentRewriter(IdentityMapper):
 
 
 
+class MathConstantRewriter(IdentityMapper):
+    def map_variable(self, expr):
+        if expr.name == "pi":
+            return prim.Variable("M_PI")
+        else:
+            return IdentityMapper.map_variable(self, expr)
 
-def sympy_to_pymbolic_for_code(sympy_exprs):
+
+
+
+
+def prepare_for_code(exprs):
     unwrap = False
-    if not isinstance(sympy_exprs, (list, tuple)):
-        sympy_exprs = [sympy_exprs]
+    if not isinstance(exprs, (list, tuple)):
+        exprs = [exprs]
         unwrap = True
 
-    from pymbolic.sympy_conv import SympyToPymbolicMapper
-    exprs = [SympyToPymbolicMapper()(se) for se in sympy_exprs]
-
+    exprs = [HankelSubstitutor(HankelGetter())(expr) for expr in exprs]
     exprs = [VectorComponentRewriter()(expr) for expr in exprs]
     exprs = [PowerRewriter()(expr) for expr in exprs]
     exprs = [FractionKiller()(expr) for expr in exprs]
-
-    exprs = [HankelSubstitutor(HankelGetter())(expr) for expr in exprs]
+    exprs = [MathConstantRewriter()(expr) for expr in exprs]
 
     from pymbolic.cse import tag_common_subexpressions
     exprs = tag_common_subexpressions(exprs)

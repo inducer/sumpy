@@ -2,9 +2,6 @@ from __future__ import division
 
 import numpy as np
 import loopy as lp
-import sympy as sp
-
-from pytools import memoize_method
 
 
 
@@ -33,67 +30,6 @@ def mi_derivative(expr, vector, mi):
     return expr
 
 # }}}
-
-
-
-def csesimp(e):
-    r, e = sp.cse(e)
-    return e[0].subs(reversed(r))
-
-
-
-
-class DerivativeCache:
-    def __init__(self, expr):
-        self.expr = expr
-        self.cache = {}
-
-    def diff_scalar(self, var, n):
-        if n == 0:
-            return self.expr
-
-        assert n > 0
-
-        key = (var, n)
-        try:
-            return self.cache[key]
-        except KeyError:
-            pass
-        print var, n
-
-        lower_deriv = self.diff_scalar(var, n-1)
-        result = lower_deriv.diff(var)
-
-        self.cache[key] = result
-        return result
-
-    def diff_vector(self, vector, multi_index):
-        key = (tuple(vector), multi_index)
-
-        try:
-            return self.cache[key]
-        except KeyError:
-            pass
-
-        dimensions = len(multi_index)
-
-        if sum(multi_index) == 0:
-            return self.expr
-
-        first_nonzero_axis = min(
-                i for i in range(dimensions)
-                if multi_index[i] > 0)
-
-        lowered_mi = list(multi_index)
-        lowered_mi[first_nonzero_axis] -= 1
-        lowered_mi = tuple(lowered_mi)
-
-        lower_deriv = self.diff_vector(vector, lowered_mi)
-        result = lower_deriv.diff(vector[first_nonzero_axis])
-
-        self.cache[key] = result
-        return result
-
 
 
 
@@ -139,7 +75,7 @@ class KernelComputation:
                 if knl.is_complex:
                     value_dtypes.append(np.complex128)
                 else:
-                    value_dtypes.append(np.complex64)
+                    value_dtypes.append(np.float64)
 
         if not isinstance(value_dtypes, (list, tuple)):
             value_dtypes = [np.dtype(value_dtypes)] * len(kernels)
@@ -205,9 +141,9 @@ class KernelComputation:
         return result
 
     def get_kernel_scaling_assignments(self):
-        from sumpy.codegen import sympy_to_pymbolic_for_code
+        from sumpy.codegen import prepare_for_code
         return [lp.Instruction(id=None,
                     assignee="knl_%d_scaling" % i,
-                    expression=sympy_to_pymbolic_for_code(kernel.get_scaling()),
+                    expression=prepare_for_code(kernel.get_scaling()),
                     temp_var_type=lp.infer_type)
                     for i, kernel in enumerate(self.kernels)]

@@ -38,11 +38,11 @@ class P2P(KernelComputation):
 
     @memoize_method
     def get_kernel(self):
-        from sumpy.symbolic import make_sym_vector
+        from pymbolic.primitives import make_sym_vector
         avec = make_sym_vector("d", self.dimensions)
 
-        from sumpy.codegen import sympy_to_pymbolic_for_code
-        exprs = sympy_to_pymbolic_for_code(
+        from sumpy.codegen import prepare_for_code
+        exprs = prepare_for_code(
                 [k.get_expression(avec) for  k in self.kernels])
         from pymbolic import var
         exprs = [knl.transform_to_code(expr) for knl, expr in zip(

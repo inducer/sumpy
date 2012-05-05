@@ -1,8 +1,8 @@
 from __future__ import division
 
-import sympy as sp
 import loopy as lp
 import numpy as np
+from pymbolic import var
 from pymbolic.mapper import IdentityMapper
 
 
@@ -15,7 +15,7 @@ class Kernel:
         self.dimensions = dimensions
 
     def get_expression(self, dist_vec):
-        """Return a :mod:`sympy` expression for the kernel.
+        """Return a :mod:`pymbolic` expression for the kernel.
 
         :arg dist_vec: target - source
 
@@ -53,10 +53,10 @@ class LaplaceKernel(Kernel):
 
     def get_expression(self, dist_vec):
         assert self.dimensions == len(dist_vec)
-        r = sp.sqrt((dist_vec.T*dist_vec)[0,0])
+        r = var("sqrt")(np.dot(dist_vec, dist_vec))
 
         if self.dimensions == 2:
-            return sp.log(r)
+            return var("log")(r)
         elif self.dimensions == 3:
             return 1/r
         else:
@@ -66,9 +66,9 @@ class LaplaceKernel(Kernel):
         """Return a global scaling of the kernel."""
 
         if self.dimensions == 2:
-            return 1/(-2*sp.pi)
+            return 1/(-2*var("pi"))
         elif self.dimensions == 3:
-            return 1/(4*sp.pi)
+            return 1/(4*var("pi"))
         else:
             raise RuntimeError("unsupported dimensionality")
 
@@ -80,15 +80,14 @@ class HelmholtzKernel(Kernel):
     def get_expression(self, dist_vec):
         assert self.dimensions == len(dist_vec)
 
-        r = sp.sqrt((dist_vec.T*dist_vec)[0,0])
+        r = var("sqrt")(np.dot(dist_vec, dist_vec))
 
-        i = sp.sqrt(-1)
-        k = sp.Symbol("k")
+        k = var("k")
 
         if self.dimensions == 2:
-            return sp.Function("H1_0")(k*r)
+            return var("hankel_1")(0, k*r)
         elif self.dimensions == 3:
-            return sp.exp(i*k*r)/r
+            return var("exp")(1j*k*r)/r
         else:
             raise RuntimeError("unsupported dimensionality")
 
@@ -96,9 +95,9 @@ class HelmholtzKernel(Kernel):
         """Return a global scaling of the kernel."""
 
         if self.dimensions == 2:
-            return sp.sqrt(-1)/4
+            return 1j/4
         elif self.dimensions == 3:
-            return 1/(4*sp.pi)
+            return 1/(4*var("pi"))
         else:
             raise RuntimeError("unsupported dimensionality")
 
@@ -142,7 +141,8 @@ class TargetDerivative(KernelWrapper):
         self.axis = axis
 
     def get_expression(self, dist_vec):
-        return self.kernel.get_expression(dist_vec).diff(dist_vec[self.axis])
+        from pymbolic.maxima import diff
+        return diff(self.kernel.get_expression(dist_vec), dist_vec[self.axis])
 
 
 
@@ -173,11 +173,13 @@ class SourceDerivative(KernelWrapper):
         assert dimensions == self.dimensions
 
         knl = self.kernel.get_expression(dist_vec)
-        from sumpy.symbolic import make_sym_vector
+        from pymbolic.primitives import make_sym_vector
         dir_vec = make_sym_vector(self.dir_vec_name, dimensions)
 
         # dist_vec = tgt-src -> minus sign from chain rule
-        return sum(-dir_vec[axis]*knl.diff(dist_vec[axis]) for axis in range(dimensions))
+        from pymbolic.maxima import diff
+        return sum(-dir_vec[axis]*diff(knl, dist_vec[axis])
+                for axis in range(dimensions))
 
     def transform_to_code(self, expr):
         return _SourceDerivativeToCodeMapper(self.dir_vec_name)(
@@ -185,7 +187,7 @@ class SourceDerivative(KernelWrapper):
 
     def get_args(self):
         return self.kernel.get_args() + [
-            lp.ArrayArg(self.dir_vec_name, self.dir_vec_dtype,
+            lp.GlobalArg(self.dir_vec_name, self.dir_vec_dtype,
                 shape=("nsrc", self.dimensions), order="C")]
 
 # }}}
