@@ -206,8 +206,7 @@ class MathConstantRewriter(IdentityMapper):
 
 
 
-def to_loopy_insns(assignments, vector_names=set(),
-        sympy_expr_maps=[], pymbolic_expr_maps=[]):
+def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[]):
     from pymbolic.sympy_interface import SympyToPymbolicMapper
     sympy_conv = SympyToPymbolicMapper()
     hank_sub = HankelSubstitutor(HankelGetter())
@@ -216,8 +215,6 @@ def to_loopy_insns(assignments, vector_names=set(),
     fck = FractionKiller()
 
     def convert_expr(expr):
-        for m in sympy_expr_maps:
-            expr = m(expr)
         expr = sympy_conv(expr)
         expr = hank_sub(expr)
         expr = vcr(expr)

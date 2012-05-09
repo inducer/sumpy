@@ -61,10 +61,14 @@ class LayerPotential(KernelComputation):
                 expand_line(sac, k, self.order, avec, bvec)
                 for i, k in enumerate(self.kernels)]
 
+        from sumpy.symbolic import kill_trivial_assignments
+        assignments = kill_trivial_assignments([
+                (name, expr.subs("tau", 0))
+                for name, expr in sac.assignments.iteritems()])
+
         from sumpy.codegen import to_loopy_insns
-        loopy_insns = to_loopy_insns(sac.assignments.iteritems(),
+        loopy_insns = to_loopy_insns(assignments,
                 vector_names=set(["a", "b"]),
-                sympy_expr_maps=[lambda expr: expr.subs(sp.Symbol("tau"), 0)],
                 pymbolic_expr_maps=[knl.transform_to_code for knl in self.kernels])
 
         isrc_sym = var("isrc")

@@ -1,9 +1,6 @@
 from __future__ import division
 
 import sympy as sp
-
-from pytools import Record
-from pymbolic import var
 from sumpy.symbolic import SympyIdentityMapper
 
 
@@ -31,14 +28,16 @@ class _DependencyToFunctionCallMapper(SympyIdentityMapper):
     function.
     """
 
-    def __init__(self, get_all_deps):
+    def __init__(self, assignments, get_all_deps):
         self.get_all_deps = get_all_deps
+        self.assignments = assignments
 
     def map_Symbol(self, expr):
         deps = list(self.get_all_deps(expr.name))
         if not deps:
             return expr
         else:
+            assert expr.name in self.assignments
             deps = list(deps)
             return sp.Function(expr.name)(*deps)
 
@@ -74,13 +73,16 @@ class _DerivativePostProcessor(SympyIdentityMapper):
             wrt[wrt_var.name] = wrt.get(wrt_var.name, 0) + 1
 
         if func_name in self.sac.assignments:
-            return self.sac.get_derivative(func_name, wrt.iteritems())
+            return self.sac._get_derivative(func_name, wrt.iteritems())
         else:
             substs = {}
             point = []
             gen_dummy = iter(self.generate_standard_dummies())
 
+            assert func_name == "hankel_1", func_name
+
             new_point_vars = []
+            seen_wrts = set()
             for wrt in expr.variables:
                 if isinstance(wrt, sp.Function):
                     if wrt in substs:
@@ -91,8 +93,11 @@ class _DerivativePostProcessor(SympyIdentityMapper):
                         new_point_vars.append(new_dummy)
                         point.append(self.rec(wrt))
                 else:
-                    new_point_vars.append(wrt)
-                    point.append(self.rec(wrt))
+                    if wrt not in seen_wrts:
+                        new_point_vars.append(wrt)
+                        point.append(self.rec(wrt))
+
+                seen_wrts.add(wrt)
 
             return sp.Subs(
                     expr.subs(substs.items()),
@@ -139,7 +144,7 @@ class _SymbolGenerator:
 
 
 
-class SymbolicAssignmentCollection(Record):
+class SymbolicAssignmentCollection(object):
     """Represents a collection of assignments::
 
         a = 5*x
@@ -153,17 +158,17 @@ class SymbolicAssignmentCollection(Record):
 
     This is a stateful object, but the only state changes allowed
     are additions to *assignments*, and corresponding updates of
-    *partial_to_name*.
+    its lookup tables.
 
     Note that user code is *only* allowed to hold on to *names* generated
     by this class, but not expressions using names defined in this collection.
     """
 
-    def __init__(self, assignments=None, partial_to_name=None):
+    def __init__(self, assignments=None):
         """
         :arg assignments: mapping from *var_name* to expression
-        :arg partial_to_name: mapping from *(var_name, wrt)*
-            to variable name containing the derivative of *expr*
+        :arg partial_to_val: mapping from *(var_name, wrt)*
+            to an expression giving the derivative of *expr*
             with respect to *wrt*, where *wrt* is a :class:`frozenset`
             of *(var_name, count)* tuples
         """
@@ -171,20 +176,21 @@ class SymbolicAssignmentCollection(Record):
         if assignments is None:
             assignments = {}
 
-        if partial_to_name is None:
-            partial_to_name = dict(
-                    ((name, frozenset()), name)
-                    for name in assignments)
+        partial_to_val = dict(
+                ((name, frozenset()), sp.Symbol(name))
+                for name in assignments)
+        name_to_partial = dict(
+                ((name, frozenset()), sp.Symbol(name))
+                for name in assignments)
 
-        from pytools import reverse_dictionary
-        Record.__init__(self,
-                assignments=assignments,
-                partial_to_name=partial_to_name,
-                name_to_partial=reverse_dictionary(partial_to_name))
+        self.assignments = assignments
+        self.partial_to_val = partial_to_val
+        self.name_to_partial = name_to_partial
 
-        self.nesting_level = 0
         self.symbol_generator = _SymbolGenerator(self.assignments)()
         self.all_dependencies_cache = {}
+
+        self.user_symbols = set()
 
     def get_all_dependencies(self, var_name):
         """Including recursive dependencies."""
@@ -213,19 +219,14 @@ class SymbolicAssignmentCollection(Record):
     def add_assignment(self, name, expr, root_name=None, wrt_set=None):
         assert isinstance(name, str)
         assert name not in self.assignments
-        assert not isinstance(expr, sp.Symbol)
-        assert not expr.is_Number
 
         if wrt_set is None:
             wrt_set = frozenset()
         if root_name is None:
             root_name = name
 
-        #print "NEW_ASSIGN", name
-        #sp.pretty_print(expr)
-
         self.assignments[name] = expr
-        self.partial_to_name[root_name, wrt_set] = name
+        self.partial_to_val[root_name, wrt_set] = sp.Symbol(name)
         self.name_to_partial[name] = (root_name, wrt_set)
 
     def assign_unique(self, name_base, expr):
@@ -237,15 +238,19 @@ class SymbolicAssignmentCollection(Record):
                 break
 
         self.add_assignment(new_name, expr)
+        self.user_symbols.add(new_name)
         return new_name
 
     def get_derivative(self, var_name, wrt):
-        self.nesting_level += 1
-        result = self._get_derivative(var_name, wrt)
-        self.nesting_level -= 1
+        result = self._get_derivative(var_name, wrt, is_top_level=True)
+
+        if isinstance(result, sp.Symbol):
+            # once we've returned the symbol to an *external* user, it should
+            # stick around even if it should otherwise go away.
+            self.user_symbols.add(result.name)
         return result
 
-    def _get_derivative(self, var_name, wrt):
+    def _get_derivative(self, var_name, wrt, is_top_level=False):
         """
         :arg wrt: an iterable of *(var_name, count)* tuples
         :returns: variable name of src derivative
@@ -253,9 +258,6 @@ class SymbolicAssignmentCollection(Record):
         Note: only derivatives with respect to external (non-assigned)
         variables are supported.
         """
-
-        prefix = "|  "* self.nesting_level
-        prefix = prefix[:-1]
 
         # {{{ normalize var_name and wrt to be relative to a root expression
 
@@ -270,21 +272,12 @@ class SymbolicAssignmentCollection(Record):
 
         # }}}
 
-        #print prefix, "ENTER", var_name, root_name, root_wrt
-
         # {{{ early exit if derivative is already known
 
         try:
-            result = self.partial_to_name[root_name, root_wrt_frozenset]
+            return self.partial_to_val[root_name, root_wrt_frozenset]
         except KeyError:
             pass
-        else:
-            if isinstance(result, sp.Basic):
-                assert result.is_Number
-                return result
-
-            #print prefix, "KNOWN ->", result
-            return sp.Symbol(result)
 
         # }}}
 
@@ -303,14 +296,11 @@ class SymbolicAssignmentCollection(Record):
                     for name, rwc, i in zip(root_wrt_names, root_wrt_counts, path)
                     if rwc-i)
 
-            if (root_name, src_wrt) in self.partial_to_name:
+            if (root_name, src_wrt) in self.partial_to_val:
                 found = True
                 break
 
         assert found
-
-        # If the path length to a known derivative is 0, that means we already
-        # know that derivative. Return it.
 
         # }}}
 
@@ -323,36 +313,41 @@ class SymbolicAssignmentCollection(Record):
         base_root_wrt = root_wrt.copy()
         base_root_wrt[diff_name] -= 1
 
-        base_symbol = self.get_derivative(root_name, frozenset(base_root_wrt.iteritems()))
-        assert isinstance(base_symbol, sp.Symbol)
+        base_symbol = self._get_derivative(root_name, frozenset(base_root_wrt.iteritems()))
         base_name = base_symbol.name
 
         base_expr = self.assignments[base_name]
 
-        dep_adder = _DependencyToFunctionCallMapper(self.get_all_dependencies)
+        # Map exprN -> exprN(tau, a0) to make dependencies on external variables
+        # explicit.
+        dep_adder = _DependencyToFunctionCallMapper(
+                self.assignments, self.get_all_dependencies)
         with_dep = dep_adder(base_expr)
+
+        # Take that derivative.
         result = with_dep.diff(sp.Symbol(diff_name))
 
-        #print prefix, "BEFORE POSTPROC"
-        #sp.pretty_print(result)
-
+        # Get rid of explicit function arguments for dependencies, carry out
+        # derivatives.
         postproc = _DerivativePostProcessor(self)
         result = postproc(result)
-
-        #print prefix, "AFTER POSTPROC"
-        #sp.pretty_print(result)
 
         # Substitute in already known variables
         result = result.subs(
                 [(expr, name) for name, expr in self.assignments.iteritems()])
 
+        # Simplify: Run CSE. Kill trivial assignments.
         result, = self.run_global_cse([result])
+        if is_top_level:
+            # If we're in a recursive invocation, then this might break
+            # symbols that an outer invocation is holding onto, *and*
+            # it will waste time.
+            result, = self.kill_trivial_assignments([result])
 
-        if isinstance(result, sp.Symbol):
-            self.partial_to_name[root_name, root_wrt_frozenset] = result.name
-            return result
-        if result.is_Number:
-            self.partial_to_name[root_name, root_wrt_frozenset] = result
+        # Check if the result is really simple--if so, activate short-circuit
+        # logic.
+        if isinstance(result, sp.Symbol) or result.is_Number:
+            self.partial_to_val[root_name, root_wrt_frozenset] = result
             return result
 
         new_name = "d%s_%s" % (
@@ -360,10 +355,6 @@ class SymbolicAssignmentCollection(Record):
                     for name, count in list_root_wrt))
 
         self.add_assignment(new_name, result, root_name, root_wrt_frozenset)
-
-        #raw_input("ENTER: ")
-
-        #print prefix, "LEAVE"
         return sp.Symbol(new_name)
 
     def run_global_cse(self, extra_exprs):
@@ -371,45 +362,47 @@ class SymbolicAssignmentCollection(Record):
         assign_exprs = [self.assignments[name] for name in assign_names]
         new_assignments, new_exprs = sp.cse(assign_exprs + extra_exprs, symbols=self.symbol_generator)
 
-        # {{{ check if CSEs are complex enough to warrant being stored
+        new_assign_exprs = new_exprs[:len(assign_exprs)]
+        new_extra_exprs = new_exprs[len(assign_exprs):]
 
+        for name, new_expr in zip(assign_names, new_assign_exprs):
+           self.assignments[name] = new_expr
+
+        for name, value in new_assignments:
+            assert isinstance(name, sp.Symbol)
+            self.add_assignment(name.name, value)
+
+        return new_extra_exprs
+
+    def kill_trivial_assignments(self, exprs):
         approved_assignments = []
         rejected_assignments = []
-        for name, value in new_assignments:
-            approved = True
 
-            # const*var: not good enough
-            if (isinstance(value, sp.Mul)
-                    and len(value.args) == 2
-                    and sum(1 for arg in value.args if arg.is_Number) == 1
-                    and sum(1 for arg in value.args if isinstance(arg, sp.Symbol)) == 1
-                    ):
-                approved = False
-
-            if approved:
+        from sumpy.symbolic import is_assignment_nontrivial
+        for name, value in self.assignments.iteritems():
+            if name in self.user_symbols or is_assignment_nontrivial(name, value):
                 approved_assignments.append((name, value))
             else:
                 rejected_assignments.append((name, value))
 
         # un-substitute rejected assignments
-        unsubst_rej = reversed(rejected_assignments)
-        new_exprs = [expr.subs(unsubst_rej) for expr in new_exprs]
-        approved_assignments = [(name, expr.subs(unsubst_rej))
-                for name, expr in approved_assignments]
+        from sumpy.symbolic import make_one_step_subst
+        unsubst_rej = make_one_step_subst(rejected_assignments)
 
-        # }}}
+        new_assignments = dict(
+                (name, expr.subs(unsubst_rej))
+                for name, expr in approved_assignments)
 
-        new_assign_exprs = new_exprs[:len(assign_exprs)]
-        new_extra_exprs = new_exprs[len(assign_exprs):]
+        new_partial_to_val = dict(
+                (key, value.subs(unsubst_rej))
+                for key, value in self.partial_to_val.iteritems())
+        exprs = [expr.subs(unsubst_rej) for expr in exprs]
 
-        for name, old_expr, new_expr in zip(assign_names, assign_exprs, new_assign_exprs):
-           self.assignments[name] = new_expr
+        self.assignments = new_assignments
+        self.partial_to_val = new_partial_to_val
+        return exprs
 
-        for name, value in approved_assignments:
-            assert isinstance(name, sp.Symbol)
-            self.add_assignment(name.name, value)
 
-        return new_extra_exprs
 
 
 

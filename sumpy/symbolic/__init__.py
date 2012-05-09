@@ -6,6 +6,53 @@ import sympy as sp
 
 
 
+# {{{ trivial assignment elimination
+
+def make_one_step_subst(assignments):
+    unwanted_vars = set(sp.Symbol(name) for name, value in assignments)
+
+    result = []
+    for name, value in assignments:
+        while value.atoms() & unwanted_vars:
+            value = value.subs(assignments)
+
+        result.append((name, value))
+
+    return result
+
+def is_assignment_nontrivial(name, value):
+    if value.is_Number:
+        return False
+    elif isinstance(value, sp.Symbol):
+        return False
+    elif (isinstance(value, sp.Mul)
+            and len(value.args) == 2
+            and sum(1 for arg in value.args if arg.is_Number) == 1
+            and sum(1 for arg in value.args if isinstance(arg, sp.Symbol)) == 1
+            ):
+        # const*var: not good enough
+        return False
+
+    return True
+
+def kill_trivial_assignments(assignments):
+    approved_assignments = []
+    rejected_assignments = []
+
+    for name, value in assignments:
+        if is_assignment_nontrivial(name, value):
+            approved_assignments.append((name, value))
+        else:
+            rejected_assignments.append((name, value))
+
+    # un-substitute rejected assignments
+    unsubst_rej = make_one_step_subst(rejected_assignments)
+
+    return [(name, expr.subs(unsubst_rej))
+            for name, expr in approved_assignments]
+
+# }}}
+
 def make_sym_vector(name, components):
     return sp.Matrix(
             [sp.Symbol("%s%d" % (name, i)) for i in range(components)])
