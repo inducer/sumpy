@@ -1,12 +1,28 @@
 from __future__ import division
 from pytools import memoize
 
+import sympy as sp
+
 
 
 
 def make_sym_vector(name, components):
     return sp.Matrix(
             [sp.Symbol("%s%d" % (name, i)) for i in range(components)])
+
+
+
+
+def vector_subs(expr, old, new):
+    result = expr
+    for old_i, new_i in zip(old, new):
+        result = result.subs(old_i, new_i)
+
+    return result
+
+
+
+
 
 
 
@@ -38,7 +54,7 @@ class SympyMapper(object):
 
 
 
-class IdentityMapper(SympyMapper):
+class SympyIdentityMapper(SympyMapper):
     def map_Add(self, expr):
         return type(expr)(*tuple(self.rec(arg) for arg in expr.args))
 
@@ -61,14 +77,12 @@ class IdentityMapper(SympyMapper):
     map_Real = map_Integer
     map_ImaginaryUnit = map_Integer
 
+    def map_Subs(self, expr):
+        return sp.Subs(self.rec(expr.expr), expr.variables,
+                tuple(self.rec(pt_i) for pt_i in expr.point))
 
-
-def vector_subs(expr, old, new):
-    from pymbolic.mapper.substitutor import substitute
-    return substitute(expr, dict(
-        (old_i, new_i)
-        for old_i, new_i in zip(old, new)))
-
+    def map_Derivative(self, expr):
+        return sp.Derivative(self.rec(expr.expr), *[self.rec(v) for v in expr.variables], evaluate=False)
 
 
 

@@ -45,6 +45,7 @@ def vector_to_device(queue, vec):
 
 
 
+
 class KernelComputation:
     """Common input processing for kernel computations."""
 
@@ -141,9 +142,7 @@ class KernelComputation:
         return result
 
     def get_kernel_scaling_assignments(self):
-        from sumpy.codegen import prepare_for_code
-        return [lp.Instruction(id=None,
-                    assignee="knl_%d_scaling" % i,
-                    expression=prepare_for_code(kernel.get_scaling()),
-                    temp_var_type=lp.infer_type)
-                    for i, kernel in enumerate(self.kernels)]
+        from sumpy.codegen import to_loopy_insns
+        return to_loopy_insns(
+                ("knl_%d_scaling" % i, kernel.get_scaling())
+                for i, kernel in enumerate(self.kernels))

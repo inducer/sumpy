@@ -2,6 +2,7 @@ from __future__ import division
 
 import numpy as np
 import loopy as lp
+import sympy as sp
 from pytools import memoize_method
 from pymbolic import parse, var
 
@@ -10,66 +11,22 @@ from sumpy.tools import KernelComputation
 
 
 
-def expand_line(kernel, order, avec, bvec):
-    tau = var("tau")
-    avec_line = avec + tau*bvec
+def expand_line(sac, kernel, order, avec, bvec):
+    avec_line = avec + sp.Symbol("tau")*bvec
 
     kernel_expr = kernel.get_expression(avec)
 
     from sumpy.symbolic import vector_subs
     line_kernel = vector_subs(kernel_expr, avec, avec_line)
 
-    # maxima symbols
-    m_sum = var("sum")
-    m_factorial = var("factorial")
-    m_subst = var("my_subst")
-    m_diff = var("diff")
+    kernel_name = sac.assign_unique("kernel", line_kernel)
 
-    assignments = (
-            "my_subst(what, expr):=subst("
-                "makelist(what[i][1]=what[i][2], i, 1, length(what)),"
-                "expr)",)
-
-    i = var("i")
-    from pymbolic.maxima import eval_expr_with_setup
-    return eval_expr_with_setup(assignments,
-            m_sum(
-                1 / m_factorial(i)
-                * m_subst([[tau,0]], m_diff(line_kernel, tau, i)),
-                i, 0, order))
-
-
-
-
-def expand_volume(kernel, order, avec, bvec):
-    dimensions = len(avec)
-
-    tgt_derivative_multi_index = [0] * dimensions
-    from sumpy.kernel import TargetDerivative
-    while isinstance(kernel, TargetDerivative):
-        tgt_derivative_multi_index[kernel.axis] += 1
-        kernel = kernel.kernel
-
-    kernel_expr = kernel.get_expression(avec)
-
-    from pytools import (
-            generate_nonnegative_integer_tuples_summing_to_at_most
-            as gnitstam)
-
-    multi_indices = sorted(gnitstam(order, dimensions), key=sum)
-
-    from sumpy.tools import mi_factorial, mi_power, mi_derivative
-    from pymbolic.sympy_conv import make_cse
-
-    from sumpy.tools import DerivativeCache
-    dcache = DerivativeCache(kernel_expr)
-
-    return sum(
-            mi_derivative(mi_power(bvec, mi), bvec, tgt_derivative_multi_index)
-            / mi_factorial(mi)
-            * make_cse(dcache.diff_vector(avec, mi),
-                "taylor_" + "_".join(str(mi_i) for mi_i in mi))
-            for mi in multi_indices)
+    from pytools import factorial
+    return sac.assign_unique("line_expn",
+            sum(
+                sac.get_derivative(kernel_name, [("tau", i)])
+                / factorial(i)
+                for i in xrange(order+1)))
 
 
 
@@ -92,24 +49,31 @@ class LayerPotential(KernelComputation):
 
     @memoize_method
     def get_kernel(self):
-        from pymbolic.primitives import make_sym_vector
+        from sumpy.symbolic import make_sym_vector
 
         avec = make_sym_vector("a", self.dimensions)
         bvec = make_sym_vector("b", self.dimensions)
 
-        from sumpy.codegen import prepare_for_code
-        exprs = prepare_for_code(
-                [expand_line(k, self.order, avec, bvec)
-                    for i, k in enumerate(self.kernels)])
-        exprs = [knl.transform_to_code(expr) for knl, expr in zip(
-            self.kernels, exprs)]
+        from sumpy.assignment_collection import SymbolicAssignmentCollection
+        sac = SymbolicAssignmentCollection()
+
+        result_names = [
+                expand_line(sac, k, self.order, avec, bvec)
+                for i, k in enumerate(self.kernels)]
+
+        from sumpy.codegen import to_loopy_insns
+        loopy_insns = to_loopy_insns(sac.assignments.iteritems(),
+                vector_names=set(["a", "b"]),
+                sympy_expr_maps=[lambda expr: expr.subs(sp.Symbol("tau"), 0)],
+                pymbolic_expr_maps=[knl.transform_to_code for knl in self.kernels])
+
         isrc_sym = var("isrc")
         exprs = [
-                expr
+                var(name)
                 * var("density_%d" % self.strength_usage[i])[isrc_sym]
                 * var("speed")[isrc_sym]
                 * var("weights")[isrc_sym]
-                for i, expr in enumerate(exprs)]
+                for i, name in enumerate(result_names)]
 
         geo_dtype = self.geometry_dtype
         arguments = (
@@ -130,33 +94,36 @@ class LayerPotential(KernelComputation):
                    ]
                 + self.gather_kernel_arguments())
 
-        knl = lp.make_kernel(self.device,
+        loopy_knl = lp.make_kernel(self.device,
                 "[nsrc,ntgt] -> {[isrc,itgt,idim]: 0<=itgt<ntgt and 0<=isrc<nsrc "
                 "and 0<=idim<%d}" % self.dimensions,
                 [
-                "[|idim] <%s> a[idim] = center[itgt,idim] - src[isrc,idim]" % geo_dtype.name,
-                "[|idim] <%s> b[idim] = tgt[itgt,idim] - center[itgt,idim]" % geo_dtype.name,
-                ]+self.get_kernel_scaling_assignments()+[
+                "[|idim] <> a[idim] = center[itgt,idim] - src[isrc,idim]",
+                "[|idim] <> b[idim] = tgt[itgt,idim] - center[itgt,idim]",
+                ]+self.get_kernel_scaling_assignments()+loopy_insns+[
                 lp.Instruction(id=None,
                     assignee="pair_result_%d" % i, expression=expr,
                     temp_var_type=dtype)
                 for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
                 ]+[
-                "result_%d[itgt] = knl_%d_scaling*sum_%s(isrc, pair_result_%d)"
-                % (i, i, dtype.name, i)
-                for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))],
+                "result_{KNLIDX}[itgt] = knl_{KNLIDX}_scaling*sum(isrc, pair_result_{KNLIDX})"
+                ],
                 arguments,
+                defines=dict(KNLIDX=range(len(exprs))),
                 name=self.name, assumptions="nsrc>=1 and ntgt>=1",
                 preambles=self.gather_kernel_preambles()
                 )
+        for kl in self.kernels:
+            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
-        return knl
+        print loopy_knl
+        return loopy_knl
 
     def get_optimized_kernel(self):
         # FIXME specialize/tune for GPU/CPU
-        knl = self.get_kernel()
-        knl = lp.split_dimension(knl, "itgt", 128, outer_tag="g.0")
-        return knl
+        loopy_knl = self.get_kernel()
+        loopy_knl = lp.split_dimension(loopy_knl, "itgt", 128, outer_tag="g.0")
+        return loopy_knl
 
     @memoize_method
     def get_compiled_kernel(self):
@@ -364,7 +331,7 @@ class JumpTermApplier(KernelComputation):
             for i, dtype in enumerate(self.value_dtypes)]
 
         # FIXME (fast) special case for jump term == 0
-        knl = lp.make_kernel(self.device,
+        loopy_knl = lp.make_kernel(self.device,
                 "[ntgt] -> {[itgt]: 0<=itgt<ntgt}",
                 [
                 lp.Instruction(id=None,
@@ -379,13 +346,13 @@ class JumpTermApplier(KernelComputation):
                 ] + operand_args + data_args,
                 name=self.name, assumptions="ntgt>=1")
 
-        return knl, data_args
+        return loopy_knl, data_args
 
     def get_optimized_kernel(self):
         # FIXME specialize/tune for GPU/CPU
-        knl, data_args = self.get_kernel()
-        knl = lp.split_dimension(knl, "itgt", 128, outer_tag="g.0")
-        return knl, data_args
+        loopy_knl, data_args = self.get_kernel()
+        loopy_knl = lp.split_dimension(loopy_knl, "itgt", 128, outer_tag="g.0")
+        return loopy_knl, data_args
 
     @memoize_method
     def get_compiled_kernel(self):

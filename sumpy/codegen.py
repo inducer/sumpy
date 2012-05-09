@@ -37,27 +37,23 @@ hank1_01_result_dtype = np.dtype([
 cl.tools.register_dtype(hank1_01_result_dtype,
         "hank1_01_result")
 
+def hank1_01_mangler(identifier, arg_dtypes):
+    if identifier == "hank1_01":
+        return np.dtype(hank1_01_result_dtype), identifier
+
 
 
 class HankelGetter(object):
     @memoize_method
     def hank1_01(self, arg):
-        from loopy.symbolic import TypedCSE
-        return TypedCSE(
-                prim.Variable("hank1_01")(arg),
-                dtype=hank1_01_result_dtype)
+        return prim.Variable("hank1_01")(arg)
 
     @memoize_method
     def hank1(self, order, arg):
-        from loopy.symbolic import TypedCSE
         if order == 0:
-            return TypedCSE(
-                    prim.Lookup(self.hank1_01(arg), "order0"),
-                    dtype=np.complex128)
+            return prim.Lookup(self.hank1_01(arg), "order0")
         elif order == 1:
-            return TypedCSE(
-                    prim.Lookup(self.hank1_01(arg), "order1"),
-                    dtype=np.complex128)
+            return prim.Lookup(self.hank1_01(arg), "order1")
         elif order < 0:
             # AS (9.1.6)
             nu = -order
@@ -79,10 +75,10 @@ class HankelGetter(object):
         # AS (9.1.31)
         k = n_derivs
         nu = order
-        from pytools import comb
+        import sympy as sp
         return prim.CommonSubexpression(
                 2**(-k)*sum(
-                    (-1)**idx*int(comb(k, idx)) * self.hank1(i, arg)
+                    (-1)**idx*int(sp.binomial(k, idx)) * self.hank1(i, arg)
                     for idx, i in enumerate(range(nu-k, nu+k+1, 2))),
                 "d%d_hank1_%d" % (n_derivs, order))
 
@@ -101,6 +97,18 @@ class HankelSubstitutor(IdentityMapper):
             return result
         else:
             return IdentityMapper.map_call(self, expr)
+
+    def map_substitution(self, expr):
+        assert isinstance(expr.child, prim.Derivative)
+        call = expr.child.child
+
+        if isinstance(call.function, prim.Variable) and call.function.name == "hankel_1":
+            hank_order, _ = call.parameters
+            hank_arg, = expr.values
+            return self.hank_getter.hank1_deriv(hank_order, hank_arg,
+                    len(expr.child.variables))
+        else:
+            return IdentityMapper.map_substitution(self, expr)
 
 # }}}
 
@@ -169,10 +177,18 @@ class FractionKiller(IdentityMapper):
 INDEXED_VAR_RE = re.compile("^([a-zA-Z_]+)([0-9]+)$")
 
 class VectorComponentRewriter(IdentityMapper):
+    def __init__(self, name_whitelist=set()):
+        self.name_whitelist = name_whitelist
+
     def map_variable(self, expr):
         match_obj = INDEXED_VAR_RE.match(expr.name)
         if match_obj is not None:
-            return prim.Variable(match_obj.group(1))[int(match_obj.group(2))]
+            name = match_obj.group(1)
+            subscript = int(match_obj.group(2))
+            if name in self.name_whitelist:
+                return prim.Variable(name)[subscript]
+            else:
+                return IdentityMapper.map_variable(self, expr)
         else:
             return IdentityMapper.map_variable(self, expr)
 
@@ -190,22 +206,30 @@ class MathConstantRewriter(IdentityMapper):
 
 
 
-def prepare_for_code(exprs):
-    unwrap = False
-    if not isinstance(exprs, (list, tuple)):
-        exprs = [exprs]
-        unwrap = True
+def to_loopy_insns(assignments, vector_names=set(),
+        sympy_expr_maps=[], pymbolic_expr_maps=[]):
+    from pymbolic.sympy_interface import SympyToPymbolicMapper
+    sympy_conv = SympyToPymbolicMapper()
+    hank_sub = HankelSubstitutor(HankelGetter())
+    vcr = VectorComponentRewriter(vector_names)
+    pwr = PowerRewriter()
+    fck = FractionKiller()
 
-    exprs = [HankelSubstitutor(HankelGetter())(expr) for expr in exprs]
-    exprs = [VectorComponentRewriter()(expr) for expr in exprs]
-    exprs = [PowerRewriter()(expr) for expr in exprs]
-    exprs = [FractionKiller()(expr) for expr in exprs]
-    exprs = [MathConstantRewriter()(expr) for expr in exprs]
+    def convert_expr(expr):
+        for m in sympy_expr_maps:
+            expr = m(expr)
+        expr = sympy_conv(expr)
+        expr = hank_sub(expr)
+        expr = vcr(expr)
+        expr = pwr(expr)
+        expr = fck(expr)
+        for m in pymbolic_expr_maps:
+            expr = m(expr)
+        return expr
 
-    from pymbolic.cse import tag_common_subexpressions
-    exprs = tag_common_subexpressions(exprs)
-
-    if unwrap:
-        exprs, = exprs
-
-    return exprs
+    import loopy as lp
+    return [
+            lp.Instruction(id=None,
+                assignee=name, expression=convert_expr(expr),
+                temp_var_type=lp.infer_type)
+            for name, expr in assignments]
