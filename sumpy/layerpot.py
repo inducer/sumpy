@@ -19,14 +19,13 @@ def expand_line(sac, kernel, order, avec, bvec):
     from sumpy.symbolic import vector_subs
     line_kernel = vector_subs(kernel_expr, avec, avec_line)
 
-    kernel_name = sac.assign_unique("kernel", line_kernel)
+    derivatives = [
+            (i, sp.Symbol(sac.assign_unique("d%dknl" % i, line_kernel.diff("tau", i))))
+            for i in xrange(order+1)]
 
     from pytools import factorial
     return sac.assign_unique("line_expn",
-            sum(
-                sac.get_derivative(kernel_name, [("tau", i)])
-                / factorial(i)
-                for i in xrange(order+1)))
+            sum(derivative / factorial(i) for i, derivative in derivatives))
 
 
 
@@ -60,6 +59,7 @@ class LayerPotential(KernelComputation):
         result_names = [
                 expand_line(sac, k, self.order, avec, bvec)
                 for i, k in enumerate(self.kernels)]
+        sac.run_global_cse()
 
         from sumpy.symbolic import kill_trivial_assignments
         assignments = kill_trivial_assignments([
@@ -120,7 +120,6 @@ class LayerPotential(KernelComputation):
         for kl in self.kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
-        print loopy_knl
         return loopy_knl
 
     def get_optimized_kernel(self):
@@ -136,8 +135,6 @@ class LayerPotential(KernelComputation):
     def __call__(self, queue, targets, sources, centers, densities,
             speed, weights, **kwargs):
         cknl = self.get_compiled_kernel()
-        #print cknl.code
-        #1/0
 
         for i, dens in enumerate(densities):
             kwargs["density_%d" % i] = dens
