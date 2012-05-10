@@ -166,8 +166,7 @@ class TargetDerivative(KernelWrapper):
         self.axis = axis
 
     def get_expression(self, dist_vec):
-        from pymbolic.maxima import diff
-        return diff(self.kernel.get_expression(dist_vec), dist_vec[self.axis])
+        return self.kernel.get_expression(dist_vec).diff(dist_vec[self.axis])
 
 
 
@@ -177,10 +176,10 @@ class _SourceDerivativeToCodeMapper(IdentityMapper):
         self.vec_name = vec_name
 
     def map_subscript(self, expr):
-        from pymbolic.primitives import Variable
+        from pymbolic.primitives import Variable, CommonSubexpression
         if expr.aggregate.name == self.vec_name and isinstance(expr.index, int):
-            return expr.aggregate[
-                    (Variable("isrc"), expr.index)]
+            return CommonSubexpression(expr.aggregate[
+                    (Variable("isrc"), expr.index)])
         else:
             return IdentityMapper.map_subscript(self, expr)
 
@@ -194,20 +193,21 @@ class SourceDerivative(KernelWrapper):
         self.dir_vec_dtype = dir_vec_dtype
 
     def transform_to_code(self, expr):
+        from sumpy.codegen import VectorComponentRewriter
+        vcr = VectorComponentRewriter([self.dir_vec_name])
         return _SourceDerivativeToCodeMapper(self.dir_vec_name)(
-                self.kernel.transform_to_code(expr))
+                vcr(self.kernel.transform_to_code(expr)))
 
     def get_expression(self, dist_vec):
         dimensions = len(dist_vec)
         assert dimensions == self.dimensions
 
         knl = self.kernel.get_expression(dist_vec)
-        from pymbolic.primitives import make_sym_vector
+        from sumpy.symbolic import make_sym_vector
         dir_vec = make_sym_vector(self.dir_vec_name, dimensions)
 
         # dist_vec = tgt-src -> minus sign from chain rule
-        from pymbolic.maxima import diff
-        return sum(-dir_vec[axis]*diff(knl, dist_vec[axis])
+        return sum(-dir_vec[axis]*knl.diff(dist_vec[axis])
                 for axis in range(dimensions))
 
     def get_args(self):

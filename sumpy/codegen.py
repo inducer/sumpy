@@ -199,6 +199,36 @@ class VectorComponentRewriter(IdentityMapper):
 
 
 
+class SumSignGrouper(IdentityMapper):
+    def map_sum(self, expr):
+        first_group = []
+        second_group = []
+
+        for child in expr.children:
+            tchild = child
+            if isinstance(tchild, prim.CommonSubexpression):
+                tchild = tchild.child
+
+            if isinstance(tchild, prim.Product):
+                neg_int_count = 0
+                for subchild in tchild.children:
+                    if isinstance(subchild, int) and subchild < 0:
+                        neg_int_count += 1
+
+                if neg_int_count % 2 == 1:
+                    second_group.append(child)
+                else:
+                    first_group.append(child)
+            else:
+                first_group.append(child)
+
+        return prim.Sum(tuple(first_group+second_group))
+
+
+
+
+
+
 class MathConstantRewriter(IdentityMapper):
     def map_variable(self, expr):
         if expr.name == "pi":
@@ -216,6 +246,7 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[]):
     hank_sub = HankelSubstitutor(HankelGetter())
     vcr = VectorComponentRewriter(vector_names)
     pwr = PowerRewriter()
+    ssg = SumSignGrouper()
     fck = FractionKiller()
 
     def convert_expr(expr):
@@ -224,6 +255,7 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[]):
         expr = vcr(expr)
         expr = pwr(expr)
         expr = fck(expr)
+        expr = ssg(expr)
         for m in pymbolic_expr_maps:
             expr = m(expr)
         return expr
