@@ -20,7 +20,11 @@ def expand_line(sac, kernel, order, avec, bvec):
     line_kernel = vector_subs(kernel_expr, avec, avec_line)
 
     derivatives = [
-            (i, sp.Symbol(sac.assign_unique("d%dknl" % i, line_kernel.diff("tau", i))))
+            (i, sp.Symbol(
+                    sac.assign_unique("d%dknl" % i,
+                        kernel.postprocess_expression(
+                            line_kernel.diff("tau", i),
+                            avec, bvec))))
             for i in xrange(order+1)]
 
     from pytools import factorial

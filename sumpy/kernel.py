@@ -39,6 +39,9 @@ class Kernel:
         """
         raise NotImplementedError
 
+    def postprocess_expression(self, expr, src_location, tgt_location):
+        return expr
+
     def get_scaling(self):
         """Return a global scaling of the kernel."""
         raise NotImplementedError
@@ -73,6 +76,9 @@ class LaplaceKernel(Kernel):
             return 1/r
         else:
             raise RuntimeError("unsupported dimensionality")
+
+    def postprocess_expression(self, expr, avec, bvec):
+        return self.kernel.postprocess_expression(expr, avec, bvec)
 
     def get_scaling(self):
         """Return a global scaling of the kernel."""
@@ -146,6 +152,9 @@ class KernelWrapper(Kernel):
     def is_complex(self):
         return self.kernel.is_complex
 
+    def get_expression(self, dist_vec):
+        return self.kernel.get_expression(dist_vec)
+
     def get_scaling(self):
         return self.kernel.get_scaling()
 
@@ -165,8 +174,8 @@ class TargetDerivative(KernelWrapper):
         KernelWrapper.__init__(self, kernel)
         self.axis = axis
 
-    def get_expression(self, dist_vec):
-        return self.kernel.get_expression(dist_vec).diff(dist_vec[self.axis])
+    def postprocess_expression(self, expr, avec, bvec):
+        return expr.diff(bvec[self.axis])
 
 
 
@@ -198,16 +207,15 @@ class SourceDerivative(KernelWrapper):
         return _SourceDerivativeToCodeMapper(self.dir_vec_name)(
                 vcr(self.kernel.transform_to_code(expr)))
 
-    def get_expression(self, dist_vec):
-        dimensions = len(dist_vec)
+    def postprocess_expression(self, expr, avec, bvec):
+        dimensions = len(avec)
         assert dimensions == self.dimensions
 
-        knl = self.kernel.get_expression(dist_vec)
         from sumpy.symbolic import make_sym_vector
         dir_vec = make_sym_vector(self.dir_vec_name, dimensions)
 
-        # dist_vec = tgt-src -> minus sign from chain rule
-        return sum(-dir_vec[axis]*knl.diff(dist_vec[axis])
+        # avec = center-src -> minus sign from chain rule
+        return sum(-dir_vec[axis]*expr.diff(avec[axis])
                 for axis in range(dimensions))
 
     def get_args(self):
