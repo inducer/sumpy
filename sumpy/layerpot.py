@@ -11,7 +11,7 @@ from sumpy.tools import KernelComputation
 
 
 
-def expand_line(sac, kernel, order, avec, bvec):
+def expand_line(kernel_nr, sac, kernel, order, avec, bvec):
     avec_line = avec + sp.Symbol("tau")*bvec
 
     kernel_expr = kernel.get_expression(avec)
@@ -21,7 +21,7 @@ def expand_line(sac, kernel, order, avec, bvec):
 
     derivatives = [
             (i, sp.Symbol(
-                    sac.assign_unique("d%dknl" % i,
+                    sac.assign_unique("d%dknl%d" % (i, kernel_nr),
                         kernel.postprocess_expression(
                             line_kernel.diff("tau", i),
                             avec, bvec))))
@@ -61,8 +61,8 @@ class LayerPotential(KernelComputation):
         sac = SymbolicAssignmentCollection()
 
         result_names = [
-                expand_line(sac, k, self.order, avec, bvec)
-                for i, k in enumerate(self.kernels)]
+                expand_line(i, sac, knl, self.order, avec, bvec)
+                for i, knl in enumerate(self.kernels)]
         sac.run_global_cse()
 
         from sumpy.symbolic import kill_trivial_assignments
@@ -121,7 +121,7 @@ class LayerPotential(KernelComputation):
                 name=self.name, assumptions="nsrc>=1 and ntgt>=1",
                 preambles=self.gather_kernel_preambles()
                 )
-        for kl in self.kernels:
+        for knl in self.kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl

@@ -38,17 +38,30 @@ class P2P(KernelComputation):
 
     @memoize_method
     def get_kernel(self):
-        from pymbolic.primitives import make_sym_vector
+        from sumpy.symbolic import make_sym_vector
         avec = make_sym_vector("d", self.dimensions)
 
-        from sumpy.codegen import prepare_for_code
-        exprs = prepare_for_code(
-                [k.get_expression(avec) for  k in self.kernels])
+        from sumpy.assignment_collection import SymbolicAssignmentCollection
+        sac = SymbolicAssignmentCollection()
+
+        result_names = [
+                sac.assign_unique("knl%d" % i,
+                    knl.postprocess_expression(
+                        knl.get_expression(avec), avec, avec))
+                for i, knl in enumerate(self.kernels)]
+
+        sac.run_global_cse()
+
+        from sumpy.codegen import to_loopy_insns
+        loopy_insns = to_loopy_insns(sac.assignments.iteritems(),
+                vector_names=set(["d"]),
+                pymbolic_expr_maps=[knl.transform_to_code for knl in self.kernels])
+
         from pymbolic import var
-        exprs = [knl.transform_to_code(expr) for knl, expr in zip(
-            self.kernels, exprs)]
-        exprs = [var("strength_%d" % self.strength_usage[i])[var("isrc")]*expr
-                for i, expr in enumerate(exprs)]
+        exprs = [
+                var(name)
+                    * var("strength_%d" % self.strength_usage[i])[var("isrc")]
+                for i, name in enumerate(result_names)]
 
         arguments = (
                 [
@@ -73,11 +86,12 @@ class P2P(KernelComputation):
                         expr, 0)
                     for expr in exprs]
 
-        return lp.make_kernel(self.device,
+        loopy_knl = lp.make_kernel(self.device,
                 "[nsrc,ntgt] -> {[isrc,itgt,idim]: 0<=itgt<ntgt and 0<=isrc<nsrc "
                 "and 0<=idim<%d}" % self.dimensions,
-                self.get_kernel_scaling_assignments()+
-                [
+                self.get_kernel_scaling_assignments()
+                + loopy_insns
+                + [
                 "[|idim] <> d[idim] = tgt[itgt,idim] - src[isrc,idim]",
                 ]+[
                 lp.Instruction(id=None,
@@ -91,6 +105,11 @@ class P2P(KernelComputation):
                 name=self.name, assumptions="nsrc>=1 and ntgt>=1",
                 preambles=self.gather_kernel_preambles(),
                 defines=dict(KNLIDX=range(len(exprs))))
+
+        for knl in self.kernels:
+            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
+
+        return loopy_knl
 
     def get_optimized_kernel(self):
         # FIXME

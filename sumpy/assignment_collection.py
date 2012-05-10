@@ -8,6 +8,8 @@ from sumpy.symbolic import SympyIdentityMapper
 
 
 def _generate_unique_possibilities(prefix):
+    yield prefix
+
     try_num = 0
     while True:
         yield "%s%d" % (prefix, try_num)

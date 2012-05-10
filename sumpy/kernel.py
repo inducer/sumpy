@@ -77,9 +77,6 @@ class LaplaceKernel(Kernel):
         else:
             raise RuntimeError("unsupported dimensionality")
 
-    def postprocess_expression(self, expr, avec, bvec):
-        return self.kernel.postprocess_expression(expr, avec, bvec)
-
     def get_scaling(self):
         """Return a global scaling of the kernel."""
 
@@ -154,6 +151,9 @@ class KernelWrapper(Kernel):
 
     def get_expression(self, dist_vec):
         return self.kernel.get_expression(dist_vec)
+
+    def postprocess_expression(self, expr, avec, bvec):
+        return self.kernel.postprocess_expression(expr, avec, bvec)
 
     def get_scaling(self):
         return self.kernel.get_scaling()
