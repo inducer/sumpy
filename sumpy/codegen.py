@@ -6,17 +6,19 @@ import pyopencl.tools
 
 import re
 
-from pymbolic.mapper import IdentityMapper
+from pymbolic.mapper import IdentityMapper, WalkMapper
 import pymbolic.primitives as prim
 
 from pytools import memoize_method
 
 
-# {{{ hankel handling
+# {{{ bessel handling
 
 import sumpy.hank103
 
-HANKEL_PREAMBLE = sumpy.hank103.CODE+"""//CL//
+BESSEL_PREAMBLE = sumpy.hank103.CODE+"""//CL//
+#include <pyopencl-bessel-j.h>
+
 typedef struct hank1_01_result_str
 {
     cdouble_t order0, order1;
@@ -37,78 +39,135 @@ hank1_01_result_dtype = np.dtype([
 cl.tools.register_dtype(hank1_01_result_dtype,
         "hank1_01_result")
 
-def hank1_01_mangler(identifier, arg_dtypes):
+def bessel_mangler(identifier, arg_dtypes):
     if identifier == "hank1_01":
-        return np.dtype(hank1_01_result_dtype), identifier
+        return np.dtype(hank1_01_result_dtype), identifier, (np.dtype(np.complex128),)
+    if identifier == "bessel_jv":
+        return np.dtype(np.float64), identifier
+
+    return None
 
 
 
-class HankelGetter(object):
+class BesselGetter(object):
+    def __init__(self, bessel_j_arg_to_top_order):
+        self.bessel_j_arg_to_top_order = bessel_j_arg_to_top_order
+
     @memoize_method
     def hank1_01(self, arg):
         return prim.Variable("hank1_01")(arg)
 
     @memoize_method
-    def hank1(self, order, arg):
+    def bessel_j_impl(self, order, arg):
+        return prim.Variable("bessel_jv")(order, arg)
+
+    @memoize_method
+    def hankel_1(self, order, arg):
         if order == 0:
-            return prim.Lookup(self.hank1_01(arg), "order0")
+            return prim.Lookup(
+                    prim.CommonSubexpression(self.hank1_01(arg), "hank1_01_result"),
+                    "order0")
         elif order == 1:
-            return prim.Lookup(self.hank1_01(arg), "order1")
+            return prim.Lookup(
+                    prim.CommonSubexpression(self.hank1_01(arg), "hank1_01_result"),
+                    "order1")
         elif order < 0:
             # AS (9.1.6)
             nu = -order
             return prim.wrap_in_cse(
-                    (-1)**nu * self.hank1(nu, arg),
+                    (-1)**nu * self.hankel_1(nu, arg),
                     "hank1_neg%d" % nu)
         elif order > 1:
             # AS (9.1.27)
             nu = order-1
             return prim.CommonSubexpression(
-                    2*nu/arg*self.hank1(nu, arg)
-                    - self.hank1(nu-1, arg),
+                    2*nu/arg*self.hankel_1(nu, arg)
+                    - self.hankel_1(nu-1, arg),
                     "hank1_%d" % order)
         else:
             assert False
 
     @memoize_method
-    def hank1_deriv(self, order, arg, n_derivs):
-        # AS (9.1.31)
-        k = n_derivs
-        nu = order
-        import sympy as sp
-        return prim.CommonSubexpression(
-                2**(-k)*sum(
-                    (-1)**idx*int(sp.binomial(k, idx)) * self.hank1(i, arg)
-                    for idx, i in enumerate(range(nu-k, nu+k+1, 2))),
-                "d%d_hank1_%d" % (n_derivs, order))
+    def bessel_j(self, order, arg):
+        top_order = self.bessel_j_arg_to_top_order[arg]
+
+        if order == top_order:
+            return prim.CommonSubexpression(
+                    self.bessel_j_impl(order, arg),
+                    "bessel_j_%d" % order)
+        elif order == top_order-1:
+            return prim.CommonSubexpression(
+                    self.bessel_j_impl(order, arg),
+                    "bessel_j_%d" % order)
+        elif order < 0:
+            return (-1)**order*self.bessel_j(-order, arg)
+        else:
+            # AS (9.1.27)
+            nu = order+1
+            return prim.CommonSubexpression(
+                    2*nu/arg*self.bessel_j(nu, arg)
+                    - self.bessel_j(nu+1, arg),
+                    "bessel_j_%d" % order)
 
 
 
 
 
-class HankelSubstitutor(IdentityMapper):
-    def __init__(self, hank_getter):
-        self.hank_getter = hank_getter
+class BesselTopOrderGatherer(WalkMapper):
+    def __init__(self):
+        self.bessel_j_arg_to_top_order = {}
 
     def map_call(self, expr):
-        if isinstance(expr.function, prim.Variable) and expr.function.name == "hankel_1":
-            hank_order, hank_arg = expr.parameters
-            result = self.hank_getter.hank1(hank_order, hank_arg)
-            return result
+        if isinstance(expr.function, prim.Variable) and expr.function.name == "bessel_j":
+            order, arg = expr.parameters
+            self.rec(arg)
+            assert isinstance(order, int)
+            self.bessel_j_arg_to_top_order[arg] = max(
+                    self.bessel_j_arg_to_top_order.get(arg, 0),
+                    abs(order))
         else:
-            return IdentityMapper.map_call(self, expr)
+            return WalkMapper.map_call(self, expr)
 
+
+
+
+class BesselDerivativeReplacer(IdentityMapper):
     def map_substitution(self, expr):
         assert isinstance(expr.child, prim.Derivative)
         call = expr.child.child
 
-        if isinstance(call.function, prim.Variable) and call.function.name == "hankel_1":
-            hank_order, _ = call.parameters
-            hank_arg, = expr.values
-            return self.hank_getter.hank1_deriv(hank_order, hank_arg,
-                    len(expr.child.variables))
+        if (isinstance(call.function, prim.Variable)
+                and call.function.name in ["hankel_1", "bessel_j"]):
+            function = call.function
+            order, _ = call.parameters
+            arg, = expr.values
+
+            # AS (9.1.31)
+            n_derivs = len(expr.child.variables)
+            import sympy as sp
+            return prim.CommonSubexpression(
+                    2**(-n_derivs)*sum(
+                        (-1)**idx*int(sp.binomial(n_derivs, idx)) * function(i, arg)
+                        for idx, i in enumerate(range(order-n_derivs, order+n_derivs+1, 2))),
+                    "d%d_%s_%d" % (n_derivs, function.name, order))
         else:
             return IdentityMapper.map_substitution(self, expr)
+
+
+
+
+class BesselSubstitutor(IdentityMapper):
+    def __init__(self, bessel_getter):
+        self.bessel_getter = bessel_getter
+
+    def map_call(self, expr):
+        if isinstance(expr.function, prim.Variable):
+            name = expr.function.name
+            if name in ["hankel_1", "bessel_j"]:
+                order, arg = expr.parameters
+                return getattr(self.bessel_getter, name)(order, self.rec(arg))
+
+        return IdentityMapper.map_call(self, expr)
 
 # }}}
 
@@ -149,8 +208,7 @@ class PowerRewriter(IdentityMapper):
 
                 if p > 0:
                     orig_base = prim.wrap_in_cse(expr.base)
-                    new_base = prim.wrap_in_cse(
-                            prim.Variable("rsqrt")(orig_base) * orig_base)
+                    new_base = prim.wrap_in_cse(prim.Variable("sqrt")(orig_base))
                 else:
                     new_base = prim.wrap_in_cse(prim.Variable("rsqrt")(expr.base))
                     p *= -1
@@ -241,17 +299,27 @@ class MathConstantRewriter(IdentityMapper):
 
 
 def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[]):
+    # convert from sympy
     from pymbolic.sympy_interface import SympyToPymbolicMapper
     sympy_conv = SympyToPymbolicMapper()
-    hank_sub = HankelSubstitutor(HankelGetter())
+    assignments = [(name, sympy_conv(expr)) for name, expr in assignments]
+
+    # gather information
+    btog = BesselTopOrderGatherer()
+    for name, expr in assignments:
+        btog(expr)
+
+    # do the rest of the conversion
+    bdr = BesselDerivativeReplacer()
+    bessel_sub = BesselSubstitutor(BesselGetter(btog.bessel_j_arg_to_top_order))
     vcr = VectorComponentRewriter(vector_names)
     pwr = PowerRewriter()
     ssg = SumSignGrouper()
     fck = FractionKiller()
 
     def convert_expr(expr):
-        expr = sympy_conv(expr)
-        expr = hank_sub(expr)
+        expr = bdr(expr)
+        expr = bessel_sub(expr)
         expr = vcr(expr)
         expr = pwr(expr)
         expr = fck(expr)

@@ -12,7 +12,7 @@ def _generate_unique_possibilities(prefix):
 
     try_num = 0
     while True:
-        yield "%s%d" % (prefix, try_num)
+        yield "%s_%d" % (prefix, try_num)
         try_num += 1
 
 

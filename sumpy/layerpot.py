@@ -11,25 +11,28 @@ from sumpy.tools import KernelComputation
 
 
 
-def expand_line(kernel_nr, sac, kernel, order, avec, bvec):
-    avec_line = avec + sp.Symbol("tau")*bvec
+def stringify_expn_index(i):
+    if isinstance(i, tuple):
+        return "_".join(stringify_expn_index(i_i) for i_i in i)
+    else:
+        assert isinstance(i, int)
+        if i < 0:
+            return "m%d" % (-i)
+        else:
+            return str(i)
 
-    kernel_expr = kernel.get_expression(avec)
+def expand(expansion_nr, sac, expansion, avec, bvec):
+    coefficients = expansion.coefficients_from_source(avec, bvec)
 
-    from sumpy.symbolic import vector_subs
-    line_kernel = vector_subs(kernel_expr, avec, avec_line)
+    assigned_coeffs = [
+            sp.Symbol(
+                    sac.assign_unique("expn%dcoeff%s" % (
+                        expansion_nr, stringify_expn_index(i)),
+                        coefficients[expansion.get_storage_index(i)]))
+            for i in expansion.get_coefficient_indices()]
 
-    derivatives = [
-            (i, sp.Symbol(
-                    sac.assign_unique("d%dknl%d" % (i, kernel_nr),
-                        kernel.postprocess_expression(
-                            line_kernel.diff("tau", i),
-                            avec, bvec))))
-            for i in xrange(order+1)]
-
-    from pytools import factorial
-    return sac.assign_unique("line_expn",
-            sum(derivative / factorial(i) for i, derivative in derivatives))
+    return sac.assign_unique("expn%d_result" % expansion_nr,
+            expansion.evaluate(assigned_coeffs, bvec))
 
 
 
@@ -37,18 +40,20 @@ def expand_line(kernel_nr, sac, kernel, order, avec, bvec):
 # {{{ layer potential applier
 
 class LayerPotential(KernelComputation):
-    def __init__(self, ctx, kernels, order, density_usage=None,
+    def __init__(self, ctx, expansions, density_usage=None,
             value_dtypes=None, density_dtypes=None,
             geometry_dtype=None,
             options=[], name="layerpot", device=None):
-        KernelComputation.__init__(self, ctx, kernels, density_usage,
+        KernelComputation.__init__(self, ctx, expansions, density_usage,
                 value_dtypes, density_dtypes, geometry_dtype,
                 name, options, device)
 
         from pytools import single_valued
-        self.dimensions = single_valued(knl.dimensions for knl in self.kernels)
+        self.dimensions = single_valued(knl.dimensions for knl in self.expansions)
 
-        self.order = order
+    @property
+    def expansions(self):
+        return self.kernels
 
     @memoize_method
     def get_kernel(self):
@@ -60,20 +65,22 @@ class LayerPotential(KernelComputation):
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
 
-        result_names = [
-                expand_line(i, sac, knl, self.order, avec, bvec)
-                for i, knl in enumerate(self.kernels)]
+        result_names = [expand(i, sac, expn, avec, bvec)
+                for i, expn in enumerate(self.expansions)]
         sac.run_global_cse()
 
         from sumpy.symbolic import kill_trivial_assignments
         assignments = kill_trivial_assignments([
                 (name, expr.subs("tau", 0))
-                for name, expr in sac.assignments.iteritems()])
+                for name, expr in sac.assignments.iteritems()],
+                retain_names=result_names)
 
         from sumpy.codegen import to_loopy_insns
         loopy_insns = to_loopy_insns(assignments,
                 vector_names=set(["a", "b"]),
-                pymbolic_expr_maps=[knl.transform_to_code for knl in self.kernels])
+                pymbolic_expr_maps=[
+                    expn.kernel.transform_to_code
+                    for expn in self.expansions])
 
         isrc_sym = var("isrc")
         exprs = [
@@ -121,8 +128,8 @@ class LayerPotential(KernelComputation):
                 name=self.name, assumptions="nsrc>=1 and ntgt>=1",
                 preambles=self.gather_kernel_preambles()
                 )
-        for knl in self.kernels:
-            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
+        for expn in self.expansions:
+            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
 
@@ -135,7 +142,7 @@ class LayerPotential(KernelComputation):
     @memoize_method
     def get_compiled_kernel(self):
         kernel = self.get_optimized_kernel()
-        return lp.CompiledKernel(self.context, kernel)
+        return lp.CompiledKernel(self.context, kernel, edit_code=True)
 
     def __call__(self, queue, targets, sources, centers, densities,
             speed, weights, **kwargs):

@@ -60,14 +60,12 @@ class Kernel:
 
 # {{{ PDE kernels
 
-def sympy_real_norm_2(x):
-    return sp.sqrt((x.T*x)[0,0])
-
 class LaplaceKernel(Kernel):
     is_complex = False
 
     def get_expression(self, dist_vec):
         assert self.dimensions == len(dist_vec)
+        from sumpy.symbolic import sympy_real_norm_2
         r = sympy_real_norm_2(dist_vec)
 
         if self.dimensions == 2:
@@ -90,21 +88,26 @@ class LaplaceKernel(Kernel):
 
 
 class HelmholtzKernel(Kernel):
+    def __init__(self, dimensions, allow_evanescent=False):
+        Kernel.__init__(self, dimensions)
+        self.allow_evanescent = allow_evanescent
+
     is_complex = True
 
     def prepare_loopy_kernel(self, loopy_knl):
         # does loopy_knl already know about hank1_01?
         mangle_result = loopy_knl.mangle_function(
                 "hank1_01", (np.dtype(np.complex128),))
-        from sumpy.codegen import hank1_01_result_dtype, hank1_01_mangler
+        from sumpy.codegen import hank1_01_result_dtype, bessel_mangler
         if mangle_result is not hank1_01_result_dtype:
-            return loopy_knl.register_function_mangler(hank1_01_mangler)
+            return loopy_knl.register_function_mangler(bessel_mangler)
         else:
             return loopy_knl
 
     def get_expression(self, dist_vec):
         assert self.dimensions == len(dist_vec)
 
+        from sumpy.symbolic import sympy_real_norm_2
         r = sympy_real_norm_2(dist_vec)
 
         k = sp.Symbol("k")
@@ -127,13 +130,16 @@ class HelmholtzKernel(Kernel):
             raise RuntimeError("unsupported dimensionality")
 
     def get_args(self):
-        return [
-                lp.ScalarArg("k", np.complex128),
-                ]
+        if self.allow_evanescent:
+            k_dtype = np.complex128
+        else:
+            k_dtype = np.float64
+
+        return [lp.ScalarArg("k", k_dtype)]
 
     def get_preambles(self):
-        from sumpy.codegen import HANKEL_PREAMBLE
-        return [("sumpy-hankel", HANKEL_PREAMBLE)]
+        from sumpy.codegen import BESSEL_PREAMBLE
+        return [("sumpy-bessel", BESSEL_PREAMBLE)]
 
 # }}}
 
@@ -175,6 +181,7 @@ class TargetDerivative(KernelWrapper):
         self.axis = axis
 
     def postprocess_expression(self, expr, avec, bvec):
+        expr = self.kernel.postprocess_expression(expr, avec, bvec)
         return expr.diff(bvec[self.axis])
 
 

@@ -35,12 +35,12 @@ def is_assignment_nontrivial(name, value):
 
     return True
 
-def kill_trivial_assignments(assignments):
+def kill_trivial_assignments(assignments, retain_names=set()):
     approved_assignments = []
     rejected_assignments = []
 
     for name, value in assignments:
-        if is_assignment_nontrivial(name, value):
+        if name in retain_names or is_assignment_nontrivial(name, value):
             approved_assignments.append((name, value))
         else:
             rejected_assignments.append((name, value))
@@ -52,6 +52,12 @@ def kill_trivial_assignments(assignments):
             for name, expr in approved_assignments]
 
 # }}}
+
+
+
+
+def sympy_real_norm_2(x):
+    return sp.sqrt((x.T*x)[0,0])
 
 def make_sym_vector(name, components):
     return sp.Matrix(
