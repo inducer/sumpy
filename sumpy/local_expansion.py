@@ -69,9 +69,11 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
         line_kernel = self.kernel.get_expression(avec_line)
 
         return [
-                self.kernel.postprocess_expression(
-                    line_kernel.diff("tau", i),
-                    avec, bvec)
+                self.kernel.postprocess_at_target(
+                    self.kernel.postprocess_at_source(
+                        line_kernel.diff("tau", i),
+                        avec),
+                    bvec)
                 .subs("tau", 0)
                 for i in self.get_coefficient_indices()]
 
@@ -89,7 +91,8 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
 class H2DLocalExpansion(LocalExpansionBase):
     def __init__(self, kernel, order):
         from sumpy.kernel import HelmholtzKernel
-        assert isinstance(kernel, HelmholtzKernel) and kernel.dimensions == 2
+        assert (isinstance(kernel.get_base_kernel(), HelmholtzKernel)
+                and kernel.dimensions == 2)
 
         LocalExpansionBase.__init__(self, kernel, order)
 
@@ -98,10 +101,10 @@ class H2DLocalExpansion(LocalExpansionBase):
         return 2*self.order+1
 
     def get_storage_index(self, k):
-        return self.order-1+k
+        return self.order+k
 
     def get_coefficient_indices(self):
-        return range(-self.order+1, self.order)
+        return range(-self.order, self.order+1)
 
     def coefficients_from_source(self, avec, bvec):
         hankel_1 = sp.Function("hankel_1")
@@ -112,8 +115,10 @@ class H2DLocalExpansion(LocalExpansionBase):
 
         e_i_csangle = sp.exp(sp.I*center_source_angle)
         return [
-                hankel_1(i, sp.Symbol("k")*u)*e_i_csangle**i
-                for i in self.get_coefficient_indices()]
+                self.kernel.postprocess_at_source(
+                    hankel_1(i, sp.Symbol("k")*u)*e_i_csangle**i,
+                    avec)
+                    for i in self.get_coefficient_indices()]
 
     def evaluate(self, coeffs, bvec):
         bessel_j = sp.Function("bessel_j")
@@ -125,9 +130,9 @@ class H2DLocalExpansion(LocalExpansionBase):
 
         e_i_ctangle = sp.exp(-sp.I*center_target_angle)
         return sum(
-                coeffs[self.get_storage_index(i)]
-                * bessel_j(i, sp.Symbol("k")*v)
-                * e_i_ctangle**i
+                self.kernel.postprocess_at_target(
+                    coeffs[self.get_storage_index(i)]
+                    * bessel_j(i, sp.Symbol("k")*v)
+                    * e_i_ctangle**i,
+                    bvec)
                 for i in self.get_coefficient_indices())
-
-

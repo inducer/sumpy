@@ -142,7 +142,7 @@ class LayerPotential(KernelComputation):
     @memoize_method
     def get_compiled_kernel(self):
         kernel = self.get_optimized_kernel()
-        return lp.CompiledKernel(self.context, kernel, edit_code=True)
+        return lp.CompiledKernel(self.context, kernel)
 
     def __call__(self, queue, targets, sources, centers, densities,
             speed, weights, **kwargs):

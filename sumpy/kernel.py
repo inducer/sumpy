@@ -17,6 +17,9 @@ class Kernel:
     def __init__(self, dimensions):
         self.dimensions = dimensions
 
+    def get_base_kernel(self):
+        return self
+
     def prepare_loopy_kernel(self, loopy_knl):
         """Apply some changes (such as registering function
         manglers) to the kernel. Return the new kernel.
@@ -39,7 +42,18 @@ class Kernel:
         """
         raise NotImplementedError
 
-    def postprocess_expression(self, expr, src_location, tgt_location):
+    def postprocess_at_source(self, expr, avec):
+        """Transform a kernel evaluation or expansion expression in a place
+        where the vector a (something-source) is known. ("something" may be
+        an expansion center or a target.)
+        """
+        return expr
+
+    def postprocess_at_target(self, expr, bvec):
+        """Transform a kernel evaluation or expansion expression in a place
+        where the vector b (target-something) is known. ("something" may be
+        an expansion center or a target.)
+        """
         return expr
 
     def get_scaling(self):
@@ -148,6 +162,9 @@ class KernelWrapper(Kernel):
         Kernel.__init__(self, kernel.dimensions)
         self.kernel = kernel
 
+    def get_base_kernel(self):
+        return self.kernel.get_base_kernel()
+
     def prepare_loopy_kernel(self, loopy_knl):
         return self.kernel.prepare_loopy_kernel(loopy_knl)
 
@@ -158,8 +175,11 @@ class KernelWrapper(Kernel):
     def get_expression(self, dist_vec):
         return self.kernel.get_expression(dist_vec)
 
-    def postprocess_expression(self, expr, avec, bvec):
-        return self.kernel.postprocess_expression(expr, avec, bvec)
+    def postprocess_at_source(self, expr, avec):
+        return self.kernel.postprocess_at_source(expr, avec)
+
+    def postprocess_at_target(self, expr, avec):
+        return self.kernel.postprocess_at_target(expr, avec)
 
     def get_scaling(self):
         return self.kernel.get_scaling()
@@ -180,8 +200,8 @@ class TargetDerivative(KernelWrapper):
         KernelWrapper.__init__(self, kernel)
         self.axis = axis
 
-    def postprocess_expression(self, expr, avec, bvec):
-        expr = self.kernel.postprocess_expression(expr, avec, bvec)
+    def postprocess_at_target(self, expr, bvec):
+        expr = self.kernel.postprocess_at_target(expr, bvec)
         return expr.diff(bvec[self.axis])
 
 
@@ -214,7 +234,9 @@ class SourceDerivative(KernelWrapper):
         return _SourceDerivativeToCodeMapper(self.dir_vec_name)(
                 vcr(self.kernel.transform_to_code(expr)))
 
-    def postprocess_expression(self, expr, avec, bvec):
+    def postprocess_at_source(self, expr, avec):
+        expr = self.kernel.postprocess_at_source(expr, avec)
+
         dimensions = len(avec)
         assert dimensions == self.dimensions
 

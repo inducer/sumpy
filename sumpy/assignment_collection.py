@@ -97,7 +97,7 @@ class SymbolicAssignmentCollection(object):
         if root_name is None:
             root_name = name
 
-        self.assignments[name] = expr
+        self.assignments[name] = sp.sympify(expr)
 
     def assign_unique(self, name_base, expr):
         """Assign *expr* to a new variable whose name is based on *name_base*.
