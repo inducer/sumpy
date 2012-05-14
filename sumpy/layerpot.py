@@ -43,13 +43,15 @@ class LayerPotential(KernelComputation):
     def __init__(self, ctx, expansions, density_usage=None,
             value_dtypes=None, density_dtypes=None,
             geometry_dtype=None,
-            options=[], name="layerpot", device=None):
+            options=[], name="layerpot", device=None,
+            optimize=False):
         KernelComputation.__init__(self, ctx, expansions, density_usage,
                 value_dtypes, density_dtypes, geometry_dtype,
                 name, options, device)
 
         from pytools import single_valued
         self.dimensions = single_valued(knl.dimensions for knl in self.expansions)
+        self.optimize = optimize
 
     @property
     def expansions(self):
@@ -67,7 +69,8 @@ class LayerPotential(KernelComputation):
 
         result_names = [expand(i, sac, expn, avec, bvec)
                 for i, expn in enumerate(self.expansions)]
-        sac.run_global_cse()
+        if self.optimize:
+            sac.run_global_cse()
 
         from sumpy.symbolic import kill_trivial_assignments
         assignments = kill_trivial_assignments([
