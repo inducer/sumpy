@@ -39,16 +39,18 @@ class P2P(KernelComputation):
     @memoize_method
     def get_kernel(self):
         from sumpy.symbolic import make_sym_vector
-        avec = make_sym_vector("d", self.dimensions)
+        dvec = make_sym_vector("d", self.dimensions)
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
 
         result_names = [
                 sac.assign_unique("knl%d" % i,
-                    knl.postprocess_expression(
-                        knl.get_expression(avec), avec, avec))
-                for i, knl in enumerate(self.kernels)]
+                    knl.postprocess_at_target(
+                        knl.postprocess_at_source(
+                            knl.get_expression(dvec), dvec),
+                        dvec))
+                        for i, knl in enumerate(self.kernels)]
 
         sac.run_global_cse()
 
