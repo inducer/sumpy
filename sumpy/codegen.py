@@ -17,7 +17,7 @@ from pytools import memoize_method
 import sumpy.hank103
 
 BESSEL_PREAMBLE = sumpy.hank103.CODE+"""//CL//
-#include <pyopencl-bessel-j.h>
+#include <pyopencl-bessel-j.cl>
 
 typedef struct hank1_01_result_str
 {
