@@ -133,7 +133,20 @@ class LayerPotentialBase(KernelComputation):
     def get_optimized_kernel(self):
         # FIXME specialize/tune for GPU/CPU
         loopy_knl = self.get_kernel()
-        loopy_knl = lp.split_dimension(loopy_knl, "itgt", 128, outer_tag="g.0")
+
+        import pyopencl as cl
+        dev = self.context.devices[0]
+        if dev.type == cl.device_type.CPU:
+            loopy_knl = lp.split_dimension(loopy_knl, "itgt", 16, outer_tag="g.0",
+                    inner_tag="l.0")
+            loopy_knl = lp.split_dimension(loopy_knl, "isrc", 256)
+            loopy_knl = lp.generate_loop_schedules(loopy_knl, [
+                "isrc_outer", "itgt_inner"])
+        else:
+            from warnings import warn
+            warn("don't know how to tune layer potential computation for '%s'" % dev)
+            loopy_knl = lp.split_dimension(loopy_knl, "itgt", 128, outer_tag="g.0")
+
         return loopy_knl
 
     @memoize_method
@@ -168,6 +181,7 @@ class LayerPotential(LayerPotentialBase):
     def __call__(self, queue, targets, sources, centers, densities,
             speed, weights, **kwargs):
         cknl = self.get_compiled_kernel()
+        #print cknl.code
 
         for i, dens in enumerate(densities):
             kwargs["density_%d" % i] = dens
