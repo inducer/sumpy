@@ -37,7 +37,9 @@ def expand(expansion_nr, sac, expansion, avec, bvec):
 
 
 
-# {{{ layer potential applier
+# {{{ layer potential computation
+
+# {{{ base class
 
 class LayerPotentialBase(KernelComputation):
     def __init__(self, ctx, expansions, density_usage=None,
@@ -88,7 +90,7 @@ class LayerPotentialBase(KernelComputation):
         isrc_sym = var("isrc")
         exprs = [
                 var(name)
-                * var("density_%d" % self.strength_usage[i])[isrc_sym]
+                * self.get_density_or_not(isrc_sym, i)
                 * var("speed")[isrc_sym]
                 * var("weights")[isrc_sym]
                 for i, name in enumerate(result_names)]
@@ -139,8 +141,15 @@ class LayerPotentialBase(KernelComputation):
         kernel = self.get_optimized_kernel()
         return lp.CompiledKernel(self.context, kernel)
 
+# }}}
+
+# {{{ direct applier
+
 class LayerPotential(LayerPotentialBase):
     """Direct applier for the layer potential."""
+
+    def get_density_or_not(self, isrc, kernel_idx):
+        return var("density_%d" % self.strength_usage[kernel_idx])[isrc]
 
     def get_input_and_output_arguments(self):
         return [
@@ -167,10 +176,15 @@ class LayerPotential(LayerPotentialBase):
                 speed=speed, weights=weights, nsrc=len(sources), ntgt=len(targets),
                 **kwargs)
 
+# }}}
 
+# {{{ matrix writer
 
 class LayerPotentialMatrixGenerator(LayerPotentialBase):
     """Generator for layer potential matrix entries."""
+
+    def get_density_or_not(self, isrc, kernel_idx):
+        return 1
 
     def get_input_and_output_arguments(self):
         return [
@@ -189,6 +203,8 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
         return cknl(queue, src=sources, tgt=targets, center=centers,
                 speed=speed, weights=weights, nsrc=len(sources), ntgt=len(targets),
                 **kwargs)
+
+# }}}
 
 # }}}
 
