@@ -14,10 +14,10 @@ from pytools import memoize_method
 
 # {{{ bessel handling
 
-import sumpy.hank103
-
-BESSEL_PREAMBLE = sumpy.hank103.CODE+"""//CL//
+BESSEL_PREAMBLE = (
+"""//CL//
 #include <pyopencl-bessel-j.cl>
+#include <pyopencl-bessel-y.cl>
 
 typedef struct hank1_01_result_str
 {
@@ -27,10 +27,11 @@ typedef struct hank1_01_result_str
 hank1_01_result hank1_01(cdouble_t z)
 {
     hank1_01_result result;
-    hank103(z, &result.order0, &result.order1, /*ifexpon*/ 1);
+    result.order0 = cdouble_new(bessel_j0(z.x), bessel_y0(z.x));
+    result.order1 = cdouble_new(bessel_j1(z.x), bessel_y1(z.x));
     return result;
 }
-"""
+""")
 
 hank1_01_result_dtype = np.dtype([
     ("order0", np.complex128),
