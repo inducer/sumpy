@@ -60,7 +60,7 @@ class FieldPlotter:
         self.nd_points = mgrid.transpose(
                 *(tuple(range(1, dim+1))+(0,)))
 
-        self.points = self.nd_points.reshape(-1, dim)
+        self.points = self.nd_points.reshape(-1, dim).copy()
 
         from pytools import product
         self.npoints = product(points)

@@ -8,7 +8,7 @@ from pymbolic.mapper import IdentityMapper
 
 
 
-class Kernel:
+class Kernel(object):
     """Basic kernel interface.
 
     :ivar is_complex:
@@ -195,7 +195,10 @@ class KernelWrapper(Kernel):
 
 # {{{ derivatives
 
-class TargetDerivative(KernelWrapper):
+class DerivativeBase(KernelWrapper):
+    pass
+
+class TargetDerivative(DerivativeBase):
     def __init__(self, axis, kernel):
         KernelWrapper.__init__(self, kernel)
         self.axis = axis
@@ -207,22 +210,57 @@ class TargetDerivative(KernelWrapper):
 
 
 
-class _SourceDerivativeToCodeMapper(IdentityMapper):
-    def __init__(self, vec_name):
+class _VectorIndexPrefixer(IdentityMapper):
+    def __init__(self, vec_name, prefix):
         self.vec_name = vec_name
+        self.prefix = prefix
 
     def map_subscript(self, expr):
-        from pymbolic.primitives import Variable, CommonSubexpression
+        from pymbolic.primitives import CommonSubexpression
         if expr.aggregate.name == self.vec_name and isinstance(expr.index, int):
             return CommonSubexpression(expr.aggregate[
-                    (Variable("isrc"), expr.index)])
+                    self.prefix + (expr.index,)])
         else:
             return IdentityMapper.map_subscript(self, expr)
 
 
 
 
-class SourceDerivative(KernelWrapper):
+class DirectionalTargetDerivative(DerivativeBase):
+    def __init__(self, kernel, dir_vec_name="tgt_derivative_dir", dir_vec_dtype=np.float64):
+        KernelWrapper.__init__(self, kernel)
+        self.dir_vec_name = dir_vec_name
+        self.dir_vec_dtype = dir_vec_dtype
+
+    def transform_to_code(self, expr):
+        from sumpy.codegen import VectorComponentRewriter
+        vcr = VectorComponentRewriter([self.dir_vec_name])
+        from pymbolic.primitives import Variable
+        return _VectorIndexPrefixer(self.dir_vec_name, (Variable("itgt"),))(
+                vcr(self.kernel.transform_to_code(expr)))
+
+    def postprocess_at_target(self, expr, bvec):
+        expr = self.kernel.postprocess_at_target(expr, bvec)
+
+        dimensions = len(bvec)
+        assert dimensions == self.dimensions
+
+        from sumpy.symbolic import make_sym_vector
+        dir_vec = make_sym_vector(self.dir_vec_name, dimensions)
+
+        # bvec = tgt-center
+        return sum(dir_vec[axis]*expr.diff(bvec[axis])
+                for axis in range(dimensions))
+
+    def get_args(self):
+        return self.kernel.get_args() + [
+            lp.GlobalArg(self.dir_vec_name, self.dir_vec_dtype,
+                shape=("ntgt", self.dimensions), order="C")]
+
+
+
+
+class SourceDerivative(DerivativeBase):
     def __init__(self, kernel, dir_vec_name="src_derivative_dir", dir_vec_dtype=np.float64):
         KernelWrapper.__init__(self, kernel)
         self.dir_vec_name = dir_vec_name
@@ -231,7 +269,8 @@ class SourceDerivative(KernelWrapper):
     def transform_to_code(self, expr):
         from sumpy.codegen import VectorComponentRewriter
         vcr = VectorComponentRewriter([self.dir_vec_name])
-        return _SourceDerivativeToCodeMapper(self.dir_vec_name)(
+        from pymbolic.primitives import Variable
+        return _VectorIndexPrefixer(self.dir_vec_name, (Variable("isrc"),))(
                 vcr(self.kernel.transform_to_code(expr)))
 
     def postprocess_at_source(self, expr, avec):

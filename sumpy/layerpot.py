@@ -225,22 +225,30 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
 # {{{ jump term handling
 
 def find_jump_term(kernel, arg_provider):
-    from sumpy.kernel import TargetDerivative, SourceDerivative
+    from sumpy.kernel import (
+            TargetDerivative, SourceDerivative,
+            DirectionalTargetDerivative,
+            DerivativeBase)
 
     tgt_derivatives = []
-    source_diff_vectors = []
+    src_derivatives = []
 
-    while isinstance(kernel, (TargetDerivative, SourceDerivative)):
+    while isinstance(kernel, DerivativeBase):
         if isinstance(kernel, TargetDerivative):
             tgt_derivatives.append(kernel.axis)
             kernel = kernel.kernel
-        elif isinstance(kernel, SourceDerivative):
-            source_diff_vectors.append(
-                    (kernel.dir_vec_name, kernel.dir_vec_dtype))
+        elif isinstance(kernel, DirectionalTargetDerivative):
+            tgt_derivatives.append(kernel.dir_vec_name)
             kernel = kernel.kernel
+        elif isinstance(kernel, SourceDerivative):
+            src_derivatives.append(kernel.dir_vec_name)
+            kernel = kernel.kernel
+        else:
+            raise RuntimeError("derivative type '%s' not understood"
+                    % type(kernel))
 
     tgt_count = len(tgt_derivatives)
-    src_count = len(source_diff_vectors)
+    src_count = len(src_derivatives)
 
     info = arg_provider
 
@@ -248,10 +256,21 @@ def find_jump_term(kernel, arg_provider):
         if tgt_count == 0:
             return 0
         elif tgt_count == 1:
-            i, = tgt_derivatives
-            return info.side/2 * info.normal[i] * info.density
+            tgt_derivative, = tgt_derivatives
+            if isinstance(tgt_derivative, int):
+                # axis derivative
+                return info.side/2 * info.normal[tgt_derivative] * info.density
+            else:
+                # directional derivative
+                return (info.side/2
+                        * np.dot(info.normal, getattr(info, tgt_derivative))
+                        * info.density)
+
         elif tgt_count == 2:
             i, j = tgt_derivatives
+
+            assert isinstance(i, int)
+            assert isinstance(j, int)
 
             from pytools import delta
             return (
@@ -264,16 +283,19 @@ def find_jump_term(kernel, arg_provider):
                     * info.density_prime)
 
     elif src_count == 1:
+        src_derivative_name, = src_derivatives
+
         if tgt_count == 0:
             return (
                     - info.side/2
-                    * np.dot(info.normal, info.src_derivative_dir)
+                    * np.dot(info.normal, getattr(info, src_derivative_name))
                     * info.density)
         elif tgt_count == 1:
             from warnings import warn
             warn("jump terms for mixed derivatives (1 src+1 tgt) only available "
                     "for the double-layer potential")
             i, = tgt_derivatives
+            assert isinstance(i, int)
             return (
                     - info.side/2
                     * info.tangent[i]
@@ -296,7 +318,7 @@ class _JumpTermSymbolicArgumentProvider(object):
 
     def __init__(self, data_args, dimensions, density_var_name,
             density_dtype, geometry_dtype):
-        # list of loopy arguments
+        # dictionary of loopy arguments
         self.arguments = data_args
         self.dimensions = dimensions
         self.density_var_name = density_var_name
@@ -368,6 +390,17 @@ class _JumpTermSymbolicArgumentProvider(object):
         from pytools.obj_array import make_obj_array
         return make_obj_array([
             parse("src_derivative_dir[itgt, %d]" % i)
+            for i in range(self.dimensions)])
+
+    @property
+    @memoize_method
+    def tgt_derivative_dir(self):
+        self.arguments["tgt_derivative_dir"] = \
+                lp.GlobalArg("tgt_derivative_dir",
+                        self.geometry_dtype, shape=("ntgt", self.dimensions), order="C")
+        from pytools.obj_array import make_obj_array
+        return make_obj_array([
+            parse("tgt_derivative_dir[itgt, %d]" % i)
             for i in range(self.dimensions)])
 
 # }}}
