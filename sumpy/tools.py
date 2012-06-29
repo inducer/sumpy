@@ -33,6 +33,26 @@ def mi_derivative(expr, vector, mi):
 
 
 
+def build_matrix(op, dtype=None):
+    dtype = dtype or op.dtype
+    from pytools import ProgressBar
+    rows, cols = op.shape
+    pb = ProgressBar("matrix", cols)
+    mat = np.zeros(op.shape, dtype)
+
+    for i in range(cols):
+        unit_vec = np.zeros(rows, dtype=dtype)
+        unit_vec[i] = 1
+        mat[:,i] = op.matvec(unit_vec)
+        pb.progress()
+
+    pb.finished()
+
+    return mat
+
+
+
+
 def vector_to_device(queue, vec):
     from pytools.obj_array import with_object_array_or_scalar
 
