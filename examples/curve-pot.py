@@ -1,6 +1,7 @@
 from __future__ import division
 import pyopencl as cl
 import numpy as np
+import numpy.linalg as la
 import matplotlib.pyplot as pt
 from pytools import Record
 
@@ -31,7 +32,8 @@ def draw_pot_figure(aspect_ratio,
         what_operator="S",
         what_operator_lpot=None,
         order=5,
-        ovsmp_center_exp=0.66):
+        ovsmp_center_exp=0.66,
+        force_center_side=None):
 
     if novsmp is None:
         novsmp = 4*nsrc
@@ -112,9 +114,13 @@ def draw_pot_figure(aspect_ratio,
     curve_len = np.sum(ovsmp_weights * ovsmp_curve.speed)
     hovsmp = curve_len/novsmp
     hnative = curve_len/nsrc
-    center_dist = 5*hnative * (hovsmp/hnative)**ovsmp_center_exp
+    center_dist = 5*hovsmp
 
-    center_side = -np.sign(native_curve.mean_curvature)
+    if force_center_side is not None:
+        center_side = force_center_side*np.ones(len(native_curve))
+    else:
+        center_side = -np.sign(native_curve.mean_curvature)
+
     centers = (native_curve.pos
             + center_side[:, np.newaxis]
             *  center_dist*native_curve.normal)
@@ -126,7 +132,7 @@ def draw_pot_figure(aspect_ratio,
     lpot_kwargs = knl_kwargs.copy()
 
     if what_operator == "D":
-        lpot_kwargs["src_derivative_dir"] = ovsmp_curve.normal
+        volpot_kwargs["src_derivative_dir"] = native_curve.normal
 
     if what_operator_lpot == "D":
         lpot_kwargs["src_derivative_dir"] = ovsmp_curve.normal
@@ -136,7 +142,41 @@ def draw_pot_figure(aspect_ratio,
 
     # }}}
 
-    len(native_curve)
+    if 1:
+        # {{{ build matrix
+
+        from fourier import make_fourier_interp_matrix
+        fim = make_fourier_interp_matrix(novsmp, nsrc)
+        from sumpy.tools import build_matrix
+        from scipy.sparse.linalg import LinearOperator
+        def apply_lpot(x):
+            xovsmp = np.dot(fim, x)
+            evt, (y,) = lpot(queue, native_curve.pos, ovsmp_curve.pos, centers,
+                    [xovsmp], ovsmp_curve.speed, ovsmp_weights,
+                    **lpot_kwargs)
+            if 0:
+                class JumpTermArgs(Record):
+                    pass
+                evt, (y,) = jt(queue, [y], JumpTermArgs(
+                    src_derivative_dir=native_curve.normal,
+                    tgt_derivative_dir=native_curve.normal,
+                    density_0=x,
+                    side=center_side,
+                    normal=native_curve.normal,
+                    ))
+            return y
+
+        op = LinearOperator((nsrc, nsrc), apply_lpot)
+        mat = build_matrix(op, dtype=np.complex128)
+        w, v = la.eig(mat)
+        pt.plot(w.real, "o-")
+        #import sys; sys.exit(0)
+        return
+
+        # }}}
+
+    # {{{ compute potentials
+
     density = np.cos(3*2*np.pi*native_t).astype(np.complex128)
     ovsmp_density = np.cos(3*2*np.pi*ovsmp_t).astype(np.complex128)
     evt, (vol_pot,) = p2p(queue, fp.points, native_curve.pos,
@@ -146,7 +186,11 @@ def draw_pot_figure(aspect_ratio,
             [ovsmp_density], ovsmp_curve.speed, ovsmp_weights,
             **lpot_kwargs)
 
+    # }}}
+
     if 1:
+        # {{{ apply jump terms
+
         class JumpTermArgs(Record):
             pass
         evt, (curve_pot,) = jt(queue, [curve_pot], JumpTermArgs(
@@ -156,13 +200,22 @@ def draw_pot_figure(aspect_ratio,
             side=center_side,
             normal=native_curve.normal,
             ))
+
+        # }}}
+
     if 0:
+        # {{{ plot on-surface potential in 2D
+
         pt.plot(curve_pot, label="pot")
         pt.plot(density, label="dens")
         pt.legend()
         pt.show()
 
+        # }}}
+
     if 0:
+        # {{{ 2D false-color plot
+
         pt.clf()
         plotval = np.log10(1e-20+np.abs(vol_pot))
         im = fp.show_scalar_in_matplotlib(plotval.real)
@@ -181,7 +234,11 @@ def draw_pot_figure(aspect_ratio,
         #pt.gca().xaxis.set_major_formatter(NullFormatter())
         #pt.gca().yaxis.set_major_formatter(NullFormatter())
         fp.set_matplotlib_limits()
+
+        # }}}
     else:
+        # {{{ 3D plots
+
         plotval_vol = vol_pot.real
         plotval_c = curve_pot.real
 
@@ -210,11 +267,22 @@ def draw_pot_figure(aspect_ratio,
                     scale*plotval_c, scale_factor=0.02)
         mlab.show()
 
+        # }}}
+
 
 
 
 if __name__ == "__main__":
-    draw_pot_figure(aspect_ratio=1, nsrc=1000, helmholtz_k=0,
-            what_operator="S",
-            what_operator_lpot="S'")
-    pt.show()
+    draw_pot_figure(aspect_ratio=1, nsrc=100, novsmp=100, helmholtz_k=0,
+            what_operator="D", what_operator_lpot="D", force_center_side=1)
+    pt.savefig("eigvals-ext-nsrc100-novsmp100.pdf")
+    pt.clf()
+    draw_pot_figure(aspect_ratio=1, nsrc=100, novsmp=100, helmholtz_k=0,
+            what_operator="D", what_operator_lpot="D", force_center_side=-1)
+    pt.savefig("eigvals-int-nsrc100-novsmp100.pdf")
+    pt.clf()
+    draw_pot_figure(aspect_ratio=1, nsrc=100, novsmp=200, helmholtz_k=0,
+            what_operator="D", what_operator_lpot="D", force_center_side=-1)
+    pt.savefig("eigvals-int-nsrc100-novsmp200.pdf")
+
+# vim: fdm=marker
