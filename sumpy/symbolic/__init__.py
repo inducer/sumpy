@@ -56,6 +56,84 @@ def kill_trivial_assignments(assignments, retain_names=set()):
 
 
 
+# {{{ debugging of sympy CSE via Maxima
+
+from pymbolic.mapper import IdentityMapper as PymbolicIdentityMapper
+
+class _DerivativeKiller(PymbolicIdentityMapper):
+    def map_derivative(self, expr):
+        from pymbolic import var
+        return var("d_"+"_".join(expr.variables))(expr.child)
+
+    def map_substitution(self, expr):
+        return self.rec(expr.child)
+
+def _get_assignments_in_maxima(assignments, prefix=""):
+    my_variable_names = set(assignments.iterkeys())
+    written_assignments = set()
+
+    prefix_subst_dict = dict(
+            (vn, prefix+vn) for vn in my_variable_names)
+
+    from pymbolic.maxima import MaximaStringifyMapper
+    mstr = MaximaStringifyMapper()
+    from pymbolic.sympy_interface import SympyToPymbolicMapper
+    s2p = SympyToPymbolicMapper()
+    dkill = _DerivativeKiller()
+
+    result = []
+
+    def write_assignment(name):
+        symbols = [atm for atm in assignments[name].atoms()
+                if isinstance(atm, sp.Symbol)
+                and atm.name in my_variable_names]
+
+        for sym in symbols:
+            if sym.name not in written_assignments:
+                write_assignment(sym.name)
+
+        result.append("%s%s : %s;" % (
+            prefix, name, mstr(dkill(s2p(
+                assignments[name].subs(prefix_subst_dict))))))
+        written_assignments.add(name)
+
+    for name in assignments.iterkeys():
+        if name not in written_assignments:
+            write_assignment(name)
+
+    return "\n".join(result)
+
+def checked_cse(exprs, symbols=None):
+    kwargs = {}
+    if symbols is not None:
+        kwargs["symbols"] = symbols
+
+    new_assignments, new_exprs = sp.cse(exprs, **kwargs)
+
+    max_old = _get_assignments_in_maxima(dict(
+            ("old_expr%d" % i, expr)
+            for i, expr in enumerate(exprs)))
+    new_ass_dict = dict(
+            ("new_expr%d" % i, expr)
+            for i, expr in enumerate(new_exprs))
+    for name, val in new_assignments:
+        new_ass_dict[name.name] = val
+    max_new = _get_assignments_in_maxima(new_ass_dict)
+
+    with open("check.mac", "w") as outf:
+        outf.write("ratprint:false;\n")
+        outf.write("%s\n\n" % max_old)
+        outf.write("%s\n" % max_new)
+        for i in xrange(len(exprs)):
+            outf.write("print(\"diff in expr %d:\n\");\n" % i)
+            outf.write("print(ratsimp(old_expr%d - new_expr%d));\n" % (i, i))
+
+    from subprocess import check_call
+    check_call(["maxima", "--very-quiet", "-r", "load(\"check.mac\");"])
+
+    return new_assignments, new_exprs
+
+# }}}
 def sympy_real_norm_2(x):
     return sp.sqrt((x.T*x)[0,0])
 
@@ -146,3 +224,5 @@ def find_power_of(base, prod):
     if result is None:
         return 0
     return result[power]
+
+# vim: fdm=marker

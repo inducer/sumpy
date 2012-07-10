@@ -32,6 +32,7 @@ class _SymbolGenerator:
 
 
 
+
 class SymbolicAssignmentCollection(object):
     """Represents a collection of assignments::
 
