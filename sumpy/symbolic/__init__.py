@@ -53,9 +53,6 @@ def kill_trivial_assignments(assignments, retain_names=set()):
 
 # }}}
 
-
-
-
 # {{{ debugging of sympy CSE via Maxima
 
 from pymbolic.mapper import IdentityMapper as PymbolicIdentityMapper
@@ -134,6 +131,10 @@ def checked_cse(exprs, symbols=None):
     return new_assignments, new_exprs
 
 # }}}
+
+
+
+
 def sympy_real_norm_2(x):
     return sp.sqrt((x.T*x)[0,0])
 
