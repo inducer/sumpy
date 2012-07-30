@@ -13,7 +13,7 @@ AXIS_NAMES = ["x", "y", "z", "w"]
 # {{{ bounding box finding
 
 @memoize
-def make_bounding_box_dtype(dimensions, geo_dtype):
+def make_bounding_box_dtype(device, dimensions, geo_dtype):
     fields = []
     for i in range(dimensions):
         fields.append(("min_%s" % AXIS_NAMES[i], geo_dtype))
@@ -21,9 +21,16 @@ def make_bounding_box_dtype(dimensions, geo_dtype):
 
     dtype = np.dtype(fields)
 
-    from pyopencl.tools import register_dtype
-    register_dtype(dtype, "sumpy_bbox_%dd_t" % dimensions)
-    return dtype
+    name = "sumpy_bbox_%dd_t" % dimensions
+
+    from pyopencl.tools import register_dtype, match_dtype_to_c_struct
+    dtype, c_decl = match_dtype_to_c_struct(device, name, dtype)
+    register_dtype(dtype, name)
+
+    return dtype, c_decl
+
+
+
 
 BBOX_CODE_TEMPLATE = Template(r"""//CL//
     ${bbox_struct_decl}
@@ -67,8 +74,9 @@ class BoundingBoxFinder:
 
     @memoize_method
     def get_kernel(self, dimensions, geo_dtype):
-        from pyopencl.tools import dtype_to_c_struct, dtype_to_ctype
-        bbox_dtype = make_bounding_box_dtype(dimensions, geo_dtype)
+        from pyopencl.tools import dtype_to_ctype
+        bbox_dtype, bbox_cdecl = make_bounding_box_dtype(
+                self.context.devices[0], dimensions, geo_dtype)
 
         if geo_dtype == np.float64:
             geo_dtype_3ltr = "DBL"
@@ -86,7 +94,7 @@ class BoundingBoxFinder:
                 dimensions=dimensions,
                 geo_ctype=dtype_to_ctype(geo_dtype),
                 geo_dtype_3ltr=geo_dtype_3ltr,
-                bbox_struct_decl=dtype_to_c_struct(bbox_dtype)
+                bbox_struct_decl=bbox_cdecl
                 )
 
         from pyopencl.reduction import ReductionKernel
@@ -121,32 +129,38 @@ def padded_bin(i, l):
 # {{{ data types
 
 @memoize
-def make_morton_bin_count_type(dimensions, particle_id_dtype):
+def make_morton_bin_count_type(device, dimensions, particle_id_dtype):
     fields = []
     for mnr in range(2**dimensions):
         fields.append(('c%s' % padded_bin(mnr, dimensions), particle_id_dtype))
 
     dtype = np.dtype(fields)
-    from pyopencl.tools import register_dtype
+
+    name = "sumpy_morton_bin_count_%dd_t" % dimensions
+    from pyopencl.tools import register_dtype, match_dtype_to_c_struct
+    dtype, c_decl = match_dtype_to_c_struct(device, name, dtype)
 
     # FIXME: build id_type into name
-    register_dtype(dtype, "sumpy_morton_bin_count_%dd_t" % dimensions) 
-    return dtype
+    register_dtype(dtype, name)
+    return dtype, c_decl
 
 @memoize
-def make_scan_type(dimensions, particle_id_dtype, box_id_dtype):
+def make_scan_type(device, dimensions, particle_id_dtype, box_id_dtype):
+    morton_dtype, _ = make_morton_bin_count_type(device, dimensions, particle_id_dtype)
     dtype = np.dtype([
-            ('counts', make_morton_bin_count_type(dimensions, particle_id_dtype)),
+            ('counts', morton_dtype),
             ('current_box_id', box_id_dtype), # max-scanned
             ('subdivided_box_id', box_id_dtype), # sum-scanned
             ('morton_nr', np.uint8),
             ])
 
-    from pyopencl.tools import register_dtype
+    name = "sumpy_tree_scan_%dd_t" % dimensions
+    from pyopencl.tools import register_dtype, match_dtype_to_c_struct
+    dtype, c_decl = match_dtype_to_c_struct(device, name, dtype)
 
     # FIXME: build id_types into name
-    register_dtype(dtype, "sumpy_tree_scan_%dd_t" % dimensions)
-    return dtype
+    register_dtype(dtype, name)
+    return dtype, c_decl
 
 # }}}
 
@@ -305,7 +319,6 @@ SCAN_OUTPUT_STMT_TPL = Template(r"""//CL//
             + item.counts.c${padded_bin(mnr, dimensions)}
         %endfor
             ;
-
         dbg_printf(("my_id_in_my_box:%d\n", my_id_in_my_box));
         morton_bin_counts[i] = item.counts;
         morton_nrs[i] = item.morton_nr;
@@ -419,14 +432,17 @@ class Tree(Record):
 # {{{ driver
 
 class TreeBuilder(object):
-    def __init__(self, context):
+    def __init__(self, context, options=[]):
         self.context = context
         self.bbox_finder = BoundingBoxFinder(context)
+        self.options = options
 
     # {{{ kernel creation
 
     @memoize_method
-    def get_kernel_info(self, dimensions, geo_dtype, particle_id_dtype=np.uint32, box_id_dtype=np.uint32):
+    def get_kernel_info(self, dimensions, geo_dtype,
+            particle_id_dtype=np.uint32, box_id_dtype=np.uint32):
+
         from pyopencl.tools import dtype_to_c_struct, dtype_to_ctype
         geo_ctype = dtype_to_ctype(geo_dtype)
 
@@ -436,9 +452,12 @@ class TreeBuilder(object):
         box_id_dtype = np.dtype(box_id_dtype)
         box_id_ctype = dtype_to_ctype(box_id_dtype)
 
-        scan_dtype = make_scan_type(dimensions, particle_id_dtype, box_id_dtype)
+        dev = self.context.devices[0]
+        scan_dtype, scan_type_decl = make_scan_type(dev,
+                dimensions, particle_id_dtype, box_id_dtype)
         morton_bin_count_dtype, _ = scan_dtype.fields["counts"]
-        bbox_dtype = make_bounding_box_dtype(dimensions, geo_dtype)
+        bbox_dtype, bbox_type_decl = make_bounding_box_dtype(
+                dev, dimensions, geo_dtype)
 
         axis_names = AXIS_NAMES[:dimensions]
 
@@ -447,9 +466,10 @@ class TreeBuilder(object):
                 axis_names=axis_names,
                 padded_bin=padded_bin,
                 geo_ctype=geo_ctype,
-                morton_bin_count_type_decl=dtype_to_c_struct(morton_bin_count_dtype),
-                tree_scan_type_decl=dtype_to_c_struct(scan_dtype),
-                bbox_type_decl=dtype_to_c_struct(bbox_dtype),
+                morton_bin_count_type_decl=dtype_to_c_struct(
+                    dev, morton_bin_count_dtype),
+                tree_scan_type_decl=scan_type_decl,
+                bbox_type_decl=dtype_to_c_struct(dev, bbox_dtype),
                 particle_id_ctype=particle_id_ctype,
                 box_id_ctype=box_id_ctype,
                 )
@@ -499,8 +519,8 @@ class TreeBuilder(object):
                 + [VectorArg(geo_dtype, ax) for ax in axis_names]
                 )
 
-        from pyopencl.scan import GenericDebugScanKernel
-        scan_kernel = GenericDebugScanKernel(
+        from pyopencl.scan import GenericScanKernel
+        scan_kernel = GenericScanKernel(
                 self.context, scan_dtype,
                 arguments=scan_knl_arguments,
                 input_expr="scan_t_from_particle(%s)"
@@ -516,7 +536,7 @@ class TreeBuilder(object):
                 neutral="scan_t_neutral()",
                 is_segment_start_expr="box_start_flags[i]",
                 output_statement=SCAN_OUTPUT_STMT_TPL.render(**codegen_args),
-                preamble=scan_preamble)
+                preamble=scan_preamble, options=self.options)
 
         postproc_kernel_source = POSTPROC_KERNEL_TPL.render(**codegen_args)
 
@@ -526,7 +546,7 @@ class TreeBuilder(object):
                 scan_knl_arguments
                 + [VectorArg(geo_dtype, "sorted_"+ax) for ax in axis_names],
                 str(postproc_kernel_source), name="postproc",
-                preamble=str(preamble))
+                preamble=str(preamble), options=self.options)
 
         return _KernelInfo(
                 scan_kernel=scan_kernel,

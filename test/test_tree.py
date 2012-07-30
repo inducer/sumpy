@@ -16,7 +16,7 @@ def test_tree(ctx_getter):
     queue = cl.CommandQueue(ctx)
 
     dims = 2
-    nparticles = 10000
+    nparticles = 1000000
     dtype = np.float64
 
     from pyopencl.clrandom import RanluxGenerator
