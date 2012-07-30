@@ -20,19 +20,19 @@ def test_tree(ctx_getter):
     dtype = np.float64
 
     from pyopencl.clrandom import RanluxGenerator
-    rng = RanluxGenerator(queue)
+    rng = RanluxGenerator(queue, seed=15)
 
     from pytools.obj_array import make_obj_array
     points = make_obj_array([
         rng.normal(queue, nparticles, dtype=dtype)
         for i in range(dims)])
 
-    pt.plot(points[0].get(), points[1].get(), "x")
-    pt.show()
+    #pt.plot(points[0].get(), points[1].get(), "x")
+    #pt.show()
 
     from sumpy.tree import TreeBuilder
     tb = TreeBuilder(ctx)
-    tb(queue, points)
+    tb(queue, points, max_particles_in_box=30)
 
 
 
