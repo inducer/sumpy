@@ -6,66 +6,70 @@ import pytools.test
 
 import matplotlib.pyplot as pt
 
+import pyopencl.array as cl_array
+import pyopencl as cl
+from pyopencl.tools import pytest_generate_tests_for_pyopencl \
+        as pytest_generate_tests
+
 
 
 
 
 @pytools.test.mark_test.opencl
-def test_tree(ctx_getter):
+def test_tree(ctx_getter, do_plot=False):
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
 
-    dims = 2
-    nparticles = 1000000
-    dtype = np.float64
+    #for dims in [2, 3]:
+    for dims in [2]:
+        nparticles = 10000
+        dtype = np.float64
 
-    from pyopencl.clrandom import RanluxGenerator
-    rng = RanluxGenerator(queue, seed=15)
+        from pyopencl.clrandom import RanluxGenerator
+        rng = RanluxGenerator(queue, seed=15)
 
-    from pytools.obj_array import make_obj_array
-    particles = make_obj_array([
-        rng.normal(queue, nparticles, dtype=dtype)
-        for i in range(dims)])
-
-    do_plot = 0
-
-    if do_plot:
-        pt.plot(particles[0].get(), particles[1].get(), "x")
-
-    from sumpy.tree import TreeBuilder
-    tb = TreeBuilder(ctx)
-
-    queue.finish()
-    print "building..."
-    tree = tb(queue, particles, max_particles_in_box=30)
-    print "%d boxes, testing..." % tree.nboxes
-
-    starts = tree.box_starts.get()
-    pcounts = tree.box_particle_counts.get()
-    sorted_particles = np.array([pi.get() for pi in tree.particles])
-    centers = tree.box_centers.get()
-    sizes = tree.box_sizes.get()
-
-
-    for ibox in xrange(tree.nboxes):
-        el = extent_low = centers[:, ibox] - sizes[ibox]*0.5
-        eh = extent_high = extent_low + sizes[ibox]
-
-        box_particle_nrs = np.arange(starts[ibox], starts[ibox]+pcounts[ibox],
-                dtype=np.intp)
+        from pytools.obj_array import make_obj_array
+        particles = make_obj_array([
+            rng.normal(queue, nparticles, dtype=dtype)
+            for i in range(dims)])
 
         if do_plot:
-            pt.plot([el[0], eh[0], eh[0], el[0], el[0]],
-                    [el[1], el[1], eh[1], eh[1], el[1]], "-")
+            pt.plot(particles[0].get(), particles[1].get(), "x")
 
-        assert (sorted_particles[:,box_particle_nrs] < extent_high[:, np.newaxis]).all()
-        assert (extent_low[:, np.newaxis] <= sorted_particles[:,box_particle_nrs]).all()
+        from sumpy.tree import TreeBuilder
+        tb = TreeBuilder(ctx)
 
-    print "done"
+        queue.finish()
+        print "building..."
+        tree = tb(queue, particles, max_particles_in_box=30)
+        print "%d boxes, testing..." % tree.nboxes
 
-    if do_plot:
-        pt.gca().set_aspect("equal", "datalim")
-        pt.show()
+        starts = tree.box_starts.get()
+        pcounts = tree.box_particle_counts.get()
+        sorted_particles = np.array([pi.get() for pi in tree.particles])
+        centers = tree.box_centers.get()
+        sizes = tree.box_sizes.get()
+
+
+        for ibox in xrange(tree.nboxes):
+            el = extent_low = centers[:, ibox] - sizes[ibox]*0.5
+            eh = extent_high = extent_low + sizes[ibox]
+
+            box_particle_nrs = np.arange(starts[ibox], starts[ibox]+pcounts[ibox],
+                    dtype=np.intp)
+
+            if do_plot:
+                pt.plot([el[0], eh[0], eh[0], el[0], el[0]],
+                        [el[1], el[1], eh[1], eh[1], el[1]], "-")
+
+            assert (sorted_particles[:,box_particle_nrs] < extent_high[:, np.newaxis]).all()
+            assert (extent_low[:, np.newaxis] <= sorted_particles[:,box_particle_nrs]).all()
+
+        print "done"
+
+        if do_plot:
+            pt.gca().set_aspect("equal", "datalim")
+            pt.show()
 
 
 

@@ -149,7 +149,7 @@ class HelmholtzKernel(Kernel):
         else:
             k_dtype = np.float64
 
-        return [lp.ScalarArg("k", k_dtype)]
+        return [lp.ValueArg("k", k_dtype)]
 
     def get_preambles(self):
         from sumpy.codegen import BESSEL_PREAMBLE

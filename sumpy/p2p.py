@@ -68,8 +68,8 @@ class P2P(KernelComputation):
                 [
                    lp.GlobalArg("src", self.geometry_dtype, shape=("nsrc", self.dimensions), order="C"),
                    lp.GlobalArg("tgt", self.geometry_dtype, shape=("ntgt", self.dimensions), order="C"),
-                   lp.ScalarArg("nsrc", np.int32),
-                   lp.ScalarArg("ntgt", np.int32),
+                   lp.ValueArg("nsrc", np.int32),
+                   lp.ValueArg("ntgt", np.int32),
                 ]+[
                    lp.GlobalArg("strength_%d" % i, dtype, shape="nsrc", order="C")
                    for i, dtype in enumerate(self.strength_dtypes)
@@ -93,19 +93,22 @@ class P2P(KernelComputation):
                 self.get_kernel_scaling_assignments()
                 + loopy_insns
                 + [
-                "[|idim] <> d[idim] = tgt[itgt,idim] - src[isrc,idim]",
+                "<> d[idim] = tgt[itgt,idim] - src[isrc,idim] {id=compute_d}",
                 ]+[
                 lp.Instruction(id=None,
                     assignee="pair_result_%d" % i, expression=expr,
                     temp_var_type=dtype)
                 for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
                 ]+[
-                "result_{KNLIDX}[itgt] = knl_{KNLIDX}_scaling*sum(isrc, pair_result_{KNLIDX})"
+                "result_${KNLIDX}[itgt] = knl_${KNLIDX}_scaling*sum(isrc, pair_result_${KNLIDX})"
                 ],
                 arguments,
                 name=self.name, assumptions="nsrc>=1 and ntgt>=1",
                 preambles=self.gather_kernel_preambles(),
                 defines=dict(KNLIDX=range(len(exprs))))
+
+        for where in ["compute_a", "compute_b"]:
+            loopy_knl = lp.duplicate_inames(loopy_knl, "idim", where)
 
         for knl in self.kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
@@ -115,7 +118,7 @@ class P2P(KernelComputation):
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
-        knl = lp.split_dimension(knl, "itgt", 1024, outer_tag="g.0")
+        knl = lp.split_iname(knl, "itgt", 1024, outer_tag="g.0")
         return knl
 
     @memoize_method

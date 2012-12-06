@@ -100,8 +100,8 @@ class LayerPotentialBase(KernelComputation):
                    lp.GlobalArg("center", geo_dtype, shape=("ntgt", self.dimensions), order="C"),
                    lp.GlobalArg("speed", geo_dtype, shape="nsrc", order="C"),
                    lp.GlobalArg("weights", geo_dtype, shape="nsrc", order="C"),
-                   lp.ScalarArg("nsrc", np.int32),
-                   lp.ScalarArg("ntgt", np.int32),
+                   lp.ValueArg("nsrc", np.int32),
+                   lp.ValueArg("ntgt", np.int32),
                 ] + self.get_input_and_output_arguments()
                 + self.gather_kernel_arguments())
 
@@ -109,8 +109,8 @@ class LayerPotentialBase(KernelComputation):
                 "[nsrc,ntgt] -> {[isrc,itgt,idim]: 0<=itgt<ntgt and 0<=isrc<nsrc "
                 "and 0<=idim<%d}" % self.dimensions,
                 [
-                "[|idim] <> a[idim] = center[itgt,idim] - src[isrc,idim]",
-                "[|idim] <> b[idim] = tgt[itgt,idim] - center[itgt,idim]",
+                "<> a[idim] = center[itgt,idim] - src[isrc,idim] {id=compute_a}",
+                "<> b[idim] = tgt[itgt,idim] - center[itgt,idim] {id=compute_b}",
                 ]+self.get_kernel_scaling_assignments()+loopy_insns+[
                 lp.Instruction(id=None,
                     assignee="pair_result_%d" % i, expression=expr,
@@ -122,6 +122,10 @@ class LayerPotentialBase(KernelComputation):
                 name=self.name, assumptions="nsrc>=1 and ntgt>=1",
                 preambles=self.gather_kernel_preambles()
                 )
+
+        for where in ["compute_a", "compute_b"]:
+            loopy_knl = lp.duplicate_inames(loopy_knl, "idim", where)
+
         for expn in self.expansions:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
@@ -134,15 +138,15 @@ class LayerPotentialBase(KernelComputation):
         import pyopencl as cl
         dev = self.context.devices[0]
         if dev.type == cl.device_type.CPU:
-            loopy_knl = lp.split_dimension(loopy_knl, "itgt", 16, outer_tag="g.0",
+            loopy_knl = lp.split_iname(loopy_knl, "itgt", 16, outer_tag="g.0",
                     inner_tag="l.0")
-            loopy_knl = lp.split_dimension(loopy_knl, "isrc", 256)
+            loopy_knl = lp.split_iname(loopy_knl, "isrc", 256)
             loopy_knl = lp.generate_loop_schedules(loopy_knl, [
                 "isrc_outer", "itgt_inner"])
         else:
             from warnings import warn
             warn("don't know how to tune layer potential computation for '%s'" % dev)
-            loopy_knl = lp.split_dimension(loopy_knl, "itgt", 128, outer_tag="g.0")
+            loopy_knl = lp.split_iname(loopy_knl, "itgt", 128, outer_tag="g.0")
 
         return loopy_knl
 
@@ -172,7 +176,7 @@ class LayerPotential(LayerPotentialBase):
 
     def get_result_store_instructions(self):
         return [
-                "result_{KNLIDX}[itgt] = knl_{KNLIDX}_scaling*sum(isrc, pair_result_{KNLIDX})"
+                "result_${KNLIDX}[itgt] = knl_${KNLIDX}_scaling*sum(isrc, pair_result_${KNLIDX})"
                 ]
 
     def __call__(self, queue, targets, sources, centers, densities,
@@ -205,7 +209,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
 
     def get_result_store_instructions(self):
         return [
-                "result_{KNLIDX}[itgt, isrc] = knl_{KNLIDX}_scaling*pair_result_{KNLIDX}"
+                "result_${KNLIDX}[itgt, isrc] = knl_${KNLIDX}_scaling*pair_result_${KNLIDX}"
                 ]
 
     def __call__(self, queue, targets, sources, centers, speed, weights, **kwargs):
@@ -450,7 +454,7 @@ class JumpTermApplier(KernelComputation):
                 "result_%d[itgt] = limit_%d[itgt] + temp_result_%d" % (i, i, i)
                 for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))],
                 [
-                   lp.ScalarArg("ntgt", np.int32),
+                   lp.ValueArg("ntgt", np.int32),
                 ] + operand_args + data_args,
                 name=self.name, assumptions="ntgt>=1")
 
@@ -459,7 +463,7 @@ class JumpTermApplier(KernelComputation):
     def get_optimized_kernel(self):
         # FIXME specialize/tune for GPU/CPU
         loopy_knl, data_args = self.get_kernel()
-        loopy_knl = lp.split_dimension(loopy_knl, "itgt", 128, outer_tag="g.0")
+        loopy_knl = lp.split_iname(loopy_knl, "itgt", 128, outer_tag="g.0")
         return loopy_knl, data_args
 
     @memoize_method

@@ -33,12 +33,12 @@ hank1_01_result hank1_01(cdouble_t z)
 }
 """)
 
-hank1_01_result_dtype = np.dtype([
-    ("order0", np.complex128),
-    ("order1", np.complex128),
-    ])
-cl.tools.register_dtype(hank1_01_result_dtype,
-        "hank1_01_result")
+hank1_01_result_dtype = cl.tools.get_or_register_dtype("hank1_01_result",
+        np.dtype([
+            ("order0", np.complex128),
+            ("order1", np.complex128),
+            ]),
+        )
 
 def bessel_mangler(identifier, arg_dtypes):
     if identifier == "hank1_01":
