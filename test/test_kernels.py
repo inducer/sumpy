@@ -5,21 +5,10 @@ import numpy.linalg as la
 import sys
 import pytools.test
 
-
-
-
-def have_cl():
-    try:
-        import pyopencl
-        return True
-    except:
-        return False
-
-if have_cl():
-    import pyopencl.array as cl_array
-    import pyopencl as cl
-    from pyopencl.tools import pytest_generate_tests_for_pyopencl \
-            as pytest_generate_tests
+import pyopencl.array as cl_array
+import pyopencl as cl
+from pyopencl.tools import pytest_generate_tests_for_pyopencl \
+        as pytest_generate_tests
 
 
 
