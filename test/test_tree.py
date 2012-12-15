@@ -6,7 +6,6 @@ import pytools.test
 
 import matplotlib.pyplot as pt
 
-import pyopencl.array as cl_array
 import pyopencl as cl
 from pyopencl.tools import pytest_generate_tests_for_pyopencl \
         as pytest_generate_tests
@@ -22,7 +21,7 @@ def test_tree(ctx_getter, do_plot=False):
 
     #for dims in [2, 3]:
     for dims in [2]:
-        nparticles = 10000
+        nparticles = 10**5
         dtype = np.float64
 
         from pyopencl.clrandom import RanluxGenerator
@@ -48,22 +47,39 @@ def test_tree(ctx_getter, do_plot=False):
         pcounts = tree.box_particle_counts.get()
         sorted_particles = np.array([pi.get() for pi in tree.particles])
         centers = tree.box_centers.get()
-        sizes = tree.box_sizes.get()
+        levels = tree.box_levels.get()
 
+        root_extent = tree.root_extent
 
         for ibox in xrange(tree.nboxes):
-            el = extent_low = centers[:, ibox] - sizes[ibox]*0.5
-            eh = extent_high = extent_low + sizes[ibox]
+            lev = int(levels[ibox])
+            box_size = root_extent / (1 << lev)
+            el = extent_low = centers[:, ibox] - 0.5*box_size
+            eh = extent_high = extent_low + box_size
 
             box_particle_nrs = np.arange(starts[ibox], starts[ibox]+pcounts[ibox],
                     dtype=np.intp)
 
             if do_plot:
                 pt.plot([el[0], eh[0], eh[0], el[0], el[0]],
-                        [el[1], el[1], eh[1], eh[1], el[1]], "-")
+                        [el[1], el[1], eh[1], eh[1], el[1]], "k-")
 
-            assert (sorted_particles[:,box_particle_nrs] < extent_high[:, np.newaxis]).all()
-            assert (extent_low[:, np.newaxis] <= sorted_particles[:,box_particle_nrs]).all()
+            box_particles = sorted_particles[:,box_particle_nrs]
+            good = (
+                    (box_particles < extent_high[:, np.newaxis])
+                    &
+                    (extent_low[:, np.newaxis] <= box_particles)
+                    )
+
+            if do_plot and not good.all():
+                pt.plot(
+                        box_particles[0, np.where(~good)[1]],
+                        box_particles[1, np.where(~good)[1]], "ro")
+
+                pt.plot([el[0], eh[0], eh[0], el[0], el[0]],
+                        [el[1], el[1], eh[1], eh[1], el[1]], "r-", lw=1)
+
+            assert good.all(), ibox
 
         print "done"
 

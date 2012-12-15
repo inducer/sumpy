@@ -6,6 +6,63 @@ import pyopencl.array
 from pyopencl.elementwise import ElementwiseTemplate
 from mako.template import Template
 
+# TODO:
+# - Add 'baggage' data / write out particle permutation?
+# - Distinguish sources and targets
+# - Allow for (groups of?) sources stuck in tree
+
+# -----------------------------------------------------------------------------
+# CONTROL FLOW:
+#
+# Since this just fills in the blanks in the outer parallel 'scan'
+# implementation, control flow here can be a bit hard to understand.
+#
+# - Everything starts and ends in the 'driver' bit at the end.
+#
+# - The first thing that happens is that data types get built and
+#   kernels get compiled. Most of the file consists of type and
+#   code generators for these kernels.
+#
+# - We start with a reduction that determines the bounding box of all
+#   particles.
+#
+# - The level loop is in the driver below, which alternates between
+#   scans and local post processing ("split and sort"), according to
+#   the algorithm described below.
+#
+# - Once the level loop finishes, a "box info" kernel is run
+#   that extracts some more information for each box. (center, level, ...)
+#
+# - As a last step, empty leaf boxes are eliminated. This is done by a
+#   scan kernel that computes indices, and by an elementwise kernel
+#   that doe
+#
+# HOW DOES THE PRIMARY SCAN WORK?
+#
+# This code sorts particles into an nD-tree of boxes. It does this by doing a
+# (parallel) scan over particles and a (local, i.e. independent for each particle)
+# postprocessing step for each level. It stops when no more new boxes were
+# created on a level.
+#
+# The following information is being pushed around by the scan, which
+# proceeds over particles:
+#
+# - a cumulative count ("counts") of particles in each subbox ("morton_nr") at
+#   the current level, should the current box need to be subdivided.
+#
+# - the current box number. At the start of the scan, this is correct only
+#   for the first particle in each box. As the scan proceeds, this gets
+#   propagated throughout the rest of the box. (by "max" as the associative,
+#   commutative operator)
+#
+# - the "subdivided box number". The very first entry here gets intialized to
+#   the number of boxes present at the previous level. If a box knows it needs to
+#   be subdivided, its first particle asks for 2**d new boxes. This gets scanned
+#   over by summing globally (unsegmented-ly). The splits are then realized in
+#   the post-processing step.
+#
+# -----------------------------------------------------------------------------
+
 
 
 
@@ -24,9 +81,9 @@ def make_bounding_box_dtype(device, dimensions, coord_dtype):
 
     name = "sumpy_bbox_%dd_t" % dimensions
 
-    from pyopencl.tools import register_dtype, match_dtype_to_c_struct
+    from pyopencl.tools import get_or_register_dtype, match_dtype_to_c_struct
     dtype, c_decl = match_dtype_to_c_struct(device, name, dtype)
-    register_dtype(dtype, name)
+    dtype = get_or_register_dtype(name, dtype)
 
     return dtype, c_decl
 
@@ -138,11 +195,11 @@ def make_morton_bin_count_type(device, dimensions, particle_id_dtype):
     dtype = np.dtype(fields)
 
     name = "sumpy_morton_bin_count_%dd_t" % dimensions
-    from pyopencl.tools import register_dtype, match_dtype_to_c_struct
+    from pyopencl.tools import get_or_register_dtype, match_dtype_to_c_struct
     dtype, c_decl = match_dtype_to_c_struct(device, name, dtype)
 
     # FIXME: build id_type into name
-    register_dtype(dtype, name)
+    dtype = get_or_register_dtype(name, dtype)
     return dtype, c_decl
 
 @memoize
@@ -156,16 +213,40 @@ def make_scan_type(device, dimensions, particle_id_dtype, box_id_dtype):
             ])
 
     name = "sumpy_tree_scan_%dd_t" % dimensions
-    from pyopencl.tools import register_dtype, match_dtype_to_c_struct
+    from pyopencl.tools import get_or_register_dtype, match_dtype_to_c_struct
     dtype, c_decl = match_dtype_to_c_struct(device, name, dtype)
 
     # FIXME: build id_types into name
-    register_dtype(dtype, name)
+    dtype = get_or_register_dtype(name, dtype)
     return dtype, c_decl
 
 # }}}
 
-# {{{ preambles
+class box_type_enum:
+    """Constants for box types."""
+
+    BRANCH = 0
+
+    # these only occur if particles have refinement restrictions
+    NONEMPTY_BRANCH = 1
+
+    LEAF = 2
+
+    # these are pruned and will not occur in output
+    EMPTY_LEAF = 3
+
+    @classmethod
+    def get_c_defines(cls):
+        """Return a string with C defines corresponding to these constants."""
+
+        return "\n".join(
+                "#define BOX_%s %d"
+                % (name, getattr(cls, name))
+                for name in dir(box_type_enum)
+                if name[0].isupper())
+
+
+# {{{ preamble
 
 PREAMBLE_TPL = Template(r"""//CL//
     ${bbox_type_decl}
@@ -182,7 +263,7 @@ PREAMBLE_TPL = Template(r"""//CL//
     typedef ${morton_nr_ctype} morton_nr_t;
 
     <%
-      def get_count_branch(known_bits):
+      def get_count_for_branch(known_bits):
           if len(known_bits) == dimensions:
               return "counts.c%s" % known_bits
 
@@ -191,13 +272,13 @@ PREAMBLE_TPL = Template(r"""//CL//
 
           return ("((morton_nr < %s) ? %s : %s)" % (
               int(boundary_morton_nr, 2),
-              get_count_branch(known_bits+"0"),
-              get_count_branch(known_bits+"1")))
+              get_count_for_branch(known_bits+"0"),
+              get_count_for_branch(known_bits+"1")))
     %>
 
     particle_id_t get_count(morton_t counts, int morton_nr)
     {
-        return ${get_count_branch("")};
+        return ${get_count_for_branch("")};
     }
 
     #ifdef DEBUG
@@ -239,7 +320,7 @@ SCAN_PREAMBLE_TPL = Template(r"""//CL//
         // assign box numbers.
         b.subdivided_box_id = a.subdivided_box_id + b.subdivided_box_id;
 
-        // directly use b.morton_nr
+        // b.morton_nr gets propagated
         return b;
     }
 
@@ -257,8 +338,9 @@ SCAN_PREAMBLE_TPL = Template(r"""//CL//
         %endfor
     )
     {
-        // Note that upper bound must be slightly larger than the highest found coordinate,
-        // so that 1.0 is never reached as a scaled coordinate.
+        // Note that the upper bound must be slightly larger than the highest
+        // found coordinate, so that 1.0 is never reached as a scaled
+        // coordinate.
 
         %for ax in axis_names:
             unsigned ${ax}_bits = (unsigned) (
@@ -279,26 +361,32 @@ SCAN_PREAMBLE_TPL = Template(r"""//CL//
         %endfor
         result.morton_nr = level_morton_number;
 
-        /* my_box_id only valid for box starts at this particle, but that's ok.
-         * We'll scan the box id (by max) so by output time every particle
-         * knows its (by then possibly former) box id. */
+        // current_box_id only valid if the current box starts at this particle, but
+        // that's ok.  We'll max-scan it so that by output time every
+        // particle knows its (by then possibly former) box id.
 
-        box_id_t my_box_id = box_id;
-        result.current_box_id = my_box_id;
+        result.current_box_id = box_id;
 
-        /* subdivided_box_id is not very meaningful now, but when scanned over
-         * by addition, will yield ids for boxes that are created by
-         * subdividing the current (over-full) box.
-         */
+        // subdivided_box_id is not very meaningful now, but when scanned over
+        // by addition, will yield new, unused ids for boxes that are created by
+        // subdividing the current box (if it is over-full).
+
         result.subdivided_box_id = 0;
         if (i == 0)
+        {
+            // Particle number zero brings in the box count from the
+            // previous level.
+
             result.subdivided_box_id = box_count;
+        }
         if (i == box_start
             && box_particle_count > max_particles_in_box)
         {
-            /* Grab ids for all subboxes at the start of the box.
-             * Subboxes will have to subtract to find their id.
-             */
+            // If this box is overfull, put in a 'request' for 2**d sub-box
+            // IDs. Sub-boxes will have to subtract from the total to find
+            // their id. These requested box IDs are then scanned over by
+            // a global sum.
+
             result.subdivided_box_id += ${2**dimensions};
         }
 
@@ -327,7 +415,9 @@ SCAN_OUTPUT_STMT_TPL = Template(r"""//CL//
         unsplit_box_ids[i] = item.current_box_id;
         split_box_ids[i] = item.subdivided_box_id;
 
-        /* Am I the last particle in my current box? */
+        // Am I the last particle in my current box?
+        // If so, populate particle count.
+
         if (my_id_in_my_box+1 == box_particle_count)
         {
             dbg_printf(("store box %d cbi:%d\n", i, item.current_box_id));
@@ -335,7 +425,7 @@ SCAN_OUTPUT_STMT_TPL = Template(r"""//CL//
             box_morton_bin_counts[item.current_box_id] = item.counts;
         }
 
-        /* Am I the last particle overall? If so, write box count. */
+        // Am I the last particle overall? If so, write box count
         if (i+1 == N)
             *box_count = item.subdivided_box_id;
     }
@@ -407,7 +497,7 @@ SPLIT_AND_SORT_KERNEL_TPL =  Template(r"""//CL//
 
                 box_start_flags[new_box_start] = 1;
                 box_starts[new_box_id] = new_box_start;
-                parent_ids[new_box_id] = my_box_id;
+                box_parent_ids[new_box_id] = my_box_id;
                 box_morton_nrs[new_box_id] = my_morton_nr;
 
                 box_particle_counts[new_box_id] =
@@ -426,32 +516,36 @@ SPLIT_AND_SORT_KERNEL_TPL =  Template(r"""//CL//
 BOX_INFO_KERNEL_TPL =  ElementwiseTemplate(
     arguments="""//CL//
         /* input */
-        box_id_t * parent_ids,
-        morton_nr_t * box_morton_nrs,
+        box_id_t *box_parent_ids,
+        morton_nr_t *box_morton_nrs,
         bbox_t bbox,
         box_id_t aligned_nboxes,
+        particle_id_t *box_particle_counts,
+        particle_id_t max_particles_in_box,
         /* output */
         box_id_t *box_child_ids, /* [2**dimensions, aligned_nboxes] */
         coord_t *box_centers, /* [dimensions, aligned_nboxes] */
-        coord_t *box_sizes, /* nboxes*/
+        unsigned char *box_levels, /* [nboxes] */
+        unsigned char *box_types, /* [nboxes] */
         """,
     operation=r"""//CL:mako//
         box_id_t box_id = i;
-        box_id_t parent_id = parent_ids[box_id];
+        box_id_t parent_id = box_parent_ids[box_id];
         morton_nr_t morton_nr = box_morton_nrs[box_id];
 
         box_child_ids[parent_id + aligned_nboxes*morton_nr] = box_id;
 
         /* walk up to root to find center and level */
         coord_vec_t center = 0;
-        coord_t box_size = 1;
+        int level = 0;
 
         box_id_t walk_parent_id = parent_id;
         box_id_t current_box_id = box_id;
         morton_nr_t walk_morton_nr = morton_nr;
         while (walk_parent_id != current_box_id)
         {
-            box_size = box_size * 0.5;
+            ++level;
+
             %for idim in range(dimensions):
                 center.s${idim} = 0.5*(
                     center.s${idim}
@@ -459,7 +553,7 @@ BOX_INFO_KERNEL_TPL =  ElementwiseTemplate(
             %endfor
 
             current_box_id = walk_parent_id;
-            walk_parent_id = parent_ids[walk_parent_id];
+            walk_parent_id = box_parent_ids[walk_parent_id];
             walk_morton_nr = box_morton_nrs[current_box_id];
         }
 
@@ -471,8 +565,59 @@ BOX_INFO_KERNEL_TPL =  ElementwiseTemplate(
         }
         %endfor
 
-        box_sizes[box_id] = box_size * extent;
+        box_levels[box_id] = level;
+
+        /* box_particle_counts is zero for empty leaves because it gets initialized
+         * to zero and never gets set. If you check above, most box info is only
+         * ever initialized *if* there's a particle in the box, because the sort/build
+         * is a repeated scan over *particles* (not boxes). Thus, no particle -> no
+         * work done.
+         */
+
+        particle_id_t p_count = box_particle_counts[box_id];
+        if (p_count == 0)
+            box_types[box_id] = BOX_EMPTY_LEAF;
+        else if (p_count > max_particles_in_box)
+        {
+            box_types[box_id] = BOX_BRANCH;
+            box_particle_counts[box_id] = 0;
+        }
+        else
+            box_types[box_id] = BOX_LEAF;
     """)
+
+# }}}
+
+# {{{ gappy copy kernel (for empty leaf pruning)
+
+# This is used to map box IDs and compress box lists in empty leaf
+# pruning.
+
+GAPPY_COPY_TPL =  Template(r"""//CL//
+    typedef ${dtype_to_ctype(dtype)} value_t;
+
+    %if dim_2_length is None:
+        value_t val = input_ary[from_indices[i]];
+
+        %if map_values:
+            val = value_map[val];
+        %endif
+
+        output_ary[i] = val;
+    %else:
+        for (int j = 0; j < ${dim_2_length}; ++j)
+        {
+            value_t val = input_ary[from_indices[i] + lda_in*j];
+
+            %if map_values:
+                val = value_map[val];
+            %endif
+
+            output_ary[i + lda_out*j] = val;
+        }
+    %endif
+
+""", strict_undefined=True)
 
 # }}}
 
@@ -480,26 +625,91 @@ BOX_INFO_KERNEL_TPL =  ElementwiseTemplate(
 
 
 class Tree(Record):
-    pass
+    """
+    Data types:
+
+    :ivar particle_id_dtype:
+    :ivar box_id_dtype:
+    :ivar coord_dtype:
+
+    Counts and sizes:
+
+    :ivar root_extent: the root box size, a scalar
+    :ivar nlevels: the number of levels
+
+    Per-particle arrays:
+
+    :ivar particles: [nparticles, dimensions] (C order)
+
+    Per-box arrays:
+
+    :ivar box_starts: [nboxes]
+    :ivar box_particle_counts: [nboxes]
+    :ivar box_parent_ids: [nboxes] Box 0 (the root) has 0 as its parent.
+    :ivar box_child_ids: [2**dimensions, aligned_nboxes] (C order)
+        "0" is used as a 'no child' marker, as the root box can never
+        occur as any box's child.
+    :ivar box_centers: [dimensions, aligned_nboxes] (C order)
+    :ivar box_levels: [nboxes]
+    :ivar box_types: [nboxes], One of the :class:`box_type` constants.
+    """
+
+    @property
+    def dimensions(self):
+        return self.particles.shape[-1]
+
+    @property
+    def nboxes(self):
+        return self.box_levels.shape[0]
+
+    @property
+    def aligned_nboxes(self):
+        return self.box_child_ids.shape[-1]
 
 
 
 
 # {{{ driver
 
-def _shorten_1d_array(ary, new_size):
-    result = cl.array.empty(ary.queue, (int(new_size),), dtype=ary.dtype)
-    cl.enqueue_copy(ary.queue, result.data, ary.data, byte_count=result.nbytes)
-    return result
-
-
 class TreeBuilder(object):
-    def __init__(self, context, options=[]):
+    def __init__(self, context):
         self.context = context
-        self.bbox_finder = BoundingBoxFinder(context)
-        self.options = options
 
     # {{{ kernel creation
+
+    def get_bbox_finder(self):
+        return BoundingBoxFinder(self.context)
+
+    @memoize_method
+    def get_gappy_copy_and_map_kernel(self, dtype, src_index_dtype,
+            dim_2_length=None, map_values=False):
+        from pyopencl.tools import VectorArg, ScalarArg
+        from pyopencl.elementwise import ElementwiseKernel
+
+        args = [
+                VectorArg(dtype, "input_ary"),
+                VectorArg(dtype, "output_ary"),
+                VectorArg(src_index_dtype, "from_indices")
+                ]
+
+        if map_values:
+            args.append(VectorArg(dtype, "value_map"))
+
+        if dim_2_length:
+            args.extend([
+                ScalarArg(np.intp, "lda_in"),
+                ScalarArg(np.intp, "lda_out"),
+                ])
+
+        from pyopencl.tools import dtype_to_ctype
+        src = GAPPY_COPY_TPL.render(
+                dtype=dtype,
+                dtype_to_ctype=dtype_to_ctype,
+                dim_2_length=dim_2_length,
+                map_values=map_values)
+
+        return ElementwiseKernel(self.context,
+                args, str(src), name="gappy_copy_and_map")
 
     @memoize_method
     def get_kernel_info(self, dimensions, coord_dtype,
@@ -540,9 +750,11 @@ class TreeBuilder(object):
                 morton_nr_ctype=morton_nr_ctype,
                 box_id_ctype=box_id_ctype,
                 AXIS_NAMES=AXIS_NAMES,
+                box_type_enum=box_type_enum
                 )
 
         preamble = PREAMBLE_TPL.render(**codegen_args)
+
         scan_preamble = preamble + SCAN_PREAMBLE_TPL.render(**codegen_args)
 
         from pyopencl.tools import VectorArg, ScalarArg
@@ -575,7 +787,7 @@ class TreeBuilder(object):
                     VectorArg(particle_id_dtype,"box_particle_counts"), # [nboxes]
 
                     # pointer to parent box
-                    VectorArg(box_id_dtype, "parent_ids"), # [nboxes]
+                    VectorArg(box_id_dtype, "box_parent_ids"), # [nboxes]
 
                     # morton nr identifier {quadr,oct}ant of parent in which this box was created
                     VectorArg(morton_nr_dtype, "box_morton_nrs"), # [nboxes]
@@ -607,7 +819,7 @@ class TreeBuilder(object):
                 neutral="scan_t_neutral()",
                 is_segment_start_expr="box_start_flags[i]",
                 output_statement=SCAN_OUTPUT_STMT_TPL.render(**codegen_args),
-                preamble=scan_preamble, options=self.options)
+                preamble=scan_preamble)
 
         split_and_sort_kernel_source = SPLIT_AND_SORT_KERNEL_TPL.render(**codegen_args)
 
@@ -617,10 +829,11 @@ class TreeBuilder(object):
                 scan_knl_arguments
                 + [VectorArg(coord_dtype, "sorted_"+ax) for ax in axis_names],
                 str(split_and_sort_kernel_source), name="split_and_sort",
-                preamble=str(preamble), options=self.options)
+                preamble=str(preamble))
 
         type_values = (
                 ("box_id_t", box_id_dtype),
+                ("particle_id_t", particle_id_dtype),
                 ("bbox_t", bbox_dtype),
                 ("coord_t", coord_dtype),
                 ("morton_nr_t", morton_nr_dtype),
@@ -630,7 +843,28 @@ class TreeBuilder(object):
         box_info_kernel = BOX_INFO_KERNEL_TPL.build(
                 self.context,
                 type_values, var_values=codegen_args_tuples,
+                more_preamble=box_type_enum.get_c_defines(),
                 declare_types=("bbox_t",))
+
+        from pyopencl.tools import VectorArg
+        find_prune_indices_kernel = GenericScanKernel(
+                self.context, box_id_dtype,
+                arguments=[
+                    # input
+                    VectorArg(np.uint8, "box_types"),
+                    # output
+                    VectorArg(box_id_dtype, "to_box_id"),
+                    VectorArg(box_id_dtype, "from_box_id"),
+                    VectorArg(box_id_dtype, "nboxes_post_prune"),
+                    ],
+                input_expr="box_types[i] == BOX_EMPTY_LEAF ? 1 : 0",
+                preamble=box_type_enum.get_c_defines(),
+                scan_expr="a+b", neutral="0",
+                output_statement="""
+                    to_box_id[i] = i-prev_item;
+                    from_box_id[i-prev_item] = i;
+                    if (i+1 == N) *nboxes_post_prune = N-item;
+                    """)
 
         return _KernelInfo(
                 particle_id_dtype=particle_id_dtype,
@@ -638,28 +872,59 @@ class TreeBuilder(object):
                 scan_kernel=scan_kernel,
                 morton_bin_count_dtype=morton_bin_count_dtype,
                 split_and_sort_kernel=split_and_sort_kernel,
-                box_info_kernel=box_info_kernel
+                box_info_kernel=box_info_kernel,
+                find_prune_indices_kernel=find_prune_indices_kernel,
                 )
 
     # }}}
+
+    def gappy_copy_and_map(self, queue, new_size, new_size_aligned,
+            src_indices, ary, map_values=None):
+        if len(ary.shape) == 2:
+            dim_2_length, old_size = ary.shape
+            assert old_size > new_size
+
+            kernel = self.get_gappy_copy_and_map_kernel(ary.dtype, src_indices.dtype,
+                    map_values=map_values is not None, dim_2_length=dim_2_length)
+
+            result = cl.array.empty(queue, (dim_2_length, new_size_aligned), ary.dtype)
+        else:
+            dim_2_length = None
+            assert len(ary) > new_size
+
+            result = cl.array.empty(queue, new_size, ary.dtype)
+
+            kernel = self.get_gappy_copy_and_map_kernel(ary.dtype, src_indices.dtype,
+                    map_values=map_values is not None)
+
+        args = (ary, result, src_indices)
+        if map_values is not None:
+            args += (map_values,)
+
+        if len(ary.shape) == 2:
+            args += (old_size, new_size_aligned)
+
+        kernel(*args, queue=queue, range=slice(new_size))
+
+        return result
 
     # {{{ run control
 
     def __call__(self, queue, particles, max_particles_in_box, nboxes_guess=None):
         dimensions = len(particles)
 
-        bbox = self.bbox_finder(particles).get()
+        bbox = self.get_bbox_finder()(particles).get()
 
         axis_names = AXIS_NAMES[:dimensions]
 
-        max_extent = max(
+        root_extent = max(
                 bbox["max_"+ax] - bbox["min_"+ax]
-                for ax in axis_names)
+                for ax in axis_names) * (1+1e-4)
 
         # make bbox square and slightly larger at the top, to ensure scaled
         # coordinates are alwyas < 1
         for ax in axis_names:
-            bbox["max_"+ax] = bbox["min_"+ax] + (1+1e-4)*max_extent
+            bbox["max_"+ax] = bbox["min_"+ax] + root_extent
 
         # {{{ get kernel info
 
@@ -676,46 +941,52 @@ class TreeBuilder(object):
         morton_bin_counts = cl.array.empty(queue, nparticles, dtype=knl_info.morton_bin_count_dtype)
         morton_nrs = cl.array.empty(queue, nparticles, dtype=np.uint8)
         box_start_flags = cl.array.zeros(queue, nparticles, dtype=np.int8)
-        box_ids = cl.array.zeros(queue, nparticles, dtype=np.uint32)
-        unsplit_box_ids = cl.array.zeros(queue, nparticles, dtype=np.uint32)
-        split_box_ids = cl.array.zeros(queue, nparticles, dtype=np.uint32)
+        box_ids = cl.array.zeros(queue, nparticles, dtype=box_id_dtype)
+        unsplit_box_ids = cl.array.zeros(queue, nparticles, dtype=box_id_dtype)
+        split_box_ids = cl.array.zeros(queue, nparticles, dtype=box_id_dtype)
 
         from pytools import div_ceil
         nboxes_guess = div_ceil(nparticles, max_particles_in_box) * 2**dimensions
 
         box_morton_bin_counts = cl.array.empty(queue, nboxes_guess,
                 dtype=knl_info.morton_bin_count_dtype)
-        box_starts = cl.array.zeros(queue, nboxes_guess, dtype=np.uint32)
-        parent_ids = cl.array.zeros(queue, nboxes_guess, dtype=np.uint32)
+        box_starts = cl.array.zeros(queue, nboxes_guess, dtype=particle_id_dtype)
+        box_parent_ids = cl.array.zeros(queue, nboxes_guess, dtype=box_id_dtype)
         box_morton_nrs = cl.array.zeros(queue, nboxes_guess, dtype=np.uint8)
-        box_particle_counts = cl.array.zeros(queue, nboxes_guess, dtype=np.uint32)
+        box_particle_counts = cl.array.zeros(queue, nboxes_guess, dtype=particle_id_dtype)
+
+        # Initalize box 0 to contain all particles
         cl.enqueue_copy(queue, box_particle_counts.data,
                 box_particle_counts.dtype.type(nparticles))
 
-        box_count = cl.array.empty(queue, (), dtype=box_id_dtype)
-        box_count.fill(1)
+        nboxes_dev = cl.array.empty(queue, (), dtype=box_id_dtype)
+        nboxes_dev.fill(1)
 
         # set parent of root box to itself
-        cl.enqueue_copy(queue, parent_ids.data, parent_ids.dtype.type(0))
+        cl.enqueue_copy(queue, box_parent_ids.data, box_parent_ids.dtype.type(0))
 
         from pytools.obj_array import make_obj_array
 
-        box_count_last = None
+        nboxes_last = None
 
+        from time import time
+        start_time = time()
         level = 0
         while True:
+            print "LEV"
             args = ((morton_bin_counts, morton_nrs,
                     box_start_flags, box_ids, unsplit_box_ids, split_box_ids,
                     box_morton_bin_counts,
                     box_starts, box_particle_counts,
-                    parent_ids, box_morton_nrs,
-                    box_count,
+                    box_parent_ids, box_morton_nrs,
+                    nboxes_dev,
                     level, max_particles_in_box, bbox)
                     + tuple(particles))
             knl_info.scan_kernel(*args)
 
-            box_count_host = box_count.get()
-            if box_count_host > nboxes_guess:
+            nboxes = nboxes_dev.get()
+            if nboxes > nboxes_guess:
+                # FIXME
                 raise NotImplementedError("Initial guess for box count was "
                         "too low. Should resize temp arrays.")
 
@@ -727,45 +998,94 @@ class TreeBuilder(object):
 
             if 0:
                 print "--------------LEVL"
-                print "nboxes", box_count.get()
+                print "nboxes_dev", nboxes_dev.get()
                 print "box_ids", box_ids.get()[:nparticles]
-                print "starts", box_starts.get()[:box_count_host]
-                print "counts", box_particle_counts.get()[:box_count_host]
+                print "starts", box_starts.get()[:nboxes]
+                print "counts", box_particle_counts.get()[:nboxes]
 
-            if box_count_host == box_count_last:
+            if nboxes == nboxes_last:
                 break
 
             particles = sorted_particles
 
             level += 1
-            box_count_last = box_count_host
+            nboxes_last = nboxes
 
-        nboxes = int(box_count_last)
+        end_time = time()
+        print end_time-start_time
 
+        nboxes = int(nboxes)
+
+        # A number of arrays below are stored as
         aligned_nboxes = div_ceil(nboxes, 32)*32
 
-        box_child_ids = cl.array.empty(queue, (2**dimensions, aligned_nboxes), box_id_dtype)
+        box_child_ids = cl.array.zeros(queue, (2**dimensions, aligned_nboxes), box_id_dtype)
         box_centers = cl.array.empty(queue, (dimensions, aligned_nboxes), coord_dtype)
-        box_sizes = cl.array.empty(queue, nboxes, coord_dtype)
+        box_levels = cl.array.empty(queue, nboxes, np.uint8)
+        box_types = cl.array.empty(queue, nboxes, np.uint8)
 
         knl_info.box_info_kernel(
-                parent_ids, box_morton_nrs, bbox, aligned_nboxes,
-                box_child_ids, box_centers, box_sizes,
-                range=slice(0, nboxes))
+                # input:
+                box_parent_ids, box_morton_nrs, bbox, aligned_nboxes,
+                box_particle_counts, max_particles_in_box,
+
+                # output:
+                box_child_ids, box_centers, box_levels, box_types,
+
+                range=slice(nboxes))
+
+        # {{{ prune empty leaf boxes
+
+        # What is the original index of this box?
+        from_box_id = cl.array.empty(queue, nboxes, box_id_dtype)
+
+        # Where should I put this box?
+        to_box_id = cl.array.empty(queue, nboxes, box_id_dtype)
+
+        nboxes_post_prune_dev = cl.array.empty(queue, (), dtype=box_id_dtype)
+        knl_info.find_prune_indices_kernel(
+                box_types, to_box_id, from_box_id, nboxes_post_prune_dev)
+
+        nboxes_post_prune = int(nboxes_post_prune_dev.get())
+        aligned_nboxes_post_prune = div_ceil(nboxes_post_prune, 32)*32
+
+        print "%d empty leaves" % (nboxes-nboxes_post_prune)
+
+        from functools import partial
+        prune_empty = partial(self.gappy_copy_and_map,
+                queue, nboxes_post_prune, aligned_nboxes_post_prune,
+                from_box_id)
+
+        if 1:
+            box_starts = prune_empty(box_starts)
+            box_particle_counts = prune_empty(box_particle_counts)
+            box_parent_ids = prune_empty(box_parent_ids, map_values=to_box_id)
+            box_child_ids = prune_empty(box_child_ids, map_values=to_box_id)
+            box_centers = prune_empty(box_centers)
+            box_levels = prune_empty(box_levels)
+            box_types = prune_empty(box_types)
+
+        # }}}
 
         return Tree(
+                # If you change this, also change the documentation
+                # of what's in the tree, above.
+
                 particle_id_dtype=knl_info.particle_id_dtype,
                 box_id_dtype=knl_info.box_id_dtype,
+                coord_dtype=coord_dtype,
 
-                nboxes=nboxes,
+                root_extent=root_extent,
+                nlevels=level+1,
 
                 particles=particles,
-                box_starts=_shorten_1d_array(box_starts, nboxes),
-                box_particle_counts=_shorten_1d_array(box_particle_counts, nboxes),
-                parent_ids=_shorten_1d_array(parent_ids, nboxes),
-                box_centers=box_centers,
-                box_sizes=box_sizes,
+                box_starts=box_starts,
+                box_particle_counts=box_particle_counts,
+                box_parent_ids=box_parent_ids,
                 box_child_ids=box_child_ids,
+                box_centers=box_centers,
+                box_levels=box_levels,
+                box_types=box_types,
                 )
 
     # }}}
