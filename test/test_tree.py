@@ -21,7 +21,7 @@ def test_tree(ctx_getter, do_plot=False):
 
     #for dims in [2, 3]:
     for dims in [2]:
-        nparticles = 10**5
+        nparticles = 10**6
         dtype = np.float64
 
         from pyopencl.clrandom import RanluxGenerator
@@ -49,7 +49,15 @@ def test_tree(ctx_getter, do_plot=False):
         centers = tree.box_centers.get()
         levels = tree.box_levels.get()
 
+        unsorted_particles = np.array([pi.get() for pi in particles])
+        assert (sorted_particles
+                == unsorted_particles[:, tree.original_particle_ids.get()]).all()
+
+        assert np.max(levels) + 1 == tree.nlevels
+
         root_extent = tree.root_extent
+
+        all_good_so_far = True
 
         for ibox in xrange(tree.nboxes):
             lev = int(levels[ibox])
@@ -71,7 +79,8 @@ def test_tree(ctx_getter, do_plot=False):
                     (extent_low[:, np.newaxis] <= box_particles)
                     )
 
-            if do_plot and not good.all():
+            all_good_here = good.all()
+            if do_plot and not all_good_here and all_good_so_far:
                 pt.plot(
                         box_particles[0, np.where(~good)[1]],
                         box_particles[1, np.where(~good)[1]], "ro")
@@ -79,14 +88,15 @@ def test_tree(ctx_getter, do_plot=False):
                 pt.plot([el[0], eh[0], eh[0], el[0], el[0]],
                         [el[1], el[1], eh[1], eh[1], el[1]], "r-", lw=1)
 
-            assert good.all(), ibox
-
-        print "done"
+            all_good_so_far = all_good_so_far and all_good_here
 
         if do_plot:
             pt.gca().set_aspect("equal", "datalim")
             pt.show()
 
+        assert all_good_so_far
+
+        print "done"
 
 
 

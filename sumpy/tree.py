@@ -7,15 +7,15 @@ from pyopencl.elementwise import ElementwiseTemplate
 from mako.template import Template
 
 # TODO:
-# - Add 'baggage' data / write out particle permutation?
 # - Distinguish sources and targets
 # - Allow for (groups of?) sources stuck in tree
+# - Add *restrict where applicable.
 
 # -----------------------------------------------------------------------------
 # CONTROL FLOW:
 #
-# Since this just fills in the blanks in the outer parallel 'scan'
-# implementation, control flow here can be a bit hard to understand.
+# Since this file mostly just fills in the blanks in the outer parallel 'scan'
+# implementation, control flow here can be a bit hard to see.
 #
 # - Everything starts and ends in the 'driver' bit at the end.
 #
@@ -41,8 +41,7 @@ from mako.template import Template
 #
 # This code sorts particles into an nD-tree of boxes. It does this by doing a
 # (parallel) scan over particles and a (local, i.e. independent for each particle)
-# postprocessing step for each level. It stops when no more new boxes were
-# created on a level.
+# postprocessing step for each level.
 #
 # The following information is being pushed around by the scan, which
 # proceeds over particles:
@@ -361,9 +360,9 @@ SCAN_PREAMBLE_TPL = Template(r"""//CL//
         %endfor
         result.morton_nr = level_morton_number;
 
-        // current_box_id only valid if the current box starts at this particle, but
-        // that's ok.  We'll max-scan it so that by output time every
-        // particle knows its (by then possibly former) box id.
+        // current_box_id is only valid if the current box starts at this
+        // particle, but that's ok.  We'll max-scan it so that by output time
+        // every particle knows its (by then possibly former) box id.
 
         result.current_box_id = box_id;
 
@@ -477,11 +476,15 @@ SPLIT_AND_SORT_KERNEL_TPL =  Template(r"""//CL//
         %for ax in axis_names:
             sorted_${ax}[tgt_particle_idx] = ${ax}[i];
         %endfor
+        new_original_particle_ids[tgt_particle_idx] = original_particle_ids[i];
 
         box_ids[tgt_particle_idx] = new_box_id;
 
         %for mnr in range(2**dimensions):
           /* Am I the last particle in my Morton bin? */
+            %if mnr:
+                else
+            %endif
             if (${mnr} == my_morton_nr
                 && my_box_morton_bin_counts.c${padded_bin(mnr, dimensions)} == my_count)
             {
@@ -500,12 +503,23 @@ SPLIT_AND_SORT_KERNEL_TPL =  Template(r"""//CL//
                 box_parent_ids[new_box_id] = my_box_id;
                 box_morton_nrs[new_box_id] = my_morton_nr;
 
-                box_particle_counts[new_box_id] =
+                particle_id_t new_count =
                     my_box_morton_bin_counts.c${padded_bin(mnr, dimensions)};
+                box_particle_counts[new_box_id] = new_count;
+                if (new_count > max_particles_in_box)
+                    *have_oversize_box = 1;
 
                 dbg_printf(("   box pcount: %d\n", box_particle_counts[new_box_id]));
             }
         %endfor
+    }
+    else
+    {
+        // Not splitting? Copy over existing particle info.
+        %for ax in axis_names:
+            sorted_${ax}[i] = ${ax}[i];
+        %endfor
+        new_original_particle_ids[i] = original_particle_ids[i];
     }
 """, strict_undefined=True)
 
@@ -640,6 +654,7 @@ class Tree(Record):
     Per-particle arrays:
 
     :ivar particles: [nparticles, dimensions] (C order)
+    :ivar original_particle_ids: [nparticles]
 
     Per-box arrays:
 
@@ -755,6 +770,8 @@ class TreeBuilder(object):
 
         preamble = PREAMBLE_TPL.render(**codegen_args)
 
+        # {{{ scan
+
         scan_preamble = preamble + SCAN_PREAMBLE_TPL.render(**codegen_args)
 
         from pyopencl.tools import VectorArg, ScalarArg
@@ -821,15 +838,28 @@ class TreeBuilder(object):
                 output_statement=SCAN_OUTPUT_STMT_TPL.render(**codegen_args),
                 preamble=scan_preamble)
 
+        # }}}
+
+        # {{{ split-and-sort
+
         split_and_sort_kernel_source = SPLIT_AND_SORT_KERNEL_TPL.render(**codegen_args)
 
         from pyopencl.elementwise import ElementwiseKernel
         split_and_sort_kernel = ElementwiseKernel(
                 self.context,
                 scan_knl_arguments
-                + [VectorArg(coord_dtype, "sorted_"+ax) for ax in axis_names],
+                + [VectorArg(coord_dtype, "sorted_"+ax) for ax in axis_names]
+                + [
+                    VectorArg(particle_id_dtype, "original_particle_ids"),
+                    VectorArg(particle_id_dtype, "new_original_particle_ids"),
+                    VectorArg(np.int32, "have_oversize_box"),
+                    ],
                 str(split_and_sort_kernel_source), name="split_and_sort",
                 preamble=str(preamble))
+
+        # }}}
+
+        # {{{ box-info
 
         type_values = (
                 ("box_id_t", box_id_dtype),
@@ -845,6 +875,10 @@ class TreeBuilder(object):
                 type_values, var_values=codegen_args_tuples,
                 more_preamble=box_type_enum.get_c_defines(),
                 declare_types=("bbox_t",))
+
+        # }}}
+
+        # {{{ find-prune-indices
 
         from pyopencl.tools import VectorArg
         find_prune_indices_kernel = GenericScanKernel(
@@ -866,6 +900,8 @@ class TreeBuilder(object):
                     if (i+1 == N) *nboxes_post_prune = N-item;
                     """)
 
+        # }}}
+
         return _KernelInfo(
                 particle_id_dtype=particle_id_dtype,
                 box_id_dtype=box_id_dtype,
@@ -878,8 +914,12 @@ class TreeBuilder(object):
 
     # }}}
 
-    def gappy_copy_and_map(self, queue, new_size, new_size_aligned,
+    def gappy_copy_and_map(self, queue, allocator, new_size, new_size_aligned,
             src_indices, ary, map_values=None):
+        """Compresses box info arrays after empty leaf pruning and, optionally,
+        maps old box IDs to new box IDs (if the array being operated on contains
+        box IDs).
+        """
         if len(ary.shape) == 2:
             dim_2_length, old_size = ary.shape
             assert old_size > new_size
@@ -887,12 +927,13 @@ class TreeBuilder(object):
             kernel = self.get_gappy_copy_and_map_kernel(ary.dtype, src_indices.dtype,
                     map_values=map_values is not None, dim_2_length=dim_2_length)
 
-            result = cl.array.empty(queue, (dim_2_length, new_size_aligned), ary.dtype)
+            result = cl.array.empty(queue, (dim_2_length, new_size_aligned), ary.dtype,
+                    allocator=allocator)
         else:
             dim_2_length = None
             assert len(ary) > new_size
 
-            result = cl.array.empty(queue, new_size, ary.dtype)
+            result = cl.array.empty(queue, new_size, ary.dtype, allocator=allocator)
 
             kernel = self.get_gappy_copy_and_map_kernel(ary.dtype, src_indices.dtype,
                     map_values=map_values is not None)
@@ -910,7 +951,8 @@ class TreeBuilder(object):
 
     # {{{ run control
 
-    def __call__(self, queue, particles, max_particles_in_box, nboxes_guess=None):
+    def __call__(self, queue, particles, max_particles_in_box, nboxes_guess=None,
+            allocator=None):
         dimensions = len(particles)
 
         bbox = self.get_bbox_finder()(particles).get()
@@ -938,28 +980,35 @@ class TreeBuilder(object):
 
         nparticles = single_valued(len(coord) for coord in particles)
 
-        morton_bin_counts = cl.array.empty(queue, nparticles, dtype=knl_info.morton_bin_count_dtype)
-        morton_nrs = cl.array.empty(queue, nparticles, dtype=np.uint8)
-        box_start_flags = cl.array.zeros(queue, nparticles, dtype=np.int8)
-        box_ids = cl.array.zeros(queue, nparticles, dtype=box_id_dtype)
-        unsplit_box_ids = cl.array.zeros(queue, nparticles, dtype=box_id_dtype)
-        split_box_ids = cl.array.zeros(queue, nparticles, dtype=box_id_dtype)
+        from functools import partial
+        empty = partial(cl.array.empty, queue, allocator=allocator)
+        zeros = partial(cl.array.zeros, queue, allocator=allocator)
+
+        morton_bin_counts = empty(nparticles, dtype=knl_info.morton_bin_count_dtype)
+        morton_nrs = empty(nparticles, dtype=np.uint8)
+        box_start_flags = zeros(nparticles, dtype=np.int8)
+        box_ids = zeros(nparticles, dtype=box_id_dtype)
+        unsplit_box_ids = zeros(nparticles, dtype=box_id_dtype)
+        split_box_ids = zeros(nparticles, dtype=box_id_dtype)
 
         from pytools import div_ceil
         nboxes_guess = div_ceil(nparticles, max_particles_in_box) * 2**dimensions
 
-        box_morton_bin_counts = cl.array.empty(queue, nboxes_guess,
+        box_morton_bin_counts = empty(nboxes_guess,
                 dtype=knl_info.morton_bin_count_dtype)
-        box_starts = cl.array.zeros(queue, nboxes_guess, dtype=particle_id_dtype)
-        box_parent_ids = cl.array.zeros(queue, nboxes_guess, dtype=box_id_dtype)
-        box_morton_nrs = cl.array.zeros(queue, nboxes_guess, dtype=np.uint8)
-        box_particle_counts = cl.array.zeros(queue, nboxes_guess, dtype=particle_id_dtype)
+        box_starts = zeros(nboxes_guess, dtype=particle_id_dtype)
+        box_parent_ids = zeros(nboxes_guess, dtype=box_id_dtype)
+        box_morton_nrs = zeros(nboxes_guess, dtype=np.uint8)
+        box_particle_counts = zeros(nboxes_guess, dtype=particle_id_dtype)
+
+        original_particle_ids = cl.array.arange(queue, nparticles, dtype=particle_id_dtype,
+                allocator=allocator)
 
         # Initalize box 0 to contain all particles
         cl.enqueue_copy(queue, box_particle_counts.data,
                 box_particle_counts.dtype.type(nparticles))
 
-        nboxes_dev = cl.array.empty(queue, (), dtype=box_id_dtype)
+        nboxes_dev = empty((), dtype=box_id_dtype)
         nboxes_dev.fill(1)
 
         # set parent of root box to itself
@@ -967,7 +1016,7 @@ class TreeBuilder(object):
 
         from pytools.obj_array import make_obj_array
 
-        nboxes_last = None
+        have_oversize_box = zeros((), np.int32)
 
         from time import time
         start_time = time()
@@ -993,8 +1042,15 @@ class TreeBuilder(object):
             #print "split_box_ids", split_box_ids.get()[:nparticles]
 
             sorted_particles = make_obj_array([
-                pt.copy() for pt in particles])
-            knl_info.split_and_sort_kernel(*(args + tuple(sorted_particles)))
+                cl.array.empty_like(pt) for pt in particles])
+
+            new_original_particle_ids = cl.array.empty_like(original_particle_ids)
+            split_and_sort_args = (
+                    args
+                    + tuple(sorted_particles)
+                    + (original_particle_ids, new_original_particle_ids,
+                        have_oversize_box))
+            knl_info.split_and_sort_kernel(*split_and_sort_args)
 
             if 0:
                 print "--------------LEVL"
@@ -1003,13 +1059,15 @@ class TreeBuilder(object):
                 print "starts", box_starts.get()[:nboxes]
                 print "counts", box_particle_counts.get()[:nboxes]
 
-            if nboxes == nboxes_last:
-                break
-
+            original_particle_ids = new_original_particle_ids
             particles = sorted_particles
 
+            if not int(have_oversize_box.get()):
+                break
+
             level += 1
-            nboxes_last = nboxes
+
+            have_oversize_box.fill(0)
 
         end_time = time()
         print end_time-start_time
@@ -1019,10 +1077,10 @@ class TreeBuilder(object):
         # A number of arrays below are stored as
         aligned_nboxes = div_ceil(nboxes, 32)*32
 
-        box_child_ids = cl.array.zeros(queue, (2**dimensions, aligned_nboxes), box_id_dtype)
-        box_centers = cl.array.empty(queue, (dimensions, aligned_nboxes), coord_dtype)
-        box_levels = cl.array.empty(queue, nboxes, np.uint8)
-        box_types = cl.array.empty(queue, nboxes, np.uint8)
+        box_child_ids = zeros((2**dimensions, aligned_nboxes), box_id_dtype)
+        box_centers = empty((dimensions, aligned_nboxes), coord_dtype)
+        box_levels = empty(nboxes, np.uint8)
+        box_types = empty(nboxes, np.uint8)
 
         knl_info.box_info_kernel(
                 # input:
@@ -1037,12 +1095,12 @@ class TreeBuilder(object):
         # {{{ prune empty leaf boxes
 
         # What is the original index of this box?
-        from_box_id = cl.array.empty(queue, nboxes, box_id_dtype)
+        from_box_id = empty(nboxes, box_id_dtype)
 
         # Where should I put this box?
-        to_box_id = cl.array.empty(queue, nboxes, box_id_dtype)
+        to_box_id = empty(nboxes, box_id_dtype)
 
-        nboxes_post_prune_dev = cl.array.empty(queue, (), dtype=box_id_dtype)
+        nboxes_post_prune_dev = empty((), dtype=box_id_dtype)
         knl_info.find_prune_indices_kernel(
                 box_types, to_box_id, from_box_id, nboxes_post_prune_dev)
 
@@ -1053,7 +1111,8 @@ class TreeBuilder(object):
 
         from functools import partial
         prune_empty = partial(self.gappy_copy_and_map,
-                queue, nboxes_post_prune, aligned_nboxes_post_prune,
+                queue, allocator,
+                nboxes_post_prune, aligned_nboxes_post_prune,
                 from_box_id)
 
         if 1:
@@ -1076,7 +1135,7 @@ class TreeBuilder(object):
                 coord_dtype=coord_dtype,
 
                 root_extent=root_extent,
-                nlevels=level+1,
+                nlevels=level+2,
 
                 particles=particles,
                 box_starts=box_starts,
@@ -1086,6 +1145,8 @@ class TreeBuilder(object):
                 box_centers=box_centers,
                 box_levels=box_levels,
                 box_types=box_types,
+
+                original_particle_ids=original_particle_ids,
                 )
 
     # }}}
