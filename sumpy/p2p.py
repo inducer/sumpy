@@ -56,7 +56,9 @@ class P2P(KernelComputation):
         from sumpy.codegen import to_loopy_insns
         loopy_insns = to_loopy_insns(sac.assignments.iteritems(),
                 vector_names=set(["d"]),
-                pymbolic_expr_maps=[knl.transform_to_code for knl in self.kernels])
+                pymbolic_expr_maps=[knl.transform_to_code for knl in self.kernels],
+                complex_dtype=np.complex128 # FIXME
+                )
 
         from pymbolic import var
         exprs = [

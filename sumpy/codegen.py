@@ -310,8 +310,23 @@ class MathConstantRewriter(IdentityMapper):
 
 
 
+class ComplexConstantSizer(IdentityMapper):
+    def __init__(self, dtype):
+        self.dtype = dtype
 
-def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[]):
+    def map_constant(self, expr):
+        if isinstance(expr, (complex, np.complexfloating)):
+            assert self.dtype.kind == "c"
+            return self.dtype.type(expr)
+        else:
+            return expr
+
+
+
+
+
+def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
+        complex_dtype=None):
     # convert from sympy
     from pymbolic.sympy_interface import SympyToPymbolicMapper
     sympy_conv = SympyToPymbolicMapper()
@@ -330,6 +345,10 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[]):
     pwr = PowerRewriter()
     ssg = SumSignGrouper()
     fck = FractionKiller()
+    if complex_dtype is not None:
+        ccs = ComplexConstantSizer(np.dtype(complex_dtype))
+    else:
+        ccs = None
 
     def convert_expr(expr):
         expr = bdr(expr)
@@ -338,11 +357,11 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[]):
         expr = pwr(expr)
         expr = fck(expr)
         expr = ssg(expr)
+        if ccs is not None:
+            expr = ccs(expr)
         for m in pymbolic_expr_maps:
             expr = m(expr)
         return expr
-
-
 
     import loopy as lp
     return [

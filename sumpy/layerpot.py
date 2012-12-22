@@ -82,7 +82,9 @@ class LayerPotentialBase(KernelComputation):
                 vector_names=set(["a", "b"]),
                 pymbolic_expr_maps=[
                     expn.kernel.transform_to_code
-                    for expn in self.expansions])
+                    for expn in self.expansions],
+                complex_dtype=np.complex128 # FIXME
+                )
 
         isrc_sym = var("isrc")
         exprs = [
