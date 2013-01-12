@@ -34,8 +34,8 @@ setup(name="sumpy",
         'Topic :: Utilities',
         ],
 
-      author="Rio Yokota, Andreas Kloeckner, Matthew Knepley",
-      author_email="yokota@bu.edu",
+      author="Andreas Kloeckner",
+      author_email="inform@tiker.net",
       license = "MIT",
       packages=["sumpy", "sumpy.symbolic"],
 
