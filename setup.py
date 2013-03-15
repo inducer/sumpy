@@ -37,7 +37,7 @@ setup(name="sumpy",
       author="Andreas Kloeckner",
       author_email="inform@tiker.net",
       license = "MIT",
-      packages=["sumpy", "sumpy.symbolic"],
+      packages=["sumpy", "sumpy.expansion"],
 
       # 2to3 invocation
       cmdclass={'build_py': build_py})
