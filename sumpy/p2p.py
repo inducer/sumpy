@@ -90,8 +90,8 @@ class P2P(KernelComputation):
 
         arguments = (
                 [
-                   lp.GlobalArg("src", self.geometry_dtype, shape=("nsrc", self.dimensions), order="C"),
-                   lp.GlobalArg("tgt", self.geometry_dtype, shape=("ntgt", self.dimensions), order="C"),
+                   lp.GlobalArg("src", self.geometry_dtype, shape=(self.dimensions, "nsrc"), order="C"),
+                   lp.GlobalArg("tgt", self.geometry_dtype, shape=(self.dimensions, "ntgt"), order="C"),
                    lp.ValueArg("nsrc", np.int32),
                    lp.ValueArg("ntgt", np.int32),
                 ]+[
@@ -117,7 +117,7 @@ class P2P(KernelComputation):
                 self.get_kernel_scaling_assignments()
                 + loopy_insns
                 + [
-                "<> d[idim] = tgt[itgt,idim] - src[isrc,idim] {id=compute_d}",
+                "<> d[idim] = tgt[idim,itgt] - src[idim,isrc] {id=compute_d}",
                 ]+[
                 lp.Instruction(id=None,
                     assignee="pair_result_%d" % i, expression=expr,
@@ -157,5 +157,4 @@ class P2P(KernelComputation):
         for i, sstr in enumerate(src_strengths):
             kwargs["strength_%d" % i] = sstr
 
-        return cknl(queue, src=sources, tgt=targets,
-                nsrc=len(sources), ntgt=len(targets), **kwargs)
+        return cknl(queue, src=sources, tgt=targets, **kwargs)
