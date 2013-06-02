@@ -29,13 +29,8 @@ from pytools import memoize_method
 from sumpy.tools import KernelComputation
 
 
-
-
 # LATER:
 # - Optimization for source == target (postpone)
-
-
-
 
 class P2P(KernelComputation):
     def __init__(self, ctx, kernels,  exclude_self, strength_usage=None,
@@ -79,7 +74,7 @@ class P2P(KernelComputation):
         loopy_insns = to_loopy_insns(sac.assignments.iteritems(),
                 vector_names=set(["d"]),
                 pymbolic_expr_maps=[knl.transform_to_code for knl in self.kernels],
-                complex_dtype=np.complex128 # FIXME
+                complex_dtype=np.complex128  # FIXME
                 )
 
         from pymbolic import var
@@ -90,18 +85,19 @@ class P2P(KernelComputation):
 
         arguments = (
                 [
-                   lp.GlobalArg("src", self.geometry_dtype, shape=(self.dimensions, "nsrc"), order="C"),
-                   lp.GlobalArg("tgt", self.geometry_dtype, shape=(self.dimensions, "ntgt"), order="C"),
-                   lp.ValueArg("nsrc", np.int32),
-                   lp.ValueArg("ntgt", np.int32),
+                    lp.GlobalArg("src", self.geometry_dtype,
+                        shape=(self.dimensions, "nsrc"), order="C"),
+                    lp.GlobalArg("tgt", self.geometry_dtype,
+                        shape=(self.dimensions, "ntgt"), order="C"),
+                    lp.ValueArg("nsrc", np.int32),
+                    lp.ValueArg("ntgt", np.int32),
                 ]+[
-                   lp.GlobalArg("strength_%d" % i, dtype, shape="nsrc", order="C")
-                   for i, dtype in enumerate(self.strength_dtypes)
+                    lp.GlobalArg("strength_%d" % i, dtype, shape="nsrc", order="C")
+                    for i, dtype in enumerate(self.strength_dtypes)
                 ]+[
-                   lp.GlobalArg("result_%d" % i, dtype, shape="ntgt", order="C")
-                   for i, dtype in enumerate(self.value_dtypes)
-                   ]
-                + self.gather_kernel_arguments())
+                    lp.GlobalArg("result_%d" % i, dtype, shape="ntgt", order="C")
+                    for i, dtype in enumerate(self.value_dtypes)
+                ] + self.gather_kernel_arguments())
 
         if self.exclude_self:
             from pymbolic.primitives import If, ComparisonOperator, Variable
@@ -119,12 +115,13 @@ class P2P(KernelComputation):
                 + [
                 "<> d[idim] = tgt[idim,itgt] - src[idim,isrc] {id=compute_d}",
                 ]+[
-                lp.Instruction(id=None,
-                    assignee="pair_result_%d" % i, expression=expr,
-                    temp_var_type=dtype)
-                for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
+                    lp.Instruction(id=None,
+                        assignee="pair_result_%d" % i, expression=expr,
+                        temp_var_type=dtype)
+                    for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
                 ]+[
-                "result_${KNLIDX}[itgt] = knl_${KNLIDX}_scaling*sum(isrc, pair_result_${KNLIDX})"
+                    "result_${KNLIDX}[itgt] = knl_${KNLIDX}_scaling \
+                            * sum(isrc, pair_result_${KNLIDX})"
                 ],
                 arguments,
                 name=self.name, assumptions="nsrc>=1 and ntgt>=1",
