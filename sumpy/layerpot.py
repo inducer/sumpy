@@ -23,8 +23,6 @@ THE SOFTWARE.
 """
 
 
-
-
 import numpy as np
 import loopy as lp
 import sympy as sp
@@ -32,8 +30,6 @@ from pytools import memoize_method
 from pymbolic import parse, var
 
 from sumpy.tools import KernelComputation
-
-
 
 
 def stringify_expn_index(i):
@@ -45,6 +41,7 @@ def stringify_expn_index(i):
             return "m%d" % (-i)
         else:
             return str(i)
+
 
 def expand(expansion_nr, sac, expansion, avec, bvec):
     coefficients = expansion.coefficients_from_source(avec, bvec)
@@ -58,8 +55,6 @@ def expand(expansion_nr, sac, expansion, avec, bvec):
 
     return sac.assign_unique("expn%d_result" % expansion_nr,
             expansion.evaluate(assigned_coeffs, bvec))
-
-
 
 
 # {{{ layer potential computation
@@ -108,7 +103,7 @@ class LayerPotentialBase(KernelComputation):
                 pymbolic_expr_maps=[
                     expn.kernel.transform_to_code
                     for expn in self.expansions],
-                complex_dtype=np.complex128 # FIXME
+                complex_dtype=np.complex128  # FIXME
                 )
 
         isrc_sym = var("isrc")
@@ -122,13 +117,16 @@ class LayerPotentialBase(KernelComputation):
         geo_dtype = self.geometry_dtype
         arguments = (
                 [
-                   lp.GlobalArg("src", geo_dtype, shape=("nsrc", self.dimensions), order="C"),
-                   lp.GlobalArg("tgt", geo_dtype, shape=("ntgt", self.dimensions), order="C"),
-                   lp.GlobalArg("center", geo_dtype, shape=("ntgt", self.dimensions), order="C"),
-                   lp.GlobalArg("speed", geo_dtype, shape="nsrc", order="C"),
-                   lp.GlobalArg("weights", geo_dtype, shape="nsrc", order="C"),
-                   lp.ValueArg("nsrc", np.int32),
-                   lp.ValueArg("ntgt", np.int32),
+                    lp.GlobalArg("src", geo_dtype,
+                        shape=("nsrc", self.dimensions), order="C"),
+                    lp.GlobalArg("tgt", geo_dtype,
+                        shape=("ntgt", self.dimensions), order="C"),
+                    lp.GlobalArg("center", geo_dtype,
+                        shape=("ntgt", self.dimensions), order="C"),
+                    lp.GlobalArg("speed", geo_dtype, shape="nsrc", order="C"),
+                    lp.GlobalArg("weights", geo_dtype, shape="nsrc", order="C"),
+                    lp.ValueArg("nsrc", np.int32),
+                    lp.ValueArg("ntgt", np.int32),
                 ] + self.get_input_and_output_arguments()
                 + self.gather_kernel_arguments())
 
@@ -139,10 +137,10 @@ class LayerPotentialBase(KernelComputation):
                 "<> a[idim] = center[itgt,idim] - src[isrc,idim] {id=compute_a}",
                 "<> b[idim] = tgt[itgt,idim] - center[itgt,idim] {id=compute_b}",
                 ]+self.get_kernel_scaling_assignments()+loopy_insns+[
-                lp.Instruction(id=None,
-                    assignee="pair_result_%d" % i, expression=expr,
-                    temp_var_type=dtype)
-                for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
+                    lp.Instruction(id=None,
+                        assignee="pair_result_%d" % i, expression=expr,
+                        temp_var_type=dtype)
+                    for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
                 ]+self.get_result_store_instructions(),
                 arguments,
                 defines=dict(KNLIDX=range(len(exprs))),
@@ -184,6 +182,7 @@ class LayerPotentialBase(KernelComputation):
 
 # }}}
 
+
 # {{{ direct applier
 
 class LayerPotential(LayerPotentialBase):
@@ -203,7 +202,8 @@ class LayerPotential(LayerPotentialBase):
 
     def get_result_store_instructions(self):
         return [
-                "result_${KNLIDX}[itgt] = knl_${KNLIDX}_scaling*sum(isrc, pair_result_${KNLIDX})"
+                "result_${KNLIDX}[itgt] = \
+                        knl_${KNLIDX}_scaling*sum(isrc, pair_result_${KNLIDX})"
                 ]
 
     def __call__(self, queue, targets, sources, centers, densities,
@@ -219,6 +219,7 @@ class LayerPotential(LayerPotentialBase):
                 **kwargs)
 
 # }}}
+
 
 # {{{ matrix writer
 
@@ -236,7 +237,8 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
 
     def get_result_store_instructions(self):
         return [
-                "result_${KNLIDX}[itgt, isrc] = knl_${KNLIDX}_scaling*pair_result_${KNLIDX}"
+                "result_${KNLIDX}[itgt, isrc] = \
+                        knl_${KNLIDX}_scaling*pair_result_${KNLIDX}"
                 ]
 
     def __call__(self, queue, targets, sources, centers, speed, weights, **kwargs):
@@ -249,6 +251,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
 # }}}
 
 # }}}
+
 
 # {{{ jump term handling
 
@@ -307,7 +310,8 @@ def find_jump_term(kernel, arg_provider):
                     * info.density
 
                     + info.side / 2
-                    * (info.normal[i]*info.tangent[j] + info.normal[j]*info.tangent[i])
+                    * (info.normal[i]*info.tangent[j]
+                        + info.normal[j]*info.tangent[i])
                     * info.density_prime)
 
     elif src_count == 1:
@@ -331,8 +335,6 @@ def find_jump_term(kernel, arg_provider):
 
     raise ValueError("don't know jump term for %d "
             "target and %d source derivatives" % (tgt_count, src_count))
-
-
 
 
 # {{{ symbolic argument provider
@@ -377,7 +379,6 @@ class _JumpTermSymbolicArgumentProvider(object):
                 lp.GlobalArg("side", self.geometry_dtype, shape="ntgt", order="C")
         return parse("side[itgt]")
 
-
     @property
     @memoize_method
     def normal(self):
@@ -414,7 +415,8 @@ class _JumpTermSymbolicArgumentProvider(object):
     def src_derivative_dir(self):
         self.arguments["src_derivative_dir"] = \
                 lp.GlobalArg("src_derivative_dir",
-                        self.geometry_dtype, shape=("ntgt", self.dimensions), order="C")
+                        self.geometry_dtype, shape=("ntgt", self.dimensions),
+                        order="C")
         from pytools.obj_array import make_obj_array
         return make_obj_array([
             parse("src_derivative_dir[itgt, %d]" % i)
@@ -425,7 +427,8 @@ class _JumpTermSymbolicArgumentProvider(object):
     def tgt_derivative_dir(self):
         self.arguments["tgt_derivative_dir"] = \
                 lp.GlobalArg("tgt_derivative_dir",
-                        self.geometry_dtype, shape=("ntgt", self.dimensions), order="C")
+                        self.geometry_dtype, shape=("ntgt", self.dimensions),
+                        order="C")
         from pytools.obj_array import make_obj_array
         return make_obj_array([
             parse("tgt_derivative_dir[itgt, %d]" % i)
@@ -434,7 +437,7 @@ class _JumpTermSymbolicArgumentProvider(object):
 # }}}
 
 
-
+# {{{ jump term applier
 
 class JumpTermApplier(KernelComputation):
     def __init__(self, ctx, kernels, density_usage=None,
@@ -466,22 +469,22 @@ class JumpTermApplier(KernelComputation):
             lp.GlobalArg("result_%d" % i, dtype, shape="ntgt", order="C")
             for i, dtype in enumerate(self.value_dtypes)
             ]+[
-            lp.GlobalArg("limit_%d" % i, dtype, shape="ntgt", order="C")
-            for i, dtype in enumerate(self.value_dtypes)]
+                lp.GlobalArg("limit_%d" % i, dtype, shape="ntgt", order="C")
+                for i, dtype in enumerate(self.value_dtypes)]
 
         # FIXME (fast) special case for jump term == 0
         loopy_knl = lp.make_kernel(self.device,
                 "[ntgt] -> {[itgt]: 0<=itgt<ntgt}",
                 [
-                lp.Instruction(id=None,
-                    assignee="temp_result_%d" % i, expression=expr,
-                    temp_var_type=dtype)
-                for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
+                    lp.Instruction(id=None,
+                        assignee="temp_result_%d" % i, expression=expr,
+                        temp_var_type=dtype)
+                    for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
                 ]+[
-                "result_%d[itgt] = limit_%d[itgt] + temp_result_%d" % (i, i, i)
-                for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))],
-                [
-                   lp.ValueArg("ntgt", np.int32),
+                    "result_%d[itgt] = limit_%d[itgt] + temp_result_%d" % (i, i, i)
+                    for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
+                ], [
+                    lp.ValueArg("ntgt", np.int32),
                 ] + operand_args + data_args,
                 name=self.name, assumptions="ntgt>=1")
 

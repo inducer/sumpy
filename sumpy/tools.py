@@ -23,17 +23,14 @@ THE SOFTWARE.
 """
 
 
-
-
 import numpy as np
-
-
 
 
 # {{{ multi_index helpers
 
 def add_mi(mi1, mi2):
     return tuple(mi1i+mi2i for mi1i, mi2i in zip(mi1, mi2))
+
 
 def mi_factorial(mi):
     from pytools import factorial
@@ -42,11 +39,13 @@ def mi_factorial(mi):
         result *= factorial(mi_i)
     return result
 
+
 def mi_power(vector, mi):
     result = 1
     for mi_i, vec_i in zip(mi, vector):
         result *= vec_i**mi_i
     return result
+
 
 def mi_derivative(expr, vector, mi):
     for mi_i, vec_i in zip(mi, vector):
@@ -54,8 +53,6 @@ def mi_derivative(expr, vector, mi):
     return expr
 
 # }}}
-
-
 
 
 def build_matrix(op, dtype=None):
@@ -68,7 +65,7 @@ def build_matrix(op, dtype=None):
     for i in range(cols):
         unit_vec = np.zeros(rows, dtype=dtype)
         unit_vec[i] = 1
-        mat[:,i] = op.matvec(unit_vec)
+        mat[:, i] = op.matvec(unit_vec)
         pb.progress()
 
     pb.finished()
@@ -76,19 +73,15 @@ def build_matrix(op, dtype=None):
     return mat
 
 
-
-
 def vector_to_device(queue, vec):
     from pytools.obj_array import with_object_array_or_scalar
 
     from pyopencl.array import to_device
+
     def to_dev(ary):
         return to_device(queue, ary)
 
     return with_object_array_or_scalar(to_dev, vec)
-
-
-
 
 
 class KernelComputation:
@@ -198,4 +191,5 @@ class KernelComputation:
                     expression=ComplexConstantSizer(dtype)(
                         sympy_conv(kernel.get_scaling())),
                     temp_var_type=dtype)
-                for i, (kernel, dtype) in enumerate(zip(self.kernels, self.value_dtypes))]
+                for i, (kernel, dtype) in enumerate(
+                    zip(self.kernels, self.value_dtypes))]

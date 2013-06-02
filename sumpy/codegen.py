@@ -23,10 +23,9 @@ THE SOFTWARE.
 """
 
 
-
 import numpy as np
 import pyopencl as cl
-import pyopencl.tools
+import pyopencl.tools  # noqa
 
 import re
 
@@ -38,8 +37,7 @@ from pytools import memoize_method
 
 # {{{ bessel handling
 
-BESSEL_PREAMBLE = (
-"""//CL//
+BESSEL_PREAMBLE = """//CL//
 #include <pyopencl-bessel-j.cl>
 #include <pyopencl-bessel-y.cl>
 
@@ -55,7 +53,7 @@ hank1_01_result hank1_01(cdouble_t z)
     result.order1 = cdouble_new(bessel_j1(z.x), bessel_y1(z.x));
     return result;
 }
-""")
+"""
 
 hank1_01_result_dtype = cl.tools.get_or_register_dtype("hank1_01_result",
         np.dtype([
@@ -64,14 +62,15 @@ hank1_01_result_dtype = cl.tools.get_or_register_dtype("hank1_01_result",
             ]),
         )
 
+
 def bessel_mangler(identifier, arg_dtypes):
     if identifier == "hank1_01":
-        return np.dtype(hank1_01_result_dtype), identifier, (np.dtype(np.complex128),)
-    if identifier == "bessel_jv":
+        return (np.dtype(hank1_01_result_dtype),
+                identifier, (np.dtype(np.complex128),))
+    elif identifier == "bessel_jv":
         return np.dtype(np.float64), identifier
-
-    return None
-
+    else:
+        return None
 
 
 class BesselGetter(object):
@@ -137,9 +136,6 @@ class BesselGetter(object):
                     "bessel_j_%d" % order)
 
 
-
-
-
 class BesselTopOrderGatherer(WalkMapper):
     """This mapper walks the expression tree to find the highest-order
     Bessel J being used, so that all other Js can be computed by the
@@ -149,7 +145,8 @@ class BesselTopOrderGatherer(WalkMapper):
         self.bessel_j_arg_to_top_order = {}
 
     def map_call(self, expr):
-        if isinstance(expr.function, prim.Variable) and expr.function.name == "bessel_j":
+        if isinstance(expr.function, prim.Variable) \
+                and expr.function.name == "bessel_j":
             order, arg = expr.parameters
             self.rec(arg)
             assert isinstance(order, int)
@@ -158,8 +155,6 @@ class BesselTopOrderGatherer(WalkMapper):
                     abs(order))
         else:
             return WalkMapper.map_call(self, expr)
-
-
 
 
 class BesselDerivativeReplacer(IdentityMapper):
@@ -191,8 +186,6 @@ class BesselDerivativeReplacer(IdentityMapper):
             return IdentityMapper.map_substitution(self, expr)
 
 
-
-
 class BesselSubstitutor(IdentityMapper):
     def __init__(self, bessel_getter):
         self.bessel_getter = bessel_getter
@@ -207,8 +200,6 @@ class BesselSubstitutor(IdentityMapper):
         return IdentityMapper.map_call(self, expr)
 
 # }}}
-
-
 
 
 class PowerRewriter(IdentityMapper):
@@ -255,9 +246,6 @@ class PowerRewriter(IdentityMapper):
         return IdentityMapper.map_power(self, expr)
 
 
-
-
-
 class FractionKiller(IdentityMapper):
     def map_quotient(self, expr):
         num = expr.numerator
@@ -271,9 +259,8 @@ class FractionKiller(IdentityMapper):
         return IdentityMapper.map_quotient(self, expr)
 
 
-
-
 INDEXED_VAR_RE = re.compile("^([a-zA-Z_]+)([0-9]+)$")
+
 
 class VectorComponentRewriter(IdentityMapper):
     def __init__(self, name_whitelist=set()):
@@ -292,9 +279,9 @@ class VectorComponentRewriter(IdentityMapper):
             return IdentityMapper.map_variable(self, expr)
 
 
-
-
 class SumSignGrouper(IdentityMapper):
+    """Anti-cancellation cargo-cultism."""
+
     def map_sum(self, expr):
         first_group = []
         second_group = []
@@ -320,18 +307,12 @@ class SumSignGrouper(IdentityMapper):
         return prim.Sum(tuple(first_group+second_group))
 
 
-
-
-
-
 class MathConstantRewriter(IdentityMapper):
     def map_variable(self, expr):
         if expr.name == "pi":
             return prim.Variable("M_PI")
         else:
             return IdentityMapper.map_variable(self, expr)
-
-
 
 
 class ComplexConstantSizer(IdentityMapper):
@@ -344,9 +325,6 @@ class ComplexConstantSizer(IdentityMapper):
             return self.dtype.type(expr)
         else:
             return expr
-
-
-
 
 
 def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
@@ -393,3 +371,5 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
                 assignee=name, expression=convert_expr(expr),
                 temp_var_type=lp.auto)
             for name, expr in assignments]
+
+# vim: fdm=marker
