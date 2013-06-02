@@ -62,12 +62,12 @@ def expand(expansion_nr, sac, expansion, avec, bvec):
 # {{{ base class
 
 class LayerPotentialBase(KernelComputation):
-    def __init__(self, ctx, expansions, density_usage=None,
-            value_dtypes=None, density_dtypes=None,
+    def __init__(self, ctx, expansions, strength_usage=None,
+            value_dtypes=None, strength_dtypes=None,
             geometry_dtype=None,
             options=[], name="layerpot", device=None):
-        KernelComputation.__init__(self, ctx, expansions, density_usage,
-                value_dtypes, density_dtypes, geometry_dtype,
+        KernelComputation.__init__(self, ctx, expansions, strength_usage,
+                value_dtypes, strength_dtypes, geometry_dtype,
                 name, options, device)
 
         from pytools import single_valued
@@ -109,9 +109,7 @@ class LayerPotentialBase(KernelComputation):
         isrc_sym = var("isrc")
         exprs = [
                 var(name)
-                * self.get_density_or_not(isrc_sym, i)
-                * var("speed")[isrc_sym]
-                * var("weights")[isrc_sym]
+                * self.get_strength_or_not(isrc_sym, i)
                 for i, name in enumerate(result_names)]
 
         geo_dtype = self.geometry_dtype
@@ -123,8 +121,6 @@ class LayerPotentialBase(KernelComputation):
                         shape=("ntgt", self.dimensions), order="C"),
                     lp.GlobalArg("center", geo_dtype,
                         shape=("ntgt", self.dimensions), order="C"),
-                    lp.GlobalArg("speed", geo_dtype, shape="nsrc", order="C"),
-                    lp.GlobalArg("weights", geo_dtype, shape="nsrc", order="C"),
                     lp.ValueArg("nsrc", np.int32),
                     lp.ValueArg("ntgt", np.int32),
                 ] + self.get_input_and_output_arguments()
@@ -188,12 +184,12 @@ class LayerPotentialBase(KernelComputation):
 class LayerPotential(LayerPotentialBase):
     """Direct applier for the layer potential."""
 
-    def get_density_or_not(self, isrc, kernel_idx):
-        return var("density_%d" % self.strength_usage[kernel_idx])[isrc]
+    def get_strength_or_not(self, isrc, kernel_idx):
+        return var("strength_%d" % self.strength_usage[kernel_idx])[isrc]
 
     def get_input_and_output_arguments(self):
         return [
-                lp.GlobalArg("density_%d" % i, dtype, shape="nsrc", order="C")
+                lp.GlobalArg("strength_%d" % i, dtype, shape="nsrc", order="C")
                 for i, dtype in enumerate(self.strength_dtypes)
             ]+[
                 lp.GlobalArg("result_%d" % i, dtype, shape="ntgt", order="C")
@@ -206,17 +202,19 @@ class LayerPotential(LayerPotentialBase):
                         knl_${KNLIDX}_scaling*sum(isrc, pair_result_${KNLIDX})"
                 ]
 
-    def __call__(self, queue, targets, sources, centers, densities,
-            speed, weights, **kwargs):
+    def __call__(self, queue, targets, sources, centers, strengths, **kwargs):
+        """
+        :arg strengths: are required to have area elements and quadrature weights
+            already multiplied in.
+        """
+
         cknl = self.get_compiled_kernel()
         #print cknl.code
 
-        for i, dens in enumerate(densities):
-            kwargs["density_%d" % i] = dens
+        for i, dens in enumerate(strengths):
+            kwargs["strength_%d" % i] = dens
 
-        return cknl(queue, src=sources, tgt=targets, center=centers,
-                speed=speed, weights=weights, nsrc=len(sources), ntgt=len(targets),
-                **kwargs)
+        return cknl(queue, src=sources, tgt=targets, center=centers, **kwargs)
 
 # }}}
 
@@ -226,7 +224,7 @@ class LayerPotential(LayerPotentialBase):
 class LayerPotentialMatrixGenerator(LayerPotentialBase):
     """Generator for layer potential matrix entries."""
 
-    def get_density_or_not(self, isrc, kernel_idx):
+    def get_strength_or_not(self, isrc, kernel_idx):
         return 1
 
     def get_input_and_output_arguments(self):
@@ -241,11 +239,10 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
                         knl_${KNLIDX}_scaling*pair_result_${KNLIDX}"
                 ]
 
-    def __call__(self, queue, targets, sources, centers, speed, weights, **kwargs):
+    def __call__(self, queue, targets, sources, centers, **kwargs):
         cknl = self.get_compiled_kernel()
 
         return cknl(queue, src=sources, tgt=targets, center=centers,
-                speed=speed, weights=weights, nsrc=len(sources), ntgt=len(targets),
                 **kwargs)
 
 # }}}
