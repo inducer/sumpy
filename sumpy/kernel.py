@@ -26,6 +26,7 @@ THE SOFTWARE.
 import loopy as lp
 import sympy as sp
 import numpy as np
+from pymbolic.primitives import Expression
 from pymbolic.mapper import IdentityMapper
 
 
@@ -34,7 +35,7 @@ from pymbolic.mapper import IdentityMapper
 class Kernel(object):
     """Basic kernel interface.
 
-    .. attribute:: is_complex
+    .. attribute:: is_complex_valued
     .. attribute:: dimensions
 
         *dimensions* is allowed to be *None* if the dimensionality is not yet
@@ -112,7 +113,7 @@ class Kernel(object):
 # {{{ PDE kernels
 
 class LaplaceKernel(Kernel):
-    is_complex = False
+    is_complex_valued = False
 
     def __repr__(self):
         if self.dimensions is not None:
@@ -170,7 +171,7 @@ class HelmholtzKernel(Kernel):
         return HelmholtzKernel(dimensions, self.helmholtz_k_name,
                 self.allow_evanescent)
 
-    is_complex = True
+    is_complex_valued = True
 
     def prepare_loopy_kernel(self, loopy_knl):
         # does loopy_knl already know about hank1_01?
@@ -222,12 +223,17 @@ class HelmholtzKernel(Kernel):
 
 class DifferenceKernel(Kernel):
     def __init__(self, kernel_plus, kernel_minus):
-        self.kernel_plus = kernel_plus
-        self.kernel_minus = kernel_minus
+        if (kernel_plus.get_base_kernel() is not kernel_plus
+                or kernel_minus.get_base_kernel() is not kernel_minus):
+            raise ValueError("kernels in difference kernel "
+                    "must be basic, unwrapped PDE kernels")
 
-        if self.kernel_plus.dimensions != self.kernel_minus.dimensions:
+        if kernel_plus.dimensions != kernel_minus.dimensions:
             raise ValueError(
                     "kernels in difference kernel have different dimensions")
+
+        self.kernel_plus = kernel_plus
+        self.kernel_minus = kernel_minus
 
         Kernel.__init__(self, self.kernel_plus.dimensions)
 
@@ -258,6 +264,25 @@ def normalize_kernel(kernel):
     return kernel
 
 
+def count_derivatives(kernel):
+    if isinstance(kernel, DerivativeBase):
+        return 1 + count_derivatives(kernel.kernel)
+    elif isinstance(kernel, KernelWrapper):
+        return count_derivatives(kernel.kernel)
+    else:
+        return 0
+
+
+def remove_axis_target_derivatives(kernel):
+    if isinstance(kernel, AxisTargetDerivative):
+        return remove_axis_target_derivatives(kernel.kernel)
+    elif isinstance(kernel, KernelWrapper):
+        kernel.replace_inner_kernel(
+                remove_axis_target_derivatives(kernel.kernel))
+    else:
+        return kernel
+
+
 # {{{ a kernel defined as wrapping another one--e.g., derivatives
 
 class KernelWrapper(Kernel):
@@ -272,8 +297,8 @@ class KernelWrapper(Kernel):
         return self.kernel.prepare_loopy_kernel(loopy_knl)
 
     @property
-    def is_complex(self):
-        return self.kernel.is_complex
+    def is_complex_valued(self):
+        return self.kernel.is_complex_valued
 
     def get_expression(self, dist_vec):
         return self.kernel.get_expression(dist_vec)
@@ -301,14 +326,32 @@ class KernelWrapper(Kernel):
 
 # {{{ derivatives
 
+class KernelPartialDerivative(Expression):
+    """A placeholder for a partial derivative of a kernel, to be used
+    in the *derivative_expression* arguments of :class:`DirectionalSourceDerivative`
+    and :class:`DirectionalTargetDerivative`.
+    """
+
+    def __init__(self, axis):
+        self.axis = axis
+
+    def __getinitargs__(self):
+        return (self.axis,)
+
+    mapper_method = "map_kernel_partial_derivative"
+
+
 class DerivativeBase(KernelWrapper):
     pass
 
 
-class TargetDerivative(DerivativeBase):
+class AxisTargetDerivative(DerivativeBase):
     def __init__(self, axis, kernel):
         KernelWrapper.__init__(self, kernel)
         self.axis = axis
+
+    def replace_inner_kernel(self, new_inner_kernel):
+        return AxisTargetDerivative(new_inner_kernel, self.derivative_expression)
 
     def postprocess_at_target(self, expr, bvec):
         expr = self.kernel.postprocess_at_target(expr, bvec)
@@ -331,11 +374,18 @@ class _VectorIndexPrefixer(IdentityMapper):
 
 
 class DirectionalTargetDerivative(DerivativeBase):
-    def __init__(self, kernel, dir_vec_name="tgt_derivative_dir",
-            dir_vec_dtype=np.float64):
+    def __init__(self, kernel, derivative_expression):
+        """
+        :arg derivative_expression: A scalar expression for the directional
+            derivative to be computed. :class:`KernelPartialDerivative` is
+            used as a placeholder for partial derivatives of the kernel.
+        """
         KernelWrapper.__init__(self, kernel)
-        self.dir_vec_name = dir_vec_name
-        self.dir_vec_dtype = dir_vec_dtype
+        self.derivative_expression = derivative_expression
+
+    def replace_inner_kernel(self, new_inner_kernel):
+        return DirectionalTargetDerivative(
+                new_inner_kernel, self.derivative_expression)
 
     def transform_to_code(self, expr):
         from sumpy.codegen import VectorComponentRewriter
@@ -357,18 +407,21 @@ class DirectionalTargetDerivative(DerivativeBase):
         return sum(dir_vec[axis]*expr.diff(bvec[axis])
                 for axis in range(dimensions))
 
-    def get_args(self):
-        return self.kernel.get_args() + [
-            lp.GlobalArg(self.dir_vec_name, self.dir_vec_dtype,
-                shape=("ntgt", self.dimensions), order="C")]
 
+class DirectionalSourceDerivative(DerivativeBase):
+    def __init__(self, kernel, derivative_expression):
+        """
+        :arg derivative_expression: A scalar expression for the directional
+            derivative to be computed. :class:`KernelPartialDerivative` is
+            used as a placeholder for partial derivatives of the kernel.
+        """
 
-class SourceDerivative(DerivativeBase):
-    def __init__(self, kernel, dir_vec_name="src_derivative_dir",
-            dir_vec_dtype=np.float64):
         KernelWrapper.__init__(self, kernel)
-        self.dir_vec_name = dir_vec_name
-        self.dir_vec_dtype = dir_vec_dtype
+        self.derivative_expression = derivative_expression
+
+    def replace_inner_kernel(self, new_inner_kernel):
+        return DirectionalSourceDerivative(
+                new_inner_kernel, self.derivative_expression)
 
     def transform_to_code(self, expr):
         from sumpy.codegen import VectorComponentRewriter
@@ -389,11 +442,6 @@ class SourceDerivative(DerivativeBase):
         # avec = center-src -> minus sign from chain rule
         return sum(-dir_vec[axis]*expr.diff(avec[axis])
                 for axis in range(dimensions))
-
-    def get_args(self):
-        return self.kernel.get_args() + [
-            lp.GlobalArg(self.dir_vec_name, self.dir_vec_dtype,
-                shape=("nsrc", self.dimensions), order="C")]
 
 # }}}
 

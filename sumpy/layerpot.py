@@ -257,7 +257,8 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
 
 def find_jump_term(kernel, arg_provider):
     from sumpy.kernel import (
-            TargetDerivative, SourceDerivative,
+            AxisTargetDerivative,
+            DirectionalSourceDerivative,
             DirectionalTargetDerivative,
             DerivativeBase)
 
@@ -265,13 +266,13 @@ def find_jump_term(kernel, arg_provider):
     src_derivatives = []
 
     while isinstance(kernel, DerivativeBase):
-        if isinstance(kernel, TargetDerivative):
+        if isinstance(kernel, AxisTargetDerivative):
             tgt_derivatives.append(kernel.axis)
             kernel = kernel.kernel
         elif isinstance(kernel, DirectionalTargetDerivative):
             tgt_derivatives.append(kernel.dir_vec_name)
             kernel = kernel.kernel
-        elif isinstance(kernel, SourceDerivative):
+        elif isinstance(kernel, DirectionalSourceDerivative):
             src_derivatives.append(kernel.dir_vec_name)
             kernel = kernel.kernel
         else:
@@ -435,83 +436,6 @@ class _JumpTermSymbolicArgumentProvider(object):
             for i in range(self.dimensions)])
 
 # }}}
-
-
-# {{{ jump term applier
-
-class JumpTermApplier(KernelComputation):
-    def __init__(self, ctx, kernels, density_usage=None,
-            value_dtypes=None, density_dtypes=None,
-            geometry_dtype=None,
-            options=[], name="jump_term", device=None):
-        KernelComputation.__init__(self, ctx, kernels, density_usage,
-                value_dtypes, density_dtypes, geometry_dtype,
-                name, options, device)
-
-        from pytools import single_valued
-        self.dimensions = single_valued(knl.dimensions for knl in self.kernels)
-
-    def get_kernel(self):
-        data_args = {}
-
-        exprs = [find_jump_term(
-                    k,
-                    _JumpTermSymbolicArgumentProvider(data_args,
-                        self.dimensions,
-                        "density_%d" % self.strength_usage[i],
-                        self.strength_dtypes[self.strength_usage[i]],
-                        self.geometry_dtype))
-                    for i, k in enumerate(self.kernels)]
-
-        data_args = list(data_args.itervalues())
-
-        operand_args = [
-            lp.GlobalArg("result_%d" % i, dtype, shape="ntgt", order="C")
-            for i, dtype in enumerate(self.value_dtypes)
-            ]+[
-                lp.GlobalArg("limit_%d" % i, dtype, shape="ntgt", order="C")
-                for i, dtype in enumerate(self.value_dtypes)]
-
-        # FIXME (fast) special case for jump term == 0
-        loopy_knl = lp.make_kernel(self.device,
-                "[ntgt] -> {[itgt]: 0<=itgt<ntgt}",
-                [
-                    lp.Instruction(id=None,
-                        assignee="temp_result_%d" % i, expression=expr,
-                        temp_var_type=dtype)
-                    for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
-                ]+[
-                    "result_%d[itgt] = limit_%d[itgt] + temp_result_%d" % (i, i, i)
-                    for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
-                ], [
-                    lp.ValueArg("ntgt", np.int32),
-                ] + operand_args + data_args,
-                name=self.name, assumptions="ntgt>=1")
-
-        return loopy_knl, data_args
-
-    def get_optimized_kernel(self):
-        # FIXME specialize/tune for GPU/CPU
-        loopy_knl, data_args = self.get_kernel()
-        loopy_knl = lp.split_iname(loopy_knl, "itgt", 128, outer_tag="g.0")
-        return loopy_knl, data_args
-
-    @memoize_method
-    def get_compiled_kernel(self):
-        opt_knl, data_args = self.get_optimized_kernel()
-        return lp.CompiledKernel(self.context, opt_knl), data_args
-
-    def __call__(self, queue, limits, argument_provider):
-        cknl, data_args = self.get_compiled_kernel()
-
-        kwargs = {}
-        for i, limit in enumerate(limits):
-            kwargs["limit_%d" % i] = limit
-
-        for arg in data_args:
-            kwargs[arg.name] = getattr(argument_provider, arg.name)
-
-        return cknl(queue, ntgt=len(limits[0]), **kwargs)
 
 # }}}
 

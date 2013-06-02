@@ -19,8 +19,8 @@ class ExpansionBase(object):
         return self.kernel.dimensions
 
     @property
-    def is_complex(self):
-        return self.kernel.is_complex
+    def is_complex_valued(self):
+        return self.kernel.is_complex_valued
 
     def prepare_loopy_kernel(self, loopy_knl):
         return self.kernel.prepare_loopy_kernel(loopy_knl)

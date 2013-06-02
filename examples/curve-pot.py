@@ -6,7 +6,6 @@ import matplotlib.pyplot as pt
 from pytools import Record
 
 
-
 def process_kernel(knl, what_operator):
     if what_operator == "S":
         pass
@@ -19,13 +18,15 @@ def process_kernel(knl, what_operator):
     elif what_operator == "D":
         from sumpy.kernel import SourceDerivative
         knl = SourceDerivative(knl)
-    elif what_operator == "S'":
-        from sumpy.kernel import DirectionalTargetDerivative
-        knl = DirectionalTargetDerivative(knl)
+    # DirectionalTargetDerivative (temporarily?) removed
+    # elif what_operator == "S'":
+    #     from sumpy.kernel import DirectionalTargetDerivative
+    #     knl = DirectionalTargetDerivative(knl)
     else:
         raise RuntimeError("unrecognized operator '%s'" % what_operator)
 
     return knl
+
 
 def draw_pot_figure(aspect_ratio,
         nsrc=100, novsmp=None, helmholtz_k=0,
@@ -46,7 +47,7 @@ def draw_pot_figure(aspect_ratio,
 
     # {{{ make plot targets
 
-    center = np.asarray([0,0], dtype=np.float64)
+    center = np.asarray([0, 0], dtype=np.float64)
     from sumpy.visualization import FieldPlotter
     fp = FieldPlotter(center, points=1000, extent=3)
 
@@ -113,7 +114,6 @@ def draw_pot_figure(aspect_ratio,
 
     curve_len = np.sum(ovsmp_weights * ovsmp_curve.speed)
     hovsmp = curve_len/novsmp
-    hnative = curve_len/nsrc
     center_dist = 5*hovsmp
 
     if force_center_side is not None:
@@ -123,7 +123,7 @@ def draw_pot_figure(aspect_ratio,
 
     centers = (native_curve.pos
             + center_side[:, np.newaxis]
-            *  center_dist*native_curve.normal)
+            * center_dist*native_curve.normal)
 
     #native_curve.plot()
     #pt.show()
@@ -142,13 +142,14 @@ def draw_pot_figure(aspect_ratio,
 
     # }}}
 
-    if 1:
+    if 0:
         # {{{ build matrix
 
         from fourier import make_fourier_interp_matrix
         fim = make_fourier_interp_matrix(novsmp, nsrc)
         from sumpy.tools import build_matrix
         from scipy.sparse.linalg import LinearOperator
+
         def apply_lpot(x):
             xovsmp = np.dot(fim, x)
             evt, (y,) = lpot(queue, native_curve.pos, ovsmp_curve.pos, centers,
@@ -188,7 +189,7 @@ def draw_pot_figure(aspect_ratio,
 
     # }}}
 
-    if 1:
+    if 0:
         # {{{ apply jump terms
 
         class JumpTermArgs(Record):
@@ -255,21 +256,20 @@ def draw_pot_figure(aspect_ratio,
             avg = np.average(np.abs(plotval_vol))
             outlier_flag = sum(
                     np.abs(plotval_vol-nb) for nb in neighbors) > avg
-            plotval_vol[outlier_flag] = sum(nb[outlier_flag] for nb in neighbors)/len(neighbors)
+            plotval_vol[outlier_flag] = sum(
+                    nb[outlier_flag] for nb in neighbors)/len(neighbors)
 
         fp.show_scalar_in_mayavi(scale*plotval_vol, maxval=1)
         from mayavi import mlab
         mlab.colorbar()
         if 1:
             mlab.points3d(
-                    native_curve.pos[:,0],
-                    native_curve.pos[:,1],
+                    native_curve.pos[:, 0],
+                    native_curve.pos[:, 1],
                     scale*plotval_c, scale_factor=0.02)
         mlab.show()
 
         # }}}
-
-
 
 
 if __name__ == "__main__":

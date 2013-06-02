@@ -111,7 +111,7 @@ class KernelComputation:
         if value_dtypes is None:
             value_dtypes = []
             for knl in kernels:
-                if knl.is_complex:
+                if knl.is_complex_valued:
                     value_dtypes.append(np.complex128)
                 else:
                     value_dtypes.append(np.float64)
