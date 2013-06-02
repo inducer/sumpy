@@ -114,6 +114,12 @@ class Kernel(object):
 class LaplaceKernel(Kernel):
     is_complex = False
 
+    def __repr__(self):
+        if self.dimensions is not None:
+            return "Laplace(%d)" % self.dimensions
+        else:
+            return "Laplace()"
+
     def fix_dimensions(self, dimensions):
         """Return a new :class:`Kernel` with :attr:`dimensions` set to
         *dimensions*.
@@ -149,6 +155,13 @@ class HelmholtzKernel(Kernel):
         Kernel.__init__(self, dimensions)
         self.helmholtz_k_name = helmholtz_k_name
         self.allow_evanescent = allow_evanescent
+
+    def __repr__(self):
+        if self.dimensions is not None:
+            return "Helmh(dim=%s, %s)" % (
+                    self.dimensions, self.helmholtz_k_name)
+        else:
+            return "Helmh(%s)" % (self.helmholtz_k_name)
 
     def fix_dimensions(self, dimensions):
         """Return a new :class:`Kernel` with :attr:`dimensions` set to
@@ -235,8 +248,12 @@ def normalize_kernel(kernel):
     if not isinstance(kernel, Kernel):
         if kernel == 0:
             kernel = LaplaceKernel()
+        elif isinstance(kernel, str):
+            kernel = HelmholtzKernel(None, kernel)
         else:
-            kernel = HelmholtzKernel(kernel)
+            raise ValueError("Only Kernel instances, 0 (for Laplace) and "
+                    "variable names (strings) "
+                    "for the Helmholtz parameter are allowed as kernels.")
 
     return kernel
 
