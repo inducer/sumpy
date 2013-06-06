@@ -34,6 +34,37 @@ import pymbolic.primitives as prim
 
 from pytools import memoize_method
 
+from pymbolic.sympy_interface import (
+        SympyToPymbolicMapper as SympyToPymbolicMapperBase)
+
+import logging
+logger = logging.getLogger(__name__)
+
+
+# {{{ sympy -> pymbolic mapper
+
+class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
+    def __init__(self, assignments):
+        self.assignments = assignments
+        self.derivative_cse_names = set()
+
+    def map_Derivative(self, expr):
+        # Sympy has picked up the habit of picking arguments out of derivatives
+        # and pronounce them common subexpressions. Me no like. Undo it, so
+        # that the bessel substitutor further down can do its job.
+
+        if expr.expr.is_Symbol:
+            # These will get removed, because loopy wont' be able to deal
+            # with them--they contain undefined placeholder symbols.
+            self.derivative_cse_names.add(expr.expr.name)
+
+        return prim.Derivative(self.rec(
+            expr.expr.subs(self.assignments)),
+            tuple(v.name for v in expr.variables))
+
+
+# }}}
+
 
 # {{{ bessel handling
 
@@ -64,6 +95,12 @@ hank1_01_result_dtype = cl.tools.get_or_register_dtype("hank1_01_result",
 
 
 def bessel_mangler(identifier, arg_dtypes):
+    """A function "mangler" to make Bessel functions
+    digestible for :mod:`loopy`.
+
+    See argument *function_manglers* to :func:`loopy.make_kernel`.
+    """
+
     if identifier == "hank1_01":
         return (np.dtype(hank1_01_result_dtype),
                 identifier, (np.dtype(np.complex128),))
@@ -202,6 +239,8 @@ class BesselSubstitutor(IdentityMapper):
 # }}}
 
 
+# {{{ power rewriter
+
 class PowerRewriter(IdentityMapper):
     def map_power(self, expr):
         exp = expr.exponent
@@ -245,8 +284,17 @@ class PowerRewriter(IdentityMapper):
 
         return IdentityMapper.map_power(self, expr)
 
+# }}}
+
+
+# {{{ fraction killer
 
 class FractionKiller(IdentityMapper):
+    """Kills fractions where the numerator is evenly divisible by the
+    denominator.
+
+    (Why does :mod:`sympy` even produce these?)
+    """
     def map_quotient(self, expr):
         num = expr.numerator
         denom = expr.denominator
@@ -258,11 +306,17 @@ class FractionKiller(IdentityMapper):
 
         return IdentityMapper.map_quotient(self, expr)
 
+# }}}
+
+
+# {{{ vector component rewriter
 
 INDEXED_VAR_RE = re.compile("^([a-zA-Z_]+)([0-9]+)$")
 
 
 class VectorComponentRewriter(IdentityMapper):
+    """For names in name_whitelist, turn ``a3`` into ``a[3]``."""
+
     def __init__(self, name_whitelist=set()):
         self.name_whitelist = name_whitelist
 
@@ -278,6 +332,10 @@ class VectorComponentRewriter(IdentityMapper):
         else:
             return IdentityMapper.map_variable(self, expr)
 
+# }}}
+
+
+# {{{ sum sign grouper
 
 class SumSignGrouper(IdentityMapper):
     """Anti-cancellation cargo-cultism."""
@@ -306,6 +364,8 @@ class SumSignGrouper(IdentityMapper):
 
         return prim.Sum(tuple(first_group+second_group))
 
+# }}}
+
 
 class MathConstantRewriter(IdentityMapper):
     def map_variable(self, expr):
@@ -329,10 +389,15 @@ class ComplexConstantSizer(IdentityMapper):
 
 def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
         complex_dtype=None):
+    logger.info("loopy instruction generation: start")
+
     # convert from sympy
-    from pymbolic.sympy_interface import SympyToPymbolicMapper
-    sympy_conv = SympyToPymbolicMapper()
+    sympy_conv = SympyToPymbolicMapper(assignments)
     assignments = [(name, sympy_conv(expr)) for name, expr in assignments]
+    assignments = [
+            (name, expr) for name, expr in assignments
+            if name not in sympy_conv.derivative_cse_names
+            ]
 
     bdr = BesselDerivativeReplacer()
     assignments = [(name, bdr(expr)) for name, expr in assignments]
@@ -347,29 +412,36 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
     pwr = PowerRewriter()
     ssg = SumSignGrouper()
     fck = FractionKiller()
-    if complex_dtype is not None:
-        ccs = ComplexConstantSizer(np.dtype(complex_dtype))
-    else:
-        ccs = None
 
-    def convert_expr(expr):
+    if 0:
+        if complex_dtype is not None:
+            ccs = ComplexConstantSizer(np.dtype(complex_dtype))
+        else:
+            ccs = None
+
+    def convert_expr(name, expr):
+        logger.debug("generate expression for: %s" % name)
         expr = bdr(expr)
         expr = bessel_sub(expr)
         expr = vcr(expr)
         expr = pwr(expr)
         expr = fck(expr)
         expr = ssg(expr)
-        if ccs is not None:
-            expr = ccs(expr)
+        if 0:
+            if ccs is not None:
+                expr = ccs(expr)
         for m in pymbolic_expr_maps:
             expr = m(expr)
         return expr
 
     import loopy as lp
-    return [
+    result = [
             lp.Instruction(id=None,
-                assignee=name, expression=convert_expr(expr),
+                assignee=name, expression=convert_expr(name, expr),
                 temp_var_type=lp.auto)
             for name, expr in assignments]
+
+    logger.info("loopy instruction generation: done")
+    return result
 
 # vim: fdm=marker

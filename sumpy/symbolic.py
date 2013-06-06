@@ -23,11 +23,8 @@ THE SOFTWARE.
 """
 
 
-
-
 import sympy as sp
-
-
+from pymbolic.mapper import IdentityMapper as IdentityMapperBase
 
 
 # {{{ trivial assignment elimination
@@ -44,6 +41,7 @@ def make_one_step_subst(assignments):
 
     return result
 
+
 def is_assignment_nontrivial(name, value):
     if value.is_Number:
         return False
@@ -52,12 +50,12 @@ def is_assignment_nontrivial(name, value):
     elif (isinstance(value, sp.Mul)
             and len(value.args) == 2
             and sum(1 for arg in value.args if arg.is_Number) == 1
-            and sum(1 for arg in value.args if isinstance(arg, sp.Symbol)) == 1
-            ):
+            and sum(1 for arg in value.args if isinstance(arg, sp.Symbol)) == 1):
         # const*var: not good enough
         return False
 
     return True
+
 
 def kill_trivial_assignments(assignments, retain_names=set()):
     approved_assignments = []
@@ -77,17 +75,17 @@ def kill_trivial_assignments(assignments, retain_names=set()):
 
 # }}}
 
+
 # {{{ debugging of sympy CSE via Maxima
 
-from pymbolic.mapper import IdentityMapper as PymbolicIdentityMapper
-
-class _DerivativeKiller(PymbolicIdentityMapper):
+class _DerivativeKiller(IdentityMapperBase):
     def map_derivative(self, expr):
         from pymbolic import var
         return var("d_"+"_".join(expr.variables))(expr.child)
 
     def map_substitution(self, expr):
         return self.rec(expr.child)
+
 
 def _get_assignments_in_maxima(assignments, prefix=""):
     my_variable_names = set(assignments.iterkeys())
@@ -124,6 +122,7 @@ def _get_assignments_in_maxima(assignments, prefix=""):
 
     return "\n".join(result)
 
+
 def checked_cse(exprs, symbols=None):
     kwargs = {}
     if symbols is not None:
@@ -157,16 +156,13 @@ def checked_cse(exprs, symbols=None):
 # }}}
 
 
-
-
 def sympy_real_norm_2(x):
-    return sp.sqrt((x.T*x)[0,0])
+    return sp.sqrt((x.T*x)[0, 0])
+
 
 def make_sym_vector(name, components):
     return sp.Matrix(
             [sp.Symbol("%s%d" % (name, i)) for i in range(components)])
-
-
 
 
 def vector_subs(expr, old, new):
@@ -175,7 +171,6 @@ def vector_subs(expr, old, new):
         result = result.subs(old_i, new_i)
 
     return result
-
 
 
 def find_power_of(base, prod):

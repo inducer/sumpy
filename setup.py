@@ -19,25 +19,32 @@ setup(name="sumpy",
       Code-generating FMM etc.
       """,
       classifiers=[
-        'Development Status :: 3 - Alpha',
-        'Intended Audience :: Developers',
-        'Intended Audience :: Other Audience',
-        'Intended Audience :: Science/Research',
-        'License :: OSI Approved :: MIT License',
-        'Natural Language :: English',
-        'Programming Language :: Python',
-        'Topic :: Scientific/Engineering',
-        'Topic :: Scientific/Engineering :: Information Analysis',
-        'Topic :: Scientific/Engineering :: Mathematics',
-        'Topic :: Scientific/Engineering :: Visualization',
-        'Topic :: Software Development :: Libraries',
-        'Topic :: Utilities',
-        ],
+          'Development Status :: 3 - Alpha',
+          'Intended Audience :: Developers',
+          'Intended Audience :: Other Audience',
+          'Intended Audience :: Science/Research',
+          'License :: OSI Approved :: MIT License',
+          'Natural Language :: English',
+          'Programming Language :: Python',
+          'Topic :: Scientific/Engineering',
+          'Topic :: Scientific/Engineering :: Information Analysis',
+          'Topic :: Scientific/Engineering :: Mathematics',
+          'Topic :: Scientific/Engineering :: Visualization',
+          'Topic :: Software Development :: Libraries',
+          'Topic :: Utilities',
+          ],
 
       author="Andreas Kloeckner",
       author_email="inform@tiker.net",
-      license = "MIT",
+      license="MIT",
       packages=["sumpy", "sumpy.expansion"],
+
+      install_requires=[
+          "loo.py>=2013.1beta",
+          "pytools>=2013.3",
+          "pytest>=2.3",
+          ],
+
 
       # 2to3 invocation
       cmdclass={'build_py': build_py})

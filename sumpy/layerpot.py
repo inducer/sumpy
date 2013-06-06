@@ -31,6 +31,9 @@ from pymbolic import parse, var
 
 from sumpy.tools import KernelComputation
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 def stringify_expn_index(i):
     if isinstance(i, tuple):
@@ -71,7 +74,7 @@ class LayerPotentialBase(KernelComputation):
                 name, options, device)
 
         from pytools import single_valued
-        self.dimensions = single_valued(knl.dimensions for knl in self.expansions)
+        self.dim = single_valued(knl.dim for knl in self.expansions)
 
     @property
     def expansions(self):
@@ -81,14 +84,19 @@ class LayerPotentialBase(KernelComputation):
     def get_kernel(self):
         from sumpy.symbolic import make_sym_vector
 
-        avec = make_sym_vector("a", self.dimensions)
-        bvec = make_sym_vector("b", self.dimensions)
+        avec = make_sym_vector("a", self.dim)
+        bvec = make_sym_vector("b", self.dim)
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
 
+        logger.info("expand kernels: start")
+
         result_names = [expand(i, sac, expn, avec, bvec)
                 for i, expn in enumerate(self.expansions)]
+
+        logger.info("expand kernels: done")
+
         sac.run_global_cse()
 
         from sumpy.symbolic import kill_trivial_assignments
@@ -101,8 +109,7 @@ class LayerPotentialBase(KernelComputation):
         loopy_insns = to_loopy_insns(assignments,
                 vector_names=set(["a", "b"]),
                 pymbolic_expr_maps=[
-                    expn.kernel.transform_to_code
-                    for expn in self.expansions],
+                    expn.kernel.transform_to_code for expn in self.expansions],
                 complex_dtype=np.complex128  # FIXME
                 )
 
@@ -116,22 +123,22 @@ class LayerPotentialBase(KernelComputation):
         arguments = (
                 [
                     lp.GlobalArg("src", geo_dtype,
-                        shape=("nsrc", self.dimensions), order="C"),
+                        shape=(self.dim, "nsrc"), order="C"),
                     lp.GlobalArg("tgt", geo_dtype,
-                        shape=("ntgt", self.dimensions), order="C"),
+                        shape=(self.dim, "ntgt"), order="C"),
                     lp.GlobalArg("center", geo_dtype,
-                        shape=("ntgt", self.dimensions), order="C"),
+                        shape=(self.dim, "ntgt"), order="C"),
                     lp.ValueArg("nsrc", np.int32),
                     lp.ValueArg("ntgt", np.int32),
                 ] + self.get_input_and_output_arguments()
                 + self.gather_kernel_arguments())
 
         loopy_knl = lp.make_kernel(self.device,
-                "[nsrc,ntgt] -> {[isrc,itgt,idim]: 0<=itgt<ntgt and 0<=isrc<nsrc "
-                "and 0<=idim<%d}" % self.dimensions,
+                "{[isrc,itgt,idim]: 0<=itgt<ntgt and 0<=isrc<nsrc "
+                "and 0<=idim<%d}" % self.dim,
                 [
-                "<> a[idim] = center[itgt,idim] - src[isrc,idim] {id=compute_a}",
-                "<> b[idim] = tgt[itgt,idim] - center[itgt,idim] {id=compute_b}",
+                "<> a[idim] = center[idim,itgt] - src[idim,isrc] {id=compute_a}",
+                "<> b[idim] = tgt[idim,itgt] - center[idim,itgt] {id=compute_b}",
                 ]+self.get_kernel_scaling_assignments()+loopy_insns+[
                     lp.Instruction(id=None,
                         assignee="pair_result_%d" % i, expression=expr,
@@ -145,10 +152,13 @@ class LayerPotentialBase(KernelComputation):
                 )
 
         for where in ["compute_a", "compute_b"]:
-            loopy_knl = lp.duplicate_inames(loopy_knl, "idim", where)
+            loopy_knl = lp.duplicate_inames(loopy_knl, "idim", where,
+                    tags={"idim": "unr"})
 
         for expn in self.expansions:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+
+        loopy_knl = lp.tag_data_axis(loopy_knl, "center", 0, "sep")
 
         return loopy_knl
 
@@ -344,11 +354,11 @@ class _JumpTermSymbolicArgumentProvider(object):
     resulting computational kernel.
     """
 
-    def __init__(self, data_args, dimensions, density_var_name,
+    def __init__(self, data_args, dim, density_var_name,
             density_dtype, geometry_dtype):
         # dictionary of loopy arguments
         self.arguments = data_args
-        self.dimensions = dimensions
+        self.dim = dim
         self.density_var_name = density_var_name
         self.density_dtype = density_dtype
         self.geometry_dtype = geometry_dtype
@@ -382,22 +392,22 @@ class _JumpTermSymbolicArgumentProvider(object):
     def normal(self):
         self.arguments["normal"] = \
                 lp.GlobalArg("normal", self.geometry_dtype,
-                        shape=("ntgt", self.dimensions), order="C")
+                        shape=("ntgt", self.dim), order="C")
         from pytools.obj_array import make_obj_array
         return make_obj_array([
             parse("normal[itgt, %d]" % i)
-            for i in range(self.dimensions)])
+            for i in range(self.dim)])
 
     @property
     @memoize_method
     def tangent(self):
         self.arguments["tangent"] = \
                 lp.GlobalArg("tangent", self.geometry_dtype,
-                        shape=("ntgt", self.dimensions), order="C")
+                        shape=("ntgt", self.dim), order="C")
         from pytools.obj_array import make_obj_array
         return make_obj_array([
             parse("tangent[itgt, %d]" % i)
-            for i in range(self.dimensions)])
+            for i in range(self.dim)])
 
     @property
     @memoize_method
@@ -413,24 +423,24 @@ class _JumpTermSymbolicArgumentProvider(object):
     def src_derivative_dir(self):
         self.arguments["src_derivative_dir"] = \
                 lp.GlobalArg("src_derivative_dir",
-                        self.geometry_dtype, shape=("ntgt", self.dimensions),
+                        self.geometry_dtype, shape=("ntgt", self.dim),
                         order="C")
         from pytools.obj_array import make_obj_array
         return make_obj_array([
             parse("src_derivative_dir[itgt, %d]" % i)
-            for i in range(self.dimensions)])
+            for i in range(self.dim)])
 
     @property
     @memoize_method
     def tgt_derivative_dir(self):
         self.arguments["tgt_derivative_dir"] = \
                 lp.GlobalArg("tgt_derivative_dir",
-                        self.geometry_dtype, shape=("ntgt", self.dimensions),
+                        self.geometry_dtype, shape=("ntgt", self.dim),
                         order="C")
         from pytools.obj_array import make_obj_array
         return make_obj_array([
             parse("tgt_derivative_dir[itgt, %d]" % i)
-            for i in range(self.dimensions)])
+            for i in range(self.dim)])
 
 # }}}
 

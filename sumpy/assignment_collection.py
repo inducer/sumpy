@@ -25,8 +25,8 @@ THE SOFTWARE.
 
 import sympy as sp
 
-
-
+import logging
+logger = logging.getLogger(__name__)
 
 
 def _generate_unique_possibilities(prefix):
@@ -38,8 +38,6 @@ def _generate_unique_possibilities(prefix):
         try_num += 1
 
 
-
-
 class _SymbolGenerator:
     def __init__(self, taken_symbols):
         self.taken_symbols = taken_symbols
@@ -47,12 +45,10 @@ class _SymbolGenerator:
 
     def __call__(self, base="expr"):
         for id_str in _generate_unique_possibilities(base):
-            if id_str not in self.taken_symbols and id_str not in self.generated_names:
+            if id_str not in self.taken_symbols \
+                    and id_str not in self.generated_names:
                 self.generated_names.add(id_str)
                 yield sp.Symbol(id_str)
-
-
-
 
 
 class SymbolicAssignmentCollection(object):
@@ -86,6 +82,11 @@ class SymbolicAssignmentCollection(object):
         self.all_dependencies_cache = {}
 
         self.user_symbols = set()
+
+    def __str__(self):
+        return "\n".join(
+            "%s <- %s" % (name, expr)
+            for name, expr in self.assignments.iteritems())
 
     def get_all_dependencies(self, var_name):
         """Including recursive dependencies."""
@@ -135,6 +136,8 @@ class SymbolicAssignmentCollection(object):
         return new_name
 
     def run_global_cse(self, extra_exprs=[]):
+        logger.info("common subexpression elimination: start")
+
         assign_names = list(self.assignments)
         assign_exprs = [self.assignments[name] for name in assign_names]
         new_assignments, new_exprs = sp.cse(assign_exprs + extra_exprs,
@@ -144,15 +147,18 @@ class SymbolicAssignmentCollection(object):
         new_extra_exprs = new_exprs[len(assign_exprs):]
 
         for name, new_expr in zip(assign_names, new_assign_exprs):
-           self.assignments[name] = new_expr
+            self.assignments[name] = new_expr
 
         for name, value in new_assignments:
             assert isinstance(name, sp.Symbol)
             self.add_assignment(name.name, value)
 
+        logger.info("common subexpression elimination: done")
         return new_extra_exprs
 
     def kill_trivial_assignments(self, exprs):
+        logger.debug("kill trivial assignments: start")
+
         approved_assignments = []
         rejected_assignments = []
 
@@ -173,10 +179,10 @@ class SymbolicAssignmentCollection(object):
 
         exprs = [expr.subs(unsubst_rej) for expr in exprs]
         self.assignments = new_assignments
+
+        logger.info("kill trivial assignments: done")
+
         return exprs
-
-
-
 
 
 # vim: fdm=marker

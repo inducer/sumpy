@@ -35,8 +35,8 @@ class ExpansionBase(object):
     # {{{ propagate kernel interface
 
     @property
-    def dimensions(self):
-        return self.kernel.dimensions
+    def dim(self):
+        return self.kernel.dim
 
     @property
     def is_complex_valued(self):
@@ -85,7 +85,7 @@ class VolumeTaylorExpansionBase(object):
                 generate_nonnegative_integer_tuples_summing_to_at_most
                 as gnitstam)
 
-        return sorted(gnitstam(self.order, self.kernel.dimensions), key=sum)
+        return sorted(gnitstam(self.order, self.kernel.dim), key=sum)
 
         return range(self.order+1)
 

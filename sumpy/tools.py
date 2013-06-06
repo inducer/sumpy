@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 
 import numpy as np
+from pytools import Record
 
 
 # {{{ multi_index helpers
@@ -83,6 +84,8 @@ def vector_to_device(queue, vec):
 
     return with_object_array_or_scalar(to_dev, vec)
 
+
+# {{{  KernelComputation
 
 class KernelComputation:
     """Common input processing for kernel computations."""
@@ -193,3 +196,8 @@ class KernelComputation:
                     temp_var_type=dtype)
                 for i, (kernel, dtype) in enumerate(
                     zip(self.kernels, self.value_dtypes))]
+
+# }}}
+
+
+# vim: fdm=marker

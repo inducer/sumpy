@@ -50,12 +50,12 @@ class P2P(KernelComputation):
         self.exclude_self = exclude_self
 
         from pytools import single_valued
-        self.dimensions = single_valued(knl.dimensions for knl in self.kernels)
+        self.dim = single_valued(knl.dim for knl in self.kernels)
 
     @memoize_method
     def get_kernel(self):
         from sumpy.symbolic import make_sym_vector
-        dvec = make_sym_vector("d", self.dimensions)
+        dvec = make_sym_vector("d", self.dim)
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
@@ -86,9 +86,9 @@ class P2P(KernelComputation):
         arguments = (
                 [
                     lp.GlobalArg("src", self.geometry_dtype,
-                        shape=(self.dimensions, "nsrc"), order="C"),
+                        shape=(self.dim, "nsrc"), order="C"),
                     lp.GlobalArg("tgt", self.geometry_dtype,
-                        shape=(self.dimensions, "ntgt"), order="C"),
+                        shape=(self.dim, "ntgt"), order="C"),
                     lp.ValueArg("nsrc", np.int32),
                     lp.ValueArg("ntgt", np.int32),
                 ]+[
@@ -108,8 +108,8 @@ class P2P(KernelComputation):
                     for expr in exprs]
 
         loopy_knl = lp.make_kernel(self.device,
-                "[nsrc,ntgt] -> {[isrc,itgt,idim]: 0<=itgt<ntgt and 0<=isrc<nsrc "
-                "and 0<=idim<%d}" % self.dimensions,
+                "{[isrc,itgt,idim]: 0<=itgt<ntgt and 0<=isrc<nsrc "
+                "and 0<=idim<%d}" % self.dim,
                 self.get_kernel_scaling_assignments()
                 + loopy_insns
                 + [
