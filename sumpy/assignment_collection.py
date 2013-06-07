@@ -59,22 +59,54 @@ class _SymbolGenerator:
 
 # {{{ CSE caching
 
+def _map_cse_result(mapper, cse_result):
+    replacements, reduced_exprs = cse_result
+
+    new_replacements = [
+            (sym, mapper(repl))
+            for sym, repl in replacements]
+    new_reduced_exprs = [
+            mapper(expr)
+            for expr in reduced_exprs]
+
+    return new_replacements, new_reduced_exprs
+
+
 def cached_cse(exprs, symbols):
     assert isinstance(symbols, _SymbolGenerator)
 
     from pytools.diskdict import get_disk_dict
     cache_dict = get_disk_dict("sumpy-cse-cache", version=1)
 
-    key = (tuple(exprs), frozenset(symbols.taken_symbols),
+    # sympy expressions don't pickle properly :(
+    # (as of Jun 7, 2013)
+    # https://code.google.com/p/sympy/issues/detail?id=1198
+
+    from pymbolic.sympy_interface import (
+            SympyToPymbolicMapper,
+            PymbolicToSympyMapper)
+
+    s2p = SympyToPymbolicMapper()
+    p2s = PymbolicToSympyMapper()
+
+    key_exprs = tuple(s2p(expr) for expr in exprs)
+
+    key = (key_exprs, frozenset(symbols.taken_symbols),
             frozenset(symbols.generated_names))
 
     try:
-        return cache_dict[key]
-    except:
+        result = cache_dict[key]
+    except KeyError:
         result = sp.cse(exprs, symbols)
-        cache_dict[key] = result
+        cache_dict[key] = _map_cse_result(s2p, result)
         return result
+    else:
+        return _map_cse_result(p2s, result)
 
+# }}}
+
+
+# {{{ collection of assignments
 
 class SymbolicAssignmentCollection(object):
     """Represents a collection of assignments::
@@ -167,8 +199,7 @@ class SymbolicAssignmentCollection(object):
         assign_exprs = [self.assignments[name] for name in assign_names]
 
         # FIXME: Switch to cached_cse above once this is fixed:
-        # https://code.google.com/p/sympy/issues/detail?id=3870
-        new_assignments, new_exprs = sp.cse(assign_exprs + extra_exprs,
+        new_assignments, new_exprs = cached_cse(assign_exprs + extra_exprs,
                 symbols=self.symbol_generator)
 
         new_assign_exprs = new_exprs[:len(assign_exprs)]
@@ -212,5 +243,6 @@ class SymbolicAssignmentCollection(object):
 
         return exprs
 
+# }}}
 
 # vim: fdm=marker
