@@ -90,12 +90,12 @@ class LayerPotentialBase(KernelComputation):
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
 
-        logger.info("expand kernels: start")
+        logger.info("compute expansion expressions: start")
 
         result_names = [expand(i, sac, expn, avec, bvec)
                 for i, expn in enumerate(self.expansions)]
 
-        logger.info("expand kernels: done")
+        logger.info("compute expansion expressions: done")
 
         sac.run_global_cse()
 

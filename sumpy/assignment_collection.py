@@ -48,7 +48,32 @@ class _SymbolGenerator:
             if id_str not in self.taken_symbols \
                     and id_str not in self.generated_names:
                 self.generated_names.add(id_str)
-                yield sp.Symbol(id_str)
+                return sp.Symbol(id_str)
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        return self()
+
+
+# {{{ CSE caching
+
+def cached_cse(exprs, symbols):
+    assert isinstance(symbols, _SymbolGenerator)
+
+    from pytools.diskdict import get_disk_dict
+    cache_dict = get_disk_dict("sumpy-cse-cache", version=1)
+
+    key = (tuple(exprs), frozenset(symbols.taken_symbols),
+            frozenset(symbols.generated_names))
+
+    try:
+        return cache_dict[key]
+    except:
+        result = sp.cse(exprs, symbols)
+        cache_dict[key] = result
+        return result
 
 
 class SymbolicAssignmentCollection(object):
@@ -78,7 +103,7 @@ class SymbolicAssignmentCollection(object):
 
         self.assignments = assignments
 
-        self.symbol_generator = _SymbolGenerator(self.assignments)()
+        self.symbol_generator = _SymbolGenerator(self.assignments)
         self.all_dependencies_cache = {}
 
         self.user_symbols = set()
@@ -140,6 +165,9 @@ class SymbolicAssignmentCollection(object):
 
         assign_names = list(self.assignments)
         assign_exprs = [self.assignments[name] for name in assign_names]
+
+        # FIXME: Switch to cached_cse above once this is fixed:
+        # https://code.google.com/p/sympy/issues/detail?id=3870
         new_assignments, new_exprs = sp.cse(assign_exprs + extra_exprs,
                 symbols=self.symbol_generator)
 

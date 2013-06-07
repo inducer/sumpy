@@ -343,17 +343,17 @@ class AxisTargetDerivative(DerivativeBase):
     mapper_method = "map_axis_target_derivative"
 
 
-class _VectorIndexPrefixer(IdentityMapper):
-    def __init__(self, vec_name, prefix):
+class _VectorIndexAdder(IdentityMapper):
+    def __init__(self, vec_name, additional_indices):
         self.vec_name = vec_name
-        self.prefix = prefix
+        self.additional_indices = additional_indices
 
     def map_subscript(self, expr):
         from pymbolic.primitives import CommonSubexpression
         if expr.aggregate.name == self.vec_name \
                 and isinstance(expr.index, int):
             return CommonSubexpression(expr.aggregate[
-                    self.prefix + (expr.index,)])
+                    (expr.index,) + self.additional_indices])
         else:
             return IdentityMapper.map_subscript(self, expr)
 
@@ -389,7 +389,8 @@ class DirectionalDerivative(DerivativeBase):
 
     def get_args(self):
         return self.inner_kernel.get_args() + [
-            lp.GlobalArg(self.dir_vec_name, None, shape=lp.auto, order="C")]
+            lp.GlobalArg(self.dir_vec_name, None, shape=lp.auto,
+                dim_tags="sep,C")]
 
 
 class DirectionalTargetDerivative(DirectionalDerivative):
@@ -399,7 +400,7 @@ class DirectionalTargetDerivative(DirectionalDerivative):
         from sumpy.codegen import VectorComponentRewriter
         vcr = VectorComponentRewriter([self.dir_vec_name])
         from pymbolic.primitives import Variable
-        return _VectorIndexPrefixer(self.dir_vec_name, (Variable("itgt"),))(
+        return _VectorIndexAdder(self.dir_vec_name, (Variable("itgt"),))(
                 vcr(self.inner_kernel.transform_to_code(expr)))
 
     def postprocess_at_target(self, expr, bvec):
@@ -425,7 +426,7 @@ class DirectionalSourceDerivative(DirectionalDerivative):
         from sumpy.codegen import VectorComponentRewriter
         vcr = VectorComponentRewriter([self.dir_vec_name])
         from pymbolic.primitives import Variable
-        return _VectorIndexPrefixer(self.dir_vec_name, (Variable("isrc"),))(
+        return _VectorIndexAdder(self.dir_vec_name, (Variable("isrc"),))(
                 vcr(self.inner_kernel.transform_to_code(expr)))
 
     def postprocess_at_target(self, expr, bvec):
