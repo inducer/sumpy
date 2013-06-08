@@ -58,39 +58,32 @@ def separate_by_real_and_imag(data, real_only):
 
 
 class FieldPlotter:
-    def __init__(self, center, extent=1, points=1000):
+    def __init__(self, center, extent=1, npoints=1000):
         center = np.asarray(center)
         self.dimensions, = dim, = center.shape
         self.a = a = center-extent*0.5
         self.b = b = center+extent*0.5
 
-        if not isinstance(points, tuple):
-            points = dim*(points,)
+        if not isinstance(npoints, tuple):
+            npoints = dim*(npoints,)
 
         for i in range(dim):
-            if points[i] == 1:
+            if npoints[i] == 1:
                 a[i] = center[i]
 
         mgrid_index = tuple(
-                slice(a[i], b[i], 1j*points[i])
+                slice(a[i], b[i], 1j*npoints[i])
                 for i in range(dim))
 
         mgrid = np.mgrid[mgrid_index]
-        self.nd_points_axis_first = mgrid.transpose(
-                *((0,)+tuple(range(1, dim+1))[::-1]))
 
-        # (point x idx, point y idx, ..., axis)
-        self.nd_points = mgrid.transpose(
-                *(tuple(range(1, dim+1))+(0,)))
+        # (axis, point x idx, point y idx, ...)
+        self.nd_points = mgrid
 
-        self.points = self.nd_points.reshape(-1, dim).copy()
+        self.points = self.nd_points.reshape(dim, -1).copy()
 
         from pytools import product
-        self.npoints = product(points)
-
-    def get_target(self):
-        from hellskitchen.discretization.target import PointsTarget
-        return PointsTarget(self.points)
+        self.npoints = product(npoints)
 
     def show_scalar_in_matplotlib(self, fld, maxval=None,
             func_name="imshow", **kwargs):
@@ -99,9 +92,7 @@ class FieldPlotter:
                     "matplotlib plotting requires 2D geometry")
 
         if len(fld.shape) == 1:
-            fld = fld.reshape(self.nd_points.shape[:-1])
-
-        fld = fld[:, ::-1]
+            fld = fld.reshape(self.nd_points.shape[1:])
 
         if maxval is not None:
             fld[fld > maxval] = maxval
@@ -124,7 +115,7 @@ class FieldPlotter:
         c = self.points
 
         from mayavi import mlab
-        mlab.quiver3d(c[:, 0], c[:, 1], c[:, 2], fld[0], fld[1], fld[2],
+        mlab.quiver3d(c[0], c[1], c[2], fld[0], fld[1], fld[2],
                 **kwargs)
 
         if do_show:
@@ -141,12 +132,16 @@ class FieldPlotter:
             fld[fld < -maxval] = -maxval
 
         if len(fld.shape) == 1:
-            fld = fld.reshape(self.nd_points.shape[:-1])
+            fld = fld.reshape(self.nd_points.shape[1:])
 
-        fld = fld[:, ::-1]
+        print self.nd_points[0].shape
+        print self.nd_points[1].shape
+        print fld.shape
+
+        print kwargs
 
         from mayavi import mlab
-        mlab.surf(self.nd_points[:, :, 0], self.nd_points[:, :, 1], fld, **kwargs)
+        mlab.surf(self.nd_points[0], self.nd_points[1], fld, **kwargs)
 
 
 
