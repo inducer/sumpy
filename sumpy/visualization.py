@@ -23,11 +23,7 @@ THE SOFTWARE.
 """
 
 
-
-
 import numpy as np
-
-
 
 
 def separate_by_real_and_imag(data, real_only):
@@ -43,10 +39,13 @@ def separate_by_real_and_imag(data, real_only):
 
             if field[0].dtype.kind == "c":
                 if real_only:
-                    yield (name, with_object_array_or_scalar(oarray_real_copy, field))
+                    yield (name,
+                            with_object_array_or_scalar(oarray_real_copy, field))
                 else:
-                    yield (name+"_r", with_object_array_or_scalar(oarray_real_copy, field))
-                    yield (name+"_i", with_object_array_or_scalar(oarray_imag_copy, field))
+                    yield (name+"_r",
+                            with_object_array_or_scalar(oarray_real_copy, field))
+                    yield (name+"_i",
+                            with_object_array_or_scalar(oarray_imag_copy, field))
             else:
                 yield (name, field)
         else:
@@ -56,8 +55,6 @@ def separate_by_real_and_imag(data, real_only):
                 yield (name+"_i", field.imag.copy())
             else:
                 yield (name, field)
-
-
 
 
 class FieldPlotter:
@@ -107,8 +104,8 @@ class FieldPlotter:
         fld = fld[:, ::-1]
 
         if maxval is not None:
-            fld[fld>maxval] = maxval
-            fld[fld<-maxval] = -maxval
+            fld[fld > maxval] = maxval
+            fld[fld < -maxval] = -maxval
 
         kwargs["extent"] = (
                 # (left, right, bottom, top)
@@ -127,7 +124,7 @@ class FieldPlotter:
         c = self.points
 
         from mayavi import mlab
-        mlab.quiver3d(c[:,0], c[:,1], c[:,2], fld[0], fld[1], fld[2],
+        mlab.quiver3d(c[:, 0], c[:, 1], c[:, 2], fld[0], fld[1], fld[2],
                 **kwargs)
 
         if do_show:
@@ -140,8 +137,8 @@ class FieldPlotter:
 
     def show_scalar_in_mayavi(self, fld, maxval=None, **kwargs):
         if maxval is not None:
-            fld[fld>maxval] = maxval
-            fld[fld<-maxval] = -maxval
+            fld[fld > maxval] = maxval
+            fld[fld < -maxval] = -maxval
 
         if len(fld.shape) == 1:
             fld = fld.reshape(self.nd_points.shape[:-1])
@@ -149,7 +146,7 @@ class FieldPlotter:
         fld = fld[:, ::-1]
 
         from mayavi import mlab
-        mlab.surf(self.nd_points[:,:,0], self.nd_points[:,:,1], fld, **kwargs)
+        mlab.surf(self.nd_points[:, :, 0], self.nd_points[:, :, 1], fld, **kwargs)
 
 
 
