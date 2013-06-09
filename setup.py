@@ -13,7 +13,7 @@ except ImportError:
     from distutils.command.build_py import build_py
 
 setup(name="sumpy",
-      version="2011.1",
+      version="2013.1",
       description="Fast summation in Python",
       long_description="""
       Code-generating FMM etc.
