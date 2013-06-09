@@ -43,6 +43,8 @@ setup(name="sumpy",
           "loo.py>=2013.1beta",
           "pytools>=2013.3",
           "pytest>=2.3",
+
+          "sympy>=0.7.2",
           ],
 
 
