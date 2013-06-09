@@ -85,7 +85,7 @@ class FieldPlotter:
         from pytools import product
         self.npoints = product(npoints)
 
-    def show_scalar_in_matplotlib(self, fld, maxval=None,
+    def show_scalar_in_matplotlib(self, fld, max_val=None,
             func_name="imshow", **kwargs):
         if len(self.a) != 2:
             raise RuntimeError(
@@ -94,9 +94,9 @@ class FieldPlotter:
         if len(fld.shape) == 1:
             fld = fld.reshape(self.nd_points.shape[1:])
 
-        if maxval is not None:
-            fld[fld > maxval] = maxval
-            fld[fld < -maxval] = -maxval
+        if max_val is not None:
+            fld[fld > max_val] = max_val
+            fld[fld < -max_val] = -max_val
 
         kwargs["extent"] = (
                 # (left, right, bottom, top)
@@ -126,19 +126,13 @@ class FieldPlotter:
         write_structured_grid(file_name, self.nd_points_axis_first,
                 point_data=list(separate_by_real_and_imag(data, real_only)))
 
-    def show_scalar_in_mayavi(self, fld, maxval=None, **kwargs):
-        if maxval is not None:
-            fld[fld > maxval] = maxval
-            fld[fld < -maxval] = -maxval
+    def show_scalar_in_mayavi(self, fld, max_val=None, **kwargs):
+        if max_val is not None:
+            fld[fld > max_val] = max_val
+            fld[fld < -max_val] = -max_val
 
         if len(fld.shape) == 1:
             fld = fld.reshape(self.nd_points.shape[1:])
-
-        print self.nd_points[0].shape
-        print self.nd_points[1].shape
-        print fld.shape
-
-        print kwargs
 
         from mayavi import mlab
         mlab.surf(self.nd_points[0], self.nd_points[1], fld, **kwargs)

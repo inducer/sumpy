@@ -219,7 +219,6 @@ class LayerPotential(LayerPotentialBase):
         """
 
         cknl = self.get_compiled_kernel()
-        #print cknl.code
 
         for i, dens in enumerate(strengths):
             kwargs["strength_%d" % i] = dens
