@@ -1,0 +1,13 @@
+include test/*.py
+include examples/*.py
+
+include doc/*.rst
+include doc/Makefile
+include doc/*.py
+include doc/images/*.png
+include doc/_static/*.css
+include doc/_templates/*.html
+
+include ez_setup.py
+include README.rst
+include requirements.txt
