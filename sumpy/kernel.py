@@ -145,10 +145,10 @@ class LaplaceKernel(Kernel):
         return (self.dim,)
 
     def __repr__(self):
-        if self.dim is not None:
-            return "Laplace(%d)" % self.dim
+        if self._dim is not None:
+            return "LapKnl%dD" % self.dim
         else:
-            return "Laplace()"
+            return "LapKnl"
 
     def get_expression(self, dist_vec):
         assert self.dim == len(dist_vec)
@@ -186,11 +186,11 @@ class HelmholtzKernel(Kernel):
         return (self.dim, self.helmholtz_k_name, self.allow_evanescent)
 
     def __repr__(self):
-        if self.dim is not None:
-            return "Helmh(dim=%s, %s)" % (
+        if self._dim is not None:
+            return "HelmKnl%dD(%s)" % (
                     self.dim, self.helmholtz_k_name)
         else:
-            return "Helmh(%s)" % (self.helmholtz_k_name)
+            return "HelmKnl(%s)" % (self.helmholtz_k_name)
 
     is_complex_valued = True
 
