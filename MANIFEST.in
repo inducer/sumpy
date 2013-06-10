@@ -8,6 +8,5 @@ include doc/images/*.png
 include doc/_static/*.css
 include doc/_templates/*.html
 
-include ez_setup.py
 include README.rst
 include requirements.txt
