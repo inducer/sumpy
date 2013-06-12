@@ -142,7 +142,7 @@ class LayerPotentialBase(KernelComputation):
                 ]+self.get_kernel_scaling_assignments()+loopy_insns+[
                     lp.Instruction(id=None,
                         assignee="pair_result_%d" % i, expression=expr,
-                        temp_var_type=dtype)
+                        temp_var_type=lp.auto)
                     for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
                 ]+self.get_result_store_instructions(),
                 arguments,
@@ -172,8 +172,8 @@ class LayerPotentialBase(KernelComputation):
             loopy_knl = lp.split_iname(loopy_knl, "itgt", 16, outer_tag="g.0",
                     inner_tag="l.0")
             loopy_knl = lp.split_iname(loopy_knl, "isrc", 256)
-            loopy_knl = lp.generate_loop_schedules(loopy_knl, [
-                "isrc_outer", "itgt_inner"])
+            loopy_knl = lp.set_loop_priority(loopy_knl,
+                    ["isrc_outer", "itgt_inner"])
         else:
             from warnings import warn
             warn("don't know how to tune layer potential computation for '%s'" % dev)

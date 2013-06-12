@@ -117,7 +117,7 @@ class P2P(KernelComputation):
                 ]+[
                     lp.Instruction(id=None,
                         assignee="pair_result_%d" % i, expression=expr,
-                        temp_var_type=dtype)
+                        temp_var_type=lp.auto)
                     for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
                 ]+[
                     "result_${KNLIDX}[itgt] = knl_${KNLIDX}_scaling \
