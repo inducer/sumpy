@@ -168,7 +168,7 @@ class LayerPotentialBase(KernelComputation):
 
         import pyopencl as cl
         dev = self.context.devices[0]
-        if dev.type == cl.device_type.CPU:
+        if dev.type & cl.device_type.CPU:
             loopy_knl = lp.split_iname(loopy_knl, "itgt", 16, outer_tag="g.0",
                     inner_tag="l.0")
             loopy_knl = lp.split_iname(loopy_knl, "isrc", 256)
