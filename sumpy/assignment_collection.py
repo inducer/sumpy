@@ -198,7 +198,13 @@ class SymbolicAssignmentCollection(object):
         assign_names = list(self.assignments)
         assign_exprs = [self.assignments[name] for name in assign_names]
 
-        # FIXME: Switch to cached_cse above once this is fixed:
+        # Options here:
+        # - cached_cse: Uses on-disk cache to speed up CSE.
+        # - checked_cse: if you mistrust the result of the cse.
+        #   Uses maxima to verify.
+        # - sp.cse: The underlying sympy thing.
+        #from sumpy.symbolic import checked_cse
+
         new_assignments, new_exprs = cached_cse(assign_exprs + extra_exprs,
                 symbols=self.symbol_generator)
 
