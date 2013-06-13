@@ -47,13 +47,14 @@ class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
     def __init__(self, assignments):
         self.assignments = assignments
         self.derivative_cse_names = set()
+        self.known_names = set(n for n, e in assignments)
 
     def map_Derivative(self, expr):
         # Sympy has picked up the habit of picking arguments out of derivatives
         # and pronounce them common subexpressions. Me no like. Undo it, so
         # that the bessel substitutor further down can do its job.
 
-        if expr.expr.is_Symbol:
+        if expr.expr.is_Symbol and expr.expr.name not in self.known_names:
             # These will get removed, because loopy wont' be able to deal
             # with them--they contain undefined placeholder symbols.
             self.derivative_cse_names.add(expr.expr.name)
@@ -390,6 +391,7 @@ class ComplexConstantSizer(IdentityMapper):
 def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
         complex_dtype=None):
     logger.info("loopy instruction generation: start")
+    assignments = list(assignments)
 
     # convert from sympy
     sympy_conv = SympyToPymbolicMapper(assignments)
