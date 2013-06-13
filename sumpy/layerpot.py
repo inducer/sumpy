@@ -67,10 +67,9 @@ def expand(expansion_nr, sac, expansion, avec, bvec):
 class LayerPotentialBase(KernelComputation):
     def __init__(self, ctx, expansions, strength_usage=None,
             value_dtypes=None, strength_dtypes=None,
-            geometry_dtype=None,
             options=[], name="layerpot", device=None):
         KernelComputation.__init__(self, ctx, expansions, strength_usage,
-                value_dtypes, strength_dtypes, geometry_dtype,
+                value_dtypes, strength_dtypes,
                 name, options, device)
 
         from pytools import single_valued
@@ -119,17 +118,16 @@ class LayerPotentialBase(KernelComputation):
                 * self.get_strength_or_not(isrc_sym, i)
                 for i, name in enumerate(result_names)]
 
-        geo_dtype = self.geometry_dtype
         arguments = (
                 [
-                    lp.GlobalArg("src", geo_dtype,
+                    lp.GlobalArg("src", None,
                         shape=(self.dim, "nsrc"), order="C"),
-                    lp.GlobalArg("tgt", geo_dtype,
+                    lp.GlobalArg("tgt", None,
                         shape=(self.dim, "ntgt"), order="C"),
-                    lp.GlobalArg("center", geo_dtype,
+                    lp.GlobalArg("center", None,
                         shape=(self.dim, "ntgt"), order="C"),
-                    lp.ValueArg("nsrc", np.int32),
-                    lp.ValueArg("ntgt", np.int32),
+                    lp.ValueArg("nsrc", None),
+                    lp.ValueArg("ntgt", None),
                 ] + self.get_input_and_output_arguments()
                 + self.gather_kernel_arguments())
 
@@ -199,10 +197,10 @@ class LayerPotential(LayerPotentialBase):
 
     def get_input_and_output_arguments(self):
         return [
-                lp.GlobalArg("strength_%d" % i, dtype, shape="nsrc", order="C")
+                lp.GlobalArg("strength_%d" % i, None, shape="nsrc", order="C")
                 for i, dtype in enumerate(self.strength_dtypes)
             ]+[
-                lp.GlobalArg("result_%d" % i, dtype, shape="ntgt", order="C")
+                lp.GlobalArg("result_%d" % i, None, shape="ntgt", order="C")
                 for i, dtype in enumerate(self.value_dtypes)
             ]
 

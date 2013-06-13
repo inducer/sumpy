@@ -24,7 +24,6 @@ THE SOFTWARE.
 
 
 import numpy as np
-from pytools import Record
 
 
 # {{{ multi_index helpers
@@ -92,7 +91,6 @@ class KernelComputation:
 
     def __init__(self, ctx, kernels, strength_usage,
             value_dtypes, strength_dtypes,
-            geometry_dtype,
             name="kernel", options=[], device=None):
         """
         :arg kernels: list of :class:`sumpy.kernel.Kernel` instances
@@ -103,11 +101,6 @@ class KernelComputation:
           number of density arrays that need to be passed.
           Default: all kernels use the same density.
         """
-
-        if geometry_dtype is None:
-            geometry_dtype = np.float64
-
-        geometry_dtype = np.dtype(geometry_dtype)
 
         # {{{ process value_dtypes
 
@@ -161,7 +154,7 @@ class KernelComputation:
         self.value_dtypes = value_dtypes
         self.strength_usage = strength_usage
         self.strength_dtypes = strength_dtypes
-        self.geometry_dtype = geometry_dtype
+        self.strength_count = strength_count
 
         self.name = name
 

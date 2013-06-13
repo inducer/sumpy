@@ -35,7 +35,7 @@ from sumpy.tools import KernelComputation
 class P2P(KernelComputation):
     def __init__(self, ctx, kernels,  exclude_self, strength_usage=None,
             value_dtypes=None, strength_dtypes=None,
-            geometry_dtype=None, options=[], name="p2p", device=None):
+            options=[], name="p2p", device=None):
         """
         :arg kernels: list of :class:`sumpy.kernel.Kernel` instances
         :arg strength_usage: A list of integers indicating which expression
@@ -44,7 +44,7 @@ class P2P(KernelComputation):
           Default: all kernels use the same strength.
         """
         KernelComputation.__init__(self, ctx, kernels, strength_usage,
-                value_dtypes, strength_dtypes, geometry_dtype,
+                value_dtypes, strength_dtypes,
                 name, options, device)
 
         self.exclude_self = exclude_self
@@ -85,11 +85,11 @@ class P2P(KernelComputation):
 
         arguments = (
                 [
-                    lp.GlobalArg("src", self.geometry_dtype,
+                    lp.GlobalArg("src", None,
                         shape=(self.dim, "nsrc"), order="C"),
-                    lp.GlobalArg("tgt", self.geometry_dtype,
+                    lp.GlobalArg("tgt", None,
                         shape=(self.dim, "ntgt"), order="C"),
-                    lp.ValueArg("nsrc", np.int32),
+                    lp.ValueArg("nsrc", None),
                     lp.ValueArg("ntgt", np.int32),
                 ]+[
                     lp.GlobalArg("strength_%d" % i, dtype, shape="nsrc", order="C")
