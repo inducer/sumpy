@@ -98,6 +98,8 @@ class FieldPlotter:
             fld[fld > max_val] = max_val
             fld[fld < -max_val] = -max_val
 
+        fld = fld[..., ::-1]
+
         kwargs["extent"] = (
                 # (left, right, bottom, top)
                 self.a[0], self.b[0],
