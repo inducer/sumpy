@@ -148,8 +148,6 @@ class P2P(KernelComputation):
 
     def __call__(self, queue, targets, sources, src_strengths, **kwargs):
         cknl = self.get_compiled_kernel()
-        #print cknl.code
-        #1/0
 
         for i, sstr in enumerate(src_strengths):
             kwargs["strength_%d" % i] = sstr
