@@ -142,7 +142,7 @@ class LaplaceKernel(Kernel):
     is_complex_valued = False
 
     def __getinitargs__(self):
-        return (self.dim,)
+        return (self._dim,)
 
     def __repr__(self):
         if self._dim is not None:
@@ -183,7 +183,7 @@ class HelmholtzKernel(Kernel):
         self.allow_evanescent = allow_evanescent
 
     def __getinitargs__(self):
-        return (self.dim, self.helmholtz_k_name, self.allow_evanescent)
+        return (self._dim, self.helmholtz_k_name, self.allow_evanescent)
 
     def __repr__(self):
         if self._dim is not None:
@@ -545,7 +545,6 @@ def normalize_kernel(kernel_like):
                     "for the Helmholtz parameter are allowed as kernels.")
 
     return kernel_like
-
 
 
 # vim: fdm=marker
