@@ -429,18 +429,18 @@ class DirectionalSourceDerivative(DirectionalDerivative):
         return _VectorIndexAdder(self.dir_vec_name, (Variable("isrc"),))(
                 vcr(self.inner_kernel.transform_to_code(expr)))
 
-    def postprocess_at_target(self, expr, bvec):
-        expr = self.inner_kernel.postprocess_at_target(expr, bvec)
+    def postprocess_at_source(self, expr, avec):
+        expr = self.inner_kernel.postprocess_at_source(expr, avec)
 
-        dim = len(bvec)
-        assert dim == self.dim
+        dimensions = len(avec)
+        assert dimensions == self.dim
 
         from sumpy.symbolic import make_sym_vector
-        dir_vec = make_sym_vector(self.dir_vec_name, dim)
+        dir_vec = make_sym_vector(self.dir_vec_name, dimensions)
 
-        # bvec = tgt-center
-        return sum(dir_vec[axis]*expr.diff(bvec[axis])
-                for axis in range(dim))
+        # avec = center-src -> minus sign from chain rule
+        return sum(-dir_vec[axis]*expr.diff(avec[axis])
+                for axis in range(dimensions))
 
     mapper_method = "map_directional_source_derivative"
 
