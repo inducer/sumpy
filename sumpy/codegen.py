@@ -47,14 +47,13 @@ class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
     def __init__(self, assignments):
         self.assignments = assignments
         self.derivative_cse_names = set()
-        self.known_names = set(n for n, e in assignments)
 
     def map_Derivative(self, expr):
         # Sympy has picked up the habit of picking arguments out of derivatives
         # and pronounce them common subexpressions. Me no like. Undo it, so
         # that the bessel substitutor further down can do its job.
 
-        if expr.expr.is_Symbol and expr.expr.name not in self.known_names:
+        if expr.expr.is_Symbol:
             # These will get removed, because loopy wont' be able to deal
             # with them--they contain undefined placeholder symbols.
             self.derivative_cse_names.add(expr.expr.name)
