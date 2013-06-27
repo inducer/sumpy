@@ -437,7 +437,7 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
 
     import loopy as lp
     result = [
-            lp.Instruction(id=None,
+            lp.ExpressionInstruction(id=None,
                 assignee=name, expression=convert_expr(name, expr),
                 temp_var_type=lp.auto)
             for name, expr in assignments]

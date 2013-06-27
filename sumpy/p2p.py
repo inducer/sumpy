@@ -115,7 +115,7 @@ class P2P(KernelComputation):
                 + [
                 "<> d[idim] = tgt[idim,itgt] - src[idim,isrc] {id=compute_d}",
                 ]+[
-                    lp.Instruction(id=None,
+                    lp.ExpressionInstruction(id=None,
                         assignee="pair_result_%d" % i, expression=expr,
                         temp_var_type=lp.auto)
                     for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))

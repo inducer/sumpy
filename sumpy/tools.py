@@ -182,7 +182,7 @@ class KernelComputation:
 
         import loopy as lp
         return [
-                lp.Instruction(id=None,
+                lp.ExpressionInstruction(id=None,
                     assignee="knl_%d_scaling" % i,
                     expression=ComplexConstantSizer(dtype)(
                         sympy_conv(kernel.get_scaling())),

@@ -138,7 +138,7 @@ class LayerPotentialBase(KernelComputation):
                 "<> a[idim] = center[idim,itgt] - src[idim,isrc] {id=compute_a}",
                 "<> b[idim] = tgt[idim,itgt] - center[idim,itgt] {id=compute_b}",
                 ]+self.get_kernel_scaling_assignments()+loopy_insns+[
-                    lp.Instruction(id=None,
+                    lp.ExpressionInstruction(id=None,
                         assignee="pair_result_%d" % i, expression=expr,
                         temp_var_type=lp.auto)
                     for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
