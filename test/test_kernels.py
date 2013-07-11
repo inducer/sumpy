@@ -33,6 +33,9 @@ import pyopencl as cl
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 
+from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansion
+from sumpy.expansion.local import VolumeTaylorLocalExpansion
+
 import logging
 logger = logging.getLogger(__name__)
 
@@ -80,7 +83,11 @@ def test_p2p(ctx_getter):
 
 @pytools.test.mark_test.opencl
 @pytest.mark.parametrize("order", [2, 3, 4, 5])
-def test_p2m2p(ctx_getter, order):
+@pytest.mark.parametrize("expn_class", [
+    VolumeTaylorLocalExpansion,
+    VolumeTaylorMultipoleExpansion,
+    ])
+def test_p2e2p(ctx_getter, order, expn_class):
     logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_getter()
@@ -93,17 +100,12 @@ def test_p2m2p(ctx_getter, order):
 
     dim = 2
 
-    from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansion
     from sumpy.kernel import LaplaceKernel, AxisTargetDerivative
     knl = LaplaceKernel(dim)
     out_kernels = [
             knl, AxisTargetDerivative(0, knl)
             ]
-    texp = VolumeTaylorMultipoleExpansion(knl, order=order)
-
-    sources = np.random.rand(dim, nsources).astype(np.float64)
-    centers = np.array([[0.5]]*dim, dtype=np.float64)
-    strengths = np.ones(nsources, dtype=np.float64)
+    texp = expn_class(knl, order=order)
 
     from sumpy.p2e import P2E
     p2m = P2E(ctx, texp, out_kernels)
@@ -118,6 +120,14 @@ def test_p2m2p(ctx_getter, order):
     eoc_rec = EOCRecorder()
 
     for dist in [3, 5, 7]:
+        from sumpy.expansion.local import LocalExpansionBase
+        if issubclass(expn_class, LocalExpansionBase):
+            centers = np.array([0.5+dist, 0.5], dtype=np.float64).reshape(dim, 1)
+        else:
+            centers = np.array([0.5, 0.5], dtype=np.float64).reshape(dim, 1)
+
+        sources = np.random.rand(dim, nsources).astype(np.float64)
+        strengths = np.ones(nsources, dtype=np.float64)
         targets = np.mgrid[dist:dist + 1:res*1j, 0:1:res*1j] \
                 .reshape(dim, -1).astype(np.float64)
 
