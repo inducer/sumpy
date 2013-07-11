@@ -36,19 +36,35 @@ class MultipoleExpansionBase(ExpansionBase):
 class VolumeTaylorMultipoleExpansion(
         MultipoleExpansionBase, VolumeTaylorExpansionBase):
     def coefficients_from_source(self, avec, bvec):
-        from sumpy.tools import mi_derivative
-        ppkernel = self.kernel.postprocess_at_source(
-                self.kernel.get_expression(avec), avec)
-        return [mi_derivative(ppkernel, avec, mi)
-                for mi in self.get_coefficient_indices()]
+        from sumpy.kernel import DirectionalSourceDerivative
+        kernel = self.kernel
+
+        from sumpy.tools import mi_power, mi_factorial
+
+        if isinstance(kernel, DirectionalSourceDerivative):
+            if kernel.get_base_kernel() is not kernel.inner_kernel:
+                raise NotImplementedError("more than one source derivative "
+                        "not supported at present")
+
+            from sumpy.symbolic import make_sym_vector
+            dir_vec = make_sym_vector(kernel.dir_vec_name, kernel.dim)
+
+            result = [0]
+            1/0
+        else:
+            return [
+                    mi_power(avec, mi) / mi_factorial(mi)
+                    for mi in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec):
-        from sumpy.tools import mi_power, mi_factorial
+        ppkernel = self.kernel.postprocess_at_target(
+                self.kernel.get_expression(bvec), bvec)
+
+        from sumpy.tools import mi_derivative
         return sum(
                 coeff
-                * self.kernel.postprocess_at_target(mi_power(bvec, mi), bvec)
-                / mi_factorial(mi)
-                for coeff, mi in zip(coeffs, self.get_coefficient_indices()))
+                * mi_derivative(ppkernel, bvec, mi)
+                for coeff, mi in zip(coeffs, self.get_coefficient_identifiers()))
 
 # }}}
 

@@ -29,6 +29,9 @@ from pytools import memoize_method
 
 class ExpansionBase(object):
     def __init__(self, kernel, order):
+        from sumpy.kernel import TargetDerivativeRemover
+        kernel = TargetDerivativeRemover()(kernel)
+
         self.kernel = kernel
         self.order = order
 
@@ -44,6 +47,9 @@ class ExpansionBase(object):
 
     def prepare_loopy_kernel(self, loopy_knl):
         return self.kernel.prepare_loopy_kernel(loopy_knl)
+
+    def transform_to_code(self, expr):
+        return self.kernel.transform_to_code(expr)
 
     def get_scaling(self):
         return self.kernel.get_scaling()
@@ -80,14 +86,12 @@ class VolumeTaylorExpansionBase(object):
         return self._storage_loc_dict()[k]
 
     @memoize_method
-    def get_coefficient_indices(self):
+    def get_coefficient_identifiers(self):
         from pytools import (
                 generate_nonnegative_integer_tuples_summing_to_at_most
                 as gnitstam)
 
         return sorted(gnitstam(self.order, self.kernel.dim), key=sum)
-
-        return range(self.order+1)
 
 # }}}
 

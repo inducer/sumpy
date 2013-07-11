@@ -54,7 +54,7 @@ def expand(expansion_nr, sac, expansion, avec, bvec):
                     sac.assign_unique("expn%dcoeff%s" % (
                         expansion_nr, stringify_expn_index(i)),
                         coefficients[expansion.get_storage_index(i)]))
-            for i in expansion.get_coefficient_indices()]
+            for i in expansion.get_coefficient_identifiers()]
 
     return sac.assign_unique("expn%d_result" % expansion_nr,
             expansion.evaluate(assigned_coeffs, bvec))

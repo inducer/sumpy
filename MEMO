@@ -1,1 +1,9 @@
 - AoS/SoA flexibility?
+
+Conventions:
+
+a = center - src
+b = tgt - center
+d = tgt - src
+
+Kernel scaling is done strictly on output to point values

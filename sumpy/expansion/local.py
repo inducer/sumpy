@@ -37,7 +37,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
     def get_storage_index(self, k):
         return k
 
-    def get_coefficient_indices(self):
+    def get_coefficient_identifiers(self):
         return range(self.order+1)
 
     def coefficients_from_source(self, avec, bvec):
@@ -56,13 +56,13 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
                         avec),
                     bvec)
                 .subs("tau", 0)
-                for i in self.get_coefficient_indices()]
+                for i in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec):
         from pytools import factorial
         return sum(
                 coeffs[self.get_storage_index(i)] / factorial(i)
-                for i in self.get_coefficient_indices())
+                for i in self.get_coefficient_identifiers())
 
 # }}}
 
@@ -75,7 +75,7 @@ class VolumeTaylorLocalExpansion(LocalExpansionBase, VolumeTaylorExpansionBase):
         ppkernel = self.kernel.postprocess_at_source(
                 self.kernel.get_expression(avec), avec)
         return [mi_derivative(ppkernel, avec, mi)
-                for mi in self.get_coefficient_indices()]
+                for mi in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec):
         from sumpy.tools import mi_power, mi_factorial
@@ -83,7 +83,7 @@ class VolumeTaylorLocalExpansion(LocalExpansionBase, VolumeTaylorExpansionBase):
                 coeff
                 * self.kernel.postprocess_at_target(mi_power(bvec, mi), bvec)
                 / mi_factorial(mi)
-                for coeff, mi in zip(coeffs, self.get_coefficient_indices()))
+                for coeff, mi in zip(coeffs, self.get_coefficient_identifiers()))
 
 # }}}
 
@@ -101,7 +101,7 @@ class H2DLocalExpansion(LocalExpansionBase):
     def get_storage_index(self, k):
         return self.order+k
 
-    def get_coefficient_indices(self):
+    def get_coefficient_identifiers(self):
         return range(-self.order, self.order+1)
 
     def coefficients_from_source(self, avec, bvec):
@@ -116,7 +116,7 @@ class H2DLocalExpansion(LocalExpansionBase):
                 self.kernel.postprocess_at_source(
                     hankel_1(i, sp.Symbol("k")*u)*e_i_csangle**i,
                     avec)
-                    for i in self.get_coefficient_indices()]
+                    for i in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec):
         bessel_j = sp.Function("bessel_j")
@@ -132,7 +132,7 @@ class H2DLocalExpansion(LocalExpansionBase):
                     * self.kernel.postprocess_at_target(
                         bessel_j(i, sp.Symbol("k")*v)
                         * e_i_ctangle**i, bvec)
-                for i in self.get_coefficient_indices())
+                for i in self.get_coefficient_identifiers())
 
 # }}}
 

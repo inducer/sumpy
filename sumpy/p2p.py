@@ -142,14 +142,10 @@ class P2P(KernelComputation):
         knl = lp.split_iname(knl, "itgt", 1024, outer_tag="g.0")
         return knl
 
-    @memoize_method
-    def get_compiled_kernel(self):
-        return lp.CompiledKernel(self.context, self.get_optimized_kernel())
-
     def __call__(self, queue, targets, sources, src_strengths, **kwargs):
-        cknl = self.get_compiled_kernel()
+        knl = self.get_optimized_kernel()
 
         for i, sstr in enumerate(src_strengths):
             kwargs["strength_%d" % i] = sstr
 
-        return cknl(queue, src=sources, tgt=targets, **kwargs)
+        return knl(queue, src=sources, tgt=targets, **kwargs)

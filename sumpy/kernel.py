@@ -95,7 +95,7 @@ class Kernel(object):
         return expr
 
     def get_expression(self, dist_vec):
-        """Return a :mod:`pymbolic` expression for the kernel.
+        """Return a :mod:`sympy` expression for the kernel.
 
         :arg dist_vec: target - source
 
@@ -499,6 +499,11 @@ class KernelIdentityMapper(KernelMapper):
 
 class AxisTargetDerivativeRemover(KernelIdentityMapper):
     def map_axis_target_derivative(self, kernel):
+        return self.rec(kernel.inner_kernel)
+
+
+class TargetDerivativeRemover(AxisTargetDerivativeRemover):
+    def map_directional_target_derivative(self, kernel):
         return self.rec(kernel.inner_kernel)
 
 

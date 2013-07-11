@@ -86,7 +86,7 @@ def vector_to_device(queue, vec):
 
 # {{{  KernelComputation
 
-class KernelComputation:
+class KernelComputation(object):
     """Common input processing for kernel computations."""
 
     def __init__(self, ctx, kernels, strength_usage,
