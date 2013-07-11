@@ -1,0 +1,4 @@
+numpy
+git+git://github.com/sympy/sympy
+git+git://github.com/inducer/pyopencl
+git+http://git.tiker.net/trees/loopy.git
