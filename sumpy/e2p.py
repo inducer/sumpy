@@ -81,7 +81,6 @@ class E2P(object):
                 for name, expr in sac.assignments.iteritems()],
                 retain_names=result_names)
 
-
         from sumpy.codegen import to_loopy_insns
         loopy_insns = to_loopy_insns(assignments,
                 vector_names=set(["b"]),
@@ -104,7 +103,7 @@ class E2P(object):
                         None, shape=None),
                     lp.GlobalArg("centers", None, shape="dim, nboxes"),
                     lp.GlobalArg("expansions", None,
-                        shape=(len(coeff_exprs), "nboxes")),
+                        shape=("nboxes", len(coeff_exprs))),
                     lp.ValueArg("nboxes", np.int32),
                     lp.ValueArg("ntargets", np.int32),
                     "..."
@@ -120,18 +119,18 @@ class E2P(object):
                     "{[itgt,idim]: itgt_start<=itgt<itgt_end and 0<=idim<dim}",
                     ],
                 loopy_insns
-                + [
-                    "<> tgt_ibox = target_boxes[itgt_box]",
-                    "<> itgt_start = box_target_starts[tgt_ibox]",
-                    "<> itgt_end = itgt_start+box_target_counts_nonchild[tgt_ibox]",
-                    "<> center[idim] = centers[idim, tgt_ibox] {id=fetch_center}",
-                    "<> b[idim] = targets[idim, itgt] - center[idim]",
-                    "<> coeff${COEFFIDX} = expansions[tgt_ibox, ${COEFFIDX}]",
-                    "result_${RESULTIDX}[itgt] = kernel_scaling * result_${RESULTIDX}_p"
-                ],
+                + ["""
+                    <> tgt_ibox = target_boxes[itgt_box]
+                    <> itgt_start = box_target_starts[tgt_ibox]
+                    <> itgt_end = itgt_start+box_target_counts_nonchild[tgt_ibox]
+                    <> center[idim] = centers[idim, tgt_ibox] {id=fetch_center}
+                    <> b[idim] = targets[idim, itgt] - center[idim]
+                    <> coeff${COEFFIDX} = expansions[tgt_ibox, ${COEFFIDX}]
+                    result_${RESULTIDX}[itgt] = \
+                            kernel_scaling * result_${RESULTIDX}_p
+                """],
                 arguments,
                 name=self.name, assumptions="ntgt_boxes>=1",
-                preambles=self.expansion.get_preambles(),
                 defines=dict(
                     dim=self.dim,
                     COEFFIDX=[str(i) for i in xrange(len(coeff_exprs))],

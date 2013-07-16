@@ -57,9 +57,6 @@ class ExpansionBase(object):
     def get_args(self):
         return self.kernel.get_args()
 
-    def get_preambles(self):
-        return self.kernel.get_preambles()
-
     # }}}
 
     def coefficients_from_source(self, expr, avec, bvec):

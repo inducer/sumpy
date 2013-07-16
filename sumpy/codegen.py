@@ -86,6 +86,11 @@ hank1_01_result hank1_01(cdouble_t z)
 }
 """
 
+
+def bessel_preamble_generator(seen_dtypes, seen_functions):
+    if "hank1_01" in seen_functions:
+        yield ("sumpy-bessel", BESSEL_PREAMBLE)
+
 hank1_01_result_dtype = cl.tools.get_or_register_dtype("hank1_01_result",
         np.dtype([
             ("order0", np.complex128),

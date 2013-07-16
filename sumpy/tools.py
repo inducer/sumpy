@@ -84,6 +84,16 @@ def vector_to_device(queue, vec):
     return with_object_array_or_scalar(to_dev, vec)
 
 
+def gather_arguments(kernel_likes):
+    result = {}
+    for knl in kernel_likes:
+        for arg in knl.get_args():
+            result[arg.name] = arg
+            # FIXME: possibly check that arguments match before overwriting
+
+    return sorted(result.itervalues(), key=lambda arg: arg.name)
+
+
 # {{{  KernelComputation
 
 class KernelComputation(object):
@@ -157,23 +167,6 @@ class KernelComputation(object):
         self.strength_count = strength_count
 
         self.name = name
-
-    def gather_kernel_arguments(self):
-        result = {}
-        for knl in self.kernels:
-            for arg in knl.get_args():
-                result[arg.name] = arg
-                # FIXME: possibly check that arguments match before overwriting
-
-        return sorted(result.itervalues(), key=lambda arg: arg.name)
-
-    def gather_kernel_preambles(self):
-        result = []
-
-        for knl in self.kernels:
-            result.extend(knl.get_preambles())
-
-        return result
 
     def get_kernel_scaling_assignments(self):
         from pymbolic.sympy_interface import SympyToPymbolicMapper

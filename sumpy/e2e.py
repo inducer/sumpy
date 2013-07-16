@@ -24,12 +24,13 @@ THE SOFTWARE.
 
 import numpy as np
 import loopy as lp
+import sympy as sp
 from pytools import memoize_method
 
 
-class P2E(object):
-    def __init__(self, ctx, expansion,
-            options=[], name="p2e", device=None):
+class E2E(object):
+    def __init__(self, ctx, src_expansion, tgt_expansion,
+            options=[], name="e2e", device=None):
         """
         :arg expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
         :arg strength_usage: A list of integers indicating which expression
@@ -42,25 +43,36 @@ class P2E(object):
             device = ctx.devices[0]
 
         self.ctx = ctx
-        self.expansion = expansion
+        self.src_expansion = src_expansion
+        self.tgt_expansion = tgt_expansion
         self.options = options
         self.name = name
         self.device = device
 
-        self.dim = expansion.dim
+        if src_expansion.dim != tgt_expansion.dim:
+            raise ValueError("source and target expansions must have "
+                    "same dimensionality")
+
+        self.dim = src_expansion.dim
 
     @memoize_method
     def get_kernel(self):
         from sumpy.symbolic import make_sym_vector
-        avec = make_sym_vector("a", self.dim)
+        dvec = make_sym_vector("d", self.dim)
+
+        ncoeff_src = len(self.src_expansion.get_coefficient_identifiers())
+        ncoeff_tgt = len(self.tgt_expansion.get_coefficient_identifiers())
+
+        src_coeff_exprs = [sp.Symbol("src_coeff%d" % i)
+                for i in xrange(ncoeff_src)]
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
-
-        coeff_names = [
+        tgt_coeff_names = [
                 sac.assign_unique("coeff%d" % i, coeff_i)
                 for i, coeff_i in enumerate(
-                    self.expansion.coefficients_from_source(avec, None))]
+                    self.tgt_expansion.translate_from(
+                        self.src_expansion, src_coeff_exprs, dvec))]
 
         sac.run_global_cse()
 
@@ -68,57 +80,71 @@ class P2E(object):
         assignments = kill_trivial_assignments([
                 (name, expr)
                 for name, expr in sac.assignments.iteritems()],
-                retain_names=coeff_names)
+                retain_names=tgt_coeff_names)
 
         from sumpy.codegen import to_loopy_insns
         loopy_insns = to_loopy_insns(assignments,
-                vector_names=set(["a"]),
-                pymbolic_expr_maps=[self.expansion.transform_to_code],
+                vector_names=set(["d"]),
+                pymbolic_expr_maps=[self.tgt_expansion.transform_to_code],
                 complex_dtype=np.complex128  # FIXME
                 )
 
+        from sumpy.tools import gather_arguments
         arguments = (
                 [
-                    lp.GlobalArg("sources", None, shape=(self.dim, "nsources")),
-                    lp.GlobalArg("strengths", None, shape="nsources"),
-                    lp.GlobalArg("box_source_starts,box_source_counts_nonchild",
-                        None, shape=None),
                     lp.GlobalArg("centers", None, shape="dim, nboxes"),
-                    lp.GlobalArg("expansions", None,
-                        shape=("nboxes", len(coeff_names))),
+                    lp.GlobalArg("src_expansions", None,
+                        shape=("nboxes", ncoeff_src)),
+                    lp.GlobalArg("tgt_expansions", None,
+                        shape=("nboxes", ncoeff_tgt)),
+                    lp.GlobalArg("src_box_starts, src_box_lists",
+                        None, shape=None, strides=(1,)),
                     lp.ValueArg("nboxes", np.int32),
-                    lp.ValueArg("nsources", np.int32),
                     "..."
-                ] + self.expansion.get_args())
+                ] + gather_arguments([self.src_expansion, self.tgt_expansion])
+                )
 
         loopy_knl = lp.make_kernel(self.device,
                 [
-                    "{[isrc_box]: 0<=isrc_box<nsrc_boxes}",
-                    "{[isrc,idim]: isrc_start<=isrc<isrc_end and 0<=idim<dim}",
+                    "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
+                    "{[isrc_box]: isrc_start<=isrc_box<isrc_stop}",
+                    "{[idim]: 0<=idim<dim}",
                     ],
                 loopy_insns
-                + [
-                    "<> src_ibox = source_boxes[isrc_box]",
-                    "<> isrc_start = box_source_starts[src_ibox]",
-                    "<> isrc_end = isrc_start+box_source_counts_nonchild[src_ibox]",
-                    "<> center[idim] = centers[idim, src_ibox] {id=fetch_center}",
-                    "<> a[idim] = center[idim] - sources[idim, isrc]",
-                    "<> strength = strengths[isrc]",
-                    "expansions[src_ibox, ${COEFFIDX}] = "
-                            "sum(isrc, strength*coeff${COEFFIDX})"
-                            "{id_prefix=write_expn}"
-                ],
+                + """
+                    <> tgt_ibox = target_boxes[itgt_box]
+                    <> tgt_center[idim] = centers[idim, tgt_ibox] \
+                            {id=fetch_tgt_center}
+
+                    <> isrc_start = src_box_starts[itgt_box]
+                    <> isrc_stop = src_box_starts[itgt_box+1]
+
+                    <> src_ibox = source_boxes[isrc_box]
+                    <> src_center[idim] = centers[idim, src_ibox] \
+                            {id=fetch_src_center}
+                    <> d[idim] = tgt_center[idim] - src_center[idim]
+
+                    src_coeff${SRC_COEFFIDX} = \
+                        src_expansions[src_ibox, ${SRC_COEFFIDX}]\
+                    tgt_expansions[tgt_ibox, ${TGT_COEFFIDX}] = \
+                        coeff${TGT_COEFFIDX}
+                    """,
                 arguments,
                 name=self.name, assumptions="nsrc_boxes>=1",
+                preambles=self.expansion.get_preambles(),
                 defines=dict(
                     dim=self.dim,
-                    COEFFIDX=[str(i) for i in xrange(len(coeff_names))]
+                    SRC_COEFFIDX=[str(i) for i in xrange(ncoeff_src)],
+                    TGT_COEFFIDX=[str(i) for i in xrange(ncoeff_tgt)],
                     ),
                 silenced_warnings="write_race(write_expn*)")
 
-        loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "fetch_center",
+        for expn in [self.src_expansion, self.tgt_expansion]:
+            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+
+        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "fetch_tgt_center",
                 tags={"idim": "unr"})
+        loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
 
         return loopy_knl
 
@@ -126,18 +152,15 @@ class P2E(object):
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
-        knl = lp.split_iname(knl, "isrc_box", 16, outer_tag="g.0")
+        knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
         return knl
 
     def __call__(self, queue, **kwargs):
         """
-        :arg expansions:
-        :arg source_boxes:
-        :arg box_source_starts:
-        :arg box_source_counts_nonchild:
+        :arg src_expansions:
+        :arg src_box_starts:
+        :arg src_box_lists:
         :arg centers:
-        :arg sources:
-        :arg strengths:
         """
         knl = self.get_optimized_kernel()
 

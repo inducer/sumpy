@@ -28,13 +28,13 @@ import sys
 import pytools.test
 
 import pytest
-import pyopencl.array as cl_array
 import pyopencl as cl
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 
 from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansion
 from sumpy.expansion.local import VolumeTaylorLocalExpansion
+from sumpy.kernel import LaplaceKernel, HelmholtzKernel, AxisTargetDerivative
 
 import logging
 logger = logging.getLogger(__name__)
@@ -48,7 +48,6 @@ def test_p2p(ctx_getter):
     dimensions = 3
     n = 5000
 
-    from sumpy.kernel import LaplaceKernel, AxisTargetDerivative
     from sumpy.p2p import P2P
     lknl = LaplaceKernel(dimensions)
     knl = P2P(ctx,
@@ -87,7 +86,120 @@ def test_p2p(ctx_getter):
     VolumeTaylorLocalExpansion,
     VolumeTaylorMultipoleExpansion,
     ])
-def test_p2e2p(ctx_getter, order, expn_class):
+@pytest.mark.parametrize("knl", [
+    LaplaceKernel(2),
+    #HelmholtzKernel(2)
+    ])
+def test_p2e2p(ctx_getter, knl, expn_class, order):
+    logging.basicConfig(level=logging.INFO)
+
+    ctx = ctx_getter()
+    queue = cl.CommandQueue(ctx)
+
+    np.random.seed(17)
+
+    res = 100
+    nsources = 500
+
+    extra_kwargs = {}
+    if isinstance(knl, HelmholtzKernel):
+        extra_kwargs["k"] = 2
+
+    out_kernels = [
+            knl,
+            AxisTargetDerivative(0, knl)
+            ]
+    expn = expn_class(knl, order=order)
+
+    from sumpy import P2E, E2P, P2P
+    p2e = P2E(ctx, expn, out_kernels)
+    e2p = E2P(ctx, expn, out_kernels)
+    p2p = P2P(ctx, out_kernels, exclude_self=False)
+
+    from pytools.convergence import EOCRecorder
+    eoc_rec_pot = EOCRecorder()
+    eoc_rec_grad_x = EOCRecorder()
+
+    for dist in [3, 5, 7]:
+        from sumpy.expansion.local import LocalExpansionBase
+        if issubclass(expn_class, LocalExpansionBase):
+            centers = np.array([0.5+dist, 0.5], dtype=np.float64).reshape(knl.dim, 1)
+        else:
+            centers = np.array([0.5, 0.5], dtype=np.float64).reshape(knl.dim, 1)
+
+        sources = np.random.rand(knl.dim, nsources).astype(np.float64)
+        strengths = np.ones(nsources, dtype=np.float64)
+        targets = np.mgrid[dist:dist + 1:res*1j, 0:1:res*1j] \
+                .reshape(knl.dim, -1).astype(np.float64)
+
+        source_boxes = np.array([0], dtype=np.int32)
+        box_source_starts = np.array([0], dtype=np.int32)
+        box_source_counts_nonchild = np.array([nsources], dtype=np.int32)
+
+        # {{{ apply p2e
+
+        evt, (mpoles,) = p2e(queue,
+                source_boxes=source_boxes,
+                box_source_starts=box_source_starts,
+                box_source_counts_nonchild=box_source_counts_nonchild,
+                centers=centers,
+                sources=sources,
+                strengths=strengths,
+                out_host=True, **extra_kwargs)
+
+        # }}}
+
+        # {{{ apply e2p
+
+        ntargets = targets.shape[-1]
+
+        box_target_starts = np.array([0], dtype=np.int32)
+        box_target_counts_nonchild = np.array([ntargets], dtype=np.int32)
+
+        evt, (pot, grad_x) = e2p(
+                queue,
+                expansions=mpoles,
+                target_boxes=source_boxes,
+                box_target_starts=box_target_starts,
+                box_target_counts_nonchild=box_target_counts_nonchild,
+                centers=centers,
+                targets=targets,
+                #flags="print_hl",
+                out_host=True, **extra_kwargs)
+
+        # }}}
+
+        # {{{ compute (direct) reference solution
+
+        evt, (pot_direct, grad_x_direct) = p2p(
+                queue,
+                targets, sources, (strengths,),
+                out_host=True,
+                **extra_kwargs)
+
+        err_pot = la.norm((pot - pot_direct)/res**2)
+        err_grad_x = la.norm((grad_x - grad_x_direct)/res**2)
+
+        # }}}
+
+        eoc_rec_pot.add_data_point(1/dist, err_pot)
+        eoc_rec_grad_x.add_data_point(1/dist, err_grad_x)
+
+    print expn_class, order
+    print("POTENTIAL:")
+    print(eoc_rec_pot)
+    print("X TARGET DERIVATIVE:")
+    print(eoc_rec_grad_x)
+
+    tgt_order = order + 1
+
+    assert eoc_rec_pot.order_estimate() > tgt_order - 0.5
+    assert eoc_rec_grad_x.order_estimate() > tgt_order - 1.5
+
+
+@pytools.test.mark_test.opencl
+@pytest.mark.parametrize("order", [2, 3, 4, 5])
+def no_test_translations(ctx_getter, order):
     logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_getter()
@@ -100,31 +212,28 @@ def test_p2e2p(ctx_getter, order, expn_class):
 
     dim = 2
 
-    from sumpy.kernel import LaplaceKernel, AxisTargetDerivative
+    from sumpy.kernel import LaplaceKernel
     knl = LaplaceKernel(dim)
-    out_kernels = [
-            knl, AxisTargetDerivative(0, knl)
-            ]
-    texp = expn_class(knl, order=order)
+    out_kernels = [knl]
+    #m_expn = VolumeTaylorMultipoleExpansion(knl, order=order)
+    l_expn = VolumeTaylorLocalExpansion(knl, order=order)
 
-    from sumpy.p2e import P2E
-    p2m = P2E(ctx, texp, out_kernels)
-
-    from sumpy.e2p import E2P
-    m2p = E2P(ctx, texp, out_kernels)
-
-    from sumpy.p2p import P2P
+    from sumpy import P2E, E2P, P2P, E2E
+    p2l = P2E(ctx, l_expn, out_kernels)
+    l2l = E2E(ctx, l_expn, l_expn)
+    l2p = E2P(ctx, l_expn, out_kernels)
     p2p = P2P(ctx, out_kernels, exclude_self=False)
 
     from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
 
     for dist in [3, 5, 7]:
-        from sumpy.expansion.local import LocalExpansionBase
-        if issubclass(expn_class, LocalExpansionBase):
-            centers = np.array([0.5+dist, 0.5], dtype=np.float64).reshape(dim, 1)
-        else:
-            centers = np.array([0.5, 0.5], dtype=np.float64).reshape(dim, 1)
+        l_centers = np.array(
+                [
+                    [0.4+dist, 0.6],
+                    [0.5+dist, 0.5],
+                    ],
+                dtype=np.float64).T.copy()
 
         sources = np.random.rand(dim, nsources).astype(np.float64)
         strengths = np.ones(nsources, dtype=np.float64)
@@ -135,13 +244,13 @@ def test_p2e2p(ctx_getter, order, expn_class):
         box_source_starts = np.array([0], dtype=np.int32)
         box_source_counts_nonchild = np.array([nsources], dtype=np.int32)
 
-        # {{{ apply P2M
+        # {{{ apply P2L
 
-        evt, (mpoles,) = p2m(queue,
+        evt, (mpoles,) = p2l(queue,
                 source_boxes=source_boxes,
                 box_source_starts=box_source_starts,
                 box_source_counts_nonchild=box_source_counts_nonchild,
-                centers=centers,
+                centers=l_centers,
                 sources=sources,
                 strengths=strengths,
                 #iflags="print_hl_wrapper",
@@ -149,20 +258,36 @@ def test_p2e2p(ctx_getter, order, expn_class):
 
         # }}}
 
-        # {{{ apply M2P
+        # {{{ apply L2L
+
+        src_box_starts = np.array([0, 0, 1], dtype=np.int32)
+        src_box_lists = np.array([0], dtype=np.int32)
+
+        box_source_starts = np.array([0], dtype=np.int32)
+        evt, (mpoles,) = l2l(queue,
+                src_expansions=mpoles,
+                src_box_starts=src_box_starts,
+                src_box_lists=src_box_lists,
+                l_centers=l_centers,
+                #iflags="print_hl_wrapper",
+                out_host=True)
+
+        # }}}
+
+        # {{{ apply L2P
 
         ntargets = targets.shape[-1]
 
         box_target_starts = np.array([0], dtype=np.int32)
         box_target_counts_nonchild = np.array([ntargets], dtype=np.int32)
 
-        evt, (pot, grad_x) = m2p(
+        evt, (pot,) = l2p(
                 queue,
                 expansions=mpoles,
                 target_boxes=source_boxes,
                 box_target_starts=box_target_starts,
                 box_target_counts_nonchild=box_target_counts_nonchild,
-                centers=centers,
+                centers=l_centers,
                 targets=targets,
                 #iflags="print_hl",
                 out_host=True,
@@ -172,7 +297,7 @@ def test_p2e2p(ctx_getter, order, expn_class):
 
         # {{{ compute (direct) reference solution
 
-        evt, (pot_direct, grad_x_direct) = p2p(
+        evt, (pot_direct,) = p2p(
                 queue,
                 targets, sources, (strengths,),
                 out_host=True)
@@ -184,112 +309,8 @@ def test_p2e2p(ctx_getter, order, expn_class):
         eoc_rec.add_data_point(1/dist, err)
 
     print eoc_rec
-    assert eoc_rec.order_estimate() > order + 0.5
-
-
-@pytools.test.mark_test.opencl
-def no_test_p2m2m2p(ctx_getter):
-    ctx = ctx_getter()
-    queue = cl.CommandQueue(ctx)
-
-    res = 100
-
-    dimensions = 3
-    sources = np.random.rand(dimensions, 5).astype(np.float32)
-    #targets = np.random.rand(dimensions, 10).astype(np.float32)
-    targets = np.mgrid[-2:2:res*1j, -2:2:res*1j, 2:2:1j].reshape(3, -1).astype(np.float32)
-    centers = np.array([[0.5]]*dimensions).astype(np.float32)
-
-    from sumpy.tools import vector_to_device
-    targets_dev = vector_to_device(queue, targets)
-    sources_dev = vector_to_device(queue, sources)
-    centers_dev = vector_to_device(queue, centers)
-    strengths_dev = cl_array.empty(queue, sources.shape[1], dtype=np.float32)
-    strengths_dev.fill(1)
-
-    cell_idx_to_particle_offset = np.array([0], dtype=np.uint32)
-    cell_idx_to_particle_cnt_src = np.array([sources.shape[1]], dtype=np.uint32)
-    cell_idx_to_particle_cnt_tgt = np.array([targets.shape[1]], dtype=np.uint32)
-
-    from pyopencl.array import to_device
-    cell_idx_to_particle_offset_dev = to_device(queue, cell_idx_to_particle_offset)
-    cell_idx_to_particle_cnt_src_dev = to_device(queue, cell_idx_to_particle_cnt_src)
-    cell_idx_to_particle_cnt_tgt_dev = to_device(queue, cell_idx_to_particle_cnt_tgt)
-
-    from sumpy.symbolic import make_coulomb_kernel_in
-    from sumpy.expansion import TaylorMultipoleExpansion
-    texp = TaylorMultipoleExpansion(
-            make_coulomb_kernel_in("b", dimensions),
-            order=3, dimensions=dimensions)
-
-    def get_coefficient_expr(idx):
-        return sp.Symbol("coeff%d" % idx)
-
-    for i in texp.m2m_exprs(get_coefficient_expr):
-        print i
-
-    print "-------------------------------------"
-    from sumpy.expansion import TaylorLocalExpansion
-    locexp = TaylorLocalExpansion(order=2, dimensions=3)
-
-    for i in texp.m2l_exprs(locexp, get_coefficient_expr):
-        print i
-
-    1/0
-
-    coeff_dtype = np.float32
-
-    # {{{ apply P2M
-
-    from sumpy.p2m import P2MKernel
-    p2m = P2MKernel(ctx, texp)
-    mpole_coeff = p2m(cell_idx_to_particle_offset_dev,
-            cell_idx_to_particle_cnt_src_dev,
-            sources_dev, strengths_dev, centers_dev, coeff_dtype)
-
-    # }}}
-
-    # {{{ apply M2P
-
-    output_maps = [
-            lambda expr: expr,
-            lambda expr: sp.diff(expr, sp.Symbol("t0"))
-            ]
-
-    m2p_ilist_starts = np.array([0, 1], dtype=np.uint32)
-    m2p_ilist_mpole_offsets = np.array([0], dtype=np.uint32)
-
-    m2p_ilist_starts_dev = to_device(queue, m2p_ilist_starts)
-    m2p_ilist_mpole_offsets_dev = to_device(queue, m2p_ilist_mpole_offsets)
-
-    from sumpy.m2p import M2PKernel
-    m2p = M2PKernel(ctx, texp, output_maps=output_maps)
-    potential_dev, x_derivative = m2p(targets_dev, m2p_ilist_starts_dev, m2p_ilist_mpole_offsets_dev, mpole_coeff, 
-            cell_idx_to_particle_offset_dev,
-            cell_idx_to_particle_cnt_tgt_dev)
-
-    # }}}
-
-    # {{{ compute (direct) reference solution
-
-    from sumpy.p2p import P2PKernel
-    from sumpy.symbolic import make_coulomb_kernel_ts
-    coulomb_knl = make_coulomb_kernel_ts(dimensions)
-
-    knl = P2PKernel(ctx, dimensions, 
-            exprs=[f(coulomb_knl) for f in output_maps], exclude_self=False)
-
-    potential_dev_direct, x_derivative_dir = knl(targets_dev, sources_dev, strengths_dev)
-
-    if 0:
-        import matplotlib.pyplot as pt
-        pt.imshow((potential_dev-potential_dev_direct).get().reshape(res, res))
-        pt.colorbar()
-        pt.show()
-
-    assert la.norm((potential_dev-potential_dev_direct).get())/res**2 < 1e-3
-
-    # }}}
+    tgt_order = order + 1
+    assert eoc_rec.order_estimate() > tgt_order - 0.5
 
 
 # You can test individual routines by typing

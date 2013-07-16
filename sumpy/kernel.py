@@ -127,9 +127,6 @@ class Kernel(object):
         """
         return []
 
-    def get_preambles(self):
-        return []
-
     def __sub__(self, other):
         return DifferenceKernel(self, other)
 
@@ -195,14 +192,13 @@ class HelmholtzKernel(Kernel):
     is_complex_valued = True
 
     def prepare_loopy_kernel(self, loopy_knl):
-        # does loopy_knl already know about hank1_01?
-        mangle_result = loopy_knl.mangle_function(
-                "hank1_01", (np.dtype(np.complex128),))
-        from sumpy.codegen import hank1_01_result_dtype, bessel_mangler
-        if mangle_result is not hank1_01_result_dtype:
-            return loopy_knl.register_function_mangler(bessel_mangler)
-        else:
-            return loopy_knl
+        from sumpy.codegen import bessel_preamble_generator, bessel_mangler
+        loopy_knl = lp.register_function_manglers(loopy_knl,
+                [bessel_mangler])
+        loopy_knl = lp.register_preamble_generators(loopy_knl,
+                [bessel_preamble_generator])
+
+        return loopy_knl
 
     def get_expression(self, dist_vec):
         assert self.dim == len(dist_vec)
@@ -236,10 +232,6 @@ class HelmholtzKernel(Kernel):
             k_dtype = np.float64
 
         return [lp.ValueArg(self.helmholtz_k_name, k_dtype)]
-
-    def get_preambles(self):
-        from sumpy.codegen import BESSEL_PREAMBLE
-        return [("sumpy-bessel", BESSEL_PREAMBLE)]
 
     mapper_method = "map_helmholtz_kernel"
 
@@ -312,9 +304,6 @@ class KernelWrapper(Kernel):
 
     def get_args(self):
         return self.inner_kernel.get_args()
-
-    def get_preambles(self):
-        return self.inner_kernel.get_preambles()
 
 # }}}
 

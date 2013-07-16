@@ -83,6 +83,7 @@ class P2P(KernelComputation):
                     * var("strength_%d" % self.strength_usage[i])[var("isrc")]
                 for i, name in enumerate(result_names)]
 
+        from sumpy.tools import gather_arguments
         arguments = (
                 [
                     lp.GlobalArg("src", None,
@@ -92,12 +93,12 @@ class P2P(KernelComputation):
                     lp.ValueArg("nsrc", None),
                     lp.ValueArg("ntgt", np.int32),
                 ]+[
-                    lp.GlobalArg("strength_%d" % i, dtype, shape="nsrc", order="C")
+                    lp.GlobalArg("strength_%d" % i, None, shape="nsrc", order="C")
                     for i, dtype in enumerate(self.strength_dtypes)
                 ]+[
                     lp.GlobalArg("result_%d" % i, dtype, shape="ntgt", order="C")
                     for i, dtype in enumerate(self.value_dtypes)
-                ] + self.gather_kernel_arguments())
+                ] + gather_arguments(self.kernels))
 
         if self.exclude_self:
             from pymbolic.primitives import If, ComparisonOperator, Variable
@@ -125,7 +126,6 @@ class P2P(KernelComputation):
                 ],
                 arguments,
                 name=self.name, assumptions="nsrc>=1 and ntgt>=1",
-                preambles=self.gather_kernel_preambles(),
                 defines=dict(KNLIDX=range(len(exprs))))
 
         for where in ["compute_a", "compute_b"]:

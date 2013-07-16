@@ -118,6 +118,7 @@ class LayerPotentialBase(KernelComputation):
                 * self.get_strength_or_not(isrc_sym, i)
                 for i, name in enumerate(result_names)]
 
+        from sumpy.tools import gather_arguments
         arguments = (
                 [
                     lp.GlobalArg("src", None,
@@ -129,7 +130,7 @@ class LayerPotentialBase(KernelComputation):
                     lp.ValueArg("nsrc", None),
                     lp.ValueArg("ntgt", None),
                 ] + self.get_input_and_output_arguments()
-                + self.gather_kernel_arguments())
+                + gather_arguments(self.kernels))
 
         loopy_knl = lp.make_kernel(self.device,
                 "{[isrc,itgt,idim]: 0<=itgt<ntgt and 0<=isrc<nsrc "
