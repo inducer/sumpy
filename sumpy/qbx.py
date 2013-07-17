@@ -147,7 +147,6 @@ class LayerPotentialBase(KernelComputation):
                 arguments,
                 defines=dict(KNLIDX=range(len(exprs))),
                 name=self.name, assumptions="nsrc>=1 and ntgt>=1",
-                preambles=self.gather_kernel_preambles()
                 )
 
         for where in ["compute_a", "compute_b"]:
