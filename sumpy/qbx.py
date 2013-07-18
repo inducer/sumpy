@@ -160,6 +160,7 @@ class LayerPotentialBase(KernelComputation):
 
         return loopy_knl
 
+    @memoize_method
     def get_optimized_kernel(self):
         # FIXME specialize/tune for GPU/CPU
         loopy_knl = self.get_kernel()
@@ -178,11 +179,6 @@ class LayerPotentialBase(KernelComputation):
             loopy_knl = lp.split_iname(loopy_knl, "itgt", 128, outer_tag="g.0")
 
         return loopy_knl
-
-    @memoize_method
-    def get_compiled_kernel(self):
-        kernel = self.get_optimized_kernel()
-        return lp.CompiledKernel(self.context, kernel)
 
 # }}}
 
@@ -216,12 +212,12 @@ class LayerPotential(LayerPotentialBase):
             already multiplied in.
         """
 
-        cknl = self.get_compiled_kernel()
+        knl = self.get_optimized_kernel()
 
         for i, dens in enumerate(strengths):
             kwargs["strength_%d" % i] = dens
 
-        return cknl(queue, src=sources, tgt=targets, center=centers, **kwargs)
+        return knl(queue, src=sources, tgt=targets, center=centers, **kwargs)
 
 # }}}
 
