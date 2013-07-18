@@ -94,7 +94,7 @@ class H2DLocalExpansion(LocalExpansionBase):
     def __init__(self, kernel, order):
         from sumpy.kernel import HelmholtzKernel
         assert (isinstance(kernel.get_base_kernel(), HelmholtzKernel)
-                and kernel.dimensions == 2)
+                and kernel.dim == 2)
 
         LocalExpansionBase.__init__(self, kernel, order)
 
