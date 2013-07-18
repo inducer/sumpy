@@ -71,7 +71,9 @@ class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
 BESSEL_PREAMBLE = """//CL//
 #include <pyopencl-bessel-j.cl>
 #include <pyopencl-bessel-y.cl>
+"""
 
+HANKEL_PREAMBLE = """//CL//
 typedef struct hank1_01_result_str
 {
     cdouble_t order0, order1;
@@ -88,8 +90,12 @@ hank1_01_result hank1_01(cdouble_t z)
 
 
 def bessel_preamble_generator(seen_dtypes, seen_functions):
+    require_bessel = False
     if any(func.name == "hank1_01" for func in seen_functions):
-        yield ("sumpy-bessel", BESSEL_PREAMBLE)
+        yield ("50-sumpy-hankel", HANKEL_PREAMBLE)
+        require_bessel = True
+    if require_bessel or any(func.name == "bessel_jv" for func in seen_functions):
+        yield ("40-sumpy-bessel", BESSEL_PREAMBLE)
 
 hank1_01_result_dtype = cl.tools.get_or_register_dtype("hank1_01_result",
         np.dtype([
