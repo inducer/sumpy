@@ -33,7 +33,7 @@ from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 
 from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansion
-from sumpy.expansion.local import VolumeTaylorLocalExpansion
+from sumpy.expansion.local import VolumeTaylorLocalExpansion, H2DLocalExpansion
 from sumpy.kernel import LaplaceKernel, HelmholtzKernel, AxisTargetDerivative
 
 import logging
@@ -82,16 +82,16 @@ def test_p2p(ctx_getter):
 
 @pytools.test.mark_test.opencl
 @pytest.mark.parametrize("order", [2, 3, 4, 5])
-@pytest.mark.parametrize("expn_class", [
-    VolumeTaylorLocalExpansion,
-    VolumeTaylorMultipoleExpansion,
-    ])
-@pytest.mark.parametrize("knl", [
-    LaplaceKernel(2),
-    #HelmholtzKernel(2)
+@pytest.mark.parametrize(("knl", "expn_class"), [
+    (LaplaceKernel(2), VolumeTaylorLocalExpansion),
+    (LaplaceKernel(2), VolumeTaylorMultipoleExpansion),
+
+    (HelmholtzKernel(2), VolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2), VolumeTaylorLocalExpansion),
+    (HelmholtzKernel(2), H2DLocalExpansion),
     ])
 def test_p2e2p(ctx_getter, knl, expn_class, order):
-    logging.basicConfig(level=logging.INFO)
+    #logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
@@ -99,15 +99,15 @@ def test_p2e2p(ctx_getter, knl, expn_class, order):
     np.random.seed(17)
 
     res = 100
-    nsources = 500
+    nsources = 100
 
     extra_kwargs = {}
     if isinstance(knl, HelmholtzKernel):
-        extra_kwargs["k"] = 2
+        extra_kwargs["k"] = 0.05
 
     out_kernels = [
             knl,
-            AxisTargetDerivative(0, knl)
+            AxisTargetDerivative(0, knl),
             ]
     expn = expn_class(knl, order=order)
 
@@ -120,21 +120,36 @@ def test_p2e2p(ctx_getter, knl, expn_class, order):
     eoc_rec_pot = EOCRecorder()
     eoc_rec_grad_x = EOCRecorder()
 
-    for dist in [3, 5, 7]:
-        from sumpy.expansion.local import LocalExpansionBase
+    from sumpy.expansion.local import LocalExpansionBase
+    if issubclass(expn_class, LocalExpansionBase):
+        h_values = [1/5, 1/7, 1/20]
+    else:
+        h_values = [1/2, 1/3, 1/5]
+
+    center = np.array([2, 1], np.float64)
+    sources = (0.7*(-0.5+np.random.rand(knl.dim, nsources).astype(np.float64))
+            + center[:, np.newaxis])
+
+    strengths = np.ones(nsources, dtype=np.float64) * (1/nsources)
+
+    source_boxes = np.array([0], dtype=np.int32)
+    box_source_starts = np.array([0], dtype=np.int32)
+    box_source_counts_nonchild = np.array([nsources], dtype=np.int32)
+
+    for h in h_values:
+        from sumpy.visualization import FieldPlotter
         if issubclass(expn_class, LocalExpansionBase):
-            centers = np.array([0.5+dist, 0.5], dtype=np.float64).reshape(knl.dim, 1)
+            loc_center = np.array([5.5, 0.0]) + center
+            centers = np.array(loc_center, dtype=np.float64).reshape(knl.dim, 1)
+            fp = FieldPlotter(loc_center, extent=h, npoints=res)
         else:
-            centers = np.array([0.5, 0.5], dtype=np.float64).reshape(knl.dim, 1)
+            eval_center = np.array([1/h, 0.0]) + center
+            fp = FieldPlotter(eval_center, extent=0.1, npoints=res)
+            centers = (
+                    np.array([0.0, 0.0], dtype=np.float64).reshape(knl.dim, 1)
+                    + center[:, np.newaxis])
 
-        sources = np.random.rand(knl.dim, nsources).astype(np.float64)
-        strengths = np.ones(nsources, dtype=np.float64)
-        targets = np.mgrid[dist:dist + 1:res*1j, 0:1:res*1j] \
-                .reshape(knl.dim, -1).astype(np.float64)
-
-        source_boxes = np.array([0], dtype=np.int32)
-        box_source_starts = np.array([0], dtype=np.int32)
-        box_source_counts_nonchild = np.array([nsources], dtype=np.int32)
+        targets = fp.points
 
         # {{{ apply p2e
 
@@ -145,6 +160,7 @@ def test_p2e2p(ctx_getter, knl, expn_class, order):
                 centers=centers,
                 sources=sources,
                 strengths=strengths,
+                #flags="print_hl_cl",
                 out_host=True, **extra_kwargs)
 
         # }}}
@@ -156,7 +172,7 @@ def test_p2e2p(ctx_getter, knl, expn_class, order):
         box_target_starts = np.array([0], dtype=np.int32)
         box_target_counts_nonchild = np.array([ntargets], dtype=np.int32)
 
-        evt, (pot, grad_x) = e2p(
+        evt, (pot, grad_x, ) = e2p(
                 queue,
                 expansions=mpoles,
                 target_boxes=source_boxes,
@@ -164,14 +180,14 @@ def test_p2e2p(ctx_getter, knl, expn_class, order):
                 box_target_counts_nonchild=box_target_counts_nonchild,
                 centers=centers,
                 targets=targets,
-                #flags="print_hl",
+                #flags="print_hl_cl",
                 out_host=True, **extra_kwargs)
 
         # }}}
 
         # {{{ compute (direct) reference solution
 
-        evt, (pot_direct, grad_x_direct) = p2p(
+        evt, (pot_direct, grad_x_direct, ) = p2p(
                 queue,
                 targets, sources, (strengths,),
                 out_host=True,
@@ -180,21 +196,58 @@ def test_p2e2p(ctx_getter, knl, expn_class, order):
         err_pot = la.norm((pot - pot_direct)/res**2)
         err_grad_x = la.norm((grad_x - grad_x_direct)/res**2)
 
+        if 1:
+            err_pot = err_pot / la.norm((pot_direct)/res**2)
+            err_grad_x = err_grad_x / la.norm((grad_x_direct)/res**2)
+
+        if 0:
+            import matplotlib.pyplot as pt
+            from matplotlib.colors import Normalize
+
+            pt.subplot(131)
+            im = fp.show_scalar_in_matplotlib(pot.real)
+            im.set_norm(Normalize(vmin=-0.1, vmax=0.1))
+
+            pt.subplot(132)
+            im = fp.show_scalar_in_matplotlib(pot_direct.real)
+            im.set_norm(Normalize(vmin=-0.1, vmax=0.1))
+            pt.colorbar()
+
+            pt.subplot(133)
+            im = fp.show_scalar_in_matplotlib(np.log10(1e-15+np.abs(pot-pot_direct)))
+            im.set_norm(Normalize(vmin=-6, vmax=1))
+
+            pt.colorbar()
+            pt.show()
+
         # }}}
 
-        eoc_rec_pot.add_data_point(1/dist, err_pot)
-        eoc_rec_grad_x.add_data_point(1/dist, err_grad_x)
+        eoc_rec_pot.add_data_point(h, err_pot)
+        eoc_rec_grad_x.add_data_point(h, err_grad_x)
 
-    print expn_class, order
+    print expn_class, knl, order
     print("POTENTIAL:")
     print(eoc_rec_pot)
     print("X TARGET DERIVATIVE:")
     print(eoc_rec_grad_x)
 
     tgt_order = order + 1
+    if issubclass(expn_class, LocalExpansionBase):
+        tgt_order_grad = tgt_order - 1
+        slack = 0.7
+        grad_slack = 0.5
+    else:
+        tgt_order_grad = tgt_order + 1
 
-    assert eoc_rec_pot.order_estimate() > tgt_order - 0.5
-    assert eoc_rec_grad_x.order_estimate() > tgt_order - 1.5
+        slack = 0.5
+        grad_slack = 1
+
+        if order <= 2:
+            slack += 1
+            grad_slack += 1
+
+    assert eoc_rec_pot.order_estimate() > tgt_order - slack
+    assert eoc_rec_grad_x.order_estimate() > tgt_order_grad - grad_slack
 
 
 @pytools.test.mark_test.opencl
