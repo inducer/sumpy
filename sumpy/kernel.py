@@ -127,6 +127,13 @@ class Kernel(object):
         """
         return []
 
+    def get_source_args(self):
+        """Return list of :cls:`loopy.Argument` instances describing
+        extra arguments used by kernel in picking up contributions
+        from point sources.
+        """
+        return []
+
     def __sub__(self, other):
         return DifferenceKernel(self, other)
 
@@ -252,6 +259,9 @@ class DifferenceKernel(Kernel):
 
         Kernel.__init__(self, self.kernel_plus.dim)
 
+        # FIXME
+        raise NotImplementedError("difference kernel mostly unimplemented")
+
     def __getinitargs__(self):
         return (self.kernel_plus, self.kernel_minus)
 
@@ -264,8 +274,6 @@ class DifferenceKernel(Kernel):
                 self.kernel_minus.fix_dimensions(dim))
 
     mapper_method = "map_difference_kernel"
-
-    # FIXME mostly unimplemented
 
 # }}}
 
@@ -304,6 +312,9 @@ class KernelWrapper(Kernel):
 
     def get_args(self):
         return self.inner_kernel.get_args()
+
+    def get_source_args(self):
+        return self.inner_kernel.get_source_args()
 
 # }}}
 
@@ -376,10 +387,10 @@ class DirectionalDerivative(DerivativeBase):
         return r"%s . \/_%s %s" % (
                 self.dir_vec_name, self.directional_kind[0], self.inner_kernel)
 
-    def get_args(self):
-        return self.inner_kernel.get_args() + [
-            lp.GlobalArg(self.dir_vec_name, None, shape=lp.auto,
-                dim_tags="sep,C")]
+    def get_source_args(self):
+        return [
+            lp.GlobalArg(self.dir_vec_name, None, shape=(self.dim, "nsrc"),
+                dim_tags="sep,C")] + self.inner_kernel.get_source_args()
 
 
 class DirectionalTargetDerivative(DirectionalDerivative):

@@ -83,7 +83,7 @@ class P2P(KernelComputation):
                     * var("strength_%d" % self.strength_usage[i])[var("isrc")]
                 for i, name in enumerate(result_names)]
 
-        from sumpy.tools import gather_arguments
+        from sumpy.tools import gather_source_arguments
         arguments = (
                 [
                     lp.GlobalArg("src", None,
@@ -98,7 +98,7 @@ class P2P(KernelComputation):
                 ]+[
                     lp.GlobalArg("result_%d" % i, dtype, shape="ntgt", order="C")
                     for i, dtype in enumerate(self.value_dtypes)
-                ] + gather_arguments(self.kernels))
+                ] + gather_source_arguments(self.kernels))
 
         if self.exclude_self:
             from pymbolic.primitives import If, ComparisonOperator, Variable

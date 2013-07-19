@@ -49,8 +49,23 @@ class VolumeTaylorMultipoleExpansion(
             from sumpy.symbolic import make_sym_vector
             dir_vec = make_sym_vector(kernel.dir_vec_name, kernel.dim)
 
-            result = [0]
-            1/0
+            coeff_identifiers = self.get_coefficient_identifiers()
+            result = [0] * len(coeff_identifiers)
+
+            for idim in xrange(kernel.dim):
+                for i, mi in enumerate(coeff_identifiers):
+                    if mi[idim] == 0:
+                        continue
+
+                    derivative_mi = tuple(mi_i - 1 if iaxis == idim else mi_i
+                            for iaxis, mi_i in enumerate(mi))
+
+                    result[i] += (
+                        - 1/mi_factorial(derivative_mi)
+                        * mi_power(avec, derivative_mi)
+                        * dir_vec[idim])
+
+            return result
         else:
             return [
                     mi_power(avec, mi) / mi_factorial(mi)

@@ -34,7 +34,8 @@ from pyopencl.tools import (  # noqa
 
 from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansion
 from sumpy.expansion.local import VolumeTaylorLocalExpansion, H2DLocalExpansion
-from sumpy.kernel import LaplaceKernel, HelmholtzKernel, AxisTargetDerivative
+from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, AxisTargetDerivative,
+        DirectionalSourceDerivative)
 
 import logging
 logger = logging.getLogger(__name__)
@@ -90,7 +91,11 @@ def test_p2p(ctx_getter):
     (HelmholtzKernel(2), VolumeTaylorLocalExpansion),
     (HelmholtzKernel(2), H2DLocalExpansion),
     ])
-def test_p2e2p(ctx_getter, knl, expn_class, order):
+@pytest.mark.parametrize("with_source_derivative", [
+    False,
+    True
+    ])
+def test_p2e2p(ctx_getter, knl, expn_class, order, with_source_derivative):
     #logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_getter()
@@ -104,6 +109,9 @@ def test_p2e2p(ctx_getter, knl, expn_class, order):
     extra_kwargs = {}
     if isinstance(knl, HelmholtzKernel):
         extra_kwargs["k"] = 0.05
+
+    if with_source_derivative:
+        knl = DirectionalSourceDerivative(knl, "dir_vec")
 
     out_kernels = [
             knl,
@@ -136,6 +144,12 @@ def test_p2e2p(ctx_getter, knl, expn_class, order):
     box_source_starts = np.array([0], dtype=np.int32)
     box_source_counts_nonchild = np.array([nsources], dtype=np.int32)
 
+    extra_source_kwargs = extra_kwargs.copy()
+    if with_source_derivative:
+        alpha = np.linspace(0, 2*np.pi, nsources, np.float64)
+        dir_vec = np.vstack([np.cos(alpha), np.sin(alpha)])
+        extra_source_kwargs["dir_vec"] = dir_vec
+
     for h in h_values:
         from sumpy.visualization import FieldPlotter
         if issubclass(expn_class, LocalExpansionBase):
@@ -161,7 +175,7 @@ def test_p2e2p(ctx_getter, knl, expn_class, order):
                 sources=sources,
                 strengths=strengths,
                 #flags="print_hl_cl",
-                out_host=True, **extra_kwargs)
+                out_host=True, **extra_source_kwargs)
 
         # }}}
 
@@ -191,7 +205,7 @@ def test_p2e2p(ctx_getter, knl, expn_class, order):
                 queue,
                 targets, sources, (strengths,),
                 out_host=True,
-                **extra_kwargs)
+                **extra_source_kwargs)
 
         err_pot = la.norm((pot - pot_direct)/res**2)
         err_grad_x = la.norm((grad_x - grad_x_direct)/res**2)
@@ -245,6 +259,10 @@ def test_p2e2p(ctx_getter, knl, expn_class, order):
         if order <= 2:
             slack += 1
             grad_slack += 1
+
+    if isinstance(knl, DirectionalSourceDerivative):
+        slack += 1
+        grad_slack += 2
 
     assert eoc_rec_pot.order_estimate() > tgt_order - slack
     assert eoc_rec_grad_x.order_estimate() > tgt_order_grad - grad_slack

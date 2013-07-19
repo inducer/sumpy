@@ -77,19 +77,20 @@ class P2E(object):
                 complex_dtype=np.complex128  # FIXME
                 )
 
+        from sumpy.tools import gather_source_arguments
         arguments = (
                 [
-                    lp.GlobalArg("sources", None, shape=(self.dim, "nsources")),
-                    lp.GlobalArg("strengths", None, shape="nsources"),
+                    lp.GlobalArg("sources", None, shape=(self.dim, "nsrc")),
+                    lp.GlobalArg("strengths", None, shape="nsrc"),
                     lp.GlobalArg("box_source_starts,box_source_counts_nonchild",
                         None, shape=None),
                     lp.GlobalArg("centers", None, shape="dim, nboxes"),
                     lp.GlobalArg("expansions", None,
                         shape=("nboxes", len(coeff_names))),
                     lp.ValueArg("nboxes", np.int32),
-                    lp.ValueArg("nsources", np.int32),
+                    lp.ValueArg("nsrc", np.int32),
                     "..."
-                ] + self.expansion.get_args())
+                ] + gather_source_arguments([self.expansion]))
 
         loopy_knl = lp.make_kernel(self.device,
                 [
