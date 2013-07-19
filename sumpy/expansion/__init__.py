@@ -29,8 +29,9 @@ from pytools import memoize_method
 
 class ExpansionBase(object):
     def __init__(self, kernel, order):
-        from sumpy.kernel import TargetDerivativeRemover
-        kernel = TargetDerivativeRemover()(kernel)
+        # Don't be tempted to remove target derivatives here.
+        # Line Taylor QBX can't do without them, because it can't
+        # take them afterwards.
 
         self.kernel = kernel
         self.order = order
