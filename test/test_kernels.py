@@ -321,7 +321,7 @@ def test_translations(ctx_getter, knl):
     np.random.seed(17)
 
     res = 200
-    nsources = 500
+    nsources = 15
 
     out_kernels = [knl]
 
@@ -329,47 +329,61 @@ def test_translations(ctx_getter, knl):
     if isinstance(knl, HelmholtzKernel):
         extra_kwargs["k"] = 0.05
 
-    center = np.array([2, 1], np.float64)
+    # Just to make sure things also work away from the origin
+    origin = np.array([2, 1], np.float64)
     sources = (0.7*(-0.5+np.random.rand(knl.dim, nsources).astype(np.float64))
-            + center[:, np.newaxis])
+            + origin[:, np.newaxis])
     strengths = np.ones(nsources, dtype=np.float64) * (1/nsources)
 
     pconv_verifier = PConvergenceVerifier()
 
     from sumpy.visualization import FieldPlotter
 
-    for order in [2, 3, 4, 5]:
-        #m_expn = VolumeTaylorMultipoleExpansion(knl, order=order)
+    eval_offset = np.array([5.5, 0.0])
+
+    centers = (np.array(
+            [
+                # box 0: particles, first mpole here
+                [0, 0],
+
+                # box 1: mpole here
+                np.array([-0.2, 0.1], np.float64),
+
+                # box 2: first local here
+                eval_offset + np.array([0.3, -0.2], np.float64),
+
+                # box 3: second local and eval here
+                eval_offset
+                ],
+            dtype=np.float64) + origin).T.copy()
+
+    del eval_offset
+
+    for order in [2, 3]:
+        m_expn = VolumeTaylorMultipoleExpansion(knl, order=order)
         l_expn = VolumeTaylorLocalExpansion(knl, order=order)
 
         from sumpy import P2E, E2P, P2P, E2E
-        p2l = P2E(ctx, l_expn, out_kernels)
+        p2m = P2E(ctx, m_expn, out_kernels)
+        m2l = E2E(ctx, m_expn, l_expn)
         l2l = E2E(ctx, l_expn, l_expn)
         l2p = E2P(ctx, l_expn, out_kernels)
         p2p = P2P(ctx, out_kernels, exclude_self=False)
 
-        eval_center = np.array([5.5, 0.0]) + center
-        l_centers = np.array(
-                [
-                    eval_center+np.array([-0.2, 0.1], np.float64),
-                    eval_center
-                    ],
-                dtype=np.float64).T.copy()
-
-        fp = FieldPlotter(eval_center, extent=0.3, npoints=res)
+        fp = FieldPlotter(centers[:, -1], extent=0.3, npoints=res)
         targets = fp.points
 
-        # {{{ apply P2L
+        # {{{ apply P2M
 
-        p2l_source_boxes = np.array([0], dtype=np.int32)
-        p2l_box_source_starts = np.array([0], dtype=np.int32)
-        p2l_box_source_counts_nonchild = np.array([nsources], dtype=np.int32)
+        p2m_source_boxes = np.array([0], dtype=np.int32)
+        p2m_box_source_starts = np.array([0], dtype=np.int32)
+        p2m_box_source_counts_nonchild = np.array([nsources], dtype=np.int32)
 
-        evt, (mpoles,) = p2l(queue,
-                source_boxes=p2l_source_boxes,
-                box_source_starts=p2l_box_source_starts,
-                box_source_counts_nonchild=p2l_box_source_counts_nonchild,
-                centers=l_centers,
+        evt, (mpoles,) = p2m(queue,
+                source_boxes=p2m_source_boxes,
+                box_source_starts=p2m_box_source_starts,
+                box_source_counts_nonchild=p2m_box_source_counts_nonchild,
+                centers=centers,
                 sources=sources,
                 strengths=strengths,
                 #flags="print_hl_wrapper",
@@ -377,18 +391,35 @@ def test_translations(ctx_getter, knl):
 
         # }}}
 
+        # {{{ apply M2L
+
+        m2l_target_boxes = np.array([2], dtype=np.int32)
+        m2l_src_box_starts = np.array([0, 1], dtype=np.int32)
+        m2l_src_box_lists = np.array([0], dtype=np.int32)
+
+        evt, (mpoles,) = m2l(queue,
+                src_expansions=mpoles,
+                target_boxes=m2l_target_boxes,
+                src_box_starts=m2l_src_box_starts,
+                src_box_lists=m2l_src_box_lists,
+                centers=centers,
+                #flags="print_hl_cl",
+                out_host=True, **extra_kwargs)
+
+        # }}}
+
         # {{{ apply L2L
 
-        p2l_target_boxes = np.array([1], dtype=np.int32)
+        l2l_target_boxes = np.array([3], dtype=np.int32)
         l2l_src_box_starts = np.array([0, 1], dtype=np.int32)
-        l2l_src_box_lists = np.array([0], dtype=np.int32)
+        l2l_src_box_lists = np.array([2], dtype=np.int32)
 
         evt, (mpoles,) = l2l(queue,
                 src_expansions=mpoles,
-                target_boxes=p2l_target_boxes,
+                target_boxes=l2l_target_boxes,
                 src_box_starts=l2l_src_box_starts,
                 src_box_lists=l2l_src_box_lists,
-                centers=l_centers,
+                centers=centers,
                 #flags="print_hl_wrapper",
                 out_host=True, **extra_kwargs)
 
@@ -398,7 +429,7 @@ def test_translations(ctx_getter, knl):
 
         ntargets = targets.shape[-1]
 
-        l2p_target_boxes = np.array([1], dtype=np.int32)
+        l2p_target_boxes = np.array([3], dtype=np.int32)
         l2p_box_target_starts = np.array([0], dtype=np.int32)
         l2p_box_target_counts_nonchild = np.array([ntargets], dtype=np.int32)
 
@@ -408,7 +439,7 @@ def test_translations(ctx_getter, knl):
                 target_boxes=l2p_target_boxes,
                 box_target_starts=l2p_box_target_starts,
                 box_target_counts_nonchild=l2p_box_target_counts_nonchild,
-                centers=l_centers,
+                centers=centers,
                 targets=targets,
                 #flags="trace_assignment_values",
                 out_host=True, **extra_kwargs
