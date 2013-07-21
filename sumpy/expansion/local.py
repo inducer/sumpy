@@ -30,6 +30,9 @@ from sumpy.expansion import ExpansionBase, VolumeTaylorExpansionBase
 class LocalExpansionBase(ExpansionBase):
     pass
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 # {{{ line taylor
 
@@ -86,10 +89,19 @@ class VolumeTaylorLocalExpansion(LocalExpansionBase, VolumeTaylorExpansionBase):
                 for coeff, mi in zip(coeffs, self.get_coefficient_identifiers()))
 
     def translate_from(self, src_expansion, src_coeff_exprs, dvec):
+        logger.info("building translation operator: %s(%d) -> %s(%d): start"
+                % (type(src_expansion).__name__,
+                    src_expansion.order,
+                    type(self).__name__,
+                    self.order))
+
         from sumpy.tools import mi_derivative
         expr = src_expansion.evaluate(src_coeff_exprs, dvec)
-        return [mi_derivative(expr, dvec, mi)
+        result = [mi_derivative(expr, dvec, mi)
                 for mi in self.get_coefficient_identifiers()]
+
+        logger.info("building translation operator: done")
+        return result
 
 # }}}
 
