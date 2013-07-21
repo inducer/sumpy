@@ -121,8 +121,8 @@ class E2P(object):
                 loopy_insns
                 + ["""
                     <> tgt_ibox = target_boxes[itgt_box]
-                    <> itgt_start = box_target_starts[tgt_ibox]
-                    <> itgt_end = itgt_start+box_target_counts_nonchild[tgt_ibox]
+                    <> itgt_start = box_target_starts[itgt_box]
+                    <> itgt_end = itgt_start+box_target_counts_nonchild[itgt_box]
                     <> center[idim] = centers[idim, tgt_ibox] {id=fetch_center}
                     <> b[idim] = targets[idim, itgt] - center[idim]
                     <> coeff${COEFFIDX} = expansions[tgt_ibox, ${COEFFIDX}]

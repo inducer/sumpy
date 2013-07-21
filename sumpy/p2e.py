@@ -100,8 +100,8 @@ class P2E(object):
                 loopy_insns
                 + [
                     "<> src_ibox = source_boxes[isrc_box]",
-                    "<> isrc_start = box_source_starts[src_ibox]",
-                    "<> isrc_end = isrc_start+box_source_counts_nonchild[src_ibox]",
+                    "<> isrc_start = box_source_starts[isrc_box]",
+                    "<> isrc_end = isrc_start+box_source_counts_nonchild[isrc_box]",
                     "<> center[idim] = centers[idim, src_ibox] {id=fetch_center}",
                     "<> a[idim] = center[idim] - sources[idim, isrc]",
                     "<> strength = strengths[isrc]",

@@ -85,6 +85,12 @@ class VolumeTaylorLocalExpansion(LocalExpansionBase, VolumeTaylorExpansionBase):
                 / mi_factorial(mi)
                 for coeff, mi in zip(coeffs, self.get_coefficient_identifiers()))
 
+    def translate_from(self, src_expansion, src_coeff_exprs, dvec):
+        from sumpy.tools import mi_derivative
+        expr = src_expansion.evaluate(src_coeff_exprs, dvec)
+        return [mi_derivative(expr, dvec, mi)
+                for mi in self.get_coefficient_identifiers()]
+
 # }}}
 
 

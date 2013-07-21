@@ -111,7 +111,7 @@ class E2E(object):
                     "{[idim]: 0<=idim<dim}",
                     ],
                 loopy_insns
-                + """
+                + ["""
                     <> tgt_ibox = target_boxes[itgt_box]
                     <> tgt_center[idim] = centers[idim, tgt_ibox] \
                             {id=fetch_tgt_center}
@@ -119,19 +119,18 @@ class E2E(object):
                     <> isrc_start = src_box_starts[itgt_box]
                     <> isrc_stop = src_box_starts[itgt_box+1]
 
-                    <> src_ibox = source_boxes[isrc_box]
+                    <> src_ibox = src_box_lists[isrc_box]
                     <> src_center[idim] = centers[idim, src_ibox] \
                             {id=fetch_src_center}
                     <> d[idim] = tgt_center[idim] - src_center[idim]
 
-                    src_coeff${SRC_COEFFIDX} = \
-                        src_expansions[src_ibox, ${SRC_COEFFIDX}]\
+                    <> src_coeff${SRC_COEFFIDX} = \
+                        src_expansions[src_ibox, ${SRC_COEFFIDX}]
                     tgt_expansions[tgt_ibox, ${TGT_COEFFIDX}] = \
-                        coeff${TGT_COEFFIDX}
-                    """,
+                        coeff${TGT_COEFFIDX} {id_prefix=write_expn}
+                    """],
                 arguments,
-                name=self.name, assumptions="nsrc_boxes>=1",
-                preambles=self.expansion.get_preambles(),
+                name=self.name, assumptions="ntgt_boxes>=1",
                 defines=dict(
                     dim=self.dim,
                     SRC_COEFFIDX=[str(i) for i in xrange(ncoeff_src)],

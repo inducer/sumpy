@@ -40,6 +40,13 @@ from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, AxisTargetDerivative,
 import logging
 logger = logging.getLogger(__name__)
 
+try:
+    import faulthandler
+except ImportError:
+    pass
+else:
+    faulthandler.enable()
+
 
 @pytest.mark.opencl
 def test_p2p(ctx_getter):
@@ -150,8 +157,9 @@ def test_p2e2p(ctx_getter, knl, expn_class, order, with_source_derivative):
         dir_vec = np.vstack([np.cos(alpha), np.sin(alpha)])
         extra_source_kwargs["dir_vec"] = dir_vec
 
+    from sumpy.visualization import FieldPlotter
+
     for h in h_values:
-        from sumpy.visualization import FieldPlotter
         if issubclass(expn_class, LocalExpansionBase):
             loc_center = np.array([5.5, 0.0]) + center
             centers = np.array(loc_center, dtype=np.float64).reshape(knl.dim, 1)
@@ -269,8 +277,12 @@ def test_p2e2p(ctx_getter, knl, expn_class, order, with_source_derivative):
 
 
 @pytools.test.mark_test.opencl
+@pytest.mark.parametrize("knl", [
+    LaplaceKernel(2),
+    HelmholtzKernel(2)
+    ])
 @pytest.mark.parametrize("order", [2, 3, 4, 5])
-def no_test_translations(ctx_getter, order):
+def test_translations(ctx_getter, knl, order):
     logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_getter()
@@ -278,12 +290,11 @@ def no_test_translations(ctx_getter, order):
 
     np.random.seed(17)
 
-    res = 100
+    res = 2
     nsources = 500
 
     dim = 2
 
-    from sumpy.kernel import LaplaceKernel
     knl = LaplaceKernel(dim)
     out_kernels = [knl]
     #m_expn = VolumeTaylorMultipoleExpansion(knl, order=order)
@@ -298,49 +309,58 @@ def no_test_translations(ctx_getter, order):
     from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
 
-    for dist in [3, 5, 7]:
+    h_values = [1/5, 1/7, 1/20]
+
+    center = np.array([2, 1], np.float64)
+    sources = (0.7*(-0.5+np.random.rand(knl.dim, nsources).astype(np.float64))
+            + center[:, np.newaxis])
+    strengths = np.ones(nsources, dtype=np.float64) * (1/nsources)
+
+    from sumpy.visualization import FieldPlotter
+
+    for h in h_values:
+        eval_center = np.array([5.5, 0.0]) + center
         l_centers = np.array(
                 [
-                    [0.4+dist, 0.6],
-                    [0.5+dist, 0.5],
+                    eval_center+np.array([-2, 1], np.float64) * h,
+                    eval_center
                     ],
                 dtype=np.float64).T.copy()
 
-        sources = np.random.rand(dim, nsources).astype(np.float64)
-        strengths = np.ones(nsources, dtype=np.float64)
-        targets = np.mgrid[dist:dist + 1:res*1j, 0:1:res*1j] \
-                .reshape(dim, -1).astype(np.float64)
-
-        source_boxes = np.array([0], dtype=np.int32)
-        box_source_starts = np.array([0], dtype=np.int32)
-        box_source_counts_nonchild = np.array([nsources], dtype=np.int32)
+        fp = FieldPlotter(eval_center, extent=h, npoints=res)
+        targets = fp.points
 
         # {{{ apply P2L
 
+        p2l_source_boxes = np.array([0], dtype=np.int32)
+        p2l_box_source_starts = np.array([0], dtype=np.int32)
+        p2l_box_source_counts_nonchild = np.array([nsources], dtype=np.int32)
+
         evt, (mpoles,) = p2l(queue,
-                source_boxes=source_boxes,
-                box_source_starts=box_source_starts,
-                box_source_counts_nonchild=box_source_counts_nonchild,
+                source_boxes=p2l_source_boxes,
+                box_source_starts=p2l_box_source_starts,
+                box_source_counts_nonchild=p2l_box_source_counts_nonchild,
                 centers=l_centers,
                 sources=sources,
                 strengths=strengths,
-                #iflags="print_hl_wrapper",
+                #flags="print_hl_wrapper",
                 out_host=True)
 
         # }}}
 
         # {{{ apply L2L
 
-        src_box_starts = np.array([0, 0, 1], dtype=np.int32)
-        src_box_lists = np.array([0], dtype=np.int32)
+        p2l_target_boxes = np.array([1], dtype=np.int32)
+        l2l_src_box_starts = np.array([0, 1], dtype=np.int32)
+        l2l_src_box_lists = np.array([0], dtype=np.int32)
 
-        box_source_starts = np.array([0], dtype=np.int32)
         evt, (mpoles,) = l2l(queue,
                 src_expansions=mpoles,
-                src_box_starts=src_box_starts,
-                src_box_lists=src_box_lists,
-                l_centers=l_centers,
-                #iflags="print_hl_wrapper",
+                target_boxes=p2l_target_boxes,
+                src_box_starts=l2l_src_box_starts,
+                src_box_lists=l2l_src_box_lists,
+                centers=l_centers,
+                #flags="print_hl_wrapper",
                 out_host=True)
 
         # }}}
@@ -349,18 +369,19 @@ def no_test_translations(ctx_getter, order):
 
         ntargets = targets.shape[-1]
 
-        box_target_starts = np.array([0], dtype=np.int32)
-        box_target_counts_nonchild = np.array([ntargets], dtype=np.int32)
+        l2p_target_boxes = np.array([1], dtype=np.int32)
+        l2p_box_target_starts = np.array([0], dtype=np.int32)
+        l2p_box_target_counts_nonchild = np.array([ntargets], dtype=np.int32)
 
         evt, (pot,) = l2p(
                 queue,
                 expansions=mpoles,
-                target_boxes=source_boxes,
-                box_target_starts=box_target_starts,
-                box_target_counts_nonchild=box_target_counts_nonchild,
+                target_boxes=l2p_target_boxes,
+                box_target_starts=l2p_box_target_starts,
+                box_target_counts_nonchild=l2p_box_target_counts_nonchild,
                 centers=l_centers,
                 targets=targets,
-                #iflags="print_hl",
+                #flags="trace_assignment_values",
                 out_host=True,
                 )
 
@@ -377,7 +398,7 @@ def no_test_translations(ctx_getter, order):
 
         # }}}
 
-        eoc_rec.add_data_point(1/dist, err)
+        eoc_rec.add_data_point(h, err)
 
     print eoc_rec
     tgt_order = order + 1
