@@ -276,13 +276,43 @@ def test_p2e2p(ctx_getter, knl, expn_class, order, with_source_derivative):
     assert eoc_rec_grad_x.order_estimate() > tgt_order_grad - grad_slack
 
 
+class PConvergenceVerifier(object):
+    def __init__(self):
+        self.orders = []
+        self.errors = []
+
+    def add_data_point(self, order, error):
+        self.orders.append(order)
+        self.errors.append(error)
+
+    def __str__(self):
+        from pytools import Table
+        tbl = Table()
+        tbl.add_row(("p", "error"))
+
+        for p, err in zip(self.orders, self.errors):
+            tbl.add_row((str(p), str(err)))
+
+        return str(tbl)
+
+    def __call__(self):
+        orders = np.array(self.orders, np.float64)
+        log_errors = np.log10(1e-20+np.abs(np.array(self.errors, np.float64)))
+
+        constant_ish = log_errors/orders
+
+        c_max = np.max(constant_ish)
+        c_min = np.min(constant_ish)
+
+        assert c_max < c_min + 2, constant_ish
+
+
 @pytools.test.mark_test.opencl
 @pytest.mark.parametrize("knl", [
     LaplaceKernel(2),
     HelmholtzKernel(2)
     ])
-@pytest.mark.parametrize("order", [2, 3, 4, 5])
-def test_translations(ctx_getter, knl, order):
+def test_translations(ctx_getter, knl):
     logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_getter()
@@ -290,44 +320,43 @@ def test_translations(ctx_getter, knl, order):
 
     np.random.seed(17)
 
-    res = 2
+    res = 200
     nsources = 500
 
-    dim = 2
-
-    knl = LaplaceKernel(dim)
     out_kernels = [knl]
-    #m_expn = VolumeTaylorMultipoleExpansion(knl, order=order)
-    l_expn = VolumeTaylorLocalExpansion(knl, order=order)
 
-    from sumpy import P2E, E2P, P2P, E2E
-    p2l = P2E(ctx, l_expn, out_kernels)
-    l2l = E2E(ctx, l_expn, l_expn)
-    l2p = E2P(ctx, l_expn, out_kernels)
-    p2p = P2P(ctx, out_kernels, exclude_self=False)
-
-    from pytools.convergence import EOCRecorder
-    eoc_rec = EOCRecorder()
-
-    h_values = [1/5, 1/7, 1/20]
+    extra_kwargs = {}
+    if isinstance(knl, HelmholtzKernel):
+        extra_kwargs["k"] = 0.05
 
     center = np.array([2, 1], np.float64)
     sources = (0.7*(-0.5+np.random.rand(knl.dim, nsources).astype(np.float64))
             + center[:, np.newaxis])
     strengths = np.ones(nsources, dtype=np.float64) * (1/nsources)
 
+    pconv_verifier = PConvergenceVerifier()
+
     from sumpy.visualization import FieldPlotter
 
-    for h in h_values:
+    for order in [2, 3, 4, 5]:
+        #m_expn = VolumeTaylorMultipoleExpansion(knl, order=order)
+        l_expn = VolumeTaylorLocalExpansion(knl, order=order)
+
+        from sumpy import P2E, E2P, P2P, E2E
+        p2l = P2E(ctx, l_expn, out_kernels)
+        l2l = E2E(ctx, l_expn, l_expn)
+        l2p = E2P(ctx, l_expn, out_kernels)
+        p2p = P2P(ctx, out_kernels, exclude_self=False)
+
         eval_center = np.array([5.5, 0.0]) + center
         l_centers = np.array(
                 [
-                    eval_center+np.array([-2, 1], np.float64) * h,
+                    eval_center+np.array([-0.2, 0.1], np.float64),
                     eval_center
                     ],
                 dtype=np.float64).T.copy()
 
-        fp = FieldPlotter(eval_center, extent=h, npoints=res)
+        fp = FieldPlotter(eval_center, extent=0.3, npoints=res)
         targets = fp.points
 
         # {{{ apply P2L
@@ -344,7 +373,7 @@ def test_translations(ctx_getter, knl, order):
                 sources=sources,
                 strengths=strengths,
                 #flags="print_hl_wrapper",
-                out_host=True)
+                out_host=True, **extra_kwargs)
 
         # }}}
 
@@ -361,7 +390,7 @@ def test_translations(ctx_getter, knl, order):
                 src_box_lists=l2l_src_box_lists,
                 centers=l_centers,
                 #flags="print_hl_wrapper",
-                out_host=True)
+                out_host=True, **extra_kwargs)
 
         # }}}
 
@@ -382,7 +411,7 @@ def test_translations(ctx_getter, knl, order):
                 centers=l_centers,
                 targets=targets,
                 #flags="trace_assignment_values",
-                out_host=True,
+                out_host=True, **extra_kwargs
                 )
 
         # }}}
@@ -392,17 +421,16 @@ def test_translations(ctx_getter, knl, order):
         evt, (pot_direct,) = p2p(
                 queue,
                 targets, sources, (strengths,),
-                out_host=True)
+                out_host=True, **extra_kwargs)
 
         err = la.norm((pot - pot_direct)/res**2)
 
         # }}}
 
-        eoc_rec.add_data_point(h, err)
+        pconv_verifier.add_data_point(order, err)
 
-    print eoc_rec
-    tgt_order = order + 1
-    assert eoc_rec.order_estimate() > tgt_order - 0.5
+    print pconv_verifier
+    pconv_verifier()
 
 
 # You can test individual routines by typing
