@@ -74,7 +74,7 @@ class E2E(object):
                     self.tgt_expansion.translate_from(
                         self.src_expansion, src_coeff_exprs, dvec))]
 
-        sac.run_global_cse()
+        #sac.run_global_cse()
 
         from sumpy.symbolic import kill_trivial_assignments
         assignments = kill_trivial_assignments([
