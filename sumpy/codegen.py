@@ -386,18 +386,6 @@ class MathConstantRewriter(IdentityMapper):
             return IdentityMapper.map_variable(self, expr)
 
 
-class ComplexConstantSizer(IdentityMapper):
-    def __init__(self, dtype):
-        self.dtype = dtype
-
-    def map_constant(self, expr):
-        if isinstance(expr, (complex, np.complexfloating)):
-            assert self.dtype.kind == "c"
-            return self.dtype.type(expr)
-        else:
-            return expr
-
-
 def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
         complex_dtype=None):
     logger.info("loopy instruction generation: start")
@@ -425,12 +413,6 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
     ssg = SumSignGrouper()
     fck = FractionKiller()
 
-    if 0:
-        if complex_dtype is not None:
-            ccs = ComplexConstantSizer(np.dtype(complex_dtype))
-        else:
-            ccs = None
-
     def convert_expr(name, expr):
         logger.debug("generate expression for: %s" % name)
         expr = bdr(expr)
@@ -439,9 +421,6 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
         expr = pwr(expr)
         expr = fck(expr)
         expr = ssg(expr)
-        if 0:
-            if ccs is not None:
-                expr = ccs(expr)
         for m in pymbolic_expr_maps:
             expr = m(expr)
         return expr

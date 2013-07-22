@@ -181,14 +181,12 @@ class KernelComputation(object):
     def get_kernel_scaling_assignments(self):
         from pymbolic.sympy_interface import SympyToPymbolicMapper
         sympy_conv = SympyToPymbolicMapper()
-        from sumpy.codegen import ComplexConstantSizer
 
         import loopy as lp
         return [
                 lp.ExpressionInstruction(id=None,
                     assignee="knl_%d_scaling" % i,
-                    expression=ComplexConstantSizer(dtype)(
-                        sympy_conv(kernel.get_scaling())),
+                    expression=sympy_conv(kernel.get_scaling()),
                     temp_var_type=dtype)
                 for i, (kernel, dtype) in enumerate(
                     zip(self.kernels, self.value_dtypes))]
