@@ -380,7 +380,13 @@ def test_translations(ctx_getter, knl):
 
     del eval_offset
 
-    for order in [2, 3, 4, 5]:
+    if isinstance(knl, HelmholtzKernel):
+        # FIXME: Embarrassing--but we run out of memory for higher orders.
+        orders = [2, 3]
+    else:
+        orders = [2, 3, 4, 5]
+
+    for order in orders:
         m_expn = VolumeTaylorMultipoleExpansion(knl, order=order)
         l_expn = VolumeTaylorLocalExpansion(knl, order=order)
 
