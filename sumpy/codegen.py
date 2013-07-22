@@ -406,6 +406,12 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
     for name, expr in assignments:
         btog(expr)
 
+    #from pymbolic.mapper.cse_tagger import CSEWalkMapper, CSETagMapper
+    #cse_walk = CSEWalkMapper()
+    #for name, expr in assignments:
+    #    cse_walk(expr)
+    #cse_tag = CSETagMapper(cse_walk)
+
     # do the rest of the conversion
     bessel_sub = BesselSubstitutor(BesselGetter(btog.bessel_j_arg_to_top_order))
     vcr = VectorComponentRewriter(vector_names)
@@ -421,6 +427,7 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
         expr = pwr(expr)
         expr = fck(expr)
         expr = ssg(expr)
+        #expr = cse_tag(expr)
         for m in pymbolic_expr_maps:
             expr = m(expr)
         return expr
