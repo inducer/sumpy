@@ -365,6 +365,7 @@ def test_translations(ctx_getter, knl):
 
         from sumpy import P2E, E2P, P2P, E2E
         p2m = P2E(ctx, m_expn, out_kernels)
+        m2m = E2E(ctx, m_expn, m_expn)
         m2l = E2E(ctx, m_expn, l_expn)
         l2l = E2E(ctx, l_expn, l_expn)
         l2p = E2P(ctx, l_expn, out_kernels)
@@ -391,11 +392,28 @@ def test_translations(ctx_getter, knl):
 
         # }}}
 
+        # {{{ apply M2M
+
+        m2m_target_boxes = np.array([1], dtype=np.int32)
+        m2m_src_box_starts = np.array([0, 1], dtype=np.int32)
+        m2m_src_box_lists = np.array([0], dtype=np.int32)
+
+        evt, (mpoles,) = m2m(queue,
+                src_expansions=mpoles,
+                target_boxes=m2m_target_boxes,
+                src_box_starts=m2m_src_box_starts,
+                src_box_lists=m2m_src_box_lists,
+                centers=centers,
+                #flags="print_hl_cl",
+                out_host=True, **extra_kwargs)
+
+        # }}}
+
         # {{{ apply M2L
 
         m2l_target_boxes = np.array([2], dtype=np.int32)
         m2l_src_box_starts = np.array([0, 1], dtype=np.int32)
-        m2l_src_box_lists = np.array([0], dtype=np.int32)
+        m2l_src_box_lists = np.array([1], dtype=np.int32)
 
         evt, (mpoles,) = m2l(queue,
                 src_expansions=mpoles,
@@ -455,6 +473,8 @@ def test_translations(ctx_getter, knl):
                 out_host=True, **extra_kwargs)
 
         err = la.norm((pot - pot_direct)/res**2)
+
+        err = err / (la.norm(pot_direct) / res**2)
 
         # }}}
 

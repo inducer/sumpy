@@ -26,6 +26,9 @@ import sympy as sp  # noqa
 
 from sumpy.expansion import ExpansionBase, VolumeTaylorExpansionBase
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 class MultipoleExpansionBase(ExpansionBase):
     pass
@@ -61,25 +64,68 @@ class VolumeTaylorMultipoleExpansion(
                             for iaxis, mi_i in enumerate(mi))
 
                     result[i] += (
-                        - 1/mi_factorial(derivative_mi)
-                        * mi_power(avec, derivative_mi)
+                        - mi_power(avec, derivative_mi)
                         * dir_vec[idim])
 
             return result
         else:
             return [
-                    mi_power(avec, mi) / mi_factorial(mi)
+                    mi_power(avec, mi)
                     for mi in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec):
         ppkernel = self.kernel.postprocess_at_target(
                 self.kernel.get_expression(bvec), bvec)
 
-        from sumpy.tools import mi_derivative
+        from sumpy.tools import mi_derivative, mi_factorial
         return sum(
-                coeff
+                coeff / mi_factorial(mi)
                 * mi_derivative(ppkernel, bvec, mi)
                 for coeff, mi in zip(coeffs, self.get_coefficient_identifiers()))
+
+    def translate_from(self, src_expansion, src_coeff_exprs, dvec):
+        if not isinstance(src_expansion, type(self)):
+            raise RuntimeError("do not know how to translate %s to "
+                    "Taylor multipole expansion"
+                    % type(src_expansion).__name)
+
+        logger.info("building translation operator: %s(%d) -> %s(%d): start"
+                % (type(src_expansion).__name__,
+                    src_expansion.order,
+                    type(self).__name__,
+                    self.order))
+
+        src_mi_to_index = dict((mi, i) for i, mi in enumerate(
+            src_expansion.get_coefficient_identifiers()))
+
+        result = [0] * len(self.get_coefficient_identifiers())
+        from pytools import generate_nonnegative_integer_tuples_below as gnitb
+
+        for i, tgt_mi in enumerate(
+                self.get_coefficient_identifiers()):
+
+            tgt_mi_plus_one = tuple(mi_i + 1 for mi_i in tgt_mi)
+
+            for src_mi in gnitb(tgt_mi_plus_one):
+                try:
+                    src_index = src_mi_to_index[src_mi]
+                except KeyError:
+                    # tgt higher-order than source--dumb, but not life-threatening
+                    continue
+
+                contrib = src_coeff_exprs[src_index]
+
+                for idim in xrange(self.dim):
+                    n = tgt_mi[idim]
+                    k = src_mi[idim]
+                    assert n >= k
+                    contrib *= (sp.binomial(n, k)
+                            * dvec[idim]**(n-k))
+
+                result[i] += contrib
+
+        logger.info("building translation operator: done")
+        return result
 
 # }}}
 
