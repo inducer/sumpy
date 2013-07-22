@@ -297,14 +297,29 @@ class PConvergenceVerifier(object):
 
     def __call__(self):
         orders = np.array(self.orders, np.float64)
-        log_errors = np.log10(1e-20+np.abs(np.array(self.errors, np.float64)))
+        errors = np.abs(np.array(self.errors, np.float64))
 
-        constant_ish = log_errors/orders
+        rel_change = np.diff(1e-20 + np.log10(errors)) / np.diff(orders)
 
-        c_max = np.max(constant_ish)
-        c_min = np.min(constant_ish)
+        assert (rel_change < -0.2).all()
 
-        assert c_max < c_min + 2, constant_ish
+
+def test_p_convergence_verifier():
+    pconv_verifier = PConvergenceVerifier()
+    for order in [2, 3, 4, 5]:
+        pconv_verifier.add_data_point(order, 0.1**order)
+    pconv_verifier()
+
+    pconv_verifier = PConvergenceVerifier()
+    for order in [2, 3, 4, 5]:
+        pconv_verifier.add_data_point(order, 0.5**order)
+    pconv_verifier()
+
+    pconv_verifier = PConvergenceVerifier()
+    for order in [2, 3, 4, 5]:
+        pconv_verifier.add_data_point(order, 2)
+    with pytest.raises(AssertionError):
+        pconv_verifier()
 
 
 @pytools.test.mark_test.opencl
@@ -359,7 +374,7 @@ def test_translations(ctx_getter, knl):
 
     del eval_offset
 
-    for order in [2, 3]:
+    for order in [2, 3, 4, 5]:
         m_expn = VolumeTaylorMultipoleExpansion(knl, order=order)
         l_expn = VolumeTaylorLocalExpansion(knl, order=order)
 
