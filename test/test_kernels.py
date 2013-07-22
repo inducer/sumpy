@@ -105,6 +105,9 @@ def test_p2p(ctx_getter):
 def test_p2e2p(ctx_getter, knl, expn_class, order, with_source_derivative):
     #logging.basicConfig(level=logging.INFO)
 
+    from sympy.core.cache import clear_cache
+    clear_cache()
+
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
 
@@ -330,6 +333,9 @@ def test_p_convergence_verifier():
 def test_translations(ctx_getter, knl):
     logging.basicConfig(level=logging.INFO)
 
+    from sympy.core.cache import clear_cache
+    clear_cache()
+
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
 
@@ -379,7 +385,7 @@ def test_translations(ctx_getter, knl):
         l_expn = VolumeTaylorLocalExpansion(knl, order=order)
 
         from sumpy import P2E, E2P, P2P, E2E
-        p2m = P2E(ctx, m_expn, out_kernels)
+        p2m = P2E(ctx, m_expn)
         m2m = E2E(ctx, m_expn, m_expn)
         m2l = E2E(ctx, m_expn, l_expn)
         l2l = E2E(ctx, l_expn, l_expn)
