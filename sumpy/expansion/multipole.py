@@ -64,7 +64,7 @@ class VolumeTaylorMultipoleExpansion(
                             for iaxis, mi_i in enumerate(mi))
 
                     result[i] += (
-                        - mi_power(avec, derivative_mi)
+                        - mi_power(avec, derivative_mi) * mi[idim]
                         * dir_vec[idim])
 
             return result
