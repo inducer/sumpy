@@ -42,7 +42,7 @@ class VolumeTaylorMultipoleExpansion(
         from sumpy.kernel import DirectionalSourceDerivative
         kernel = self.kernel
 
-        from sumpy.tools import mi_power, mi_factorial
+        from sumpy.tools import mi_power
 
         if isinstance(kernel, DirectionalSourceDerivative):
             if kernel.get_base_kernel() is not kernel.inner_kernel:
