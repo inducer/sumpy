@@ -28,7 +28,9 @@ import sympy as sp
 from pytools import memoize_method
 
 
-class E2P(object):
+# {{{ E2P base class
+
+class E2PBase(object):
     def __init__(self, ctx, expansion, kernels,
             options=[], name="e2p", device=None):
         """
@@ -56,8 +58,7 @@ class E2P(object):
         for knl in kernels:
             assert tdr(knl) == expansion.kernel
 
-    @memoize_method
-    def get_kernel(self):
+    def get_loopy_insns_and_result_names(self):
         from sumpy.symbolic import make_sym_vector
         bvec = make_sym_vector("b", self.dim)
 
@@ -96,6 +97,20 @@ class E2P(object):
                     expression=sympy_conv(self.expansion.kernel.get_scaling()),
                     temp_var_type=lp.auto))
 
+        return loopy_insns, result_names
+
+# }}}
+
+
+# {{{ box-local E2P (L2P, likely)
+
+class E2PFromLocal(E2PBase):
+    @memoize_method
+    def get_kernel(self):
+        ncoeffs = len(self.expansion)
+
+        loopy_insns, result_names = self.get_loopy_insns_and_result_names()
+
         arguments = (
                 [
                     lp.GlobalArg("targets", None, shape=(self.dim, "ntargets")),
@@ -103,7 +118,7 @@ class E2P(object):
                         None, shape=None),
                     lp.GlobalArg("centers", None, shape="dim, nboxes"),
                     lp.GlobalArg("expansions", None,
-                        shape=("nboxes", len(coeff_exprs))),
+                        shape=("nboxes", ncoeffs)),
                     lp.ValueArg("nboxes", np.int32),
                     lp.ValueArg("ntargets", np.int32),
                     "..."
@@ -133,7 +148,7 @@ class E2P(object):
                 name=self.name, assumptions="ntgt_boxes>=1",
                 defines=dict(
                     dim=self.dim,
-                    COEFFIDX=[str(i) for i in xrange(len(coeff_exprs))],
+                    COEFFIDX=[str(i) for i in xrange(ncoeffs)],
                     RESULTIDX=[str(i) for i in xrange(len(result_names))],
                     )
                 )
@@ -163,3 +178,89 @@ class E2P(object):
         knl = self.get_optimized_kernel()
 
         return knl(queue, **kwargs)
+
+# }}}
+
+
+# {{{ E2P from CSR-like interaction list
+
+class E2PFromCSR(E2PBase):
+    @memoize_method
+    def get_kernel(self):
+        ncoeffs = len(self.expansion)
+
+        loopy_insns, result_names = self.get_loopy_insns_and_result_names()
+
+        arguments = (
+                [
+                    lp.GlobalArg("targets", None, shape=(self.dim, "ntargets")),
+                    lp.GlobalArg("box_target_starts,box_target_counts_nonchild",
+                        None, shape=None),
+                    lp.GlobalArg("centers", None, shape="dim, nboxes"),
+                    lp.GlobalArg("expansions", None,
+                        shape=("nboxes", ncoeffs)),
+                    lp.ValueArg("nboxes", np.int32),
+                    lp.ValueArg("ntargets", np.int32),
+                    "..."
+                ] + [
+                    lp.GlobalArg("result_%d" % i, None, shape="ntargets")
+                    for i in range(len(result_names))
+                ] + self.expansion.get_args()
+                )
+
+        loopy_knl = lp.make_kernel(self.device,
+                [
+                    "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
+                    "{[itgt]: itgt_start<=itgt<itgt_end}",
+                    "{[isrc_box,idim]: isrc_box_start<=isrc_box<=isrc_box_end \
+                            and 0<=idim<dim}",
+                    ],
+                loopy_insns
+                + ["""
+                    <> tgt_ibox = target_boxes[itgt_box]
+                    <> itgt_start = box_target_starts[itgt_box]
+                    <> itgt_end = itgt_start+box_target_counts_nonchild[itgt_box]
+                    <> tgt[idim] = targets[idim] {id=fetch_tgt}
+
+                    <> isrc_box_start = source_box_starts[isrc_box]
+                    <> isrc_box_end = source_box_starts[isrc_box+1]
+
+                    <> src_ibox = source_box_lists[isrc_box]
+                    <> coeff${COEFFIDX} = expansions[src_ibox, ${COEFFIDX}]
+                    <> center[idim] = centers[idim, src_ibox] {id=fetch_center}
+
+                    <> b[idim] = tgt[idim] - center[idim]
+                    result[${RESULTIDX, itgt] = \
+                            kernel_scaling * sum(isrc_box, result_${RESULTIDX}_p)
+                """],
+                arguments,
+                name=self.name, assumptions="ntgt_boxes>=1",
+                defines=dict(
+                    dim=self.dim,
+                    COEFFIDX=[str(i) for i in xrange(ncoeffs)],
+                    RESULTIDX=[str(i) for i in xrange(len(result_names))],
+                    )
+                )
+
+        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "fetch_tgt",
+                tags={"idim": "unr"})
+        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "fetch_center",
+                tags={"idim": "unr"})
+        loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
+
+        return loopy_knl
+
+    @memoize_method
+    def get_optimized_kernel(self):
+        # FIXME
+        knl = self.get_kernel()
+        #knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
+        return knl
+
+    def __call__(self, queue, **kwargs):
+        knl = self.get_optimized_kernel()
+        return knl(queue, **kwargs)
+
+# }}}
+
+# vim: foldmethod=marker

@@ -110,16 +110,15 @@ class KernelComputation(object):
     """Common input processing for kernel computations."""
 
     def __init__(self, ctx, kernels, strength_usage,
-            value_dtypes, strength_dtypes,
-            name="kernel", options=[], device=None):
+            value_dtypes, name="kernel", options=[], device=None):
         """
         :arg kernels: list of :class:`sumpy.kernel.Kernel` instances
             :class:`sumpy.kernel.TargetDerivative` wrappers should be
             the outermost kernel wrappers, if present.
         :arg strength_usage: A list of integers indicating which expression
-          uses which density. This implicitly specifies the
-          number of density arrays that need to be passed.
-          Default: all kernels use the same density.
+            uses which density. This implicitly specifies the
+            number of density arrays that need to be passed.
+            Default: all kernels use the same density.
         """
 
         # {{{ process value_dtypes
@@ -149,21 +148,6 @@ class KernelComputation(object):
 
         # }}}
 
-        # {{{ process strength_dtypes
-
-        if strength_dtypes is None:
-            strength_dtypes = value_dtypes[0]
-
-        if not isinstance(strength_dtypes, (list, tuple)):
-            strength_dtypes = [np.dtype(strength_dtypes)] * strength_count
-
-        if len(strength_dtypes) != strength_count:
-            raise ValueError("exprs and strength_usage must have the same length")
-
-        strength_dtypes = [np.dtype(dtype) for dtype in strength_dtypes]
-
-        # }}}
-
         if device is None:
             device = ctx.devices[0]
 
@@ -173,7 +157,6 @@ class KernelComputation(object):
         self.kernels = kernels
         self.value_dtypes = value_dtypes
         self.strength_usage = strength_usage
-        self.strength_dtypes = strength_dtypes
         self.strength_count = strength_count
 
         self.name = name

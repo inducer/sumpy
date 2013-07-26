@@ -28,15 +28,17 @@ import sympy as sp
 from pytools import memoize_method
 
 
-class E2E(object):
+# {{{ translation base class
+
+class E2EBase(object):
     def __init__(self, ctx, src_expansion, tgt_expansion,
             options=[], name="e2e", device=None):
         """
         :arg expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
         :arg strength_usage: A list of integers indicating which expression
-          uses which source strength indicator. This implicitly specifies the
-          number of strength arrays that need to be passed.
-          Default: all kernels use the same strength.
+            uses which source strength indicator. This implicitly specifies the
+            number of strength arrays that need to be passed.
+            Default: all kernels use the same strength.
         """
 
         if device is None:
@@ -55,16 +57,12 @@ class E2E(object):
 
         self.dim = src_expansion.dim
 
-    @memoize_method
-    def get_kernel(self):
+    def get_translation_loopy_insns(self):
         from sumpy.symbolic import make_sym_vector
         dvec = make_sym_vector("d", self.dim)
 
-        ncoeff_src = len(self.src_expansion.get_coefficient_identifiers())
-        ncoeff_tgt = len(self.tgt_expansion.get_coefficient_identifiers())
-
         src_coeff_exprs = [sp.Symbol("src_coeff%d" % i)
-                for i in xrange(ncoeff_src)]
+                for i in xrange(len(self.src_expansion))]
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
@@ -83,34 +81,49 @@ class E2E(object):
                 retain_names=tgt_coeff_names)
 
         from sumpy.codegen import to_loopy_insns
-        loopy_insns = to_loopy_insns(assignments,
+        return to_loopy_insns(
+                assignments,
                 vector_names=set(["d"]),
                 pymbolic_expr_maps=[self.tgt_expansion.transform_to_code],
                 complex_dtype=np.complex128  # FIXME
                 )
 
-        from sumpy.tools import gather_arguments
-        arguments = (
-                [
-                    lp.GlobalArg("centers", None, shape="dim, nboxes"),
-                    lp.GlobalArg("src_expansions", None,
-                        shape=("nboxes", ncoeff_src)),
-                    lp.GlobalArg("tgt_expansions", None,
-                        shape=("nboxes", ncoeff_tgt)),
-                    lp.GlobalArg("src_box_starts, src_box_lists",
-                        None, shape=None, strides=(1,)),
-                    lp.ValueArg("nboxes", np.int32),
-                    "..."
-                ] + gather_arguments([self.src_expansion, self.tgt_expansion])
-                )
+    @memoize_method
+    def get_optimized_kernel(self):
+        # FIXME
+        knl = self.get_kernel()
+        knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
+        return knl
 
+# }}}
+
+
+# {{{ translation from "compressed sparse row"-like source box lists
+
+class E2EFromCSR(E2EBase):
+    """Implements translation from a "compressed sparse row"-like source box
+    list.
+    """
+
+    def get_kernel(self):
+        ncoeff_src = len(self.src_expansion)
+        ncoeff_tgt = len(self.tgt_expansion)
+
+        # To clarify terminology:
+        #
+        # isrc_box -> The index in a list of (in this case, source) boxes
+        # src_ibox -> The (global) box number for the (in this case, source) box
+        #
+        # (same for itgt_box, tgt_ibox)
+
+        from sumpy.tools import gather_arguments
         loopy_knl = lp.make_kernel(self.device,
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
                     "{[isrc_box]: isrc_start<=isrc_box<isrc_stop}",
                     "{[idim]: 0<=idim<dim}",
                     ],
-                loopy_insns
+                self.get_translation_loopy_insns()
                 + ["""
                     <> tgt_ibox = target_boxes[itgt_box]
                     <> tgt_center[idim] = centers[idim, tgt_ibox] \
@@ -123,13 +136,22 @@ class E2E(object):
                     <> src_center[idim] = centers[idim, src_ibox] \
                             {id=fetch_src_center}
                     <> d[idim] = tgt_center[idim] - src_center[idim]
-
                     <> src_coeff${SRC_COEFFIDX} = \
                         src_expansions[src_ibox, ${SRC_COEFFIDX}]
                     tgt_expansions[tgt_ibox, ${TGT_COEFFIDX}] = \
-                        coeff${TGT_COEFFIDX} {id_prefix=write_expn}
+                            coeff${TGT_COEFFIDX} {id_prefix=write_expn}
                     """],
-                arguments,
+                [
+                    lp.GlobalArg("centers", None, shape="dim, nboxes"),
+                    lp.GlobalArg("src_box_starts, src_box_lists",
+                        None, shape=None, strides=(1,)),
+                    lp.ValueArg("nboxes", np.int32),
+                    lp.GlobalArg("src_expansions", None,
+                        shape=("nboxes", ncoeff_src)),
+                    lp.GlobalArg("tgt_expansions", None,
+                        shape=("nboxes", ncoeff_tgt)),
+                    "..."
+                ] + gather_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name, assumptions="ntgt_boxes>=1",
                 defines=dict(
                     dim=self.dim,
@@ -147,12 +169,96 @@ class E2E(object):
 
         return loopy_knl
 
-    @memoize_method
-    def get_optimized_kernel(self):
-        # FIXME
-        knl = self.get_kernel()
-        knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
-        return knl
+    def __call__(self, queue, **kwargs):
+        """
+        :arg src_expansions:
+        :arg src_box_starts:
+        :arg src_box_lists:
+        :arg centers:
+        """
+        knl = self.get_optimized_kernel()
+
+        return knl(queue, **kwargs)
+
+# }}}
+
+
+# {{{ translation from a box's children
+
+class E2EFromChildren(E2EBase):
+    def get_kernel(self):
+        if self.src_expansion is not self.tgt_expansion:
+            raise RuntimeError("%s requires that the source "
+                    "and target expansion are the same object")
+
+        ncoeffs = len(self.src_expansion)
+
+        # To clarify terminology:
+        #
+        # isrc_box -> The index in a list of (in this case, source) boxes
+        # src_ibox -> The (global) box number for the (in this case, source) box
+        #
+        # (same for itgt_box, tgt_ibox)
+
+        loopy_insns = [
+                insn.copy(predicates=insn.predicates
+                    | frozenset(["is_src_box_valid"]))
+                for insn in self.get_translation_loopy_insns()]
+
+        from sumpy.tools import gather_arguments
+        loopy_knl = lp.make_kernel(self.device,
+                [
+                    "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
+                    "{[isrc_box]: 0<=isrc_box<nchildren}",
+                    "{[idim]: 0<=idim<dim}",
+                    ],
+                loopy_insns
+                + ["""
+                    <> tgt_ibox = target_boxes[itgt_box]
+                    <> tgt_center[idim] = centers[idim, tgt_ibox] \
+                        {id=fetch_tgt_center}
+
+                    <> src_ibox = box_child_ids[isrc_box,itgt_box]
+                    <> is_src_box_valid = src_ibox != 0
+
+                    <> src_center[idim] = centers[idim, src_ibox] \
+                        {id=fetch_src_center,if=is_src_box_valid}
+                    <> d[idim] = tgt_center[idim] - src_center[idim] \
+                        {if=is_src_box_valid}
+
+                    <> src_coeff${COEFFIDX} = \
+                        expansions[src_ibox, ${COEFFIDX}] \
+                        {if=is_src_box_valid}
+                    expansions[tgt_ibox, ${COEFFIDX}] = \
+                        expansions[tgt_ibox, ${COEFFIDX}] + coeff${COEFFIDX} \
+                        {id_prefix=write_expn,if=is_src_box_valid,dep=}
+                    """],
+                [
+                    lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
+                    lp.GlobalArg("box_child_ids", None,
+                        shape="nchildren, aligned_nboxes"),
+                    lp.GlobalArg("expansions", None,
+                        shape=("nboxes", ncoeffs)),
+                    lp.ValueArg("nboxes", np.int32),
+                    lp.ValueArg("aligned_nboxes", np.int32),
+                    "..."
+                ] + gather_arguments([self.src_expansion, self.tgt_expansion]),
+                name=self.name, assumptions="ntgt_boxes>=1",
+                defines=dict(
+                    dim=self.dim,
+                    nchildren=2**self.dim,
+                    COEFFIDX=[str(i) for i in xrange(ncoeffs)],
+                    ),
+                silenced_warnings="write_race(write_expn*)")
+
+        for expn in [self.src_expansion, self.tgt_expansion]:
+            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+
+        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "fetch_tgt_center",
+                tags={"idim": "unr"})
+        loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
+
+        return loopy_knl
 
     def __call__(self, queue, **kwargs):
         """
@@ -164,3 +270,85 @@ class E2E(object):
         knl = self.get_optimized_kernel()
 
         return knl(queue, **kwargs)
+
+# }}}
+
+
+# {{{ translation from a box's parent
+
+class E2EFromParent(E2EBase):
+    def get_kernel(self):
+        if self.src_expansion is not self.tgt_expansion:
+            raise RuntimeError("%s requires that the source "
+                    "and target expansion are the same object")
+
+        ncoeffs = len(self.src_expansion)
+
+        # To clarify terminology:
+        #
+        # isrc_box -> The index in a list of (in this case, source) boxes
+        # src_ibox -> The (global) box number for the (in this case, source) box
+        #
+        # (same for itgt_box, tgt_ibox)
+
+        from sumpy.tools import gather_arguments
+        loopy_knl = lp.make_kernel(self.device,
+                [
+                    "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
+                    "{[idim]: 0<=idim<dim}",
+                    ],
+                self.get_translation_loopy_insns()
+                + ["""
+                    <> tgt_ibox = target_boxes[itgt_box]
+                    <> tgt_center[idim] = centers[idim, tgt_ibox] \
+                        {id=fetch_tgt_center}
+
+                    <> src_ibox = box_parent_ids[tgt_ibox]
+                    <> src_center[idim] = centers[idim, src_ibox] \
+                        {id=fetch_src_center}
+                    <> d[idim] = tgt_center[idim] - src_center[idim]
+
+                    <> src_coeff${COEFFIDX} = \
+                        expansions[src_ibox, ${COEFFIDX}]
+                    expansions[tgt_ibox, ${COEFFIDX}] = \
+                        expansions[tgt_ibox, ${COEFFIDX}] + coeff${COEFFIDX} \
+                        {id_prefix=write_expn,if=is_src_box_valid}
+                    """],
+                [
+                    lp.GlobalArg("centers", None, shape="dim, nboxes"),
+                    lp.ValueArg("nboxes", np.int32),
+                    lp.GlobalArg("expansions", None,
+                        shape=("nboxes", ncoeffs)),
+                    "..."
+                ] + gather_arguments([self.src_expansion, self.tgt_expansion]),
+                name=self.name, assumptions="ntgt_boxes>=1",
+                defines=dict(
+                    dim=self.dim,
+                    nchildren=2**self.dim,
+                    COEFFIDX=[str(i) for i in xrange(ncoeffs)],
+                    ),
+                silenced_warnings="write_race(write_expn*)")
+
+        for expn in [self.src_expansion, self.tgt_expansion]:
+            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+
+        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "fetch_tgt_center",
+                tags={"idim": "unr"})
+        loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
+
+        return loopy_knl
+
+    def __call__(self, queue, **kwargs):
+        """
+        :arg src_expansions:
+        :arg src_box_starts:
+        :arg src_box_lists:
+        :arg centers:
+        """
+        knl = self.get_optimized_kernel()
+
+        return knl(queue, **kwargs)
+
+# }}}
+
+# vim: foldmethod=marker

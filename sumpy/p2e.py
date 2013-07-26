@@ -27,7 +27,9 @@ import loopy as lp
 from pytools import memoize_method
 
 
-class P2E(object):
+# {{{ P2E base class
+
+class P2EBase(object):
     def __init__(self, ctx, expansion,
             options=[], name="p2e", device=None):
         """
@@ -49,8 +51,7 @@ class P2E(object):
 
         self.dim = expansion.dim
 
-    @memoize_method
-    def get_kernel(self):
+    def get_looy_instructions(self):
         from sumpy.symbolic import make_sym_vector
         avec = make_sym_vector("a", self.dim)
 
@@ -71,55 +72,66 @@ class P2E(object):
                 retain_names=coeff_names)
 
         from sumpy.codegen import to_loopy_insns
-        loopy_insns = to_loopy_insns(assignments,
+        return to_loopy_insns(
+                assignments,
                 vector_names=set(["a"]),
                 pymbolic_expr_maps=[self.expansion.transform_to_code],
                 complex_dtype=np.complex128  # FIXME
                 )
 
-        from sumpy.tools import gather_source_arguments
-        arguments = (
-                [
-                    lp.GlobalArg("sources", None, shape=(self.dim, "nsrc")),
-                    lp.GlobalArg("strengths", None, shape="nsrc"),
-                    lp.GlobalArg("box_source_starts,box_source_counts_nonchild",
-                        None, shape=None),
-                    lp.GlobalArg("centers", None, shape="dim, nboxes"),
-                    lp.GlobalArg("expansions", None,
-                        shape=("nboxes", len(coeff_names))),
-                    lp.ValueArg("nboxes", np.int32),
-                    lp.ValueArg("nsrc", np.int32),
-                    "..."
-                ] + gather_source_arguments([self.expansion]))
+# }}}
 
+
+# {{{ P2E from local boxes
+
+class P2EFromLocal(P2EBase):
+    @memoize_method
+    def get_kernel(self):
+        ncoeffs = len(self.expansion)
+
+        from sumpy.tools import gather_source_arguments
         loopy_knl = lp.make_kernel(self.device,
                 [
                     "{[isrc_box]: 0<=isrc_box<nsrc_boxes}",
                     "{[isrc,idim]: isrc_start<=isrc<isrc_end and 0<=idim<dim}",
                     ],
-                loopy_insns
-                + [
-                    "<> src_ibox = source_boxes[isrc_box]",
-                    "<> isrc_start = box_source_starts[isrc_box]",
-                    "<> isrc_end = isrc_start+box_source_counts_nonchild[isrc_box]",
-                    "<> center[idim] = centers[idim, src_ibox] {id=fetch_center}",
-                    "<> a[idim] = center[idim] - sources[idim, isrc]",
-                    "<> strength = strengths[isrc]",
-                    "expansions[src_ibox, ${COEFFIDX}] = "
-                            "sum(isrc, strength*coeff${COEFFIDX})"
-                            "{id_prefix=write_expn}"
-                ],
-                arguments,
+                self.get_looy_instructions()
+                + ["""
+                    <> src_ibox = source_boxes[isrc_box]
+                    <> isrc_start = box_source_starts[isrc_box]
+                    <> isrc_end = isrc_start+box_source_counts_nonchild[isrc_box]
+                    <> center[idim] = centers[idim, src_ibox] {id=fetch_center}
+                    <> a[idim] = center[idim] - sources[idim, isrc] \
+                            {id=compute_a}
+                    <> strength = strengths[isrc]
+                    expansions[src_ibox, ${COEFFIDX}] = \
+                            sum(isrc, strength*coeff${COEFFIDX}) \
+                            {id_prefix=write_expn}
+                    """],
+                [
+                    lp.GlobalArg("sources", None, shape=(self.dim, "nsources")),
+                    lp.GlobalArg("strengths", None, shape="nsources"),
+                    lp.GlobalArg("box_source_starts,box_source_counts_nonchild",
+                        None, shape=None),
+                    lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
+                    lp.GlobalArg("expansions", None,
+                        shape=("nboxes", ncoeffs)),
+                    lp.ValueArg("nboxes,aligned_nboxes", np.int32),
+                    lp.ValueArg("nsources", np.int32),
+                    "..."
+                ] + gather_source_arguments([self.expansion]),
                 name=self.name, assumptions="nsrc_boxes>=1",
                 defines=dict(
                     dim=self.dim,
-                    COEFFIDX=[str(i) for i in xrange(len(coeff_names))]
+                    COEFFIDX=[str(i) for i in xrange(ncoeffs)]
                     ),
                 silenced_warnings="write_race(write_expn*)")
 
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
         loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "fetch_center",
                 tags={"idim": "unr"})
+        loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
+        loopy_knl = lp.tag_data_axes(loopy_knl, "sources", "sep,c")
 
         return loopy_knl
 
@@ -143,3 +155,88 @@ class P2E(object):
         knl = self.get_optimized_kernel()
 
         return knl(queue, **kwargs)
+
+# }}}
+
+
+# {{{ P2E from CSR-like interaction list
+
+class P2EFromCSR(P2EBase):
+    @memoize_method
+    def get_kernel(self):
+        ncoeffs = len(self.expansion)
+
+        # FIXXME
+        from sumpy.tools import gather_source_arguments
+        arguments = (
+                [
+                    lp.GlobalArg("sources", None, shape=(self.dim, "nsources")),
+                    lp.GlobalArg("strengths", None, shape="nsources"),
+                    lp.GlobalArg("box_source_starts,box_source_counts_nonchild",
+                        None, shape=None),
+                    lp.GlobalArg("centers", None, shape="dim, nboxes"),
+                    lp.GlobalArg("expansions", None,
+                        shape=("nboxes", ncoeffs)),
+                    lp.ValueArg("nboxes", np.int32),
+                    lp.ValueArg("nsources", np.int32),
+                    "..."
+                ] + gather_source_arguments([self.expansion]))
+
+        loopy_knl = lp.make_kernel(self.device,
+                [
+                    "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
+                    "{[isrc_box]: 0<=isrc_box<nsrc_boxes}",
+                    "{[isrc,idim]: isrc_start<=isrc<isrc_end and 0<=idim<dim}",
+                    ],
+                self.get_looy_instructions()
+                + ["""
+                    <> src_ibox = source_boxes[isrc_box]
+                    <> isrc_start = box_source_starts[isrc_box]
+                    <> isrc_end = isrc_start+box_source_counts_nonchild[isrc_box]
+                    <> center[idim] = centers[idim, src_ibox] {id=fetch_center}
+                    <> a[idim] = center[idim] - sources[idim, isrc] {id=compute_a}
+                    <> strength = strengths[isrc]
+                    expansions[src_ibox, ${COEFFIDX}] = \
+                            sum(isrc, strength*coeff${COEFFIDX}) \
+                            {id_prefix=write_expn}
+                    """],
+                arguments,
+                name=self.name, assumptions="nsrc_boxes>=1",
+                defines=dict(
+                    dim=self.dim,
+                    COEFFIDX=[str(i) for i in xrange(ncoeffs)]
+                    ),
+                silenced_warnings="write_race(write_expn*)")
+
+        loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
+        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "fetch_center",
+                tags={"idim": "unr"})
+        loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
+        loopy_knl = lp.tag_data_axes(loopy_knl, "sources", "sep,c")
+
+        return loopy_knl
+
+    @memoize_method
+    def get_optimized_kernel(self):
+        # FIXME
+        knl = self.get_kernel()
+        knl = lp.split_iname(knl, "isrc_box", 16, outer_tag="g.0")
+        return knl
+
+    def __call__(self, queue, **kwargs):
+        """
+        :arg expansions:
+        :arg source_boxes:
+        :arg box_source_starts:
+        :arg box_source_counts_nonchild:
+        :arg centers:
+        :arg sources:
+        :arg strengths:
+        """
+        knl = self.get_optimized_kernel()
+
+        return knl(queue, **kwargs)
+
+# }}}
+
+# vim: foldmethod=marker

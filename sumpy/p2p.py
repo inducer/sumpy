@@ -32,9 +32,11 @@ from sumpy.tools import KernelComputation
 # LATER:
 # - Optimization for source == target (postpone)
 
-class P2P(KernelComputation):
+# {{{ p2p base class
+
+class P2PBase(KernelComputation):
     def __init__(self, ctx, kernels,  exclude_self, strength_usage=None,
-            value_dtypes=None, strength_dtypes=None,
+            value_dtypes=None,
             options=[], name="p2p", device=None):
         """
         :arg kernels: list of :class:`sumpy.kernel.Kernel` instances
@@ -44,7 +46,7 @@ class P2P(KernelComputation):
           Default: all kernels use the same strength.
         """
         KernelComputation.__init__(self, ctx, kernels, strength_usage,
-                value_dtypes, strength_dtypes,
+                value_dtypes,
                 name, options, device)
 
         self.exclude_self = exclude_self
@@ -52,8 +54,7 @@ class P2P(KernelComputation):
         from pytools import single_valued
         self.dim = single_valued(knl.dim for knl in self.kernels)
 
-    @memoize_method
-    def get_kernel(self):
+    def get_loopy_insns_and_result_names(self):
         from sumpy.symbolic import make_sym_vector
         dvec = make_sym_vector("d", self.dim)
 
@@ -77,6 +78,18 @@ class P2P(KernelComputation):
                 complex_dtype=np.complex128  # FIXME
                 )
 
+        return loopy_insns, result_names
+
+# }}}
+
+
+# {{{ P2P with list of sources and list of targets
+
+class P2P(P2PBase):
+    @memoize_method
+    def get_kernel(self):
+        loopy_insns, result_names = self.get_loopy_insns_and_result_names()
+
         from pymbolic import var
         exprs = [
                 var(name)
@@ -87,16 +100,16 @@ class P2P(KernelComputation):
         arguments = (
                 [
                     lp.GlobalArg("src", None,
-                        shape=(self.dim, "nsrc"), order="C"),
+                        shape=(self.dim, "nsources"), order="C"),
                     lp.GlobalArg("tgt", None,
-                        shape=(self.dim, "ntgt"), order="C"),
-                    lp.ValueArg("nsrc", None),
-                    lp.ValueArg("ntgt", np.int32),
+                        shape=(self.dim, "ntargets"), order="C"),
+                    lp.ValueArg("nsources", None),
+                    lp.ValueArg("ntargets", np.int32),
                 ]+[
-                    lp.GlobalArg("strength_%d" % i, None, shape="nsrc", order="C")
-                    for i, dtype in enumerate(self.strength_dtypes)
+                    lp.GlobalArg("strength_%d" % i, None, shape="nsources", order="C")
+                    for i in xrange(self.strength_count)
                 ]+[
-                    lp.GlobalArg("result_%d" % i, dtype, shape="ntgt", order="C")
+                    lp.GlobalArg("result_%d" % i, dtype, shape="ntargets", order="C")
                     for i, dtype in enumerate(self.value_dtypes)
                 ] + gather_source_arguments(self.kernels))
 
@@ -109,8 +122,7 @@ class P2P(KernelComputation):
                     for expr in exprs]
 
         loopy_knl = lp.make_kernel(self.device,
-                "{[isrc,itgt,idim]: 0<=itgt<ntgt and 0<=isrc<nsrc "
-                "and 0<=idim<%d}" % self.dim,
+                "{[isrc,itgt,idim]: 0<=itgt<ntargets and 0<=isrc<nsources and 0<=idim<dim}",
                 self.get_kernel_scaling_assignments()
                 + loopy_insns
                 + [
@@ -119,14 +131,17 @@ class P2P(KernelComputation):
                     lp.ExpressionInstruction(id=None,
                         assignee="pair_result_%d" % i, expression=expr,
                         temp_var_type=lp.auto)
-                    for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
+                    for i, expr in enumerate(exprs)
                 ]+[
                     "result_${KNLIDX}[itgt] = knl_${KNLIDX}_scaling \
                             * sum(isrc, pair_result_${KNLIDX})"
                 ],
                 arguments,
-                name=self.name, assumptions="nsrc>=1 and ntgt>=1",
-                defines=dict(KNLIDX=range(len(exprs))))
+                name=self.name, assumptions="nsources>=1 and ntargets>=1",
+                defines=dict(
+                    KNLIDX=range(len(exprs)),
+                    dim=self.dim,
+                    ))
 
         for where in ["compute_a", "compute_b"]:
             loopy_knl = lp.duplicate_inames(loopy_knl, "idim", where)
@@ -149,3 +164,105 @@ class P2P(KernelComputation):
             kwargs["strength_%d" % i] = sstr
 
         return knl(queue, src=sources, tgt=targets, **kwargs)
+
+# }}}
+
+
+# {{{ P2P from CSR-like interaction list
+
+class P2PFromCSR(P2PBase):
+    # FIXME: exclude_self ...?
+
+    @memoize_method
+    def get_kernel(self):
+        loopy_insns, result_names = self.get_loopy_insns_and_result_names()
+
+        from pymbolic import var
+        exprs = [
+                var(name)
+                * var("strength_%d" % self.strength_usage[i])[var("isrc")]
+                for i, name in enumerate(result_names)]
+
+        from sumpy.tools import gather_source_arguments
+        arguments = (
+                [
+                    lp.GlobalArg("box_target_starts,box_target_counts_nonchild,"
+                        "box_source_starts,box_source_counts_nonchild",
+                        None, shape=None)
+                ]+[
+                    lp.GlobalArg("strength_%d" % i, None, shape="nsources")
+                    for i in xrange(self.strength_count)
+                ]+[
+                    lp.GlobalArg("result_%d" % i, dtype, shape="ntargets")
+                    for i, dtype in enumerate(self.value_dtypes)
+                ] + gather_source_arguments(self.kernels))
+
+        loopy_knl = lp.make_kernel(self.device,
+                [
+                    "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
+                    "{[isrc_box]: isrc_box_start<=isrc_box<=isrc_box_end}",
+                    "{[itgt,isrc,idim]: \
+                            itgt_start<=itgt<itgt_end and \
+                            isrc_start<=isrc<isrc_end and \
+                            0<=idim<dim }",
+                    ],
+                self.get_kernel_scaling_assignments()
+                + loopy_insns + [
+                    """
+                    <> tgt_ibox = target_boxes[itgt_box]
+                    <> itgt_start = box_target_starts[itgt_box]
+                    <> itgt_end = itgt_start+box_target_counts_nonchild[itgt_box]
+
+                    <> isrc_box_start = source_box_starts[itgt_box]
+                    <> isrc_box_end = source_box_starts[itgt_box+1]
+
+                    <> src_ibox = source_box_lists[isrc_box]
+                    <> isrc_start = box_source_starts[isrc_box]
+                    <> isrc_end = isrc_start+box_source_counts_nonchild[isrc_box]
+
+                    <> d[idim] = targets[idim,itgt] - sources[idim,isrc] \
+                            {id=compute_d}
+
+                    result[${KNLIDX}, itgt] = result[${KNLIDX}, itgt] + \
+                            knl_${KNLIDX}_scaling \
+                            * sum(isrc, pair_result_${KNLIDX})
+                    """
+                ]+[
+                    lp.ExpressionInstruction(id=None,
+                        assignee="pair_result_%d" % i, expression=expr,
+                        temp_var_type=lp.auto)
+                    for i, expr in enumerate(exprs)
+                ]+[
+                ],
+                arguments,
+                name=self.name, assumptions="nsources>=1 and ntargets>=1",
+                defines=dict(
+                    KNLIDX=range(len(exprs)),
+                    dim=self.dim,
+                    ))
+
+        for where in ["compute_a", "compute_b"]:
+            loopy_knl = lp.duplicate_inames(loopy_knl, "idim", where)
+
+        for knl in self.kernels:
+            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
+
+        return loopy_knl
+
+    def get_optimized_kernel(self):
+        # FIXME
+        knl = self.get_kernel()
+        knl = lp.split_iname(knl, "itgt", 1024, outer_tag="g.0")
+        return knl
+
+    def __call__(self, queue, targets, sources, src_strengths, **kwargs):
+        knl = self.get_optimized_kernel()
+
+        for i, sstr in enumerate(src_strengths):
+            kwargs["strength_%d" % i] = sstr
+
+        return knl(queue, src=sources, tgt=targets, **kwargs)
+
+# }}}
+
+# vim: foldmethod=marker

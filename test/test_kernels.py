@@ -25,7 +25,6 @@ THE SOFTWARE.
 import numpy as np
 import numpy.linalg as la
 import sys
-import pytools.test
 
 import pytest
 import pyopencl as cl
@@ -48,7 +47,6 @@ else:
     faulthandler.enable()
 
 
-@pytest.mark.opencl
 def test_p2p(ctx_getter):
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
@@ -88,7 +86,6 @@ def test_p2p(ctx_getter):
     assert rel_err < 1e-3
 
 
-@pytools.test.mark_test.opencl
 @pytest.mark.parametrize("order", [2, 3, 4, 5])
 @pytest.mark.parametrize(("knl", "expn_class"), [
     (LaplaceKernel(2), VolumeTaylorLocalExpansion),
@@ -129,9 +126,9 @@ def test_p2e2p(ctx_getter, knl, expn_class, order, with_source_derivative):
             ]
     expn = expn_class(knl, order=order)
 
-    from sumpy import P2E, E2P, P2P
-    p2e = P2E(ctx, expn, out_kernels)
-    e2p = E2P(ctx, expn, out_kernels)
+    from sumpy import P2EFromLocal, E2PFromLocal, P2P
+    p2e = P2EFromLocal(ctx, expn, out_kernels)
+    e2p = E2PFromLocal(ctx, expn, out_kernels)
     p2p = P2P(ctx, out_kernels, exclude_self=False)
 
     from pytools.convergence import EOCRecorder
@@ -185,6 +182,8 @@ def test_p2e2p(ctx_getter, knl, expn_class, order, with_source_derivative):
                 centers=centers,
                 sources=sources,
                 strengths=strengths,
+                nboxes=1,
+
                 #flags="print_hl_cl",
                 out_host=True, **extra_source_kwargs)
 
@@ -325,7 +324,6 @@ def test_p_convergence_verifier():
         pconv_verifier()
 
 
-@pytools.test.mark_test.opencl
 @pytest.mark.parametrize("knl", [
     LaplaceKernel(2),
     HelmholtzKernel(2)
@@ -385,17 +383,18 @@ def test_translations(ctx_getter, knl):
         orders = [2, 3]
     else:
         orders = [2, 3, 4, 5]
+    nboxes = centers.shape[-1]
 
     for order in orders:
         m_expn = VolumeTaylorMultipoleExpansion(knl, order=order)
         l_expn = VolumeTaylorLocalExpansion(knl, order=order)
 
-        from sumpy import P2E, E2P, P2P, E2E
-        p2m = P2E(ctx, m_expn)
-        m2m = E2E(ctx, m_expn, m_expn)
-        m2l = E2E(ctx, m_expn, l_expn)
-        l2l = E2E(ctx, l_expn, l_expn)
-        l2p = E2P(ctx, l_expn, out_kernels)
+        from sumpy import P2EFromLocal, E2PFromLocal, P2P, E2EFromCSR
+        p2m = P2EFromLocal(ctx, m_expn)
+        m2m = E2EFromCSR(ctx, m_expn, m_expn)
+        m2l = E2EFromCSR(ctx, m_expn, l_expn)
+        l2l = E2EFromCSR(ctx, l_expn, l_expn)
+        l2p = E2PFromLocal(ctx, l_expn, out_kernels)
         p2p = P2P(ctx, out_kernels, exclude_self=False)
 
         fp = FieldPlotter(centers[:, -1], extent=0.3, npoints=res)
@@ -414,6 +413,8 @@ def test_translations(ctx_getter, knl):
                 centers=centers,
                 sources=sources,
                 strengths=strengths,
+                nboxes=nboxes,
+
                 #flags="print_hl_wrapper",
                 out_host=True, **extra_kwargs)
 

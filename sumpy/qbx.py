@@ -66,10 +66,10 @@ def expand(expansion_nr, sac, expansion, avec, bvec):
 
 class LayerPotentialBase(KernelComputation):
     def __init__(self, ctx, expansions, strength_usage=None,
-            value_dtypes=None, strength_dtypes=None,
+            value_dtypes=None,
             options=[], name="layerpot", device=None):
         KernelComputation.__init__(self, ctx, expansions, strength_usage,
-                value_dtypes, strength_dtypes,
+                value_dtypes,
                 name, options, device)
 
         from pytools import single_valued
@@ -122,18 +122,18 @@ class LayerPotentialBase(KernelComputation):
         arguments = (
                 [
                     lp.GlobalArg("src", None,
-                        shape=(self.dim, "nsrc"), order="C"),
+                        shape=(self.dim, "nsources"), order="C"),
                     lp.GlobalArg("tgt", None,
-                        shape=(self.dim, "ntgt"), order="C"),
+                        shape=(self.dim, "ntargets"), order="C"),
                     lp.GlobalArg("center", None,
-                        shape=(self.dim, "ntgt"), order="C"),
-                    lp.ValueArg("nsrc", None),
-                    lp.ValueArg("ntgt", None),
+                        shape=(self.dim, "ntargets"), order="C"),
+                    lp.ValueArg("nsources", None),
+                    lp.ValueArg("ntargets", None),
                 ] + self.get_input_and_output_arguments()
                 + gather_source_arguments(self.kernels))
 
         loopy_knl = lp.make_kernel(self.device,
-                "{[isrc,itgt,idim]: 0<=itgt<ntgt and 0<=isrc<nsrc "
+                "{[isrc,itgt,idim]: 0<=itgt<ntargets and 0<=isrc<nsources "
                 "and 0<=idim<%d}" % self.dim,
                 [
                 "<> a[idim] = center[idim,itgt] - src[idim,isrc] {id=compute_a}",
@@ -146,7 +146,7 @@ class LayerPotentialBase(KernelComputation):
                 ]+self.get_result_store_instructions(),
                 arguments,
                 defines=dict(KNLIDX=range(len(exprs))),
-                name=self.name, assumptions="nsrc>=1 and ntgt>=1",
+                name=self.name, assumptions="nsources>=1 and ntargets>=1",
                 )
 
         for where in ["compute_a", "compute_b"]:
@@ -193,11 +193,11 @@ class LayerPotential(LayerPotentialBase):
 
     def get_input_and_output_arguments(self):
         return [
-                lp.GlobalArg("strength_%d" % i, None, shape="nsrc", order="C")
-                for i, dtype in enumerate(self.strength_dtypes)
+                lp.GlobalArg("strength_%d" % i, None, shape="nsources", order="C")
+                for i in xrange(self.strength_count)
             ]+[
-                lp.GlobalArg("result_%d" % i, None, shape="ntgt", order="C")
-                for i, dtype in enumerate(self.value_dtypes)
+                lp.GlobalArg("result_%d" % i, None, shape="ntargets", order="C")
+                for i in xrange(len(self.kernels))
             ]
 
     def get_result_store_instructions(self):
@@ -232,7 +232,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
 
     def get_input_and_output_arguments(self):
         return [
-                lp.GlobalArg("result_%d" % i, dtype, shape="ntgt,nsrc", order="C")
+                lp.GlobalArg("result_%d" % i, dtype, shape="ntargets,nsources")
                 for i, dtype in enumerate(self.value_dtypes)
             ]
 
@@ -361,7 +361,7 @@ class _JumpTermSymbolicArgumentProvider(object):
     def density(self):
         self.arguments[self.density_var_name] = \
                 lp.GlobalArg(self.density_var_name, self.density_dtype,
-                        shape="ntgt", order="C")
+                        shape="ntargets", order="C")
         return parse("%s[itgt]" % self.density_var_name)
 
     @property
@@ -370,14 +370,14 @@ class _JumpTermSymbolicArgumentProvider(object):
         prime_var_name = self.density_var_name+"_prime"
         self.arguments[prime_var_name] = \
                 lp.GlobalArg(prime_var_name, self.density_dtype,
-                        shape="ntgt", order="C")
+                        shape="ntargets", order="C")
         return parse("%s[itgt]" % prime_var_name)
 
     @property
     @memoize_method
     def side(self):
         self.arguments["side"] = \
-                lp.GlobalArg("side", self.geometry_dtype, shape="ntgt", order="C")
+                lp.GlobalArg("side", self.geometry_dtype, shape="ntargets")
         return parse("side[itgt]")
 
     @property
@@ -385,7 +385,7 @@ class _JumpTermSymbolicArgumentProvider(object):
     def normal(self):
         self.arguments["normal"] = \
                 lp.GlobalArg("normal", self.geometry_dtype,
-                        shape=("ntgt", self.dim), order="C")
+                        shape=("ntargets", self.dim), order="C")
         from pytools.obj_array import make_obj_array
         return make_obj_array([
             parse("normal[itgt, %d]" % i)
@@ -396,7 +396,7 @@ class _JumpTermSymbolicArgumentProvider(object):
     def tangent(self):
         self.arguments["tangent"] = \
                 lp.GlobalArg("tangent", self.geometry_dtype,
-                        shape=("ntgt", self.dim), order="C")
+                        shape=("ntargets", self.dim), order="C")
         from pytools.obj_array import make_obj_array
         return make_obj_array([
             parse("tangent[itgt, %d]" % i)
@@ -407,7 +407,7 @@ class _JumpTermSymbolicArgumentProvider(object):
     def mean_curvature(self):
         self.arguments["mean_curvature"] = \
                 lp.GlobalArg("mean_curvature",
-                        self.geometry_dtype, shape="ntgt",
+                        self.geometry_dtype, shape="ntargets",
                         order="C")
         return parse("mean_curvature[itgt]")
 
@@ -416,7 +416,7 @@ class _JumpTermSymbolicArgumentProvider(object):
     def src_derivative_dir(self):
         self.arguments["src_derivative_dir"] = \
                 lp.GlobalArg("src_derivative_dir",
-                        self.geometry_dtype, shape=("ntgt", self.dim),
+                        self.geometry_dtype, shape=("ntargets", self.dim),
                         order="C")
         from pytools.obj_array import make_obj_array
         return make_obj_array([
@@ -428,7 +428,7 @@ class _JumpTermSymbolicArgumentProvider(object):
     def tgt_derivative_dir(self):
         self.arguments["tgt_derivative_dir"] = \
                 lp.GlobalArg("tgt_derivative_dir",
-                        self.geometry_dtype, shape=("ntgt", self.dim),
+                        self.geometry_dtype, shape=("ntargets", self.dim),
                         order="C")
         from pytools.obj_array import make_obj_array
         return make_obj_array([

@@ -389,7 +389,7 @@ class DirectionalDerivative(DerivativeBase):
 
     def get_source_args(self):
         return [
-            lp.GlobalArg(self.dir_vec_name, None, shape=(self.dim, "nsrc"),
+            lp.GlobalArg(self.dir_vec_name, None, shape=(self.dim, "nsources"),
                 dim_tags="sep,C")] + self.inner_kernel.get_source_args()
 
 

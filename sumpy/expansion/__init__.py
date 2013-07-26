@@ -63,6 +63,9 @@ class ExpansionBase(object):
 
     # }}}
 
+    def __len__(self):
+        return len(self.get_coefficient_identifiers())
+
     def coefficients_from_source(self, expr, avec, bvec):
         """
         :arg bvec: vector from center to target. Not usually necessary,

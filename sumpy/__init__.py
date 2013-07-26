@@ -22,9 +22,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from sumpy.p2p import P2P
-from sumpy.p2e import P2E
-from sumpy.e2p import E2P
-from sumpy.e2e import E2E
+from sumpy.p2p import P2P, P2PFromCSR
+from sumpy.p2e import P2EFromLocal, P2EFromCSR
+from sumpy.e2p import E2PFromLocal, E2PFromCSR
+from sumpy.e2e import E2EFromCSR, E2EFromChildren, E2EFromParent
 
-__all__ = ["P2P", "P2E", "E2P", "E2E"]
+__all__ = [
+    "P2P", "P2PFromCSR",
+    "P2EFromLocal", "P2EFromCSR",
+    "E2PFromLocal", "E2PFromCSR",
+    "E2EFromCSR", "E2EFromChildren", "E2EFromParent"]

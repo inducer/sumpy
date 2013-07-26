@@ -3,7 +3,6 @@ import pyopencl as cl
 import numpy as np
 import numpy.linalg as la
 import matplotlib.pyplot as pt
-from pytools import Record
 
 
 def process_kernel(knl, what_operator):
@@ -16,8 +15,8 @@ def process_kernel(knl, what_operator):
         from sumpy.kernel import TargetDerivative
         knl = TargetDerivative(1, knl)
     elif what_operator == "D":
-        from sumpy.kernel import SourceDerivative
-        knl = SourceDerivative(knl)
+        from sumpy.kernel import DirectionalSourceDerivative
+        knl = DirectionalSourceDerivative(knl)
     # DirectionalTargetDerivative (temporarily?) removed
     # elif what_operator == "S'":
     #     from sumpy.kernel import DirectionalTargetDerivative
@@ -49,7 +48,7 @@ def draw_pot_figure(aspect_ratio,
 
     center = np.asarray([0, 0], dtype=np.float64)
     from sumpy.visualization import FieldPlotter
-    fp = FieldPlotter(center, points=1000, extent=3)
+    fp = FieldPlotter(center, npoints=1000, extent=3)
 
     # }}}
 
@@ -57,7 +56,7 @@ def draw_pot_figure(aspect_ratio,
 
     from sumpy.p2p import P2P
     from sumpy.kernel import LaplaceKernel, HelmholtzKernel
-    from sumpy.local_expansion import H2DLocalExpansion, LineTaylorLocalExpansion
+    from sumpy.expansion.local import H2DLocalExpansion, LineTaylorLocalExpansion
     if helmholtz_k:
         knl = HelmholtzKernel(2)
         expn_class = H2DLocalExpansion
@@ -73,12 +72,9 @@ def draw_pot_figure(aspect_ratio,
 
     lpot_knl = process_kernel(knl, what_operator_lpot)
 
-    from sumpy.layerpot import LayerPotential, JumpTermApplier
+    from sumpy.qbx import LayerPotential
     lpot = LayerPotential(ctx, [
         expn_class(lpot_knl, order=order)],
-            value_dtypes=np.complex128)
-
-    jt = JumpTermApplier(ctx, [lpot_knl],
             value_dtypes=np.complex128)
 
     # }}}
@@ -155,16 +151,7 @@ def draw_pot_figure(aspect_ratio,
             evt, (y,) = lpot(queue, native_curve.pos, ovsmp_curve.pos, centers,
                     [xovsmp], ovsmp_curve.speed, ovsmp_weights,
                     **lpot_kwargs)
-            if 0:
-                class JumpTermArgs(Record):
-                    pass
-                evt, (y,) = jt(queue, [y], JumpTermArgs(
-                    src_derivative_dir=native_curve.normal,
-                    tgt_derivative_dir=native_curve.normal,
-                    density_0=x,
-                    side=center_side,
-                    normal=native_curve.normal,
-                    ))
+
             return y
 
         op = LinearOperator((nsrc, nsrc), apply_lpot)
@@ -188,21 +175,6 @@ def draw_pot_figure(aspect_ratio,
             **lpot_kwargs)
 
     # }}}
-
-    if 0:
-        # {{{ apply jump terms
-
-        class JumpTermArgs(Record):
-            pass
-        evt, (curve_pot,) = jt(queue, [curve_pot], JumpTermArgs(
-            src_derivative_dir=native_curve.normal,
-            tgt_derivative_dir=native_curve.normal,
-            density_0=density,
-            side=center_side,
-            normal=native_curve.normal,
-            ))
-
-        # }}}
 
     if 0:
         # {{{ plot on-surface potential in 2D
@@ -273,6 +245,7 @@ def draw_pot_figure(aspect_ratio,
 
 
 if __name__ == "__main__":
+    1/0  # FIXME update to new conventions
     draw_pot_figure(aspect_ratio=1, nsrc=100, novsmp=100, helmholtz_k=0,
             what_operator="D", what_operator_lpot="D", force_center_side=1)
     pt.savefig("eigvals-ext-nsrc100-novsmp100.pdf")
