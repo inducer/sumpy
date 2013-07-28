@@ -105,28 +105,10 @@ class E2PBase(object):
 # {{{ box-local E2P (L2P, likely)
 
 class E2PFromLocal(E2PBase):
-    @memoize_method
     def get_kernel(self):
         ncoeffs = len(self.expansion)
 
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
-
-        arguments = (
-                [
-                    lp.GlobalArg("targets", None, shape=(self.dim, "ntargets")),
-                    lp.GlobalArg("box_target_starts,box_target_counts_nonchild",
-                        None, shape=None),
-                    lp.GlobalArg("centers", None, shape="dim, nboxes"),
-                    lp.GlobalArg("expansions", None,
-                        shape=("nboxes", ncoeffs)),
-                    lp.ValueArg("nboxes", np.int32),
-                    lp.ValueArg("ntargets", np.int32),
-                    "..."
-                ] + [
-                    lp.GlobalArg("result_%d" % i, None, shape="ntargets")
-                    for i in range(len(result_names))
-                ] + self.expansion.get_args()
-                )
 
         loopy_knl = lp.make_kernel(self.device,
                 [
@@ -136,24 +118,38 @@ class E2PFromLocal(E2PBase):
                 loopy_insns
                 + ["""
                     <> tgt_ibox = target_boxes[itgt_box]
-                    <> itgt_start = box_target_starts[itgt_box]
-                    <> itgt_end = itgt_start+box_target_counts_nonchild[itgt_box]
+                    <> itgt_start = box_target_starts[tgt_ibox]
+                    <> itgt_end = itgt_start+box_target_counts_nonchild[tgt_ibox]
                     <> center[idim] = centers[idim, tgt_ibox] {id=fetch_center}
-                    <> b[idim] = targets[idim, itgt] - center[idim]
+                    <> b[idim] = targets[idim, itgt] - center[idim] \
+                            {id=compute_b}
                     <> coeff${COEFFIDX} = expansions[tgt_ibox, ${COEFFIDX}]
-                    result_${RESULTIDX}[itgt] = \
+                    result[${RESULTIDX},itgt] = \
                             kernel_scaling * result_${RESULTIDX}_p
                 """],
-                arguments,
+                [
+                    lp.GlobalArg("targets", None, shape=(self.dim, "ntargets"),
+                        dim_tags="sep,C"),
+                    lp.GlobalArg("box_target_starts,box_target_counts_nonchild",
+                        None, shape=None),
+                    lp.GlobalArg("centers", None, shape="dim, naligned_boxes"),
+                    lp.GlobalArg("result", None, shape="nresults, ntargets",
+                        dim_tags="sep,C"),
+                    lp.GlobalArg("expansions", None, shape=("nboxes", ncoeffs)),
+                    lp.ValueArg("nboxes,naligned_boxes", np.int32),
+                    lp.ValueArg("ntargets", np.int32),
+                    "..."
+                ] + self.expansion.get_args(),
                 name=self.name, assumptions="ntgt_boxes>=1",
                 defines=dict(
                     dim=self.dim,
                     COEFFIDX=[str(i) for i in xrange(ncoeffs)],
                     RESULTIDX=[str(i) for i in xrange(len(result_names))],
+                    nresults=len(result_names),
                     )
                 )
 
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "fetch_center",
+        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "compute_b",
                 tags={"idim": "unr"})
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
 
@@ -185,60 +181,59 @@ class E2PFromLocal(E2PBase):
 # {{{ E2P from CSR-like interaction list
 
 class E2PFromCSR(E2PBase):
-    @memoize_method
     def get_kernel(self):
         ncoeffs = len(self.expansion)
 
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
 
-        arguments = (
-                [
-                    lp.GlobalArg("targets", None, shape=(self.dim, "ntargets")),
-                    lp.GlobalArg("box_target_starts,box_target_counts_nonchild",
-                        None, shape=None),
-                    lp.GlobalArg("centers", None, shape="dim, nboxes"),
-                    lp.GlobalArg("expansions", None,
-                        shape=("nboxes", ncoeffs)),
-                    lp.ValueArg("nboxes", np.int32),
-                    lp.ValueArg("ntargets", np.int32),
-                    "..."
-                ] + [
-                    lp.GlobalArg("result_%d" % i, None, shape="ntargets")
-                    for i in range(len(result_names))
-                ] + self.expansion.get_args()
-                )
-
         loopy_knl = lp.make_kernel(self.device,
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
                     "{[itgt]: itgt_start<=itgt<itgt_end}",
-                    "{[isrc_box,idim]: isrc_box_start<=isrc_box<=isrc_box_end \
-                            and 0<=idim<dim}",
+                    "{[isrc_box]: isrc_box_start<=isrc_box<isrc_box_end }",
+                    "{[idim]: 0<=idim<dim}",
                     ],
                 loopy_insns
                 + ["""
                     <> tgt_ibox = target_boxes[itgt_box]
-                    <> itgt_start = box_target_starts[itgt_box]
-                    <> itgt_end = itgt_start+box_target_counts_nonchild[itgt_box]
-                    <> tgt[idim] = targets[idim] {id=fetch_tgt}
+                    <> itgt_start = box_target_starts[tgt_ibox]
+                    <> itgt_end = itgt_start+box_target_counts_nonchild[tgt_ibox]
 
-                    <> isrc_box_start = source_box_starts[isrc_box]
-                    <> isrc_box_end = source_box_starts[isrc_box+1]
+                    <> tgt[idim] = targets[idim,itgt] {id=fetch_tgt}
+
+                    <> isrc_box_start = source_box_starts[itgt_box]
+                    <> isrc_box_end = source_box_starts[itgt_box+1]
 
                     <> src_ibox = source_box_lists[isrc_box]
                     <> coeff${COEFFIDX} = expansions[src_ibox, ${COEFFIDX}]
                     <> center[idim] = centers[idim, src_ibox] {id=fetch_center}
 
                     <> b[idim] = tgt[idim] - center[idim]
-                    result[${RESULTIDX, itgt] = \
+                    result[${RESULTIDX}, itgt] = \
                             kernel_scaling * sum(isrc_box, result_${RESULTIDX}_p)
                 """],
-                arguments,
+                [
+                    lp.GlobalArg("targets", None, shape=(self.dim, "ntargets"),
+                        dim_tags="sep,C"),
+                    lp.GlobalArg("box_target_starts,box_target_counts_nonchild",
+                        None, shape=None),
+                    lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
+                    lp.GlobalArg("expansions", None,
+                        shape=("nboxes", ncoeffs)),
+                    lp.ValueArg("nboxes,aligned_nboxes", np.int32),
+                    lp.ValueArg("ntargets", np.int32),
+                    lp.GlobalArg("result", None, shape="nresults,ntargets",
+                        dim_tags="sep,C"),
+                    lp.GlobalArg("source_box_starts, source_box_lists,",
+                        None, shape=None),
+                    "..."
+                ] + self.expansion.get_args(),
                 name=self.name, assumptions="ntgt_boxes>=1",
                 defines=dict(
                     dim=self.dim,
                     COEFFIDX=[str(i) for i in xrange(ncoeffs)],
                     RESULTIDX=[str(i) for i in xrange(len(result_names))],
+                    nresults=len(result_names),
                     )
                 )
 
@@ -246,6 +241,7 @@ class E2PFromCSR(E2PBase):
                 tags={"idim": "unr"})
         loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "fetch_center",
                 tags={"idim": "unr"})
+        loopy_knl = lp.set_loop_priority(loopy_knl, "itgt_box,itgt,isrc_box")
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl

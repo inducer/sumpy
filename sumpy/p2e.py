@@ -85,7 +85,6 @@ class P2EBase(object):
 # {{{ P2E from local boxes
 
 class P2EFromLocal(P2EBase):
-    @memoize_method
     def get_kernel(self):
         ncoeffs = len(self.expansion)
 
@@ -98,8 +97,8 @@ class P2EFromLocal(P2EBase):
                 self.get_looy_instructions()
                 + ["""
                     <> src_ibox = source_boxes[isrc_box]
-                    <> isrc_start = box_source_starts[isrc_box]
-                    <> isrc_end = isrc_start+box_source_counts_nonchild[isrc_box]
+                    <> isrc_start = box_source_starts[src_ibox]
+                    <> isrc_end = isrc_start+box_source_counts_nonchild[src_ibox]
                     <> center[idim] = centers[idim, src_ibox] {id=fetch_center}
                     <> a[idim] = center[idim] - sources[idim, isrc] \
                             {id=compute_a}
@@ -109,7 +108,8 @@ class P2EFromLocal(P2EBase):
                             {id_prefix=write_expn}
                     """],
                 [
-                    lp.GlobalArg("sources", None, shape=(self.dim, "nsources")),
+                    lp.GlobalArg("sources", None, shape=(self.dim, "nsources"),
+                        dim_tags="sep,c"),
                     lp.GlobalArg("strengths", None, shape="nsources"),
                     lp.GlobalArg("box_source_starts,box_source_counts_nonchild",
                         None, shape=None),
@@ -131,7 +131,6 @@ class P2EFromLocal(P2EBase):
         loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "fetch_center",
                 tags={"idim": "unr"})
         loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
-        loopy_knl = lp.tag_data_axes(loopy_knl, "sources", "sep,c")
 
         return loopy_knl
 
@@ -162,22 +161,23 @@ class P2EFromLocal(P2EBase):
 # {{{ P2E from CSR-like interaction list
 
 class P2EFromCSR(P2EBase):
-    @memoize_method
     def get_kernel(self):
         ncoeffs = len(self.expansion)
 
-        # FIXXME
         from sumpy.tools import gather_source_arguments
         arguments = (
                 [
-                    lp.GlobalArg("sources", None, shape=(self.dim, "nsources")),
+                    lp.GlobalArg("sources", None, shape=(self.dim, "nsources"),
+                        dim_tags="sep,c"),
                     lp.GlobalArg("strengths", None, shape="nsources"),
+                    lp.GlobalArg("source_box_starts,source_box_lists",
+                        None, shape=None),
                     lp.GlobalArg("box_source_starts,box_source_counts_nonchild",
                         None, shape=None),
-                    lp.GlobalArg("centers", None, shape="dim, nboxes"),
+                    lp.GlobalArg("centers", None, shape="dim, naligned_boxes"),
                     lp.GlobalArg("expansions", None,
                         shape=("nboxes", ncoeffs)),
-                    lp.ValueArg("nboxes", np.int32),
+                    lp.ValueArg("naligned_boxes,nboxes", np.int32),
                     lp.ValueArg("nsources", np.int32),
                     "..."
                 ] + gather_source_arguments([self.expansion]))
@@ -185,14 +185,20 @@ class P2EFromCSR(P2EBase):
         loopy_knl = lp.make_kernel(self.device,
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
-                    "{[isrc_box]: 0<=isrc_box<nsrc_boxes}",
+                    "{[isrc_box]: isrc_box_stop<=isrc_box<isrc_box_start}",
                     "{[isrc,idim]: isrc_start<=isrc<isrc_end and 0<=idim<dim}",
                     ],
                 self.get_looy_instructions()
                 + ["""
-                    <> src_ibox = source_boxes[isrc_box]
-                    <> isrc_start = box_source_starts[isrc_box]
-                    <> isrc_end = isrc_start+box_source_counts_nonchild[isrc_box]
+                    <> tgt_ibox = target_boxes[itgt_box]
+
+                    <> isrc_box_start = source_box_starts[itgt_box]
+                    <> isrc_box_stop = source_box_starts[itgt_box+1]
+
+                    <> src_ibox = source_box_lists[isrc_box]
+                    <> isrc_start = box_source_starts[src_ibox]
+                    <> isrc_end = isrc_start+box_source_counts_nonchild[src_ibox]
+
                     <> center[idim] = centers[idim, src_ibox] {id=fetch_center}
                     <> a[idim] = center[idim] - sources[idim, isrc] {id=compute_a}
                     <> strength = strengths[isrc]
@@ -201,7 +207,7 @@ class P2EFromCSR(P2EBase):
                             {id_prefix=write_expn}
                     """],
                 arguments,
-                name=self.name, assumptions="nsrc_boxes>=1",
+                name=self.name, assumptions="ntgt_boxes>=1",
                 defines=dict(
                     dim=self.dim,
                     COEFFIDX=[str(i) for i in xrange(ncoeffs)]
@@ -212,7 +218,6 @@ class P2EFromCSR(P2EBase):
         loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "fetch_center",
                 tags={"idim": "unr"})
         loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
-        loopy_knl = lp.tag_data_axes(loopy_knl, "sources", "sep,c")
 
         return loopy_knl
 
@@ -220,7 +225,7 @@ class P2EFromCSR(P2EBase):
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
-        knl = lp.split_iname(knl, "isrc_box", 16, outer_tag="g.0")
+        knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
         return knl
 
     def __call__(self, queue, **kwargs):

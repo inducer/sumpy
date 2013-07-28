@@ -382,7 +382,7 @@ def test_translations(ctx_getter, knl):
         # FIXME: Embarrassing--but we run out of memory for higher orders.
         orders = [2, 3]
     else:
-        orders = [2, 3, 4, 5]
+        orders = [2, 3, 4]
     nboxes = centers.shape[-1]
 
     for order in orders:
@@ -403,8 +403,11 @@ def test_translations(ctx_getter, knl):
         # {{{ apply P2M
 
         p2m_source_boxes = np.array([0], dtype=np.int32)
-        p2m_box_source_starts = np.array([0], dtype=np.int32)
-        p2m_box_source_counts_nonchild = np.array([nsources], dtype=np.int32)
+
+        # These are indexed by global box numbers.
+        p2m_box_source_starts = np.array([0, 0, 0, 0], dtype=np.int32)
+        p2m_box_source_counts_nonchild = np.array([nsources, 0, 0, 0],
+                dtype=np.int32)
 
         evt, (mpoles,) = p2m(queue,
                 source_boxes=p2m_source_boxes,
@@ -476,8 +479,11 @@ def test_translations(ctx_getter, knl):
         ntargets = targets.shape[-1]
 
         l2p_target_boxes = np.array([3], dtype=np.int32)
-        l2p_box_target_starts = np.array([0], dtype=np.int32)
-        l2p_box_target_counts_nonchild = np.array([ntargets], dtype=np.int32)
+
+        # These are indexed by global box numbers.
+        l2p_box_target_starts = np.array([0, 0, 0, 0], dtype=np.int32)
+        l2p_box_target_counts_nonchild = np.array([0, 0, 0, ntargets],
+                dtype=np.int32)
 
         evt, (pot,) = l2p(
                 queue,

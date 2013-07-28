@@ -142,10 +142,10 @@ class E2EFromCSR(E2EBase):
                             coeff${TGT_COEFFIDX} {id_prefix=write_expn}
                     """],
                 [
-                    lp.GlobalArg("centers", None, shape="dim, nboxes"),
+                    lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
                     lp.GlobalArg("src_box_starts, src_box_lists",
                         None, shape=None, strides=(1,)),
-                    lp.ValueArg("nboxes", np.int32),
+                    lp.ValueArg("aligned_nboxes,nboxes", np.int32),
                     lp.GlobalArg("src_expansions", None,
                         shape=("nboxes", ncoeff_src)),
                     lp.GlobalArg("tgt_expansions", None,
@@ -218,7 +218,7 @@ class E2EFromChildren(E2EBase):
                     <> tgt_center[idim] = centers[idim, tgt_ibox] \
                         {id=fetch_tgt_center}
 
-                    <> src_ibox = box_child_ids[isrc_box,itgt_box]
+                    <> src_ibox = box_child_ids[isrc_box,tgt_ibox]
                     <> is_src_box_valid = src_ibox != 0
 
                     <> src_center[idim] = centers[idim, src_ibox] \
@@ -312,11 +312,12 @@ class E2EFromParent(E2EBase):
                         expansions[src_ibox, ${COEFFIDX}]
                     expansions[tgt_ibox, ${COEFFIDX}] = \
                         expansions[tgt_ibox, ${COEFFIDX}] + coeff${COEFFIDX} \
-                        {id_prefix=write_expn,if=is_src_box_valid}
+                        {id_prefix=write_expn}
                     """],
                 [
-                    lp.GlobalArg("centers", None, shape="dim, nboxes"),
-                    lp.ValueArg("nboxes", np.int32),
+                    lp.GlobalArg("centers", None, shape="dim, naligned_boxes"),
+                    lp.ValueArg("naligned_boxes,nboxes", np.int32),
+                    lp.GlobalArg("box_parent_ids", None, shape="nboxes"),
                     lp.GlobalArg("expansions", None,
                         shape=("nboxes", ncoeffs)),
                     "..."

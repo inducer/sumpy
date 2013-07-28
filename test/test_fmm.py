@@ -33,14 +33,22 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+try:
+    import faulthandler
+except ImportError:
+    pass
+else:
+    faulthandler.enable()
+
+
 def no_test_sumpy_fmm(ctx_getter):
     logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
 
-    nsources = 3000
-    ntargets = 1000
+    nsources = 500
+    ntargets = 50
     dim = 2
     dtype = np.float64
 
@@ -76,7 +84,7 @@ def no_test_sumpy_fmm(ctx_getter):
     from sumpy.expansion.local import VolumeTaylorLocalExpansion
     from sumpy.kernel import LaplaceKernel
 
-    order = 3
+    order = 2
     knl = LaplaceKernel(dim)
     mpole_expn = VolumeTaylorMultipoleExpansion(knl, order)
     local_expn = VolumeTaylorLocalExpansion(knl, order)
@@ -88,11 +96,11 @@ def no_test_sumpy_fmm(ctx_getter):
     wrangler = wcc.get_wrangler(queue, np.float64)
 
     from boxtree.fmm import drive_fmm
-    pot = drive_fmm(trav, wrangler, weights)
+    pot, = drive_fmm(trav, wrangler, weights)
 
     from sumpy import P2P
     p2p = P2P(ctx, out_kernels, exclude_self=False)
-    ref_pot = p2p(queue, sources, targets)
+    evt, (ref_pot,) = p2p(queue, targets, sources, (weights,))
 
     pot = pot.get()
     ref_pot = ref_pot.get()

@@ -43,6 +43,7 @@ class SumpyExpansionWranglerCodeContainer(object):
         self.tree = tree
         m_expn = self.multipole_expansion = multipole_expansion
         l_expn = self.local_expansion = local_expansion
+        self.out_kernels = out_kernels
 
         self.cl_context = cl_context
 
@@ -100,18 +101,25 @@ class SumpyExpansionWrangler(object):
                 dtype=self.dtype)
 
     def potential_zeros(self):
-        return tuple(
+        from pytools.obj_array import make_obj_array
+        return make_obj_array([
                 cl.array.zeros(
                     self.queue,
                     self.tree.ntargets,
                     dtype=self.dtype)
-                for k in self.out_kernels)
+                for k in self.code.out_kernels])
 
     def reorder_src_weights(self, src_weights):
         return src_weights.with_queue(self.queue)[self.tree.user_source_ids]
 
     def reorder_potentials(self, potentials):
-        return potentials.with_queue(self.queue)[self.tree.sorted_target_ids]
+        from pytools.obj_array import is_obj_array, with_object_array_or_scalar
+        assert is_obj_array(potentials)
+
+        def reorder(x):
+            return x.with_queue(self.queue)[self.tree.sorted_target_ids]
+
+        return with_object_array_or_scalar(reorder, potentials)
 
     def form_multipoles(self, source_boxes, src_weights):
         mpoles = self.multipole_expansion_zeros()
@@ -132,6 +140,9 @@ class SumpyExpansionWrangler(object):
         return mpoles
 
     def coarsen_multipoles(self, parent_boxes, mpoles):
+        if not len(parent_boxes):
+            return mpoles
+
         evt, (mpoles_res,) = self.code.m2m(self.queue,
                 expansions=mpoles,
                 target_boxes=parent_boxes,
@@ -150,9 +161,11 @@ class SumpyExpansionWrangler(object):
                 target_boxes=target_boxes,
                 source_box_starts=source_box_starts,
                 source_box_lists=source_box_lists,
-                strengths=(src_weights,),
+                strength=(src_weights,),
                 box_target_starts=self.tree.box_target_starts,
                 box_target_counts_nonchild=self.tree.box_target_counts_nonchild,
+                box_source_starts=self.tree.box_source_starts,
+                box_source_counts_nonchild=self.tree.box_source_counts_nonchild,
                 sources=self.tree.sources,
                 targets=self.tree.targets,
                 result=pot,
@@ -162,18 +175,18 @@ class SumpyExpansionWrangler(object):
         for pot_i, pot_res_i in zip(pot, pot_res):
             assert pot_i is pot_res_i
 
-        return pot_res
+        return pot
 
     def multipole_to_local(self, target_or_target_parent_boxes,
             starts, lists, mpole_exps):
         local_exps = self.local_expansion_zeros()
 
-        evt, (local_exps_res,) = self.m2l(self.queue,
+        evt, (local_exps_res,) = self.code.m2l(self.queue,
                 src_expansions=mpole_exps,
                 target_boxes=target_or_target_parent_boxes,
                 src_box_starts=starts,
                 src_box_lists=lists,
-                centers=self.tree.centers,
+                centers=self.tree.box_centers,
                 tgt_expansions=local_exps,
 
                 **self.extra_kwargs)
@@ -182,19 +195,20 @@ class SumpyExpansionWrangler(object):
 
         return local_exps
 
-    def eval_multipoles(self, target_boxes, sep_smaller_nonsiblings_starts,
-            sep_smaller_nonsiblings_lists, mpole_exps):
+    def eval_multipoles(self, target_boxes, source_box_starts,
+            source_box_lists, mpole_exps):
         pot = self.potential_zeros()
 
-        evt, pot_res = self.m2p(self.queue,
+        evt, pot_res = self.code.m2p(self.queue,
                 expansions=mpole_exps,
                 target_boxes=target_boxes,
                 box_target_starts=self.tree.box_target_starts,
                 box_target_counts_nonchild=self.tree.box_target_counts_nonchild,
-                source_box_starts=sep_smaller_nonsiblings_starts,
-                source_box_lists=sep_smaller_nonsiblings_lists,
-                centers=self.tree.centers,
+                source_box_starts=source_box_starts,
+                source_box_lists=source_box_lists,
+                centers=self.tree.box_centers,
                 targets=self.tree.targets,
+                result=pot,
 
                 **self.extra_kwargs)
 
@@ -204,77 +218,54 @@ class SumpyExpansionWrangler(object):
         return pot
 
     def form_locals(self, target_or_target_parent_boxes, starts, lists, src_weights):
-        local_exps = self.expansion_zeros()
+        local_exps = self.local_expansion_zeros()
 
-        evt, (local_exps,) = self.p2l(self.queue,
-                source_boxes=source_boxes,
-                box_source_starts=box_source_starts,
-                box_source_counts_nonchild=box_source_counts_nonchild,
-                centers=self.tree.centers,
+        evt, (result,) = self.code.p2l(self.queue,
+                target_boxes=target_or_target_parent_boxes,
+                source_box_starts=starts,
+                source_box_lists=lists,
+                box_source_starts=self.tree.box_source_starts,
+                box_source_counts_nonchild=self.tree.box_source_counts_nonchild,
+                centers=self.tree.box_centers,
                 sources=self.tree.sources,
                 strengths=src_weights,
+                expansions=local_exps,
 
                 **self.extra_kwargs)
-        from pyfmmlib import h2dformta
 
-        for itgt_box, tgt_ibox in enumerate(target_or_target_parent_boxes):
-            start, end = starts[itgt_box:itgt_box+2]
+        assert local_exps is result
 
-            contrib = 0
-
-            for src_ibox in lists[start:end]:
-                src_pslice = self._get_source_slice(src_ibox)
-                tgt_center = self.tree.box_centers[:, tgt_ibox]
-
-                if src_pslice.stop - src_pslice.start == 0:
-                    continue
-
-                ier, mpole = h2dformta(
-                        self.helmholtz_k, rscale,
-                        self._get_sources(src_pslice), src_weights[src_pslice],
-                        tgt_center, self.nterms)
-                if ier:
-                    raise RuntimeError("h2dformta failed")
-
-                contrib = contrib + mpole
-
-            local_exps[tgt_ibox] = contrib
-
-        return local_exps
+        return result
 
     def refine_locals(self, child_boxes, local_exps):
-        from pyfmmlib import h2dlocloc_vec
+        if not len(child_boxes):
+            return local_exps
 
-        for tgt_ibox in child_boxes:
-            tgt_center = self.tree.box_centers[:, tgt_ibox]
-            src_ibox = self.tree.box_parent_ids[tgt_ibox]
-            src_center = self.tree.box_centers[:, src_ibox]
+        evt, (local_exps_res,) = self.code.l2l(self.queue,
+                expansions=local_exps,
+                target_boxes=child_boxes,
+                box_parent_ids=self.tree.box_parent_ids,
+                centers=self.tree.box_centers,
+                **self.extra_kwargs)
 
-            tmp_loc_exp = h2dlocloc_vec(
-                        self.helmholtz_k,
-                        rscale, src_center, local_exps[src_ibox],
-                        rscale, tgt_center, self.nterms)[:, 0]
-
-            local_exps[tgt_ibox] += tmp_loc_exp
-
+        assert local_exps_res is local_exps
         return local_exps
 
     def eval_locals(self, target_boxes, local_exps):
         pot = self.potential_zeros()
-        rscale = 1  # FIXME
 
-        from pyfmmlib import h2dtaeval_vec
+        evt, pot_res = self.code.l2p(self.queue,
+                expansions=local_exps,
+                target_boxes=target_boxes,
+                box_target_starts=self.tree.box_target_starts,
+                box_target_counts_nonchild=self.tree.box_target_counts_nonchild,
+                centers=self.tree.box_centers,
+                targets=self.tree.targets,
+                result=pot,
 
-        for tgt_ibox in target_boxes:
-            tgt_pslice = self._get_target_slice(tgt_ibox)
+                **self.extra_kwargs)
 
-            if tgt_pslice.stop - tgt_pslice.start == 0:
-                continue
-
-            tmp_pot, _, _ = h2dtaeval_vec(self.helmholtz_k, rscale,
-                    self.tree.box_centers[:, tgt_ibox], local_exps[tgt_ibox],
-                    self._get_targets(tgt_pslice), ifgrad=False, ifhess=False)
-
-            pot[tgt_pslice] += tmp_pot
+        for pot_i, pot_res_i in zip(pot, pot_res):
+            assert pot_i is pot_res_i
 
         return pot
