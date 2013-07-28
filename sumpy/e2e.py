@@ -132,14 +132,18 @@ class E2EFromCSR(E2EBase):
                     <> isrc_start = src_box_starts[itgt_box]
                     <> isrc_stop = src_box_starts[itgt_box+1]
 
-                    <> src_ibox = src_box_lists[isrc_box]
+                    <> src_ibox = src_box_lists[isrc_box] \
+                            {id=read_src_ibox}
                     <> src_center[idim] = centers[idim, src_ibox] \
                             {id=fetch_src_center}
                     <> d[idim] = tgt_center[idim] - src_center[idim]
                     <> src_coeff${SRC_COEFFIDX} = \
-                        src_expansions[src_ibox, ${SRC_COEFFIDX}]
+                        src_expansions[src_ibox, ${SRC_COEFFIDX}] \
+                        {dep=read_src_ibox}
+
                     tgt_expansions[tgt_ibox, ${TGT_COEFFIDX}] = \
-                            coeff${TGT_COEFFIDX} {id_prefix=write_expn}
+                            sum(isrc_box, coeff${TGT_COEFFIDX}) \
+                            {id_prefix=write_expn}
                     """],
                 [
                     lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
@@ -201,8 +205,9 @@ class E2EFromChildren(E2EBase):
         # (same for itgt_box, tgt_ibox)
 
         loopy_insns = [
-                insn.copy(predicates=insn.predicates
-                    | frozenset(["is_src_box_valid"]))
+                insn.copy(
+                    predicates=insn.predicates | frozenset(["is_src_box_valid"]),
+                    id=lp.UniqueName("compute_coeff"))
                 for insn in self.get_translation_loopy_insns()]
 
         from sumpy.tools import gather_arguments
@@ -218,7 +223,8 @@ class E2EFromChildren(E2EBase):
                     <> tgt_center[idim] = centers[idim, tgt_ibox] \
                         {id=fetch_tgt_center}
 
-                    <> src_ibox = box_child_ids[isrc_box,tgt_ibox]
+                    <> src_ibox = box_child_ids[isrc_box,tgt_ibox] \
+                            {id=read_src_ibox}
                     <> is_src_box_valid = src_ibox != 0
 
                     <> src_center[idim] = centers[idim, src_ibox] \
@@ -228,10 +234,10 @@ class E2EFromChildren(E2EBase):
 
                     <> src_coeff${COEFFIDX} = \
                         expansions[src_ibox, ${COEFFIDX}] \
-                        {if=is_src_box_valid}
+                        {if=is_src_box_valid,dep=read_src_ibox}
                     expansions[tgt_ibox, ${COEFFIDX}] = \
                         expansions[tgt_ibox, ${COEFFIDX}] + coeff${COEFFIDX} \
-                        {id_prefix=write_expn,if=is_src_box_valid,dep=}
+                        {id_prefix=write_expn,if=is_src_box_valid,dep=compute_coeff*}
                     """],
                 [
                     lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
@@ -303,13 +309,15 @@ class E2EFromParent(E2EBase):
                     <> tgt_center[idim] = centers[idim, tgt_ibox] \
                         {id=fetch_tgt_center}
 
-                    <> src_ibox = box_parent_ids[tgt_ibox]
+                    <> src_ibox = box_parent_ids[tgt_ibox] \
+                        {id=read_src_ibox}
                     <> src_center[idim] = centers[idim, src_ibox] \
                         {id=fetch_src_center}
                     <> d[idim] = tgt_center[idim] - src_center[idim]
 
                     <> src_coeff${COEFFIDX} = \
-                        expansions[src_ibox, ${COEFFIDX}]
+                        expansions[src_ibox, ${COEFFIDX}] \
+                        {dep=read_src_ibox}
                     expansions[tgt_ibox, ${COEFFIDX}] = \
                         expansions[tgt_ibox, ${COEFFIDX}] + coeff${COEFFIDX} \
                         {id_prefix=write_expn}

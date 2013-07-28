@@ -148,6 +148,7 @@ class SumpyExpansionWrangler(object):
                 target_boxes=parent_boxes,
                 box_child_ids=self.tree.box_child_ids,
                 centers=self.tree.box_centers,
+
                 **self.extra_kwargs)
 
         assert mpoles_res is mpoles

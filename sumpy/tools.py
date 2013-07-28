@@ -55,17 +55,23 @@ def mi_derivative(expr, vector, mi):
 # }}}
 
 
-def build_matrix(op, dtype=None):
+def build_matrix(op, dtype=None, shape=None):
     dtype = dtype or op.dtype
     from pytools import ProgressBar
-    rows, cols = op.shape
+    shape = shape or op.shape
+    rows, cols = shape
     pb = ProgressBar("matrix", cols)
-    mat = np.zeros(op.shape, dtype)
+    mat = np.zeros(shape, dtype)
+
+    try:
+        matvec_method = op.matvec
+    except AttributeError:
+        matvec_method = op.__call__
 
     for i in range(cols):
-        unit_vec = np.zeros(rows, dtype=dtype)
+        unit_vec = np.zeros(cols, dtype=dtype)
         unit_vec[i] = 1
-        mat[:, i] = op.matvec(unit_vec)
+        mat[:, i] = matvec_method(unit_vec)
         pb.progress()
 
     pb.finished()

@@ -66,17 +66,30 @@ def no_test_sumpy_fmm(ctx_getter):
     tree, _ = tb(queue, sources, targets=targets,
             max_particles_in_box=30, debug=True)
 
+    if 0:
+        from boxtree.visualization import TreePlotter
+        plotter = TreePlotter(tree.get())
+        plotter.draw_tree(fill=False, edgecolor="black", zorder=10)
+        plotter.set_bounding_box()
+        plotter.draw_box_numbers()
+
+        import matplotlib.pyplot as pt
+        pt.show()
+
     from boxtree.traversal import FMMTraversalBuilder
     tbuild = FMMTraversalBuilder(ctx)
     trav, _ = tbuild(queue, tree, debug=True)
 
     trav = trav.get()
 
-    from pyopencl.clrandom import RanluxGenerator
-    rng = RanluxGenerator(queue, seed=20)
-
-    weights = rng.uniform(queue, nsources, dtype=np.float64)
-    #weights = np.ones(nsources)
+    if 1:
+        from pyopencl.clrandom import RanluxGenerator
+        rng = RanluxGenerator(queue, seed=20)
+        weights = rng.uniform(queue, nsources, dtype=np.float64)
+    else:
+        weights = np.zeros(nsources)
+        weights[0] = 1
+        weights = cl.array.to_device(queue, weights)
 
     logger.info("computing direct (reference) result")
 
@@ -84,7 +97,7 @@ def no_test_sumpy_fmm(ctx_getter):
     from sumpy.expansion.local import VolumeTaylorLocalExpansion
     from sumpy.kernel import LaplaceKernel
 
-    order = 2
+    order = 1
     knl = LaplaceKernel(dim)
     mpole_expn = VolumeTaylorMultipoleExpansion(knl, order)
     local_expn = VolumeTaylorLocalExpansion(knl, order)
@@ -97,6 +110,25 @@ def no_test_sumpy_fmm(ctx_getter):
 
     from boxtree.fmm import drive_fmm
     pot, = drive_fmm(trav, wrangler, weights)
+    #print la.norm(pot.get())
+    #1/0
+
+    if 0:
+        from sumpy.tools import build_matrix
+
+        def matvec(x):
+            pot, = drive_fmm(trav, wrangler, cl.array.to_device(queue, x))
+            return pot.get()
+
+        mat = build_matrix(matvec, dtype=np.float64, shape=(ntargets, nsources))
+        if 0:
+            amat = np.abs(mat)
+            sum_over_rows = np.sum(amat, axis=0)
+            print np.where(sum_over_rows == 0)
+        else:
+            import matplotlib.pyplot as pt
+            pt.imshow(mat)
+            pt.show()
 
     from sumpy import P2P
     p2p = P2P(ctx, out_kernels, exclude_self=False)
