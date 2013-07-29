@@ -122,8 +122,8 @@ def test_sumpy_fmm(ctx_getter):
 
         from sumpy.fmm import SumpyExpansionWranglerCodeContainer
         wcc = SumpyExpansionWranglerCodeContainer(
-                ctx, tree, mpole_expn, local_expn, out_kernels)
-        wrangler = wcc.get_wrangler(queue, np.float64)
+                ctx, mpole_expn, local_expn, out_kernels)
+        wrangler = wcc.get_wrangler(queue, tree, np.float64)
 
         from boxtree.fmm import drive_fmm
 

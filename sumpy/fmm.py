@@ -38,9 +38,8 @@ class SumpyExpansionWranglerCodeContainer(object):
     is decoupled by storing it in this object.
     """
 
-    def __init__(self, cl_context, tree,
+    def __init__(self, cl_context,
             multipole_expansion, local_expansion, out_kernels):
-        self.tree = tree
         m_expn = self.multipole_expansion = multipole_expansion
         l_expn = self.local_expansion = local_expansion
         self.out_kernels = out_kernels
@@ -59,10 +58,12 @@ class SumpyExpansionWranglerCodeContainer(object):
         self.l2l = E2EFromParent(cl_context, l_expn, l_expn)
         self.m2p = E2PFromCSR(cl_context, m_expn, out_kernels)
         self.l2p = E2PFromLocal(cl_context, l_expn, out_kernels)
+
+        # FIXME figure out what to do about exclude_self
         self.p2p = P2PFromCSR(cl_context, out_kernels, exclude_self=False)
 
-    def get_wrangler(self, queue, dtype, extra_kwargs={}):
-        return SumpyExpansionWrangler(self, queue, dtype, extra_kwargs)
+    def get_wrangler(self, queue, tree, dtype, extra_kwargs={}):
+        return SumpyExpansionWrangler(self, queue, tree, dtype, extra_kwargs)
 
 
 class SumpyExpansionWrangler(object):
@@ -70,15 +71,12 @@ class SumpyExpansionWrangler(object):
     by using :mod:`sumpy` expansions/translations.
     """
 
-    def __init__(self, code_container, queue, dtype, extra_kwargs):
+    def __init__(self, code_container, queue, tree, dtype, extra_kwargs):
         self.code = code_container
         self.queue = queue
+        self.tree = tree
         self.dtype = dtype
         self.extra_kwargs = extra_kwargs
-
-    @property
-    def tree(self):
-        return self.code.tree
 
     @property
     def multipole_expansion(self):
