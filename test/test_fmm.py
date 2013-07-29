@@ -46,7 +46,8 @@ else:
 @pytest.mark.parametrize("knl", [
     LaplaceKernel(2),
     LaplaceKernel(3),
-    #HelmholtzKernel(2),
+    HelmholtzKernel(2),
+    HelmholtzKernel(3),
     ])
 def test_sumpy_fmm(ctx_getter, knl):
     logging.basicConfig(level=logging.INFO)
@@ -126,11 +127,15 @@ def test_sumpy_fmm(ctx_getter, knl):
 
     extra_kwargs = {}
     dtype = np.float64
+    order_values = [1, 2, 3]
     if isinstance(knl, HelmholtzKernel):
         extra_kwargs["k"] = 0.05
         dtype = np.complex128
 
-    for order in [1, 2, 3]:
+        if knl.dim == 3:
+            order_values = [1, 2]
+
+    for order in order_values:
         mpole_expn = VolumeTaylorMultipoleExpansion(knl, order)
         local_expn = VolumeTaylorLocalExpansion(knl, order)
         out_kernels = [knl]
