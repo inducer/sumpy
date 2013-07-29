@@ -41,7 +41,7 @@ else:
     faulthandler.enable()
 
 
-def no_test_sumpy_fmm(ctx_getter):
+def test_sumpy_fmm(ctx_getter):
     logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_getter()
@@ -56,9 +56,16 @@ def no_test_sumpy_fmm(ctx_getter):
             make_normal_particle_array as p_normal)
 
     sources = p_normal(queue, nsources, dim, dtype, seed=15)
-    targets = (
-            p_normal(queue, ntargets, dim, dtype, seed=18)
-            + np.array([2, 0]))
+    if 1:
+        targets = (
+                p_normal(queue, ntargets, dim, dtype, seed=18)
+                + np.array([0.1, 0]))
+    else:
+        from sumpy.visualization import FieldPlotter
+        fp = FieldPlotter(np.array([0.5, 0]), extent=3, npoints=200)
+        from pytools.obj_array import make_obj_array
+        targets = make_obj_array(
+                [fp.points[0], fp.points[1]])
 
     from boxtree import TreeBuilder
     tb = TreeBuilder(ctx)
@@ -66,9 +73,24 @@ def no_test_sumpy_fmm(ctx_getter):
     tree, _ = tb(queue, sources, targets=targets,
             max_particles_in_box=30, debug=True)
 
+    from boxtree.traversal import FMMTraversalBuilder
+    tbuild = FMMTraversalBuilder(ctx)
+    trav, _ = tbuild(queue, tree, debug=True)
+
+    # {{{ plot tree
+
     if 0:
+        host_tree = tree.get()
+        host_trav = trav.get()
+
+        if 1:
+            print "src_box", host_tree.find_box_nr_for_source(403)
+            print "tgt_box", host_tree.find_box_nr_for_target(28)
+            print list(host_trav.target_or_target_parent_boxes).index(37)
+            print host_trav.get_box_list("sep_bigger", 22)
+
         from boxtree.visualization import TreePlotter
-        plotter = TreePlotter(tree.get())
+        plotter = TreePlotter(host_tree)
         plotter.draw_tree(fill=False, edgecolor="black", zorder=10)
         plotter.set_bounding_box()
         plotter.draw_box_numbers()
@@ -76,20 +98,11 @@ def no_test_sumpy_fmm(ctx_getter):
         import matplotlib.pyplot as pt
         pt.show()
 
-    from boxtree.traversal import FMMTraversalBuilder
-    tbuild = FMMTraversalBuilder(ctx)
-    trav, _ = tbuild(queue, tree, debug=True)
+    # }}}
 
-    trav = trav.get()
-
-    if 1:
-        from pyopencl.clrandom import RanluxGenerator
-        rng = RanluxGenerator(queue, seed=20)
-        weights = rng.uniform(queue, nsources, dtype=np.float64)
-    else:
-        weights = np.zeros(nsources)
-        weights[0] = 1
-        weights = cl.array.to_device(queue, weights)
+    from pyopencl.clrandom import RanluxGenerator
+    rng = RanluxGenerator(queue, seed=20)
+    weights = rng.uniform(queue, nsources, dtype=np.float64)
 
     logger.info("computing direct (reference) result")
 
@@ -97,49 +110,39 @@ def no_test_sumpy_fmm(ctx_getter):
     from sumpy.expansion.local import VolumeTaylorLocalExpansion
     from sumpy.kernel import LaplaceKernel
 
-    order = 1
+    from pytools.convergence import PConvergenceVerifier
+
+    pconv_verifier = PConvergenceVerifier()
     knl = LaplaceKernel(dim)
-    mpole_expn = VolumeTaylorMultipoleExpansion(knl, order)
-    local_expn = VolumeTaylorLocalExpansion(knl, order)
-    out_kernels = [knl]
 
-    from sumpy.fmm import SumpyExpansionWranglerCodeContainer
-    wcc = SumpyExpansionWranglerCodeContainer(
-            ctx, tree, mpole_expn, local_expn, out_kernels)
-    wrangler = wcc.get_wrangler(queue, np.float64)
+    for order in [1, 2, 3]:
+        mpole_expn = VolumeTaylorMultipoleExpansion(knl, order)
+        local_expn = VolumeTaylorLocalExpansion(knl, order)
+        out_kernels = [knl]
 
-    from boxtree.fmm import drive_fmm
-    pot, = drive_fmm(trav, wrangler, weights)
-    #print la.norm(pot.get())
-    #1/0
+        from sumpy.fmm import SumpyExpansionWranglerCodeContainer
+        wcc = SumpyExpansionWranglerCodeContainer(
+                ctx, tree, mpole_expn, local_expn, out_kernels)
+        wrangler = wcc.get_wrangler(queue, np.float64)
 
-    if 0:
-        from sumpy.tools import build_matrix
+        from boxtree.fmm import drive_fmm
 
-        def matvec(x):
-            pot, = drive_fmm(trav, wrangler, cl.array.to_device(queue, x))
-            return pot.get()
+        pot, = drive_fmm(trav, wrangler, weights)
 
-        mat = build_matrix(matvec, dtype=np.float64, shape=(ntargets, nsources))
-        if 0:
-            amat = np.abs(mat)
-            sum_over_rows = np.sum(amat, axis=0)
-            print np.where(sum_over_rows == 0)
-        else:
-            import matplotlib.pyplot as pt
-            pt.imshow(mat)
-            pt.show()
+        from sumpy import P2P
+        p2p = P2P(ctx, out_kernels, exclude_self=False)
+        evt, (ref_pot,) = p2p(queue, targets, sources, (weights,))
 
-    from sumpy import P2P
-    p2p = P2P(ctx, out_kernels, exclude_self=False)
-    evt, (ref_pot,) = p2p(queue, targets, sources, (weights,))
+        pot = pot.get()
+        ref_pot = ref_pot.get()
 
-    pot = pot.get()
-    ref_pot = ref_pot.get()
+        rel_err = la.norm(pot - ref_pot) / la.norm(ref_pot)
+        logger.info("order %d -> relative l2 error: %g" % (order, rel_err))
 
-    rel_err = la.norm(pot - ref_pot) / la.norm(ref_pot)
-    logger.info("relative l2 error: %g" % rel_err)
-    assert rel_err < 1e-5
+        pconv_verifier.add_data_point(order, rel_err)
+
+    print pconv_verifier
+    pconv_verifier()
 
 
 # You can test individual routines by typing

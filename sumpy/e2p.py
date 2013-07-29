@@ -159,7 +159,7 @@ class E2PFromLocal(E2PBase):
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
-        #knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
+        knl = lp.tag_inames(knl, dict(itgt_box="g.0"))
         return knl
 
     def __call__(self, queue, **kwargs):

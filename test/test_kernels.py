@@ -35,6 +35,7 @@ from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansion
 from sumpy.expansion.local import VolumeTaylorLocalExpansion, H2DLocalExpansion
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, AxisTargetDerivative,
         DirectionalSourceDerivative)
+from pytools.convergence import PConvergenceVerifier
 
 import logging
 logger = logging.getLogger(__name__)
@@ -276,52 +277,6 @@ def test_p2e2p(ctx_getter, knl, expn_class, order, with_source_derivative):
 
     assert eoc_rec_pot.order_estimate() > tgt_order - slack
     assert eoc_rec_grad_x.order_estimate() > tgt_order_grad - grad_slack
-
-
-class PConvergenceVerifier(object):
-    def __init__(self):
-        self.orders = []
-        self.errors = []
-
-    def add_data_point(self, order, error):
-        self.orders.append(order)
-        self.errors.append(error)
-
-    def __str__(self):
-        from pytools import Table
-        tbl = Table()
-        tbl.add_row(("p", "error"))
-
-        for p, err in zip(self.orders, self.errors):
-            tbl.add_row((str(p), str(err)))
-
-        return str(tbl)
-
-    def __call__(self):
-        orders = np.array(self.orders, np.float64)
-        errors = np.abs(np.array(self.errors, np.float64))
-
-        rel_change = np.diff(1e-20 + np.log10(errors)) / np.diff(orders)
-
-        assert (rel_change < -0.2).all()
-
-
-def test_p_convergence_verifier():
-    pconv_verifier = PConvergenceVerifier()
-    for order in [2, 3, 4, 5]:
-        pconv_verifier.add_data_point(order, 0.1**order)
-    pconv_verifier()
-
-    pconv_verifier = PConvergenceVerifier()
-    for order in [2, 3, 4, 5]:
-        pconv_verifier.add_data_point(order, 0.5**order)
-    pconv_verifier()
-
-    pconv_verifier = PConvergenceVerifier()
-    for order in [2, 3, 4, 5]:
-        pconv_verifier.add_data_point(order, 2)
-    with pytest.raises(AssertionError):
-        pconv_verifier()
 
 
 @pytest.mark.parametrize("knl", [

@@ -247,6 +247,7 @@ class SumpyExpansionWrangler(object):
                 target_boxes=child_boxes,
                 box_parent_ids=self.tree.box_parent_ids,
                 centers=self.tree.box_centers,
+
                 **self.extra_kwargs)
 
         assert local_exps_res is local_exps

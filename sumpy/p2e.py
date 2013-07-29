@@ -185,7 +185,7 @@ class P2EFromCSR(P2EBase):
         loopy_knl = lp.make_kernel(self.device,
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
-                    "{[isrc_box]: isrc_box_stop<=isrc_box<isrc_box_start}",
+                    "{[isrc_box]: isrc_box_start<=isrc_box<isrc_box_stop}",
                     "{[isrc,idim]: isrc_start<=isrc<isrc_end and 0<=idim<dim}",
                     ],
                 self.get_looy_instructions()
@@ -199,11 +199,11 @@ class P2EFromCSR(P2EBase):
                     <> isrc_start = box_source_starts[src_ibox]
                     <> isrc_end = isrc_start+box_source_counts_nonchild[src_ibox]
 
-                    <> center[idim] = centers[idim, src_ibox] {id=fetch_center}
+                    <> center[idim] = centers[idim, tgt_ibox] {id=fetch_center}
                     <> a[idim] = center[idim] - sources[idim, isrc] {id=compute_a}
                     <> strength = strengths[isrc]
-                    expansions[src_ibox, ${COEFFIDX}] = \
-                            sum(isrc, strength*coeff${COEFFIDX}) \
+                    expansions[tgt_ibox, ${COEFFIDX}] = \
+                            sum((isrc_box, isrc), strength*coeff${COEFFIDX}) \
                             {id_prefix=write_expn}
                     """],
                 arguments,

@@ -38,7 +38,7 @@ setup(name="sumpy",
 
       install_requires=[
           "loo.py>=2013.1beta",
-          "pytools>=2013.3",
+          "pytools>=2013.5.6",
           "pytest>=2.3",
 
           # FIXME leave out for now

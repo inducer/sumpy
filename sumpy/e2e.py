@@ -240,6 +240,8 @@ class E2EFromChildren(E2EBase):
                         {id_prefix=write_expn,if=is_src_box_valid,dep=compute_coeff*}
                     """],
                 [
+                    lp.GlobalArg("target_boxes", None, shape=lp.auto,
+                        offset=lp.auto),
                     lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
                     lp.GlobalArg("box_child_ids", None,
                         shape="nchildren, aligned_nboxes"),
@@ -323,6 +325,8 @@ class E2EFromParent(E2EBase):
                         {id_prefix=write_expn}
                     """],
                 [
+                    lp.GlobalArg("target_boxes", None, shape=lp.auto,
+                        offset=lp.auto),
                     lp.GlobalArg("centers", None, shape="dim, naligned_boxes"),
                     lp.ValueArg("naligned_boxes,nboxes", np.int32),
                     lp.GlobalArg("box_parent_ids", None, shape="nboxes"),
