@@ -127,7 +127,8 @@ class E2PFromSingleBox(E2PBase):
                             {id=compute_b}
                     <> coeff${COEFFIDX} = expansions[tgt_ibox, ${COEFFIDX}]
                     result[${RESULTIDX},itgt] = \
-                            kernel_scaling * result_${RESULTIDX}_p
+                            kernel_scaling * result_${RESULTIDX}_p \
+                            {id_prefix=write_result}
                 """],
                 [
                     lp.GlobalArg("targets", None, shape=(self.dim, "ntargets"),
@@ -148,8 +149,8 @@ class E2PFromSingleBox(E2PBase):
                     COEFFIDX=[str(i) for i in xrange(ncoeffs)],
                     RESULTIDX=[str(i) for i in xrange(len(result_names))],
                     nresults=len(result_names),
-                    )
-                )
+                    ),
+                silenced_warnings="write_race(write_result*)")
 
         loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "compute_b",
                 tags={"idim": "unr"})
@@ -214,7 +215,8 @@ class E2PFromCSR(E2PBase):
 
                     <> b[idim] = tgt[idim] - center[idim]
                     result[${RESULTIDX}, itgt] = \
-                            kernel_scaling * sum(isrc_box, result_${RESULTIDX}_p)
+                            kernel_scaling * sum(isrc_box, result_${RESULTIDX}_p) \
+                            {id_prefix=write_result}
                 """],
                 [
                     lp.GlobalArg("targets", None, shape=(self.dim, "ntargets"),
@@ -238,8 +240,8 @@ class E2PFromCSR(E2PBase):
                     COEFFIDX=[str(i) for i in xrange(ncoeffs)],
                     RESULTIDX=[str(i) for i in xrange(len(result_names))],
                     nresults=len(result_names),
-                    )
-                )
+                    ),
+                silenced_warnings="write_race(write_result*)")
 
         loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "fetch_tgt",
                 tags={"idim": "unr"})
