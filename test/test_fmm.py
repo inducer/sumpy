@@ -28,6 +28,8 @@ import numpy.linalg as la
 import pyopencl as cl
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
+from sumpy.kernel import LaplaceKernel, HelmholtzKernel
+import pytest
 
 import logging
 logger = logging.getLogger(__name__)
@@ -41,7 +43,12 @@ else:
     faulthandler.enable()
 
 
-def test_sumpy_fmm(ctx_getter):
+@pytest.mark.parametrize("knl", [
+    LaplaceKernel(2),
+    LaplaceKernel(3),
+    #HelmholtzKernel(2),
+    ])
+def test_sumpy_fmm(ctx_getter, knl):
     logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_getter()
@@ -49,23 +56,27 @@ def test_sumpy_fmm(ctx_getter):
 
     nsources = 500
     ntargets = 50
-    dim = 2
     dtype = np.float64
 
     from boxtree.tools import (
             make_normal_particle_array as p_normal)
 
-    sources = p_normal(queue, nsources, dim, dtype, seed=15)
+    sources = p_normal(queue, nsources, knl.dim, dtype, seed=15)
     if 1:
+        offset = np.zeros(knl.dim)
+        offset[0] = 0.1
+
         targets = (
-                p_normal(queue, ntargets, dim, dtype, seed=18)
-                + np.array([0.1, 0]))
+                p_normal(queue, ntargets, knl.dim, dtype, seed=18)
+                + offset)
+
+        del offset
     else:
         from sumpy.visualization import FieldPlotter
         fp = FieldPlotter(np.array([0.5, 0]), extent=3, npoints=200)
         from pytools.obj_array import make_obj_array
         targets = make_obj_array(
-                [fp.points[0], fp.points[1]])
+                [fp.points[i] for i in xrange(knl.dim)])
 
     from boxtree import TreeBuilder
     tb = TreeBuilder(ctx)
@@ -108,12 +119,16 @@ def test_sumpy_fmm(ctx_getter):
 
     from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansion
     from sumpy.expansion.local import VolumeTaylorLocalExpansion
-    from sumpy.kernel import LaplaceKernel
 
     from pytools.convergence import PConvergenceVerifier
 
     pconv_verifier = PConvergenceVerifier()
-    knl = LaplaceKernel(dim)
+
+    extra_kwargs = {}
+    dtype = np.float64
+    if isinstance(knl, HelmholtzKernel):
+        extra_kwargs["k"] = 0.05
+        dtype = np.complex128
 
     for order in [1, 2, 3]:
         mpole_expn = VolumeTaylorMultipoleExpansion(knl, order)
@@ -123,7 +138,7 @@ def test_sumpy_fmm(ctx_getter):
         from sumpy.fmm import SumpyExpansionWranglerCodeContainer
         wcc = SumpyExpansionWranglerCodeContainer(
                 ctx, mpole_expn, local_expn, out_kernels)
-        wrangler = wcc.get_wrangler(queue, tree, np.float64)
+        wrangler = wcc.get_wrangler(queue, tree, dtype, extra_kwargs=extra_kwargs)
 
         from boxtree.fmm import drive_fmm
 
@@ -131,7 +146,8 @@ def test_sumpy_fmm(ctx_getter):
 
         from sumpy import P2P
         p2p = P2P(ctx, out_kernels, exclude_self=False)
-        evt, (ref_pot,) = p2p(queue, targets, sources, (weights,))
+        evt, (ref_pot,) = p2p(queue, targets, sources, (weights,),
+                **extra_kwargs)
 
         pot = pot.get()
         ref_pot = ref_pot.get()
