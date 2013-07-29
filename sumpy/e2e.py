@@ -32,7 +32,7 @@ from pytools import memoize_method
 
 class E2EBase(object):
     def __init__(self, ctx, src_expansion, tgt_expansion,
-            options=[], name="e2e", device=None):
+            options=[], name=None, device=None):
         """
         :arg expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
         :arg strength_usage: A list of integers indicating which expression
@@ -48,7 +48,7 @@ class E2EBase(object):
         self.src_expansion = src_expansion
         self.tgt_expansion = tgt_expansion
         self.options = options
-        self.name = name
+        self.name = name or self.default_name
         self.device = device
 
         if src_expansion.dim != tgt_expansion.dim:
@@ -104,6 +104,8 @@ class E2EFromCSR(E2EBase):
     """Implements translation from a "compressed sparse row"-like source box
     list.
     """
+
+    default_name = "e2e_from_csr"
 
     def get_kernel(self):
         ncoeff_src = len(self.src_expansion)
@@ -190,6 +192,8 @@ class E2EFromCSR(E2EBase):
 # {{{ translation from a box's children
 
 class E2EFromChildren(E2EBase):
+    default_name = "e2e_from_children"
+
     def get_kernel(self):
         if self.src_expansion is not self.tgt_expansion:
             raise RuntimeError("%s requires that the source "
@@ -285,6 +289,8 @@ class E2EFromChildren(E2EBase):
 # {{{ translation from a box's parent
 
 class E2EFromParent(E2EBase):
+    default_name = "e2e_from_parent"
+
     def get_kernel(self):
         if self.src_expansion is not self.tgt_expansion:
             raise RuntimeError("%s requires that the source "

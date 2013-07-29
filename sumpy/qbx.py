@@ -188,6 +188,8 @@ class LayerPotentialBase(KernelComputation):
 class LayerPotential(LayerPotentialBase):
     """Direct applier for the layer potential."""
 
+    default_name = "qbx_apply"
+
     def get_strength_or_not(self, isrc, kernel_idx):
         return var("strength_%d" % self.strength_usage[kernel_idx])[isrc]
 
@@ -226,6 +228,8 @@ class LayerPotential(LayerPotentialBase):
 
 class LayerPotentialMatrixGenerator(LayerPotentialBase):
     """Generator for layer potential matrix entries."""
+
+    default_name = "qbx_matrix"
 
     def get_strength_or_not(self, isrc, kernel_idx):
         return 1

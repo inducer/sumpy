@@ -32,7 +32,7 @@ from pytools import memoize_method
 
 class E2PBase(object):
     def __init__(self, ctx, expansion, kernels,
-            options=[], name="e2p", device=None):
+            options=[], name=None, device=None):
         """
         :arg expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
         :arg strength_usage: A list of integers indicating which expression
@@ -48,7 +48,7 @@ class E2PBase(object):
         self.expansion = expansion
         self.kernels = kernels
         self.options = options
-        self.name = name
+        self.name = name or self.default_name
         self.device = device
 
         self.dim = expansion.dim
@@ -102,9 +102,11 @@ class E2PBase(object):
 # }}}
 
 
-# {{{ box-local E2P (L2P, likely)
+# {{{ E2P to single box (L2P, likely)
 
-class E2PFromLocal(E2PBase):
+class E2PFromSingleBox(E2PBase):
+    default_name = "e2p_from_local"
+
     def get_kernel(self):
         ncoeffs = len(self.expansion)
 
@@ -181,6 +183,8 @@ class E2PFromLocal(E2PBase):
 # {{{ E2P from CSR-like interaction list
 
 class E2PFromCSR(E2PBase):
+    default_name = "e2p_from_csr"
+
     def get_kernel(self):
         ncoeffs = len(self.expansion)
 

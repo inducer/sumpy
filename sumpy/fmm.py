@@ -47,17 +47,17 @@ class SumpyExpansionWranglerCodeContainer(object):
         self.cl_context = cl_context
 
         from sumpy import (
-                P2EFromLocal, P2EFromCSR,
-                E2PFromLocal, E2PFromCSR,
+                P2EFromSingleBox, P2EFromCSR,
+                E2PFromSingleBox, E2PFromCSR,
                 P2PFromCSR,
                 E2EFromCSR, E2EFromChildren, E2EFromParent)
-        self.p2m = P2EFromLocal(cl_context, m_expn)
+        self.p2m = P2EFromSingleBox(cl_context, m_expn)
         self.p2l = P2EFromCSR(cl_context, l_expn)
         self.m2m = E2EFromChildren(cl_context, m_expn, m_expn)
         self.m2l = E2EFromCSR(cl_context, m_expn, l_expn)
         self.l2l = E2EFromParent(cl_context, l_expn, l_expn)
         self.m2p = E2PFromCSR(cl_context, m_expn, out_kernels)
-        self.l2p = E2PFromLocal(cl_context, l_expn, out_kernels)
+        self.l2p = E2PFromSingleBox(cl_context, l_expn, out_kernels)
 
         # FIXME figure out what to do about exclude_self
         self.p2p = P2PFromCSR(cl_context, out_kernels, exclude_self=False)

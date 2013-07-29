@@ -116,7 +116,7 @@ class KernelComputation(object):
     """Common input processing for kernel computations."""
 
     def __init__(self, ctx, kernels, strength_usage,
-            value_dtypes, name="kernel", options=[], device=None):
+            value_dtypes, name, options=[], device=None):
         """
         :arg kernels: list of :class:`sumpy.kernel.Kernel` instances
             :class:`sumpy.kernel.TargetDerivative` wrappers should be
@@ -165,7 +165,7 @@ class KernelComputation(object):
         self.strength_usage = strength_usage
         self.strength_count = strength_count
 
-        self.name = name
+        self.name = name or self.default_name
 
     def get_kernel_scaling_assignments(self):
         from pymbolic.sympy_interface import SympyToPymbolicMapper

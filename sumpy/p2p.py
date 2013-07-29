@@ -37,7 +37,7 @@ from sumpy.tools import KernelComputation
 class P2PBase(KernelComputation):
     def __init__(self, ctx, kernels,  exclude_self, strength_usage=None,
             value_dtypes=None,
-            options=[], name="p2p", device=None):
+            options=[], name=None, device=None):
         """
         :arg kernels: list of :class:`sumpy.kernel.Kernel` instances
         :arg strength_usage: A list of integers indicating which expression
@@ -86,6 +86,8 @@ class P2PBase(KernelComputation):
 # {{{ P2P with list of sources and list of targets
 
 class P2P(P2PBase):
+    default_name = "p2p"
+
     def get_kernel(self):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
 
@@ -110,7 +112,8 @@ class P2P(P2PBase):
                 self.get_kernel_scaling_assignments()
                 + loopy_insns
                 + [
-                    "<> d[idim] = targets[idim,itgt] - sources[idim,isrc] {id=compute_d}",
+                    "<> d[idim] = targets[idim,itgt] - sources[idim,isrc] \
+                            {id=compute_d}",
                 ]+[
                     lp.ExpressionInstruction(id=None,
                         assignee="pair_result_%d" % i, expression=expr,
@@ -180,6 +183,8 @@ class P2P(P2PBase):
 # {{{ P2P from CSR-like interaction list
 
 class P2PFromCSR(P2PBase):
+    default_name = "p2p_from_csr"
+
     # FIXME: exclude_self ...?
 
     @memoize_method

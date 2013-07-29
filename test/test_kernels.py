@@ -127,9 +127,9 @@ def test_p2e2p(ctx_getter, knl, expn_class, order, with_source_derivative):
             ]
     expn = expn_class(knl, order=order)
 
-    from sumpy import P2EFromLocal, E2PFromLocal, P2P
-    p2e = P2EFromLocal(ctx, expn, out_kernels)
-    e2p = E2PFromLocal(ctx, expn, out_kernels)
+    from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P
+    p2e = P2EFromSingleBox(ctx, expn, out_kernels)
+    e2p = E2PFromSingleBox(ctx, expn, out_kernels)
     p2p = P2P(ctx, out_kernels, exclude_self=False)
 
     from pytools.convergence import EOCRecorder
@@ -344,12 +344,12 @@ def test_translations(ctx_getter, knl):
         m_expn = VolumeTaylorMultipoleExpansion(knl, order=order)
         l_expn = VolumeTaylorLocalExpansion(knl, order=order)
 
-        from sumpy import P2EFromLocal, E2PFromLocal, P2P, E2EFromCSR
-        p2m = P2EFromLocal(ctx, m_expn)
+        from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P, E2EFromCSR
+        p2m = P2EFromSingleBox(ctx, m_expn)
         m2m = E2EFromCSR(ctx, m_expn, m_expn)
         m2l = E2EFromCSR(ctx, m_expn, l_expn)
         l2l = E2EFromCSR(ctx, l_expn, l_expn)
-        l2p = E2PFromLocal(ctx, l_expn, out_kernels)
+        l2p = E2PFromSingleBox(ctx, l_expn, out_kernels)
         p2p = P2P(ctx, out_kernels, exclude_self=False)
 
         fp = FieldPlotter(centers[:, -1], extent=0.3, npoints=res)

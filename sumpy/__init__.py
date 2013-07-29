@@ -23,12 +23,12 @@ THE SOFTWARE.
 """
 
 from sumpy.p2p import P2P, P2PFromCSR
-from sumpy.p2e import P2EFromLocal, P2EFromCSR
-from sumpy.e2p import E2PFromLocal, E2PFromCSR
+from sumpy.p2e import P2EFromSingleBox, P2EFromCSR
+from sumpy.e2p import E2PFromSingleBox, E2PFromCSR
 from sumpy.e2e import E2EFromCSR, E2EFromChildren, E2EFromParent
 
 __all__ = [
     "P2P", "P2PFromCSR",
-    "P2EFromLocal", "P2EFromCSR",
-    "E2PFromLocal", "E2PFromCSR",
+    "P2EFromSingleBox", "P2EFromCSR",
+    "E2PFromSingleBox", "E2PFromCSR",
     "E2EFromCSR", "E2EFromChildren", "E2EFromParent"]

@@ -31,7 +31,7 @@ from pytools import memoize_method
 
 class P2EBase(object):
     def __init__(self, ctx, expansion,
-            options=[], name="p2e", device=None):
+            options=[], name=None, device=None):
         """
         :arg expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
         :arg strength_usage: A list of integers indicating which expression
@@ -46,7 +46,7 @@ class P2EBase(object):
         self.ctx = ctx
         self.expansion = expansion
         self.options = options
-        self.name = name
+        self.name = name or self.default_name
         self.device = device
 
         self.dim = expansion.dim
@@ -82,9 +82,11 @@ class P2EBase(object):
 # }}}
 
 
-# {{{ P2E from local boxes
+# {{{ P2E from single box (P2M, likely)
 
-class P2EFromLocal(P2EBase):
+class P2EFromSingleBox(P2EBase):
+    default_name = "p2e_from_single_box"
+
     def get_kernel(self):
         ncoeffs = len(self.expansion)
 
@@ -161,6 +163,8 @@ class P2EFromLocal(P2EBase):
 # {{{ P2E from CSR-like interaction list
 
 class P2EFromCSR(P2EBase):
+    default_name = "p2e_from_csr"
+
     def get_kernel(self):
         ncoeffs = len(self.expansion)
 
