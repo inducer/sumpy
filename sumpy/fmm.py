@@ -86,6 +86,8 @@ class SumpyExpansionWrangler(object):
     def local_expansion(self):
         return self.code.local_expansion
 
+    # {{{ data vector utilities
+
     def multipole_expansion_zeros(self):
         return cl.array.zeros(
                 self.queue,
@@ -119,19 +121,41 @@ class SumpyExpansionWrangler(object):
 
         return with_object_array_or_scalar(reorder, potentials)
 
+    # }}}
+
+    # {{{ source/target dispatch
+
+    # These exist so that subclasses can override access to per-box source/target
+    # lists, for example to use point sources instead of regular sources, or to
+    # use a FilteredTargetListsInTreeOrder object.
+
+    def box_source_list_kwargs(self):
+        return dict(
+                box_source_starts=self.tree.box_source_starts,
+                box_source_counts_nonchild=self.tree.box_source_counts_nonchild,
+                sources=self.tree.sources)
+
+    def box_target_list_kwargs(self):
+        return dict(
+                box_target_starts=self.tree.box_target_starts,
+                box_target_counts_nonchild=self.tree.box_target_counts_nonchild,
+                targets=self.tree.targets)
+
+    # }}}
+
     def form_multipoles(self, source_boxes, src_weights):
         mpoles = self.multipole_expansion_zeros()
 
+        kwargs = self.extra_kwargs.copy()
+        kwargs.update(self.box_source_list_kwargs())
+
         evt, (mpoles_res,) = self.code.p2m(self.queue,
                 source_boxes=source_boxes,
-                box_source_starts=self.tree.box_source_starts,
-                box_source_counts_nonchild=self.tree.box_source_counts_nonchild,
                 centers=self.tree.box_centers,
-                sources=self.tree.sources,
                 strengths=src_weights,
                 expansions=mpoles,
 
-                **self.extra_kwargs)
+                **kwargs)
 
         assert mpoles_res is mpoles
 
@@ -156,20 +180,18 @@ class SumpyExpansionWrangler(object):
             source_box_lists, src_weights):
         pot = self.potential_zeros()
 
+        kwargs = self.extra_kwargs.copy()
+        kwargs.update(self.box_source_list_kwargs())
+        kwargs.update(self.box_target_list_kwargs())
+
         evt, pot_res = self.code.p2p(self.queue,
                 target_boxes=target_boxes,
                 source_box_starts=source_box_starts,
                 source_box_lists=source_box_lists,
                 strength=(src_weights,),
-                box_target_starts=self.tree.box_target_starts,
-                box_target_counts_nonchild=self.tree.box_target_counts_nonchild,
-                box_source_starts=self.tree.box_source_starts,
-                box_source_counts_nonchild=self.tree.box_source_counts_nonchild,
-                sources=self.tree.sources,
-                targets=self.tree.targets,
                 result=pot,
 
-                **self.extra_kwargs)
+                **kwargs)
 
         for pot_i, pot_res_i in zip(pot, pot_res):
             assert pot_i is pot_res_i
@@ -198,18 +220,18 @@ class SumpyExpansionWrangler(object):
             source_box_lists, mpole_exps):
         pot = self.potential_zeros()
 
+        kwargs = self.extra_kwargs.copy()
+        kwargs.update(self.box_target_list_kwargs())
+
         evt, pot_res = self.code.m2p(self.queue,
                 expansions=mpole_exps,
                 target_boxes=target_boxes,
-                box_target_starts=self.tree.box_target_starts,
-                box_target_counts_nonchild=self.tree.box_target_counts_nonchild,
                 source_box_starts=source_box_starts,
                 source_box_lists=source_box_lists,
                 centers=self.tree.box_centers,
-                targets=self.tree.targets,
                 result=pot,
 
-                **self.extra_kwargs)
+                **kwargs)
 
         for pot_i, pot_res_i in zip(pot, pot_res):
             assert pot_i is pot_res_i
@@ -219,18 +241,18 @@ class SumpyExpansionWrangler(object):
     def form_locals(self, target_or_target_parent_boxes, starts, lists, src_weights):
         local_exps = self.local_expansion_zeros()
 
+        kwargs = self.extra_kwargs.copy()
+        kwargs.update(self.box_source_list_kwargs())
+
         evt, (result,) = self.code.p2l(self.queue,
                 target_boxes=target_or_target_parent_boxes,
                 source_box_starts=starts,
                 source_box_lists=lists,
-                box_source_starts=self.tree.box_source_starts,
-                box_source_counts_nonchild=self.tree.box_source_counts_nonchild,
                 centers=self.tree.box_centers,
-                sources=self.tree.sources,
                 strengths=src_weights,
                 expansions=local_exps,
 
-                **self.extra_kwargs)
+                **kwargs)
 
         assert local_exps is result
 
@@ -254,16 +276,16 @@ class SumpyExpansionWrangler(object):
     def eval_locals(self, target_boxes, local_exps):
         pot = self.potential_zeros()
 
+        kwargs = self.extra_kwargs.copy()
+        kwargs.update(self.box_target_list_kwargs())
+
         evt, pot_res = self.code.l2p(self.queue,
                 expansions=local_exps,
                 target_boxes=target_boxes,
-                box_target_starts=self.tree.box_target_starts,
-                box_target_counts_nonchild=self.tree.box_target_counts_nonchild,
                 centers=self.tree.box_centers,
-                targets=self.tree.targets,
                 result=pot,
 
-                **self.extra_kwargs)
+                **kwargs)
 
         for pot_i, pot_res_i in zip(pot, pot_res):
             assert pot_i is pot_res_i
