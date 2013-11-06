@@ -30,6 +30,8 @@ import pyopencl as cl
 import pyopencl.array  # noqa
 
 
+# {{{ expansion wrangler code container
+
 class SumpyExpansionWranglerCodeContainer(object):
     """Objects of this type serve as a place to keep the code needed
     for :class:`SumpyExpansionWrangler`. Since :class:`SumpyExpansionWrangler`
@@ -65,6 +67,10 @@ class SumpyExpansionWranglerCodeContainer(object):
     def get_wrangler(self, queue, tree, dtype, extra_kwargs={}):
         return SumpyExpansionWrangler(self, queue, tree, dtype, extra_kwargs)
 
+# }}}
+
+
+# {{{ expansion wrangler
 
 class SumpyExpansionWrangler(object):
     """Implements the :class:`boxtree.fmm.ExpansionWranglerInterface`
@@ -291,3 +297,7 @@ class SumpyExpansionWrangler(object):
             assert pot_i is pot_res_i
 
         return pot
+
+# }}}
+
+# vim: foldmethod=marker
