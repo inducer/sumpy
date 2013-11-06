@@ -169,6 +169,7 @@ class LaplaceKernel(Kernel):
     def get_scaling(self):
         """Return a global scaling of the kernel."""
 
+        # (Kress LIE, Thm 6.2)
         if self.dim == 2:
             return 1/(-2*sp.pi)
         elif self.dim == 3:
