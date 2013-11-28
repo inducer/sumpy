@@ -294,7 +294,8 @@ class E2EFromParent(E2EBase):
     def get_kernel(self):
         if self.src_expansion is not self.tgt_expansion:
             raise RuntimeError("%s requires that the source "
-                    "and target expansion are the same object")
+                    "and target expansion are the same object"
+                    % self.default_name)
 
         ncoeffs = len(self.src_expansion)
 
