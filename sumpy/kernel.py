@@ -140,6 +140,37 @@ class Kernel(object):
 # }}}
 
 
+# {{{ "one" kernel (for testing
+
+class OneKernel(Kernel):
+    """A kernel whose value is 1 everywhere, for every source and target.
+    (for testing)
+    """
+
+    is_complex_valued = False
+
+    def __getinitargs__(self):
+        return (self._dim,)
+
+    def __repr__(self):
+        if self._dim is not None:
+            return "OneKnl%dD" % self.dim
+        else:
+            return "OneKnl"
+
+    def get_expression(self, dist_vec):
+        return sp.sympify(1)
+
+    def get_scaling(self):
+        """Return a global scaling of the kernel."""
+
+        return 1
+
+    mapper_method = "map_one_kernel"
+
+# }}}
+
+
 # {{{ PDE kernels
 
 class LaplaceKernel(Kernel):
@@ -483,6 +514,9 @@ class KernelIdentityMapper(KernelMapper):
     def map_helmholtz_kernel(self, kernel):
         return kernel
 
+    def map_one_kernel(self, kernel):
+        return kernel
+
     def map_difference_kernel(self, kernel):
         return DifferenceKernel(
                 self.rec(kernel.kernel_plus), self.rec(kernel.kernel_minus))
@@ -518,6 +552,9 @@ class DerivativeCounter(KernelCombineMapper):
     def map_helmholtz_kernel(self, kernel):
         return 0
 
+    def map_one_kernel(self, kernel):
+        return 0
+
     def map_axis_target_derivative(self, kernel):
         return 1 + self.rec(kernel.inner_kernel)
 
@@ -535,6 +572,9 @@ class KernelDimensionSetter(KernelIdentityMapper):
     def map_helmholtz_kernel(self, kernel):
         return HelmholtzKernel(self.dim, kernel.helmholtz_k_name,
                 kernel.allow_evanescent)
+
+    def map_one_kernel(self, kernel):
+        return OneKernel(self.dim)
 
 # }}}
 
