@@ -294,7 +294,7 @@ def test_translations(ctx_getter, knl):
 
     np.random.seed(17)
 
-    res = 200
+    res = 20
     nsources = 15
 
     out_kernels = [knl]
@@ -309,7 +309,10 @@ def test_translations(ctx_getter, knl):
             + origin[:, np.newaxis])
     strengths = np.ones(nsources, dtype=np.float64) * (1/nsources)
 
-    pconv_verifier = PConvergenceVerifier()
+    pconv_verifier_p2m2p = PConvergenceVerifier()
+    pconv_verifier_p2m2m2p = PConvergenceVerifier()
+    pconv_verifier_p2m2m2l2p = PConvergenceVerifier()
+    pconv_verifier_full = PConvergenceVerifier()
 
     from sumpy.visualization import FieldPlotter
 
@@ -320,7 +323,7 @@ def test_translations(ctx_getter, knl):
                 # box 0: particles, first mpole here
                 [0, 0],
 
-                # box 1: mpole here
+                # box 1: second mpole here
                 np.array([-0.2, 0.1], np.float64),
 
                 # box 2: first local here
@@ -340,6 +343,28 @@ def test_translations(ctx_getter, knl):
         orders = [2, 3, 4]
     nboxes = centers.shape[-1]
 
+    def eval_at(e2p, source_box_nr):
+        e2p_target_boxes = np.array([source_box_nr], dtype=np.int32)
+
+        # These are indexed by global box numbers.
+        e2p_box_target_starts = np.array([0, 0, 0, 0], dtype=np.int32)
+        e2p_box_target_counts_nonchild = np.array([0, 0, 0, 0],
+                dtype=np.int32)
+        e2p_box_target_counts_nonchild[source_box_nr] = ntargets
+
+        evt, (pot,) = e2p(
+                queue,
+                expansions=mpoles,
+                target_boxes=e2p_target_boxes,
+                box_target_starts=e2p_box_target_starts,
+                box_target_counts_nonchild=e2p_box_target_counts_nonchild,
+                centers=centers,
+                targets=targets,
+                out_host=True, **extra_kwargs
+                )
+
+        return pot
+
     for order in orders:
         m_expn = VolumeTaylorMultipoleExpansion(knl, order=order)
         l_expn = VolumeTaylorLocalExpansion(knl, order=order)
@@ -347,6 +372,7 @@ def test_translations(ctx_getter, knl):
         from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P, E2EFromCSR
         p2m = P2EFromSingleBox(ctx, m_expn)
         m2m = E2EFromCSR(ctx, m_expn, m_expn)
+        m2p = E2PFromSingleBox(ctx, m_expn, out_kernels)
         m2l = E2EFromCSR(ctx, m_expn, l_expn)
         l2l = E2EFromCSR(ctx, l_expn, l_expn)
         l2p = E2PFromSingleBox(ctx, l_expn, out_kernels)
@@ -354,6 +380,15 @@ def test_translations(ctx_getter, knl):
 
         fp = FieldPlotter(centers[:, -1], extent=0.3, npoints=res)
         targets = fp.points
+
+        # {{{ compute (direct) reference solution
+
+        evt, (pot_direct,) = p2p(
+                queue,
+                targets, sources, (strengths,),
+                out_host=True, **extra_kwargs)
+
+        # }}}
 
         # {{{ apply P2M
 
@@ -378,6 +413,15 @@ def test_translations(ctx_getter, knl):
 
         # }}}
 
+        ntargets = targets.shape[-1]
+
+        pot = eval_at(m2p, 0)
+
+        err = la.norm((pot - pot_direct)/res**2)
+        err = err / (la.norm(pot_direct) / res**2)
+
+        pconv_verifier_p2m2p.add_data_point(order, err)
+
         # {{{ apply M2M
 
         m2m_target_boxes = np.array([1], dtype=np.int32)
@@ -394,6 +438,13 @@ def test_translations(ctx_getter, knl):
                 out_host=True, **extra_kwargs)
 
         # }}}
+
+        pot = eval_at(m2p, 1)
+
+        err = la.norm((pot - pot_direct)/res**2)
+        err = err / (la.norm(pot_direct) / res**2)
+
+        pconv_verifier_p2m2m2p.add_data_point(order, err)
 
         # {{{ apply M2L
 
@@ -412,6 +463,13 @@ def test_translations(ctx_getter, knl):
 
         # }}}
 
+        pot = eval_at(l2p, 2)
+
+        err = la.norm((pot - pot_direct)/res**2)
+        err = err / (la.norm(pot_direct) / res**2)
+
+        pconv_verifier_p2m2m2l2p.add_data_point(order, err)
+
         # {{{ apply L2L
 
         l2l_target_boxes = np.array([3], dtype=np.int32)
@@ -429,48 +487,25 @@ def test_translations(ctx_getter, knl):
 
         # }}}
 
-        # {{{ apply L2P
-
-        ntargets = targets.shape[-1]
-
-        l2p_target_boxes = np.array([3], dtype=np.int32)
-
-        # These are indexed by global box numbers.
-        l2p_box_target_starts = np.array([0, 0, 0, 0], dtype=np.int32)
-        l2p_box_target_counts_nonchild = np.array([0, 0, 0, ntargets],
-                dtype=np.int32)
-
-        evt, (pot,) = l2p(
-                queue,
-                expansions=mpoles,
-                target_boxes=l2p_target_boxes,
-                box_target_starts=l2p_box_target_starts,
-                box_target_counts_nonchild=l2p_box_target_counts_nonchild,
-                centers=centers,
-                targets=targets,
-                #flags="trace_assignment_values",
-                out_host=True, **extra_kwargs
-                )
-
-        # }}}
-
-        # {{{ compute (direct) reference solution
-
-        evt, (pot_direct,) = p2p(
-                queue,
-                targets, sources, (strengths,),
-                out_host=True, **extra_kwargs)
+        pot = eval_at(l2p, 3)
 
         err = la.norm((pot - pot_direct)/res**2)
-
         err = err / (la.norm(pot_direct) / res**2)
 
-        # }}}
+        pconv_verifier_full.add_data_point(order, err)
 
-        pconv_verifier.add_data_point(order, err)
-
-    print pconv_verifier
-    pconv_verifier()
+    for name, verifier in [
+            ("p2m2p", pconv_verifier_p2m2p),
+            ("p2m2m2p", pconv_verifier_p2m2m2p),
+            ("p2m2m2l2p", pconv_verifier_p2m2m2l2p),
+            ("full", pconv_verifier_full),
+            ]:
+        print 30*"-"
+        print name
+        print 30*"-"
+        print verifier
+        print 30*"-"
+        verifier()
 
 
 # You can test individual routines by typing
