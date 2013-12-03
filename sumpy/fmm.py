@@ -64,8 +64,11 @@ class SumpyExpansionWranglerCodeContainer(object):
         # FIXME figure out what to do about exclude_self
         self.p2p = P2PFromCSR(cl_context, out_kernels, exclude_self=False)
 
-    def get_wrangler(self, queue, tree, dtype, extra_kwargs={}):
-        return SumpyExpansionWrangler(self, queue, tree, dtype, extra_kwargs)
+    def get_wrangler(self, queue, tree, dtype,
+            source_extra_kwargs={},
+            kernel_extra_kwargs=None):
+        return SumpyExpansionWrangler(self, queue, tree, dtype,
+                source_extra_kwargs, kernel_extra_kwargs)
 
 # }}}
 
@@ -75,14 +78,31 @@ class SumpyExpansionWranglerCodeContainer(object):
 class SumpyExpansionWrangler(object):
     """Implements the :class:`boxtree.fmm.ExpansionWranglerInterface`
     by using :mod:`sumpy` expansions/translations.
+
+    .. attribute:: source_extra_kwargs
+
+        Keyword arguments to be passed to interactions that involve
+        source particles.
+
+    .. attribute:: kernel_extra_kwargs
+
+        Keyword arguments to be passed to interactions that involve
+        expansions, but not source particles.
     """
 
-    def __init__(self, code_container, queue, tree, dtype, extra_kwargs):
+    def __init__(self, code_container, queue, tree, dtype,
+            source_extra_kwargs,
+            kernel_extra_kwargs=None):
         self.code = code_container
         self.queue = queue
         self.tree = tree
         self.dtype = dtype
-        self.extra_kwargs = extra_kwargs
+        self.source_extra_kwargs = source_extra_kwargs
+
+        if kernel_extra_kwargs is None:
+            kernel_extra_kwargs = source_extra_kwargs
+
+        self.kernel_extra_kwargs = kernel_extra_kwargs
 
     @property
     def multipole_expansion(self):
@@ -152,7 +172,7 @@ class SumpyExpansionWrangler(object):
     def form_multipoles(self, source_boxes, src_weights):
         mpoles = self.multipole_expansion_zeros()
 
-        kwargs = self.extra_kwargs.copy()
+        kwargs = self.source_extra_kwargs.copy()
         kwargs.update(self.box_source_list_kwargs())
 
         evt, (mpoles_res,) = self.code.p2m(self.queue,
@@ -177,7 +197,7 @@ class SumpyExpansionWrangler(object):
                 box_child_ids=self.tree.box_child_ids,
                 centers=self.tree.box_centers,
 
-                **self.extra_kwargs)
+                **self.kernel_extra_kwargs)
 
         assert mpoles_res is mpoles
         return mpoles
@@ -186,7 +206,7 @@ class SumpyExpansionWrangler(object):
             source_box_lists, src_weights):
         pot = self.potential_zeros()
 
-        kwargs = self.extra_kwargs.copy()
+        kwargs = self.source_extra_kwargs.copy()
         kwargs.update(self.box_source_list_kwargs())
         kwargs.update(self.box_target_list_kwargs())
 
@@ -216,7 +236,7 @@ class SumpyExpansionWrangler(object):
                 centers=self.tree.box_centers,
                 tgt_expansions=local_exps,
 
-                **self.extra_kwargs)
+                **self.kernel_extra_kwargs)
 
         assert local_exps_res is local_exps
 
@@ -226,7 +246,7 @@ class SumpyExpansionWrangler(object):
             source_box_lists, mpole_exps):
         pot = self.potential_zeros()
 
-        kwargs = self.extra_kwargs.copy()
+        kwargs = self.kernel_extra_kwargs.copy()
         kwargs.update(self.box_target_list_kwargs())
 
         evt, pot_res = self.code.m2p(self.queue,
@@ -247,7 +267,7 @@ class SumpyExpansionWrangler(object):
     def form_locals(self, target_or_target_parent_boxes, starts, lists, src_weights):
         local_exps = self.local_expansion_zeros()
 
-        kwargs = self.extra_kwargs.copy()
+        kwargs = self.source_extra_kwargs.copy()
         kwargs.update(self.box_source_list_kwargs())
 
         evt, (result,) = self.code.p2l(self.queue,
@@ -274,7 +294,7 @@ class SumpyExpansionWrangler(object):
                 box_parent_ids=self.tree.box_parent_ids,
                 centers=self.tree.box_centers,
 
-                **self.extra_kwargs)
+                **self.kernel_extra_kwargs)
 
         assert local_exps_res is local_exps
         return local_exps
@@ -282,7 +302,7 @@ class SumpyExpansionWrangler(object):
     def eval_locals(self, target_boxes, local_exps):
         pot = self.potential_zeros()
 
-        kwargs = self.extra_kwargs.copy()
+        kwargs = self.kernel_extra_kwargs.copy()
         kwargs.update(self.box_target_list_kwargs())
 
         evt, pot_res = self.code.l2p(self.queue,
