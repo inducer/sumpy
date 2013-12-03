@@ -125,7 +125,7 @@ class FieldPlotter:
 
     def write_vtk_file(self, file_name, data, real_only=False):
         from pyvisfile.vtk import write_structured_grid
-        write_structured_grid(file_name, self.nd_points_axis_first,
+        write_structured_grid(file_name, self.nd_points,
                 point_data=list(separate_by_real_and_imag(data, real_only)))
 
     def show_scalar_in_mayavi(self, fld, max_val=None, **kwargs):
