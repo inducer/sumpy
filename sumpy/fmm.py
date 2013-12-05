@@ -135,8 +135,8 @@ class SumpyExpansionWrangler(object):
                     dtype=self.dtype)
                 for k in self.code.out_kernels])
 
-    def reorder_src_weights(self, src_weights):
-        return src_weights.with_queue(self.queue)[self.tree.user_source_ids]
+    def reorder_sources(self, source_array):
+        return source_array.with_queue(self.queue)[self.tree.user_source_ids]
 
     def reorder_potentials(self, potentials):
         from pytools.obj_array import is_obj_array, with_object_array_or_scalar
