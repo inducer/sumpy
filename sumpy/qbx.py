@@ -132,7 +132,7 @@ class LayerPotentialBase(KernelComputation):
                 ] + self.get_input_and_output_arguments()
                 + gather_source_arguments(self.kernels))
 
-        loopy_knl = lp.make_kernel(self.device,
+        loopy_knl = lp.make_kernel(
                 "{[isrc,itgt,idim]: 0<=itgt<ntargets and 0<=isrc<nsources "
                 "and 0<=idim<%d}" % self.dim,
                 [

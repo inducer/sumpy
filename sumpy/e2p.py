@@ -112,7 +112,7 @@ class E2PFromSingleBox(E2PBase):
 
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
 
-        loopy_knl = lp.make_kernel(self.device,
+        loopy_knl = lp.make_kernel(
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
                     "{[itgt,idim]: itgt_start<=itgt<itgt_end and 0<=idim<dim}",
@@ -191,7 +191,7 @@ class E2PFromCSR(E2PBase):
 
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
 
-        loopy_knl = lp.make_kernel(self.device,
+        loopy_knl = lp.make_kernel(
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
                     "{[itgt]: itgt_start<=itgt<itgt_end}",

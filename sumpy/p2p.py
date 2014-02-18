@@ -106,7 +106,7 @@ class P2P(P2PBase):
                     for expr in exprs]
 
         from sumpy.tools import gather_source_arguments
-        loopy_knl = lp.make_kernel(self.device,
+        loopy_knl = lp.make_kernel(
                 "{[isrc,itgt,idim]: 0<=itgt<ntargets and 0<=isrc<nsources \
                         and 0<=idim<dim}",
                 self.get_kernel_scaling_assignments()
@@ -198,7 +198,7 @@ class P2PFromCSR(P2PBase):
                 for i, name in enumerate(result_names)]
 
         from sumpy.tools import gather_source_arguments
-        loopy_knl = lp.make_kernel(self.device,
+        loopy_knl = lp.make_kernel(
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
                     "{[isrc_box]: isrc_box_start<=isrc_box<isrc_box_end}",

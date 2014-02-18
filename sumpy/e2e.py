@@ -119,7 +119,7 @@ class E2EFromCSR(E2EBase):
         # (same for itgt_box, tgt_ibox)
 
         from sumpy.tools import gather_arguments
-        loopy_knl = lp.make_kernel(self.device,
+        loopy_knl = lp.make_kernel(
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
                     "{[isrc_box]: isrc_start<=isrc_box<isrc_stop}",
@@ -215,7 +215,7 @@ class E2EFromChildren(E2EBase):
                 for insn in self.get_translation_loopy_insns()]
 
         from sumpy.tools import gather_arguments
-        loopy_knl = lp.make_kernel(self.device,
+        loopy_knl = lp.make_kernel(
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
                     "{[isrc_box]: 0<=isrc_box<nchildren}",
@@ -307,7 +307,7 @@ class E2EFromParent(E2EBase):
         # (same for itgt_box, tgt_ibox)
 
         from sumpy.tools import gather_arguments
-        loopy_knl = lp.make_kernel(self.device,
+        loopy_knl = lp.make_kernel(
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
                     "{[idim]: 0<=idim<dim}",

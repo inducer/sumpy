@@ -91,7 +91,7 @@ class P2EFromSingleBox(P2EBase):
         ncoeffs = len(self.expansion)
 
         from sumpy.tools import gather_source_arguments
-        loopy_knl = lp.make_kernel(self.device,
+        loopy_knl = lp.make_kernel(
                 [
                     "{[isrc_box]: 0<=isrc_box<nsrc_boxes}",
                     "{[isrc,idim]: isrc_start<=isrc<isrc_end and 0<=idim<dim}",
@@ -186,7 +186,7 @@ class P2EFromCSR(P2EBase):
                     "..."
                 ] + gather_source_arguments([self.expansion]))
 
-        loopy_knl = lp.make_kernel(self.device,
+        loopy_knl = lp.make_kernel(
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
                     "{[isrc_box]: isrc_box_start<=isrc_box<isrc_box_stop}",
