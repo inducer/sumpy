@@ -76,6 +76,21 @@ class ExpansionBase(object):
     def evaluate(self, coeffs, bvec):
         raise NotImplementedError
 
+    def update_persistent_hash(self, key_hash, key_builder):
+        key_hash.update(type(self).__name__.encode("utf8"))
+        key_builder.rec(key_hash, self.kernel)
+        key_builder.rec(key_hash, self.order)
+
+    def __eq__(self, other):
+        return (
+                type(self) == type(other)
+                and self.kernel == other.kernel
+                and self.order == other.order)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+
 # }}}
 
 

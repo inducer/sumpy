@@ -25,12 +25,12 @@ THE SOFTWARE.
 import numpy as np
 import loopy as lp
 import sympy as sp
-from pytools import memoize_method
+from sumpy.tools import KernelCacheWrapper
 
 
 # {{{ E2P base class
 
-class E2PBase(object):
+class E2PBase(KernelCacheWrapper):
     def __init__(self, ctx, expansion, kernels,
             options=[], name=None, device=None):
         """
@@ -99,6 +99,9 @@ class E2PBase(object):
 
         return loopy_insns, result_names
 
+    def get_cache_key(self):
+        return (type(self).__name__, self.expansion, tuple(self.kernels))
+
 # }}}
 
 
@@ -158,7 +161,6 @@ class E2PFromSingleBox(E2PBase):
 
         return loopy_knl
 
-    @memoize_method
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
@@ -174,7 +176,7 @@ class E2PFromSingleBox(E2PBase):
         :arg centers:
         :arg targets:
         """
-        knl = self.get_optimized_kernel()
+        knl = self.get_cached_optimized_kernel()
 
         return knl(queue, **kwargs)
 
@@ -252,7 +254,6 @@ class E2PFromCSR(E2PBase):
 
         return loopy_knl
 
-    @memoize_method
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
@@ -260,7 +261,7 @@ class E2PFromCSR(E2PBase):
         return knl
 
     def __call__(self, queue, **kwargs):
-        knl = self.get_optimized_kernel()
+        knl = self.get_cached_optimized_kernel()
         return knl(queue, **kwargs)
 
 # }}}

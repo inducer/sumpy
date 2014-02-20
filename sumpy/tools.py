@@ -22,8 +22,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-
+from pytools import memoize_method
 import numpy as np
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 # {{{ multi_index helpers
@@ -182,5 +185,27 @@ class KernelComputation(object):
 
 # }}}
 
+
+class KernelCacheWrapper(object):
+    @memoize_method
+    def get_cached_optimized_kernel(self):
+        from sumpy import code_cache, CACHING_ENABLED
+
+        if CACHING_ENABLED:
+            cache_key = self.get_cache_key()
+
+            try:
+                result = code_cache[cache_key]
+                logger.info("%s: kernel cache hit" % self.name)
+                return result
+            except KeyError:
+                pass
+
+        knl = self.get_optimized_kernel()
+
+        if CACHING_ENABLED:
+            code_cache[cache_key] = knl
+
+        return knl
 
 # vim: fdm=marker

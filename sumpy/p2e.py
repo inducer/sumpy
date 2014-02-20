@@ -24,12 +24,15 @@ THE SOFTWARE.
 
 import numpy as np
 import loopy as lp
-from pytools import memoize_method
+from sumpy.tools import KernelCacheWrapper
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 # {{{ P2E base class
 
-class P2EBase(object):
+class P2EBase(KernelCacheWrapper):
     def __init__(self, ctx, expansion,
             options=[], name=None, device=None):
         """
@@ -78,6 +81,9 @@ class P2EBase(object):
                 pymbolic_expr_maps=[self.expansion.transform_to_code],
                 complex_dtype=np.complex128  # FIXME
                 )
+
+    def get_cache_key(self):
+        return (type(self).__name__, self.expansion)
 
 # }}}
 
@@ -136,11 +142,11 @@ class P2EFromSingleBox(P2EBase):
 
         return loopy_knl
 
-    @memoize_method
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
         knl = lp.split_iname(knl, "isrc_box", 16, outer_tag="g.0")
+
         return knl
 
     def __call__(self, queue, **kwargs):
@@ -153,7 +159,7 @@ class P2EFromSingleBox(P2EBase):
         :arg sources:
         :arg strengths:
         """
-        knl = self.get_optimized_kernel()
+        knl = self.get_cached_optimized_kernel()
 
         return knl(queue, **kwargs)
 
@@ -225,7 +231,6 @@ class P2EFromCSR(P2EBase):
 
         return loopy_knl
 
-    @memoize_method
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
@@ -242,7 +247,7 @@ class P2EFromCSR(P2EBase):
         :arg sources:
         :arg strengths:
         """
-        knl = self.get_optimized_kernel()
+        knl = self.get_cached_optimized_kernel()
 
         return knl(queue, **kwargs)
 

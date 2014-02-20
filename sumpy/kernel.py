@@ -44,6 +44,8 @@ class Kernel(object):
     def __init__(self, dim=None):
         self._dim = dim
 
+    # {{{ hashing/pickling/equality
+
     def __eq__(self, other):
         if self is other:
             return True
@@ -62,6 +64,24 @@ class Kernel(object):
         except AttributeError:
             self.hash_value = hash((type(self),) + self.__getinitargs__())
             return self.hash_value
+
+    def update_persistent_hash(self, key_hash, key_builder):
+        key_hash.update(type(self).__name__.encode("utf8"))
+        key_builder.rec(key_hash, self.__getinitargs__())
+
+    def __getstate__(self):
+        return self.__getinitargs__()
+
+    def __setstate__(self, state):
+        # Can't use trivial pickling: hash_value cache must stay unset
+        assert len(self.init_arg_names) == len(state)
+        for name, value in zip(self.init_arg_names, state):
+            if name == "dim":
+                name = "_dim"
+
+            setattr(self, name, value)
+
+    # }}}
 
     @property
     def dim(self):
@@ -140,7 +160,7 @@ class Kernel(object):
 # }}}
 
 
-# {{{ "one" kernel (for testing
+# {{{ "one" kernel (for testing)
 
 class OneKernel(Kernel):
     """A kernel whose value is 1 everywhere, for every source and target.
@@ -148,6 +168,8 @@ class OneKernel(Kernel):
     """
 
     is_complex_valued = False
+
+    init_arg_names = ("dim",)
 
     def __getinitargs__(self):
         return (self._dim,)
@@ -175,6 +197,8 @@ class OneKernel(Kernel):
 
 class LaplaceKernel(Kernel):
     is_complex_valued = False
+
+    init_arg_names = ("dim",)
 
     def __getinitargs__(self):
         return (self._dim,)
@@ -276,6 +300,8 @@ class HelmholtzKernel(Kernel):
 
 
 class DifferenceKernel(Kernel):
+    init_arg_names = ("kernel_plus", "kernel_minus")
+
     def __init__(self, kernel_plus, kernel_minus):
         if (kernel_plus.get_base_kernel() is not kernel_plus
                 or kernel_minus.get_base_kernel() is not kernel_minus):
@@ -358,6 +384,8 @@ class DerivativeBase(KernelWrapper):
 
 
 class AxisTargetDerivative(DerivativeBase):
+    init_arg_names = ("axis", "inner_kernel")
+
     def __init__(self, axis, inner_kernel):
         KernelWrapper.__init__(self, inner_kernel)
         self.axis = axis
@@ -391,6 +419,8 @@ class _VectorIndexAdder(IdentityMapper):
 
 
 class DirectionalDerivative(DerivativeBase):
+    init_arg_names = ("inner_kernel", "dir_vec_name", "dir_vec_data")
+
     def __init__(self, inner_kernel, dir_vec_name=None, dir_vec_data=None):
         """
         :arg dir_vec_data: an object of unspecified type, available for

@@ -24,9 +24,8 @@ THE SOFTWARE.
 
 import numpy as np
 import loopy as lp
-from pytools import memoize_method
 
-from sumpy.tools import KernelComputation
+from sumpy.tools import KernelComputation, KernelCacheWrapper
 
 
 # LATER:
@@ -34,7 +33,7 @@ from sumpy.tools import KernelComputation
 
 # {{{ p2p base class
 
-class P2PBase(KernelComputation):
+class P2PBase(KernelComputation, KernelCacheWrapper):
     def __init__(self, ctx, kernels,  exclude_self, strength_usage=None,
             value_dtypes=None,
             options=[], name=None, device=None):
@@ -79,6 +78,10 @@ class P2PBase(KernelComputation):
                 )
 
         return loopy_insns, result_names
+
+    def get_cache_key(self):
+        return (type(self).__name__, tuple(self.kernels), self.exclude_self,
+                tuple(self.strength_usage), tuple(self.value_dtypes))
 
 # }}}
 
@@ -153,7 +156,6 @@ class P2P(P2PBase):
 
         return loopy_knl
 
-    @memoize_method
     def get_optimized_kernel(self, targets_is_obj_array, sources_is_obj_array):
         # FIXME
         knl = self.get_kernel()
@@ -168,7 +170,7 @@ class P2P(P2PBase):
 
     def __call__(self, queue, targets, sources, strength, **kwargs):
         from pytools.obj_array import is_obj_array
-        knl = self.get_optimized_kernel(
+        knl = self.get_cached_optimized_kernel(
                 targets_is_obj_array=
                 is_obj_array(targets) or isinstance(targets, (tuple, list)),
                 sources_is_obj_array=
@@ -187,7 +189,6 @@ class P2PFromCSR(P2PBase):
 
     # FIXME: exclude_self ...?
 
-    @memoize_method
     def get_kernel(self):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
 
@@ -276,7 +277,7 @@ class P2PFromCSR(P2PBase):
         return knl
 
     def __call__(self, queue, **kwargs):
-        knl = self.get_optimized_kernel()
+        knl = self.get_cached_optimized_kernel()
 
         return knl(queue, **kwargs)
 

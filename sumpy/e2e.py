@@ -25,12 +25,15 @@ THE SOFTWARE.
 import numpy as np
 import loopy as lp
 import sympy as sp
-from pytools import memoize_method
+from sumpy.tools import KernelCacheWrapper
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 # {{{ translation base class
 
-class E2EBase(object):
+class E2EBase(KernelCacheWrapper):
     def __init__(self, ctx, src_expansion, tgt_expansion,
             options=[], name=None, device=None):
         """
@@ -88,11 +91,17 @@ class E2EBase(object):
                 complex_dtype=np.complex128  # FIXME
                 )
 
-    @memoize_method
+    def get_cache_key(self):
+        return (
+                type(self).__name__,
+                self.src_expansion,
+                self.tgt_expansion)
+
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
         knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
+
         return knl
 
 # }}}
@@ -182,7 +191,7 @@ class E2EFromCSR(E2EBase):
         :arg src_box_lists:
         :arg centers:
         """
-        knl = self.get_optimized_kernel()
+        knl = self.get_cached_optimized_kernel()
 
         return knl(queue, **kwargs)
 
@@ -279,7 +288,7 @@ class E2EFromChildren(E2EBase):
         :arg src_box_lists:
         :arg centers:
         """
-        knl = self.get_optimized_kernel()
+        knl = self.get_cached_optimized_kernel()
 
         return knl(queue, **kwargs)
 
@@ -365,7 +374,7 @@ class E2EFromParent(E2EBase):
         :arg src_box_lists:
         :arg centers:
         """
-        knl = self.get_optimized_kernel()
+        knl = self.get_cached_optimized_kernel()
 
         return knl(queue, **kwargs)
 
