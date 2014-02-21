@@ -9,8 +9,17 @@ except ImportError:
     # 2.x
     from distutils.command.build_py import build_py
 
+ver_dic = {}
+version_file = open("sumpy/version.py")
+try:
+    version_file_contents = version_file.read()
+finally:
+    version_file.close()
+
+exec(compile(version_file_contents, "sumpy/version.py", 'exec'), ver_dic)
+
 setup(name="sumpy",
-      version="2013.1",
+      version=ver_dic["VERSION_TEXT"],
       description="Fast summation in Python",
       long_description="""
       Code-generating FMM etc.
