@@ -447,6 +447,14 @@ class DirectionalDerivative(DerivativeBase):
 
         return (self.inner_kernel, self.dir_vec_name, dir_vec_data)
 
+    def update_persistent_hash(self, key_hash, key_builder):
+        key_hash.update(type(self).__name__.encode("utf8"))
+        key_builder.rec(key_hash, self.inner_kernel)
+        key_builder.rec(key_hash, self.dir_vec_name)
+
+        # dir_vec_data is abstract data to us--we're not allowed to even know
+        # what type it is.
+
     def __str__(self):
         return r"%s . \/_%s %s" % (
                 self.dir_vec_name, self.directional_kind[0], self.inner_kernel)
