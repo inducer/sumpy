@@ -188,11 +188,12 @@ class KernelComputation(object):
 
 class KernelCacheWrapper(object):
     @memoize_method
-    def get_cached_optimized_kernel(self):
+    def get_cached_optimized_kernel(self, **kwargs):
         from sumpy import code_cache, CACHING_ENABLED
 
         if CACHING_ENABLED:
-            cache_key = self.get_cache_key()
+            cache_key = self.get_cache_key() + tuple(
+                    kwargs.iteritems())
 
             try:
                 result = code_cache[cache_key]
@@ -201,7 +202,7 @@ class KernelCacheWrapper(object):
             except KeyError:
                 pass
 
-        knl = self.get_optimized_kernel()
+        knl = self.get_optimized_kernel(**kwargs)
 
         if CACHING_ENABLED:
             code_cache[cache_key] = knl
