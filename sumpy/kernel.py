@@ -236,6 +236,8 @@ class LaplaceKernel(Kernel):
 
 
 class HelmholtzKernel(Kernel):
+    init_arg_names = ("dim", "helmholtz_k_name", "allow_evanescent")
+
     def __init__(self, dim=None, helmholtz_k_name="k",
             allow_evanescent=False):
         Kernel.__init__(self, dim)
