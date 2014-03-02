@@ -196,6 +196,6 @@ class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):
         elif expr.name == "pi":
             return sp.pi
         else:
-            return PymbolicToSympyMapper.map_variable(expr)
+            return PymbolicToSympyMapper.map_variable(self, expr)
 
 # vim: fdm=marker
