@@ -271,7 +271,7 @@ class LaplaceKernel(ExpressionKernel):
     mapper_method = "map_laplace_kernel"
 
 
-class HelmholtzKernel(Kernel):
+class HelmholtzKernel(ExpressionKernel):
     init_arg_names = ("dim", "helmholtz_k_name", "allow_evanescent")
 
     def __init__(self, dim=None, helmholtz_k_name="k",
