@@ -55,8 +55,8 @@ class P2EBase(KernelCacheWrapper):
         self.dim = expansion.dim
 
     def get_looy_instructions(self):
-        from sumpy.symbolic import make_sym_vector
-        avec = make_sym_vector("a", self.dim)
+        from sumpy.symbolic import make_sympy_vector
+        avec = make_sympy_vector("a", self.dim)
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()

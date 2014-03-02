@@ -81,10 +81,10 @@ class LayerPotentialBase(KernelComputation):
 
     @memoize_method
     def get_kernel(self):
-        from sumpy.symbolic import make_sym_vector
+        from sumpy.symbolic import make_sympy_vector
 
-        avec = make_sym_vector("a", self.dim)
-        bvec = make_sym_vector("b", self.dim)
+        avec = make_sympy_vector("a", self.dim)
+        bvec = make_sympy_vector("b", self.dim)
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
@@ -136,8 +136,8 @@ class LayerPotentialBase(KernelComputation):
                 "{[isrc,itgt,idim]: 0<=itgt<ntargets and 0<=isrc<nsources "
                 "and 0<=idim<%d}" % self.dim,
                 [
-                "<> a[idim] = center[idim,itgt] - src[idim,isrc] {id=compute_a}",
-                "<> b[idim] = tgt[idim,itgt] - center[idim,itgt] {id=compute_b}",
+                    "<> a[idim] = center[idim,itgt] - src[idim,isrc] {id=compute_a}",
+                    "<> b[idim] = tgt[idim,itgt] - center[idim,itgt] {id=compute_b}",
                 ]+self.get_kernel_scaling_assignments()+loopy_insns+[
                     lp.ExpressionInstruction(id=None,
                         assignee="pair_result_%d" % i, expression=expr,

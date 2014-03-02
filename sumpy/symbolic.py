@@ -24,7 +24,9 @@ THE SOFTWARE.
 
 
 import sympy as sp
+import numpy as np
 from pymbolic.mapper import IdentityMapper as IdentityMapperBase
+from pymbolic.sympy_interface import PymbolicToSympyMapper
 
 
 # {{{ trivial assignment elimination
@@ -160,7 +162,12 @@ def sympy_real_norm_2(x):
     return sp.sqrt((x.T*x)[0, 0])
 
 
-def make_sym_vector(name, components):
+def pymbolic_real_norm_2(x):
+    from pymbolic import var
+    return var("sqrt")(np.dot(x, x))
+
+
+def make_sympy_vector(name, components):
     return sp.Matrix(
             [sp.Symbol("%s%d" % (name, i)) for i in range(components)])
 
@@ -180,5 +187,15 @@ def find_power_of(base, prod):
     if result is None:
         return 0
     return result[power]
+
+
+class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):
+    def map_variable(self, expr):
+        if expr.name == "I":
+            return sp.I
+        elif expr.name == "pi":
+            return sp.pi
+        else:
+            return PymbolicToSympyMapper.map_variable(expr)
 
 # vim: fdm=marker

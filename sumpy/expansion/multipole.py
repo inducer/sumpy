@@ -49,8 +49,8 @@ class VolumeTaylorMultipoleExpansion(
                 raise NotImplementedError("more than one source derivative "
                         "not supported at present")
 
-            from sumpy.symbolic import make_sym_vector
-            dir_vec = make_sym_vector(kernel.dir_vec_name, kernel.dim)
+            from sumpy.symbolic import make_sympy_vector
+            dir_vec = make_sympy_vector(kernel.dir_vec_name, kernel.dim)
 
             coeff_identifiers = self.get_coefficient_identifiers()
             result = [0] * len(coeff_identifiers)

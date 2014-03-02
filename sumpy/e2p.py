@@ -59,8 +59,8 @@ class E2PBase(KernelCacheWrapper):
             assert tdr(knl) == expansion.kernel
 
     def get_loopy_insns_and_result_names(self):
-        from sumpy.symbolic import make_sym_vector
-        bvec = make_sym_vector("b", self.dim)
+        from sumpy.symbolic import make_sympy_vector
+        bvec = make_sympy_vector("b", self.dim)
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()

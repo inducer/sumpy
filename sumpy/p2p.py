@@ -54,8 +54,8 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
         self.dim = single_valued(knl.dim for knl in self.kernels)
 
     def get_loopy_insns_and_result_names(self):
-        from sumpy.symbolic import make_sym_vector
-        dvec = make_sym_vector("d", self.dim)
+        from sumpy.symbolic import make_sympy_vector
+        dvec = make_sympy_vector("d", self.dim)
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()

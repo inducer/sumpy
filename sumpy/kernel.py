@@ -24,9 +24,11 @@ THE SOFTWARE.
 
 
 import loopy as lp
-import sympy as sp
 import numpy as np
 from pymbolic.mapper import IdentityMapper
+from sumpy.symbolic import pymbolic_real_norm_2
+from pymbolic.primitives import make_sym_vector
+from pymbolic import var
 
 
 # {{{ basic kernel interface
@@ -38,7 +40,7 @@ class Kernel(object):
     .. attribute:: dim
 
         *dim* is allowed to be *None* if the dimensionality is not yet
-        known. Use the :meth:`fix_dimensions`
+        known.
     """
 
     def __init__(self, dim=None):
@@ -90,13 +92,6 @@ class Kernel(object):
                     "has not yet been set")
 
         return self._dim
-
-    def fix_dim(self, dim):
-        """Return a new :class:`Kernel` with :attr:`dim` set to
-        *dim*.
-        """
-
-        raise NotImplementedError
 
     def get_base_kernel(self):
         return self
@@ -154,51 +149,115 @@ class Kernel(object):
         """
         return []
 
-    def __sub__(self, other):
-        return DifferenceKernel(self, other)
-
 # }}}
 
 
-# {{{ "one" kernel (for testing)
-
-class OneKernel(Kernel):
-    """A kernel whose value is 1 everywhere, for every source and target.
-    (for testing)
-    """
-
+class ExpressionKernel(Kernel):
     is_complex_valued = False
 
-    init_arg_names = ("dim",)
+    init_arg_names = ("dim", "expression", "scaling", "is_complex_valued")
+
+    def __init__(self, dim, expression, scaling, is_complex_valued):
+        """
+        :arg expression: A :mod:`pymbolic` expression depending on
+            variables *d_1* through *d_N* where *N* equals *dim*.
+            (These variables match what is returned from
+            :func:`pymbolic.primitives.make_sym_vector` with
+            argument `"d"`.)
+        :arg scaling: A :mod:`pymbolic` expression for the scaling
+            of the kernel.
+        """
+
+        # expression and scaling are pymbolic objects because those pickle
+        # cleanly. D'oh, sympy!
+
+        Kernel.__init__(self, dim)
+
+        self.expression = expression
+        self.scaling = scaling
+        self.is_complex_valued = is_complex_valued
 
     def __getinitargs__(self):
         return (self._dim,)
 
     def __repr__(self):
         if self._dim is not None:
-            return "OneKnl%dD" % self.dim
+            return "ExprKnl%dD" % self.dim
         else:
-            return "OneKnl"
+            return "ExprKnl"
 
     def get_expression(self, dist_vec):
-        return sp.sympify(1)
+        if self.expression is None:
+            raise RuntimeError("expression in ExpressionKernel has not "
+                    "been determined yet (this could be due to a PDE kernel "
+                    "not having learned its dimensionality yet)")
+
+        from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
+        expr = PymbolicToSympyMapperWithSymbols()(self.expression)
+
+        if self.dim != len(dist_vec):
+            raise ValueError("dist_vec length does not match expected dimension")
+
+        expr = expr.subs([
+            ("d_%d" % i, dist_vec_i)
+            for i, dist_vec_i in enumerate(dist_vec)
+            ])
+
+        return expr
 
     def get_scaling(self):
         """Return a global scaling of the kernel."""
 
-        return 1
+        if self.scaling is None:
+            raise RuntimeError("scaling in ExpressionKernel has not "
+                    "been determined yet (this could be due to a PDE kernel "
+                    "not having learned its dimensionality yet)")
 
-    mapper_method = "map_one_kernel"
+        from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
+        return PymbolicToSympyMapperWithSymbols()(self.scaling)
 
-# }}}
+    mapper_method = "map_expression_kernel"
+
+
+one_kernel_2d = ExpressionKernel(
+        dim=2,
+        expression=1,
+        scaling=1,
+        is_complex_valued=False)
+one_kernel_3d = ExpressionKernel(
+        dim=3,
+        expression=1,
+        scaling=1,
+        is_complex_valued=False)
 
 
 # {{{ PDE kernels
 
-class LaplaceKernel(Kernel):
-    is_complex_valued = False
-
+class LaplaceKernel(ExpressionKernel):
     init_arg_names = ("dim",)
+
+    def __init__(self, dim=None):
+        # See (Kress LIE, Thm 6.2) for scaling
+        if dim == 2:
+            r = pymbolic_real_norm_2(make_sym_vector("d", dim))
+            expr = var("log")(r)
+            scaling = 1/(-2*var("pi"))
+        elif dim == 3:
+            r = pymbolic_real_norm_2(make_sym_vector("d", dim))
+            expr = 1/r
+            scaling = 1/(4*var("pi"))
+        elif dim is None:
+            expr = None
+            scaling = None
+        else:
+            raise RuntimeError("unsupported dimensionality")
+
+        ExpressionKernel.__init__(
+                self,
+                dim,
+                expression=expr,
+                scaling=scaling,
+                is_complex_valued=False)
 
     def __getinitargs__(self):
         return (self._dim,)
@@ -209,29 +268,6 @@ class LaplaceKernel(Kernel):
         else:
             return "LapKnl"
 
-    def get_expression(self, dist_vec):
-        assert self.dim == len(dist_vec)
-        from sumpy.symbolic import sympy_real_norm_2
-        r = sympy_real_norm_2(dist_vec)
-
-        if self.dim == 2:
-            return sp.log(r)
-        elif self.dim == 3:
-            return 1/r
-        else:
-            raise RuntimeError("unsupported dimensionality")
-
-    def get_scaling(self):
-        """Return a global scaling of the kernel."""
-
-        # (Kress LIE, Thm 6.2)
-        if self.dim == 2:
-            return 1/(-2*sp.pi)
-        elif self.dim == 3:
-            return 1/(4*sp.pi)
-        else:
-            raise RuntimeError("unsupported dimensionality")
-
     mapper_method = "map_laplace_kernel"
 
 
@@ -240,7 +276,29 @@ class HelmholtzKernel(Kernel):
 
     def __init__(self, dim=None, helmholtz_k_name="k",
             allow_evanescent=False):
-        Kernel.__init__(self, dim)
+        k = var(helmholtz_k_name)
+
+        if dim == 2:
+            r = pymbolic_real_norm_2(make_sym_vector("d", dim))
+            expr = var("hankel_1")(0, k*r)
+            scaling = var("I")/4
+        elif dim == 3:
+            r = pymbolic_real_norm_2(make_sym_vector("d", dim))
+            expr = var("exp")(var("I")*k*r)/r
+            scaling = 1/(4*var("pi"))
+        elif dim is None:
+            expr = None
+            scaling = None
+        else:
+            raise RuntimeError("unsupported dimensionality")
+
+        ExpressionKernel.__init__(
+                self,
+                dim,
+                expression=expr,
+                scaling=scaling,
+                is_complex_valued=True)
+
         self.helmholtz_k_name = helmholtz_k_name
         self.allow_evanescent = allow_evanescent
 
@@ -254,8 +312,6 @@ class HelmholtzKernel(Kernel):
         else:
             return "HelmKnl(%s)" % (self.helmholtz_k_name)
 
-    is_complex_valued = True
-
     def prepare_loopy_kernel(self, loopy_knl):
         from sumpy.codegen import bessel_preamble_generator, bessel_mangler
         loopy_knl = lp.register_function_manglers(loopy_knl,
@@ -264,31 +320,6 @@ class HelmholtzKernel(Kernel):
                 [bessel_preamble_generator])
 
         return loopy_knl
-
-    def get_expression(self, dist_vec):
-        assert self.dim == len(dist_vec)
-
-        from sumpy.symbolic import sympy_real_norm_2
-        r = sympy_real_norm_2(dist_vec)
-
-        k = sp.Symbol(self.helmholtz_k_name)
-
-        if self.dim == 2:
-            return sp.Function("hankel_1")(0, k*r)
-        elif self.dim == 3:
-            return sp.exp(sp.I*k*r)/r
-        else:
-            raise RuntimeError("unsupported dimensionality")
-
-    def get_scaling(self):
-        """Return a global scaling of the kernel."""
-
-        if self.dim == 2:
-            return sp.I/4
-        elif self.dim == 3:
-            return 1/(4*sp.pi)
-        else:
-            raise RuntimeError("unsupported dimensionality")
 
     def get_args(self):
         if self.allow_evanescent:
@@ -299,41 +330,6 @@ class HelmholtzKernel(Kernel):
         return [lp.ValueArg(self.helmholtz_k_name, k_dtype)]
 
     mapper_method = "map_helmholtz_kernel"
-
-
-class DifferenceKernel(Kernel):
-    init_arg_names = ("kernel_plus", "kernel_minus")
-
-    def __init__(self, kernel_plus, kernel_minus):
-        if (kernel_plus.get_base_kernel() is not kernel_plus
-                or kernel_minus.get_base_kernel() is not kernel_minus):
-            raise ValueError("kernels in difference kernel "
-                    "must be basic, unwrapped PDE kernels")
-
-        if kernel_plus.dim != kernel_minus.dim:
-            raise ValueError(
-                    "kernels in difference kernel have different dim")
-
-        self.kernel_plus = kernel_plus
-        self.kernel_minus = kernel_minus
-
-        Kernel.__init__(self, self.kernel_plus.dim)
-
-        # FIXME
-        raise NotImplementedError("difference kernel mostly unimplemented")
-
-    def __getinitargs__(self):
-        return (self.kernel_plus, self.kernel_minus)
-
-    def fix_dimensions(self, dim):
-        """Return a new :class:`Kernel` with :attr:`dim` set to
-        *dim*.
-        """
-        return DifferenceKernel(
-                self.kernel_plus.fix_dimensions(dim),
-                self.kernel_minus.fix_dimensions(dim))
-
-    mapper_method = "map_difference_kernel"
 
 # }}}
 
@@ -481,8 +477,8 @@ class DirectionalTargetDerivative(DirectionalDerivative):
         dim = len(bvec)
         assert dim == self.dim
 
-        from sumpy.symbolic import make_sym_vector
-        dir_vec = make_sym_vector(self.dir_vec_name, dim)
+        from sumpy.symbolic import make_sympy_vector
+        dir_vec = make_sympy_vector(self.dir_vec_name, dim)
 
         # bvec = tgt-center
         return sum(dir_vec[axis]*expr.diff(bvec[axis])
@@ -507,8 +503,8 @@ class DirectionalSourceDerivative(DirectionalDerivative):
         dimensions = len(avec)
         assert dimensions == self.dim
 
-        from sumpy.symbolic import make_sym_vector
-        dir_vec = make_sym_vector(self.dir_vec_name, dimensions)
+        from sumpy.symbolic import make_sympy_vector
+        dir_vec = make_sympy_vector(self.dir_vec_name, dimensions)
 
         # avec = center-src -> minus sign from chain rule
         return sum(-dir_vec[axis]*expr.diff(avec[axis])
@@ -548,18 +544,11 @@ class KernelCombineMapper(KernelMapper):
 
 
 class KernelIdentityMapper(KernelMapper):
-    def map_laplace_kernel(self, kernel):
+    def map_expression_kernel(self, kernel):
         return kernel
 
-    def map_helmholtz_kernel(self, kernel):
-        return kernel
-
-    def map_one_kernel(self, kernel):
-        return kernel
-
-    def map_difference_kernel(self, kernel):
-        return DifferenceKernel(
-                self.rec(kernel.kernel_plus), self.rec(kernel.kernel_minus))
+    map_laplace_kernel = map_expression_kernel
+    map_helmholtz_kernel = map_expression_kernel
 
     def map_axis_target_derivative(self, kernel):
         return AxisTargetDerivative(kernel.axis, self.rec(kernel.inner_kernel))
@@ -586,14 +575,11 @@ class DerivativeCounter(KernelCombineMapper):
     def combine(self, values):
         return max(values)
 
-    def map_laplace_kernel(self, kernel):
+    def map_expression_kernel(self, kernel):
         return 0
 
-    def map_helmholtz_kernel(self, kernel):
-        return 0
-
-    def map_one_kernel(self, kernel):
-        return 0
+    map_laplace_kernel = map_expression_kernel
+    map_helmholtz_kernel = map_expression_kernel
 
     def map_axis_target_derivative(self, kernel):
         return 1 + self.rec(kernel.inner_kernel)
@@ -606,15 +592,30 @@ class KernelDimensionSetter(KernelIdentityMapper):
     def __init__(self, dim):
         self.dim = dim
 
+    def map_expression_kernel(self, kernel):
+        if kernel._dim is not None and self.dim != kernel.dim:
+            raise RuntimeError("cannot set kernel dimension to new value (%d)"
+                    "different from existing one (%d)"
+                    % (self.dim, kernel.dim))
+
+        return kernel
+
     def map_laplace_kernel(self, kernel):
+        if kernel._dim is not None and self.dim != kernel.dim:
+            raise RuntimeError("cannot set kernel dimension to new value (%d)"
+                    "different from existing one (%d)"
+                    % (self.dim, kernel.dim))
+
         return LaplaceKernel(self.dim)
 
     def map_helmholtz_kernel(self, kernel):
+        if kernel._dim is not None and self.dim != kernel.dim:
+            raise RuntimeError("cannot set kernel dimension to new value (%d)"
+                    "different from existing one (%d)"
+                    % (self.dim, kernel.dim))
+
         return HelmholtzKernel(self.dim, kernel.helmholtz_k_name,
                 kernel.allow_evanescent)
-
-    def map_one_kernel(self, kernel):
-        return OneKernel(self.dim)
 
 # }}}
 

@@ -31,7 +31,7 @@ class ExpansionBase(object):
     def __init__(self, kernel, order):
         # Don't be tempted to remove target derivatives here.
         # Line Taylor QBX can't do without them, because it can't
-        # take them afterwards.
+        # apply those derivatives to the expanded quantity.
 
         self.kernel = kernel
         self.order = order

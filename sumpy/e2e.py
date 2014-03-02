@@ -61,8 +61,8 @@ class E2EBase(KernelCacheWrapper):
         self.dim = src_expansion.dim
 
     def get_translation_loopy_insns(self):
-        from sumpy.symbolic import make_sym_vector
-        dvec = make_sym_vector("d", self.dim)
+        from sumpy.symbolic import make_sympy_vector
+        dvec = make_sympy_vector("d", self.dim)
 
         src_coeff_exprs = [sp.Symbol("src_coeff%d" % i)
                 for i in xrange(len(self.src_expansion))]
