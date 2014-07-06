@@ -147,6 +147,7 @@ class LayerPotentialBase(KernelComputation):
                 arguments,
                 defines=dict(KNLIDX=range(len(exprs))),
                 name=self.name, assumptions="nsources>=1 and ntargets>=1",
+                default_offset=lp.auto,
                 )
 
         for where in ["compute_a", "compute_b"]:
@@ -157,6 +158,10 @@ class LayerPotentialBase(KernelComputation):
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.tag_data_axes(loopy_knl, "center", "sep,C")
+        # loopy_knl = lp.set_options(loopy_knl,
+        #         #write_cl=True, highlight_cl=True,
+        #         #trace_assignment_values=True
+        #         )
 
         return loopy_knl
 
