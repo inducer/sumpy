@@ -66,6 +66,9 @@ class FieldPlotter:
 
         if not isinstance(npoints, tuple):
             npoints = dim*(npoints,)
+        else:
+            if len(npoints) != dim:
+                raise ValueError("length of npoints must match dimension")
 
         for i in range(dim):
             if npoints[i] == 1:
