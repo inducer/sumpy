@@ -54,7 +54,7 @@ class P2EBase(KernelCacheWrapper):
 
         self.dim = expansion.dim
 
-    def get_looy_instructions(self):
+    def get_loopy_instructions(self):
         from sumpy.symbolic import make_sympy_vector
         avec = make_sympy_vector("a", self.dim)
 
@@ -102,7 +102,7 @@ class P2EFromSingleBox(P2EBase):
                     "{[isrc_box]: 0<=isrc_box<nsrc_boxes}",
                     "{[isrc,idim]: isrc_start<=isrc<isrc_end and 0<=idim<dim}",
                     ],
-                self.get_looy_instructions()
+                self.get_loopy_instructions()
                 + ["""
                     <> src_ibox = source_boxes[isrc_box]
                     <> isrc_start = box_source_starts[src_ibox]
@@ -198,7 +198,7 @@ class P2EFromCSR(P2EBase):
                     "{[isrc_box]: isrc_box_start<=isrc_box<isrc_box_stop}",
                     "{[isrc,idim]: isrc_start<=isrc<isrc_end and 0<=idim<dim}",
                     ],
-                self.get_looy_instructions()
+                self.get_loopy_instructions()
                 + ["""
                     <> tgt_ibox = target_boxes[itgt_box]
 
