@@ -337,7 +337,7 @@ class VectorComponentRewriter(IdentityMapper):
             name = match_obj.group(1)
             subscript = int(match_obj.group(2))
             if name in self.name_whitelist:
-                return prim.Variable(name)[subscript]
+                return prim.Variable(name).index(subscript)
             else:
                 return IdentityMapper.map_variable(self, expr)
         else:

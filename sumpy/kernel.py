@@ -410,8 +410,8 @@ class _VectorIndexAdder(IdentityMapper):
         from pymbolic.primitives import CommonSubexpression
         if expr.aggregate.name == self.vec_name \
                 and isinstance(expr.index, int):
-            return CommonSubexpression(expr.aggregate[
-                    (expr.index,) + self.additional_indices])
+            return CommonSubexpression(expr.aggregate.index(
+                    (expr.index,) + self.additional_indices))
         else:
             return IdentityMapper.map_subscript(self, expr)
 
