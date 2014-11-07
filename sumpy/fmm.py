@@ -98,11 +98,10 @@ class SumpyExpansionWrangler(object):
         self.tree = tree
         self.dtype = dtype
         self.source_extra_kwargs = source_extra_kwargs
-
-        if kernel_extra_kwargs is None:
-            kernel_extra_kwargs = source_extra_kwargs
-
         self.kernel_extra_kwargs = kernel_extra_kwargs
+
+        self.extra_kwargs = source_extra_kwargs.copy()
+        self.extra_kwargs.update(self.kernel_extra_kwargs)
 
     @property
     def multipole_expansion(self):
@@ -172,7 +171,7 @@ class SumpyExpansionWrangler(object):
     def form_multipoles(self, source_boxes, src_weights):
         mpoles = self.multipole_expansion_zeros()
 
-        kwargs = self.source_extra_kwargs.copy()
+        kwargs = self.extra_kwargs.copy()
         kwargs.update(self.box_source_list_kwargs())
 
         evt, (mpoles_res,) = self.code.p2m(self.queue,
@@ -206,7 +205,7 @@ class SumpyExpansionWrangler(object):
             source_box_lists, src_weights):
         pot = self.potential_zeros()
 
-        kwargs = self.source_extra_kwargs.copy()
+        kwargs = self.extra_kwargs.copy()
         kwargs.update(self.box_source_list_kwargs())
         kwargs.update(self.box_target_list_kwargs())
 
@@ -267,7 +266,7 @@ class SumpyExpansionWrangler(object):
     def form_locals(self, target_or_target_parent_boxes, starts, lists, src_weights):
         local_exps = self.local_expansion_zeros()
 
-        kwargs = self.source_extra_kwargs.copy()
+        kwargs = self.extra_kwargs.copy()
         kwargs.update(self.box_source_list_kwargs())
 
         evt, (result,) = self.code.p2l(self.queue,
