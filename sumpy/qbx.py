@@ -196,7 +196,7 @@ class LayerPotential(LayerPotentialBase):
     default_name = "qbx_apply"
 
     def get_strength_or_not(self, isrc, kernel_idx):
-        return var("strength_%d" % self.strength_usage[kernel_idx])[isrc]
+        return var("strength_%d" % self.strength_usage[kernel_idx]).index(isrc)
 
     def get_input_and_output_arguments(self):
         return [
