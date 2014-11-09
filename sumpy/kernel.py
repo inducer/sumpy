@@ -94,6 +94,9 @@ class Kernel(object):
         return self._dim
 
     def get_base_kernel(self):
+        """Return the kernel being wrapped by this one, or else
+        *self*.
+        """
         return self
 
     def prepare_loopy_kernel(self, loopy_knl):
