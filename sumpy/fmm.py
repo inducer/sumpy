@@ -97,12 +97,15 @@ class SumpyExpansionWrangler(object):
         self.queue = queue
         self.tree = tree
         self.dtype = dtype
+
+        if kernel_extra_kwargs is not None:
+            kernel_extra_kwargs = {}
+
         self.source_extra_kwargs = source_extra_kwargs
         self.kernel_extra_kwargs = kernel_extra_kwargs
 
         self.extra_kwargs = source_extra_kwargs.copy()
-        if self.kernel_extra_kwargs is not None:
-            self.extra_kwargs.update(self.kernel_extra_kwargs)
+        self.extra_kwargs.update(self.kernel_extra_kwargs)
 
     @property
     def multipole_expansion(self):
