@@ -98,7 +98,7 @@ class SumpyExpansionWrangler(object):
         self.tree = tree
         self.dtype = dtype
 
-        if kernel_extra_kwargs is not None:
+        if kernel_extra_kwargs is None:
             kernel_extra_kwargs = {}
 
         self.source_extra_kwargs = source_extra_kwargs
