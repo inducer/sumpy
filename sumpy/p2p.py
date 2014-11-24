@@ -97,7 +97,7 @@ class P2P(P2PBase):
         from pymbolic import var
         exprs = [
                 var(name)
-                * var("strength")[self.strength_usage[i], var("isrc")]
+                * var("strength").index((self.strength_usage[i], var("isrc")))
                 for i, name in enumerate(result_names)]
 
         if self.exclude_self:
