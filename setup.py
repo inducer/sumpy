@@ -3,12 +3,6 @@
 
 from setuptools import setup
 
-try:
-    from distutils.command.build_py import build_py_2to3 as build_py
-except ImportError:
-    # 2.x
-    from distutils.command.build_py import build_py
-
 ver_dic = {}
 version_file = open("sumpy/version.py")
 try:
@@ -50,12 +44,9 @@ setup(name="sumpy",
           "pytools>=2013.5.6",
           "boxtree>=2013.1",
           "pytest>=2.3",
+          "six",
 
           # If this causes issues, see:
           # https://code.google.com/p/sympy/issues/detail?id=3874
           "sympy>=0.7.2",
-          ],
-
-
-      # 2to3 invocation
-      cmdclass={'build_py': build_py})
+          ])
