@@ -192,8 +192,11 @@ class KernelCacheWrapper(object):
         from sumpy import code_cache, CACHING_ENABLED
 
         if CACHING_ENABLED:
-            cache_key = self.get_cache_key() + tuple(
-                    kwargs.iteritems())
+            import loopy.version
+            cache_key = (
+                    self.get_cache_key()
+                    + tuple(sorted(kwargs.iteritems()))
+                    + (loopy.version.DATA_MODEL_VERSION,))
 
             try:
                 result = code_cache[cache_key]
