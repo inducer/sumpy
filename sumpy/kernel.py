@@ -31,6 +31,31 @@ from pymbolic.primitives import make_sym_vector
 from pymbolic import var
 
 
+class KernelArgument(object):
+    """
+    .. attribute:: loopy_arg
+
+        A :class:`loopy.Argument` instance describing the type,
+        name, and other features of this kernel argument when
+        passed to a generated piece of code.
+
+    .. attribute:: expression
+
+        A :class:`pymbolic.primitives.Expression` instance that
+        should be evaluted to obtain the value of this argument
+        when this kernel is used in symbolic evaluation, such
+        as in :mod:`pytential.
+    """
+
+    def __init__(self, loopy_arg, expression=None):
+        self.loopy_arg = loopy_arg
+        self.expression = expression
+
+    @property
+    def name(self):
+        return self.loopy_arg.name
+
+
 # {{{ basic kernel interface
 
 class Kernel(object):
@@ -140,13 +165,13 @@ class Kernel(object):
         raise NotImplementedError
 
     def get_args(self):
-        """Return list of :cls:`loopy.Argument` instances describing
-        extra arguments used by kernel.
+        """Return list of :cls:`KernelArgument` instances describing
+        extra arguments used by the kernel.
         """
         return []
 
     def get_source_args(self):
-        """Return list of :cls:`loopy.Argument` instances describing
+        """Return list of :cls:`KernelArgument` instances describing
         extra arguments used by kernel in picking up contributions
         from point sources.
         """
@@ -275,11 +300,26 @@ class LaplaceKernel(ExpressionKernel):
 
 
 class HelmholtzKernel(ExpressionKernel):
-    init_arg_names = ("dim", "helmholtz_k_name", "allow_evanescent")
+    init_arg_names = ("dim", "helmholtz_k_name", "helmholtz_k_expression",
+            "allow_evanescent")
 
     def __init__(self, dim=None, helmholtz_k_name="k",
+            helmholtz_k_expression=None,
             allow_evanescent=False):
+        """
+        :arg helmholtz_k_name: The argument name to use for the Helmholtz
+            parameter when generating functions to evaluate this kernel.
+        :arg helmholtz_k_expression: The expression to evaluate to find
+            the Helmholtz parameter when evaluating this kernel as part
+            of a :mod:`pymbolic` operator.
+        """
         k = var(helmholtz_k_name)
+
+        # Guard against code using the old positional interface.
+        assert not isinstance(helmholtz_k_expression, bool)
+
+        if helmholtz_k_expression is None:
+            helmholtz_k_expression = k
 
         if dim == 2:
             r = pymbolic_real_norm_2(make_sym_vector("d", dim))
@@ -303,10 +343,20 @@ class HelmholtzKernel(ExpressionKernel):
                 is_complex_valued=True)
 
         self.helmholtz_k_name = helmholtz_k_name
+        self.helmholtz_k_expression = helmholtz_k_expression
         self.allow_evanescent = allow_evanescent
 
     def __getinitargs__(self):
-        return (self._dim, self.helmholtz_k_name, self.allow_evanescent)
+        return (self._dim, self.helmholtz_k_name,
+                self.helmholtz_k_expression, self.allow_evanescent)
+
+    def update_persistent_hash(self, key_hash, key_builder):
+        key_hash.update(type(self).__name__.encode("utf8"))
+        key_builder.rec(key_hash, (self.dim, self.helmholtz_k_name,
+            self.allow_evanescent))
+
+        # pymbolic expressions don't fit into persistent hashes:
+        # omit helmholtz_k_expression
 
     def __repr__(self):
         if self._dim is not None:
@@ -330,7 +380,10 @@ class HelmholtzKernel(ExpressionKernel):
         else:
             k_dtype = np.float64
 
-        return [lp.ValueArg(self.helmholtz_k_name, k_dtype)]
+        return [
+                KernelArgument(
+                    loopy_arg=lp.ValueArg(self.helmholtz_k_name, k_dtype),
+                    expression=self.helmholtz_k_expression)]
 
     mapper_method = "map_helmholtz_kernel"
 
@@ -420,11 +473,11 @@ class _VectorIndexAdder(IdentityMapper):
 
 
 class DirectionalDerivative(DerivativeBase):
-    init_arg_names = ("inner_kernel", "dir_vec_name", "dir_vec_data")
+    init_arg_names = ("inner_kernel", "dir_vec_name", "dir_vec_expression")
 
-    def __init__(self, inner_kernel, dir_vec_name=None, dir_vec_data=None):
+    def __init__(self, inner_kernel, dir_vec_name=None, dir_vec_expression=None):
         """
-        :arg dir_vec_data: an object of unspecified type, available for
+        :arg dir_vec_expression: an object of unspecified type, available for
             use by client applications to store information about the
             direction vector. :mod:`pytential` for instance uses this
             to store the direction vector expression to be evaluated.
@@ -435,24 +488,24 @@ class DirectionalDerivative(DerivativeBase):
 
         KernelWrapper.__init__(self, inner_kernel)
         self.dir_vec_name = dir_vec_name
-        self.dir_vec_data = dir_vec_data
+        self.dir_vec_expression = dir_vec_expression
 
     def __getinitargs__(self):
-        dir_vec_data = self.dir_vec_data
+        dir_vec_expression = self.dir_vec_expression
 
         # for hashability
-        if isinstance(dir_vec_data, np.ndarray):
-            dir_vec_data = tuple(dir_vec_data)
+        if isinstance(dir_vec_expression, np.ndarray):
+            dir_vec_expression = tuple(dir_vec_expression)
 
-        return (self.inner_kernel, self.dir_vec_name, dir_vec_data)
+        return (self.inner_kernel, self.dir_vec_name, dir_vec_expression)
 
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode("utf8"))
         key_builder.rec(key_hash, self.inner_kernel)
         key_builder.rec(key_hash, self.dir_vec_name)
 
-        # dir_vec_data is abstract data to us--we're not allowed to even know
-        # what type it is.
+        # pymbolic expressions don't fit into persistent hashes:
+        # omit dir_vec_expression.
 
     def __str__(self):
         return r"%s . \/_%s %s" % (
@@ -460,8 +513,14 @@ class DirectionalDerivative(DerivativeBase):
 
     def get_source_args(self):
         return [
-            lp.GlobalArg(self.dir_vec_name, None, shape=(self.dim, "nsources"),
-                dim_tags="sep,C")] + self.inner_kernel.get_source_args()
+                KernelArgument(
+                    loopy_arg=lp.GlobalArg(
+                        self.dir_vec_name,
+                        None,
+                        shape=(self.dim, "nsources"),
+                        dim_tags="sep,C"),
+                    expression=self.dir_vec_expression)
+                    ] + self.inner_kernel.get_source_args()
 
 
 class DirectionalTargetDerivative(DirectionalDerivative):
@@ -559,7 +618,7 @@ class KernelIdentityMapper(KernelMapper):
     def map_directional_target_derivative(self, kernel):
         return type(kernel)(
                 self.rec(kernel.inner_kernel),
-                kernel.dir_vec_name, kernel.dir_vec_data)
+                kernel.dir_vec_name, kernel.dir_vec_expression)
 
     map_directional_source_derivative = map_directional_target_derivative
 
@@ -617,8 +676,11 @@ class KernelDimensionSetter(KernelIdentityMapper):
                     "different from existing one (%d)"
                     % (self.dim, kernel.dim))
 
-        return HelmholtzKernel(self.dim, kernel.helmholtz_k_name,
-                kernel.allow_evanescent)
+        return HelmholtzKernel(self.dim,
+                helmholtz_k_name=kernel.helmholtz_k_name,
+                helmholtz_k_expression=(
+                    kernel.helmholtz_k_expression),
+                allow_evanescent=kernel.allow_evanescent)
 
 # }}}
 

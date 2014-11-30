@@ -96,7 +96,7 @@ class P2EFromSingleBox(P2EBase):
     def get_kernel(self):
         ncoeffs = len(self.expansion)
 
-        from sumpy.tools import gather_source_arguments
+        from sumpy.tools import gather_loopy_source_arguments
         loopy_knl = lp.make_kernel(
                 [
                     "{[isrc_box]: 0<=isrc_box<nsrc_boxes}",
@@ -127,7 +127,7 @@ class P2EFromSingleBox(P2EBase):
                     lp.ValueArg("nboxes,aligned_nboxes", np.int32),
                     lp.ValueArg("nsources", np.int32),
                     "..."
-                ] + gather_source_arguments([self.expansion]),
+                ] + gather_loopy_source_arguments([self.expansion]),
                 name=self.name, assumptions="nsrc_boxes>=1",
                 defines=dict(
                     dim=self.dim,
@@ -174,7 +174,7 @@ class P2EFromCSR(P2EBase):
     def get_kernel(self):
         ncoeffs = len(self.expansion)
 
-        from sumpy.tools import gather_source_arguments
+        from sumpy.tools import gather_loopy_source_arguments
         arguments = (
                 [
                     lp.GlobalArg("sources", None, shape=(self.dim, "nsources"),
@@ -190,7 +190,7 @@ class P2EFromCSR(P2EBase):
                     lp.ValueArg("naligned_boxes,nboxes", np.int32),
                     lp.ValueArg("nsources", np.int32),
                     "..."
-                ] + gather_source_arguments([self.expansion]))
+                ] + gather_loopy_source_arguments([self.expansion]))
 
         loopy_knl = lp.make_kernel(
                 [

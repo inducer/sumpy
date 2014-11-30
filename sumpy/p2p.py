@@ -108,7 +108,7 @@ class P2P(P2PBase):
                         expr, 0)
                     for expr in exprs]
 
-        from sumpy.tools import gather_source_arguments
+        from sumpy.tools import gather_loopy_source_arguments
         loopy_knl = lp.make_kernel(
                 "{[isrc,itgt,idim]: 0<=itgt<ntargets and 0<=isrc<nsources \
                         and 0<=idim<dim}",
@@ -136,7 +136,7 @@ class P2P(P2PBase):
                     lp.GlobalArg("strength", None, shape="nstrengths,nsources"),
                     lp.GlobalArg("result", self.value_dtypes[0],  # FIXME
                         shape="nresults,ntargets", dim_tags="sep,C")
-                ] + gather_source_arguments(self.kernels),
+                ] + gather_loopy_source_arguments(self.kernels),
                 name=self.name, assumptions="nsources>=1 and ntargets>=1",
                 defines=dict(
                     KNLIDX=range(len(exprs)),
@@ -198,7 +198,7 @@ class P2PFromCSR(P2PBase):
                 * var("strength").index((self.strength_usage[i], var("isrc")))
                 for i, name in enumerate(result_names)]
 
-        from sumpy.tools import gather_source_arguments
+        from sumpy.tools import gather_loopy_source_arguments
         loopy_knl = lp.make_kernel(
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
@@ -251,7 +251,7 @@ class P2PFromCSR(P2PBase):
                     lp.ValueArg("nsources", np.int32),
                     lp.ValueArg("ntargets", np.int32),
                     "...",
-                ] + gather_source_arguments(self.kernels),
+                ] + gather_loopy_source_arguments(self.kernels),
                 name=self.name, assumptions="ntgt_boxes>=1",
                 defines=dict(
                     KNLIDX=range(len(exprs)),

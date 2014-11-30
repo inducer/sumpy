@@ -145,7 +145,7 @@ class E2PFromSingleBox(E2PBase):
                     lp.ValueArg("nboxes,naligned_boxes", np.int32),
                     lp.ValueArg("ntargets", np.int32),
                     "..."
-                ] + self.expansion.get_args(),
+                ] + [arg.loopy_arg for arg in self.expansion.get_args()],
                 name=self.name, assumptions="ntgt_boxes>=1",
                 defines=dict(
                     dim=self.dim,
@@ -235,7 +235,7 @@ class E2PFromCSR(E2PBase):
                     lp.GlobalArg("source_box_starts, source_box_lists,",
                         None, shape=None),
                     "..."
-                ] + self.expansion.get_args(),
+                ] + [arg.loopy_arg for arg in self.expansion.get_args()],
                 name=self.name, assumptions="ntgt_boxes>=1",
                 defines=dict(
                     dim=self.dim,

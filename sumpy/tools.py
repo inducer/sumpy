@@ -113,6 +113,14 @@ def gather_source_arguments(kernel_likes):
     return sorted(result.itervalues(), key=lambda arg: arg.name)
 
 
+def gather_loopy_arguments(kernel_likes):
+    return [arg.loopy_arg for arg in gather_arguments(kernel_likes)]
+
+
+def gather_loopy_source_arguments(kernel_likes):
+    return [arg.loopy_arg for arg in gather_source_arguments(kernel_likes)]
+
+
 # {{{  KernelComputation
 
 class KernelComputation(object):

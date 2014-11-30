@@ -127,7 +127,7 @@ class E2EFromCSR(E2EBase):
         #
         # (same for itgt_box, tgt_ibox)
 
-        from sumpy.tools import gather_arguments
+        from sumpy.tools import gather_loopy_arguments
         loopy_knl = lp.make_kernel(
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
@@ -166,7 +166,7 @@ class E2EFromCSR(E2EBase):
                     lp.GlobalArg("tgt_expansions", None,
                         shape=("nboxes", ncoeff_tgt)),
                     "..."
-                ] + gather_arguments([self.src_expansion, self.tgt_expansion]),
+                ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name, assumptions="ntgt_boxes>=1",
                 defines=dict(
                     dim=self.dim,
@@ -223,7 +223,7 @@ class E2EFromChildren(E2EBase):
                     id=lp.UniqueName("compute_coeff"))
                 for insn in self.get_translation_loopy_insns()]
 
-        from sumpy.tools import gather_arguments
+        from sumpy.tools import gather_loopy_arguments
         loopy_knl = lp.make_kernel(
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
@@ -263,7 +263,7 @@ class E2EFromChildren(E2EBase):
                     lp.ValueArg("nboxes", np.int32),
                     lp.ValueArg("aligned_nboxes", np.int32),
                     "..."
-                ] + gather_arguments([self.src_expansion, self.tgt_expansion]),
+                ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name, assumptions="ntgt_boxes>=1",
                 defines=dict(
                     dim=self.dim,
@@ -315,7 +315,7 @@ class E2EFromParent(E2EBase):
         #
         # (same for itgt_box, tgt_ibox)
 
-        from sumpy.tools import gather_arguments
+        from sumpy.tools import gather_loopy_arguments
         loopy_knl = lp.make_kernel(
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
@@ -349,7 +349,7 @@ class E2EFromParent(E2EBase):
                     lp.GlobalArg("expansions", None,
                         shape=("nboxes", ncoeffs)),
                     "..."
-                ] + gather_arguments([self.src_expansion, self.tgt_expansion]),
+                ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name, assumptions="ntgt_boxes>=1",
                 defines=dict(
                     dim=self.dim,
