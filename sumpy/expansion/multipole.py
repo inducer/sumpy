@@ -173,7 +173,7 @@ class H2DMultipoleExpansion(MultipoleExpansionBase):
     def translate_from(self, src_expansion, src_coeff_exprs, dvec):
         if not isinstance(src_expansion, type(self)):
             raise RuntimeError("do not know how to translate %s to "
-                               "multipole 2D Hankel expansion"
+                               "multipole 2D Helmholtz Bessel expansion"
                                % type(src_expansion).__name__)
         from sumpy.symbolic import sympy_real_norm_2
         dvec_len = sympy_real_norm_2(dvec)

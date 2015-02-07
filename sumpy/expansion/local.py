@@ -175,7 +175,7 @@ class H2DLocalExpansion(LocalExpansionBase):
             return translated_coeffs
 
         raise RuntimeError("do not know how to translate %s to "
-                           "local 2D Hankel expansion"
+                           "local 2D Helmholtz Bessel expansion"
                            % type(src_expansion).__name__)
 
 # }}}
