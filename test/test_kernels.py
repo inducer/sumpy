@@ -339,8 +339,10 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
 
     del eval_offset
 
+    from sumpy.expansion import VolumeTaylorExpansionBase
+
     if isinstance(knl, HelmholtzKernel) and \
-           isinstance(local_expn_class, VolumeTaylorLocalExpansion):
+           issubclass(local_expn_class, VolumeTaylorExpansionBase):
         # FIXME: Embarrassing--but we run out of memory for higher orders.
         orders = [2, 3]
     else:
