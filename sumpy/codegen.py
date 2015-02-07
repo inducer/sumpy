@@ -65,6 +65,26 @@ class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
 
 # }}}
 
+# {{{ complex handling
+
+def complex_mangler(identifier, arg_dtypes):
+    """A function "mangler" to make casting to complex values
+    digestible for :mod:`loopy`.
+
+    See argument *function_manglers* to :func:`loopy.make_kernel`.
+    """
+
+    if identifier == "complex" and arg_dtypes == (np.dtype(np.float64),):
+        return (np.dtype(np.complex128), "cdouble_fromreal",
+                (np.dtype(np.float64),))
+    elif identifier == "complex" and arg_dtypes == (np.dtype(np.complex128),):
+        return (np.dtype(np.complex128), "cdouble_cast",
+                (np.dtype(np.complex128),))
+    else:
+        return None
+
+# }}}
+
 
 # {{{ bessel handling
 

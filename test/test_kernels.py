@@ -31,7 +31,8 @@ import pyopencl as cl
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 
-from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansion
+from sumpy.expansion.multipole import (
+        VolumeTaylorMultipoleExpansion, H2DMultipoleExpansion)
 from sumpy.expansion.local import VolumeTaylorLocalExpansion, H2DLocalExpansion
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, AxisTargetDerivative,
         DirectionalSourceDerivative)
@@ -95,6 +96,7 @@ def test_p2p(ctx_getter):
     (HelmholtzKernel(2), VolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), VolumeTaylorLocalExpansion),
     (HelmholtzKernel(2), H2DLocalExpansion),
+    (HelmholtzKernel(2), H2DMultipoleExpansion)
     ])
 @pytest.mark.parametrize("with_source_derivative", [
     False,
@@ -279,11 +281,12 @@ def test_p2e2p(ctx_getter, knl, expn_class, order, with_source_derivative):
     assert eoc_rec_grad_x.order_estimate() > tgt_order_grad - grad_slack
 
 
-@pytest.mark.parametrize("knl", [
-    LaplaceKernel(2),
-    HelmholtzKernel(2)
+@pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class", [
+    (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion)
     ])
-def test_translations(ctx_getter, knl):
+def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
     logging.basicConfig(level=logging.INFO)
 
     from sympy.core.cache import clear_cache
@@ -336,7 +339,8 @@ def test_translations(ctx_getter, knl):
 
     del eval_offset
 
-    if isinstance(knl, HelmholtzKernel):
+    if isinstance(knl, HelmholtzKernel) and \
+           isinstance(local_expn_class, VolumeTaylorLocalExpansion):
         # FIXME: Embarrassing--but we run out of memory for higher orders.
         orders = [2, 3]
     else:
@@ -366,8 +370,8 @@ def test_translations(ctx_getter, knl):
         return pot
 
     for order in orders:
-        m_expn = VolumeTaylorMultipoleExpansion(knl, order=order)
-        l_expn = VolumeTaylorLocalExpansion(knl, order=order)
+        m_expn = mpole_expn_class(knl, order=order)
+        l_expn = local_expn_class(knl, order=order)
 
         from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P, E2EFromCSR
         p2m = P2EFromSingleBox(ctx, m_expn)

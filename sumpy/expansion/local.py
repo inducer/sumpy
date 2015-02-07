@@ -123,34 +123,60 @@ class H2DLocalExpansion(LocalExpansionBase):
         return range(-self.order, self.order+1)
 
     def coefficients_from_source(self, avec, bvec):
-        hankel_1 = sp.Function("hankel_1")
-        center_source_angle = sp.atan2(-avec[1], -avec[0])
-
         from sumpy.symbolic import sympy_real_norm_2
-        u = sympy_real_norm_2(avec)
-
-        e_i_csangle = sp.exp(sp.I*center_source_angle)
-        return [
-                self.kernel.postprocess_at_source(
-                    hankel_1(i, sp.Symbol("k")*u)*e_i_csangle**i,
-                    avec)
-                    for i in self.get_coefficient_identifiers()]
+        hankel_1 = sp.Function("hankel_1")
+        # The coordinates are negated since avec points from source to center.
+        source_angle_rel_center = sp.atan2(-avec[1], -avec[0])
+        avec_len = sympy_real_norm_2(avec)
+        return [self.kernel.postprocess_at_source(
+                    hankel_1(l, sp.Symbol("k") * avec_len)
+                    * sp.exp(sp.I * l * source_angle_rel_center), avec)
+                    for l in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec):
-        bessel_j = sp.Function("bessel_j")
-
         from sumpy.symbolic import sympy_real_norm_2
-        v = sympy_real_norm_2(bvec)
+        bessel_j = sp.Function("bessel_j")
+        bvec_len = sympy_real_norm_2(bvec)
+        target_angle_rel_center = sp.atan2(bvec[1], bvec[0])
+        return sum(coeffs[self.get_storage_index(l)]
+                   * self.kernel.postprocess_at_target(
+                       bessel_j(l, sp.Symbol("k") * bvec_len)
+                       * sp.exp(sp.I * l * -target_angle_rel_center), bvec)
+                for l in self.get_coefficient_identifiers())
 
-        center_target_angle = sp.atan2(bvec[1], bvec[0])
+    def translate_from(self, src_expansion, src_coeff_exprs, dvec):
+        from sumpy.symbolic import sympy_real_norm_2
 
-        e_i_ctangle = sp.exp(-sp.I*center_target_angle)
-        return sum(
-                    coeffs[self.get_storage_index(i)]
-                    * self.kernel.postprocess_at_target(
-                        bessel_j(i, sp.Symbol("k")*v)
-                        * e_i_ctangle**i, bvec)
-                for i in self.get_coefficient_identifiers())
+        if isinstance(src_expansion, H2DLocalExpansion):
+            dvec_len = sympy_real_norm_2(dvec)
+            bessel_j = sp.Function("bessel_j")
+            new_center_angle_rel_old_center = sp.atan2(dvec[1], dvec[0])
+            translated_coeffs = []
+            for l in self.get_coefficient_identifiers():
+                translated_coeffs.append(
+                    sum(src_coeff_exprs[src_expansion.get_storage_index(m)]
+                        * bessel_j(m - l, sp.Symbol("k") * dvec_len)
+                        * sp.exp(sp.I * (m - l) * -new_center_angle_rel_old_center)
+                    for m in src_expansion.get_coefficient_identifiers()))
+            return translated_coeffs
+
+        from sumpy.expansion.multipole import H2DMultipoleExpansion
+        if isinstance(src_expansion, H2DMultipoleExpansion):
+            dvec_len = sympy_real_norm_2(dvec)
+            hankel_1 = sp.Function("hankel_1")
+            new_center_angle_rel_old_center = sp.atan2(dvec[1], dvec[0])
+            translated_coeffs = []
+            for l in self.get_coefficient_identifiers():
+                translated_coeffs.append(
+                    sum((-1) ** l * hankel_1(m + l, sp.Symbol("k") * dvec_len)
+                        * sp.exp(sp.I * (m + l) * new_center_angle_rel_old_center)
+                        * src_coeff_exprs[src_expansion.get_storage_index(m)]
+                    for m in src_expansion.get_coefficient_identifiers()))
+            return translated_coeffs
+
+        raise RuntimeError("do not know how to translate %s to "
+                           "local 2D Hankel expansion"
+                           % type(src_expansion).__name__)
 
 # }}}
 

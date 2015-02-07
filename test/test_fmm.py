@@ -29,6 +29,11 @@ import pyopencl as cl
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 from sumpy.kernel import LaplaceKernel, HelmholtzKernel
+from sumpy.expansion.multipole import (
+    VolumeTaylorMultipoleExpansion, H2DMultipoleExpansion)
+from sumpy.expansion.local import (
+    VolumeTaylorLocalExpansion, H2DLocalExpansion)
+
 import pytest
 
 import logging
@@ -43,13 +48,14 @@ else:
     faulthandler.enable()
 
 
-@pytest.mark.parametrize("knl", [
-    LaplaceKernel(2),
-    LaplaceKernel(3),
-    HelmholtzKernel(2),
-    HelmholtzKernel(3),
+@pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class", [
+    (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion),
+    (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion)
     ])
-def test_sumpy_fmm(ctx_getter, knl):
+def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
     logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_getter()
@@ -118,9 +124,6 @@ def test_sumpy_fmm(ctx_getter, knl):
 
     logger.info("computing direct (reference) result")
 
-    from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansion
-    from sumpy.expansion.local import VolumeTaylorLocalExpansion
-
     from pytools.convergence import PConvergenceVerifier
 
     pconv_verifier = PConvergenceVerifier()
@@ -136,8 +139,8 @@ def test_sumpy_fmm(ctx_getter, knl):
             order_values = [1, 2]
 
     for order in order_values:
-        mpole_expn = VolumeTaylorMultipoleExpansion(knl, order)
-        local_expn = VolumeTaylorLocalExpansion(knl, order)
+        mpole_expn = mpole_expn_class(knl, order)
+        local_expn = local_expn_class(knl, order)
         out_kernels = [knl]
 
         from sumpy.fmm import SumpyExpansionWranglerCodeContainer
