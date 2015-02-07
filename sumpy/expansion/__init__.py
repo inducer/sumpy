@@ -66,8 +66,9 @@ class ExpansionBase(object):
     def __len__(self):
         return len(self.get_coefficient_identifiers())
 
-    def coefficients_from_source(self, expr, avec, bvec):
+    def coefficients_from_source(self, avec, bvec):
         """
+        :arg avec: vector from source to center.
         :arg bvec: vector from center to target. Not usually necessary,
             except for line-Taylor expansion.
         """
