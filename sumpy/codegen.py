@@ -109,7 +109,11 @@ hank1_01_result hank1_01(cdouble_t z)
 """
 
 
-def bessel_preamble_generator(seen_dtypes, seen_functions):
+def bessel_preamble_generator(target, seen_dtypes, seen_functions):
+    from loopy.target.pyopencl import PyOpenCLTarget
+    if not isinstance(target, PyOpenCLTarget):
+        raise NotImplementedError("Only the PyOpenCLTarget is supported as of now")
+
     require_bessel = False
     if any(func.name == "hank1_01" for func in seen_functions):
         yield ("50-sumpy-hankel", HANKEL_PREAMBLE)
@@ -125,12 +129,16 @@ hank1_01_result_dtype = cl.tools.get_or_register_dtype("hank1_01_result",
         )
 
 
-def bessel_mangler(identifier, arg_dtypes):
+def bessel_mangler(target, identifier, arg_dtypes):
     """A function "mangler" to make Bessel functions
     digestible for :mod:`loopy`.
 
     See argument *function_manglers* to :func:`loopy.make_kernel`.
     """
+
+    from loopy.target.pyopencl import PyOpenCLTarget
+    if not isinstance(target, PyOpenCLTarget):
+        raise NotImplementedError("Only the PyOpenCLTarget is supported as of now")
 
     if identifier == "hank1_01":
         return (np.dtype(hank1_01_result_dtype),

@@ -67,14 +67,24 @@ class ExpansionBase(object):
         return len(self.get_coefficient_identifiers())
 
     def coefficients_from_source(self, avec, bvec):
-        """
+        """Form an expansion from a source point.
+
         :arg avec: vector from source to center.
         :arg bvec: vector from center to target. Not usually necessary,
             except for line-Taylor expansion.
+
+        :returns: a list of :mod:`sympy` expressions representing
+            the coefficients of the expansion.
         """
         raise NotImplementedError
 
     def evaluate(self, coeffs, bvec):
+        """
+        :return: a :mod:`sympy` expression corresponding
+            to the evaluated expansion with the coefficients
+            in *coeffs*.
+        """
+
         raise NotImplementedError
 
     def update_persistent_hash(self, key_hash, key_builder):
