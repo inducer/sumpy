@@ -152,11 +152,9 @@ class H2DMultipoleExpansion(MultipoleExpansionBase):
         avec_len = sympy_real_norm_2(avec)
         # The coordinates are negated since avec points from source to center.
         source_angle_rel_center = sp.atan2(-avec[1], -avec[0])
-        # FIXME: Figure out why compiling some kernels fails without the cast
-        # to complex values.
-        return [sp.Function("complex")(self.kernel.postprocess_at_source(
+        return [self.kernel.postprocess_at_source(
                     bessel_j(l, sp.Symbol("k") * avec_len) *
-                    sp.exp(sp.I * l * -source_angle_rel_center), avec))
+                    sp.exp(sp.I * l * -source_angle_rel_center), avec)
                 for l in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec):
