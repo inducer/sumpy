@@ -366,10 +366,9 @@ class HelmholtzKernel(ExpressionKernel):
             return "HelmKnl(%s)" % (self.helmholtz_k_name)
 
     def prepare_loopy_kernel(self, loopy_knl):
-        from sumpy.codegen import (bessel_preamble_generator, bessel_mangler,
-                                   complex_mangler)
+        from sumpy.codegen import (bessel_preamble_generator, bessel_mangler)
         loopy_knl = lp.register_function_manglers(loopy_knl,
-                [bessel_mangler, complex_mangler])
+                [bessel_mangler])
         loopy_knl = lp.register_preamble_generators(loopy_knl,
                 [bessel_preamble_generator])
 
