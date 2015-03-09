@@ -130,7 +130,7 @@ class VolumeTaylorMultipoleExpansion(
 # }}}
 
 
-# {{{ 2D J-expansion
+# {{{ 2D H-expansion
 
 class H2DMultipoleExpansion(MultipoleExpansionBase):
     def __init__(self, kernel, order):
@@ -150,10 +150,13 @@ class H2DMultipoleExpansion(MultipoleExpansionBase):
         from sumpy.symbolic import sympy_real_norm_2
         bessel_j = sp.Function("bessel_j")
         avec_len = sympy_real_norm_2(avec)
+
+        k = sp.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
+
         # The coordinates are negated since avec points from source to center.
         source_angle_rel_center = sp.atan2(-avec[1], -avec[0])
         return [self.kernel.postprocess_at_source(
-                    bessel_j(l, sp.Symbol("k") * avec_len) *
+                    bessel_j(l, k * avec_len) *
                     sp.exp(sp.I * l * -source_angle_rel_center), avec)
                 for l in self.get_coefficient_identifiers()]
 
@@ -162,9 +165,12 @@ class H2DMultipoleExpansion(MultipoleExpansionBase):
         hankel_1 = sp.Function("hankel_1")
         bvec_len = sympy_real_norm_2(bvec)
         target_angle_rel_center = sp.atan2(bvec[1], bvec[0])
+
+        k = sp.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
+
         return sum(coeffs[self.get_storage_index(l)]
                    * self.kernel.postprocess_at_target(
-                       hankel_1(l, sp.Symbol("k") * bvec_len)
+                       hankel_1(l, k * bvec_len)
                        * sp.exp(sp.I * l * target_angle_rel_center), bvec)
                 for l in self.get_coefficient_identifiers())
 
@@ -177,11 +183,14 @@ class H2DMultipoleExpansion(MultipoleExpansionBase):
         dvec_len = sympy_real_norm_2(dvec)
         bessel_j = sp.Function("bessel_j")
         new_center_angle_rel_old_center = sp.atan2(dvec[1], dvec[0])
+
+        k = sp.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
+
         translated_coeffs = []
         for l in self.get_coefficient_identifiers():
             translated_coeffs.append(
                 sum(src_coeff_exprs[src_expansion.get_storage_index(m)]
-                    * bessel_j(m - l, sp.Symbol("k") * dvec_len)
+                    * bessel_j(m - l, k * dvec_len)
                     * sp.exp(sp.I * (m - l) * new_center_angle_rel_old_center)
                 for m in src_expansion.get_coefficient_identifiers()))
         return translated_coeffs

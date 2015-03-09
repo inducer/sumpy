@@ -125,11 +125,14 @@ class H2DLocalExpansion(LocalExpansionBase):
     def coefficients_from_source(self, avec, bvec):
         from sumpy.symbolic import sympy_real_norm_2
         hankel_1 = sp.Function("hankel_1")
+
+        k = sp.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
+
         # The coordinates are negated since avec points from source to center.
         source_angle_rel_center = sp.atan2(-avec[1], -avec[0])
         avec_len = sympy_real_norm_2(avec)
         return [self.kernel.postprocess_at_source(
-                    hankel_1(l, sp.Symbol("k") * avec_len)
+                    hankel_1(l, k * avec_len)
                     * sp.exp(sp.I * l * source_angle_rel_center), avec)
                     for l in self.get_coefficient_identifiers()]
 
@@ -138,14 +141,19 @@ class H2DLocalExpansion(LocalExpansionBase):
         bessel_j = sp.Function("bessel_j")
         bvec_len = sympy_real_norm_2(bvec)
         target_angle_rel_center = sp.atan2(bvec[1], bvec[0])
+
+        k = sp.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
+
         return sum(coeffs[self.get_storage_index(l)]
                    * self.kernel.postprocess_at_target(
-                       bessel_j(l, sp.Symbol("k") * bvec_len)
+                       bessel_j(l, k * bvec_len)
                        * sp.exp(sp.I * l * -target_angle_rel_center), bvec)
                 for l in self.get_coefficient_identifiers())
 
     def translate_from(self, src_expansion, src_coeff_exprs, dvec):
         from sumpy.symbolic import sympy_real_norm_2
+
+        k = sp.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
 
         if isinstance(src_expansion, H2DLocalExpansion):
             dvec_len = sympy_real_norm_2(dvec)
@@ -155,7 +163,7 @@ class H2DLocalExpansion(LocalExpansionBase):
             for l in self.get_coefficient_identifiers():
                 translated_coeffs.append(
                     sum(src_coeff_exprs[src_expansion.get_storage_index(m)]
-                        * bessel_j(m - l, sp.Symbol("k") * dvec_len)
+                        * bessel_j(m - l, k * dvec_len)
                         * sp.exp(sp.I * (m - l) * -new_center_angle_rel_old_center)
                     for m in src_expansion.get_coefficient_identifiers()))
             return translated_coeffs
@@ -168,7 +176,7 @@ class H2DLocalExpansion(LocalExpansionBase):
             translated_coeffs = []
             for l in self.get_coefficient_identifiers():
                 translated_coeffs.append(
-                    sum((-1) ** l * hankel_1(m + l, sp.Symbol("k") * dvec_len)
+                    sum((-1) ** l * hankel_1(m + l, k * dvec_len)
                         * sp.exp(sp.I * (m + l) * new_center_angle_rel_old_center)
                         * src_coeff_exprs[src_expansion.get_storage_index(m)]
                     for m in src_expansion.get_coefficient_identifiers()))
