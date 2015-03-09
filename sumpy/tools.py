@@ -208,10 +208,12 @@ class KernelCacheWrapper(object):
 
             try:
                 result = code_cache[cache_key]
-                logger.info("%s: kernel cache hit" % self.name)
+                logger.debug("%s: kernel cache hit" % self.name)
                 return result
             except KeyError:
                 pass
+
+        logger.info("%s: kernel cache miss" % self.name)
 
         knl = self.get_optimized_kernel(**kwargs)
 
