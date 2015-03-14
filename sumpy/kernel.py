@@ -651,6 +651,12 @@ class KernelDimensionSetter(KernelIdentityMapper):
 
 
 def to_kernel_and_args(kernel_like):
+    if (isinstance(kernel_like, tuple)
+            and len(kernel_like) == 2
+            and isinstance(kernel_like[0], Kernel)):
+        # already gone through to_kernel_and_args
+        return kernel_like
+
     if not isinstance(kernel_like, Kernel):
         if kernel_like == 0:
             return LaplaceKernel(), {}
