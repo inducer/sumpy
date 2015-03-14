@@ -66,7 +66,7 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
                         knl.postprocess_at_source(
                             knl.get_expression(dvec), dvec),
                         dvec))
-                        for i, knl in enumerate(self.kernels)]
+                for i, knl in enumerate(self.kernels)]
 
         sac.run_global_cse()
 
@@ -171,10 +171,10 @@ class P2P(P2PBase):
     def __call__(self, queue, targets, sources, strength, **kwargs):
         from pytools.obj_array import is_obj_array
         knl = self.get_cached_optimized_kernel(
-                targets_is_obj_array=
-                is_obj_array(targets) or isinstance(targets, (tuple, list)),
-                sources_is_obj_array=
-                is_obj_array(sources) or isinstance(sources, (tuple, list)))
+                targets_is_obj_array=(
+                    is_obj_array(targets) or isinstance(targets, (tuple, list))),
+                sources_is_obj_array=(
+                    is_obj_array(sources) or isinstance(sources, (tuple, list))))
 
         return knl(queue, sources=sources, targets=targets, strength=strength,
                 **kwargs)
