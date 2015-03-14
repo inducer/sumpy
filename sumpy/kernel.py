@@ -650,18 +650,18 @@ class KernelDimensionSetter(KernelIdentityMapper):
 # }}}
 
 
-def normalize_kernel(kernel_like):
+def to_kernel_and_args(kernel_like):
     if not isinstance(kernel_like, Kernel):
         if kernel_like == 0:
-            kernel_like = LaplaceKernel()
+            return LaplaceKernel(), {}
         elif isinstance(kernel_like, str):
-            kernel_like = HelmholtzKernel(None, kernel_like)
+            return HelmholtzKernel(None), {"k": var(kernel_like)}
         else:
             raise ValueError("Only Kernel instances, 0 (for Laplace) and "
                     "variable names (strings) "
                     "for the Helmholtz parameter are allowed as kernels.")
 
-    return kernel_like
+    return kernel_like, {}
 
 
 # vim: fdm=marker
