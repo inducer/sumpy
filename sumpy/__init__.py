@@ -36,7 +36,7 @@ __all__ = [
     "E2EFromCSR", "E2EFromChildren", "E2EFromParent"]
 
 
-code_cache = PersistentDict("sumpy-code-cache-v2-"+VERSION_TEXT)
+code_cache = PersistentDict("sumpy-code-cache-v3-"+VERSION_TEXT)
 
 
 # {{{ cache control
