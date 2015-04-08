@@ -170,13 +170,14 @@ def draw_pot_figure(aspect_ratio,
     evt, (vol_pot,) = p2p(queue, fp.points, native_curve.pos,
             [native_curve.speed*native_weights*density], **volpot_kwargs)
 
-    evt, (curve_pot,) = lpot(queue, native_curve.pos, ovsmp_curve.pos, centers,
-            [ovsmp_density], ovsmp_curve.speed, ovsmp_weights,
+    evt, (curve_pot,) = lpot(queue, native_curve.pos, ovsmp_curve.pos,
+            centers,
+            [ovsmp_density * ovsmp_curve.speed * ovsmp_weights],
             **lpot_kwargs)
 
     # }}}
 
-    if 0:
+    if 1:
         # {{{ plot on-surface potential in 2D
 
         pt.plot(curve_pot, label="pot")
@@ -245,7 +246,6 @@ def draw_pot_figure(aspect_ratio,
 
 
 if __name__ == "__main__":
-    1/0  # FIXME update to new conventions
     draw_pot_figure(aspect_ratio=1, nsrc=100, novsmp=100, helmholtz_k=0,
             what_operator="D", what_operator_lpot="D", force_center_side=1)
     pt.savefig("eigvals-ext-nsrc100-novsmp100.pdf")

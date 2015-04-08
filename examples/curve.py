@@ -9,7 +9,7 @@ import scipy.fftpack
 
 class CurveGrid:
     def __init__(self, x, y):
-        self.pos = np.vstack([x,y]).T.copy()
+        self.pos = np.vstack([x,y]).copy()
         xp = self.xp = sp.fftpack.diff(x, period=1)
         yp = self.yp = sp.fftpack.diff(y, period=1)
         xpp = self.xpp = sp.fftpack.diff(xp, period=1)
@@ -17,7 +17,7 @@ class CurveGrid:
         self.mean_curvature = (xp*ypp-yp*xpp)/((xp**2+yp**2)**(3/2))
 
         speed = self.speed = np.sqrt(xp**2+yp**2)
-        self.normal = (np.vstack([yp, -xp])/speed).T.copy()
+        self.normal = (np.vstack([yp, -xp])/speed).copy()
 
     def __len__(self):
         return len(self.pos)
