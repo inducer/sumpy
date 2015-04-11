@@ -232,13 +232,13 @@ def draw_pot_figure(aspect_ratio,
             plotval_vol[outlier_flag] = sum(
                     nb[outlier_flag] for nb in neighbors)/len(neighbors)
 
-        fp.show_scalar_in_mayavi(scale*plotval_vol, maxval=1)
+        fp.show_scalar_in_mayavi(scale*plotval_vol, max_val=1)
         from mayavi import mlab
         mlab.colorbar()
         if 1:
             mlab.points3d(
-                    native_curve.pos[:, 0],
-                    native_curve.pos[:, 1],
+                    native_curve.pos[0],
+                    native_curve.pos[1],
                     scale*plotval_c, scale_factor=0.02)
         mlab.show()
 
