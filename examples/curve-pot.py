@@ -148,8 +148,9 @@ def draw_pot_figure(aspect_ratio,
 
         def apply_lpot(x):
             xovsmp = np.dot(fim, x)
-            evt, (y,) = lpot(queue, native_curve.pos, ovsmp_curve.pos, centers,
-                    [xovsmp], ovsmp_curve.speed, ovsmp_weights,
+            evt, (y,) = lpot(queue, native_curve.pos, ovsmp_curve.pos,
+                    centers,
+                    [xovsmp * ovsmp_curve.speed * ovsmp_weights],
                     **lpot_kwargs)
 
             return y
