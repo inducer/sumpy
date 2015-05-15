@@ -93,6 +93,15 @@ def vector_to_device(queue, vec):
     return with_object_array_or_scalar(to_dev, vec)
 
 
+def vector_from_device(queue, vec):
+    from pytools.obj_array import with_object_array_or_scalar
+
+    def from_dev(ary):
+        return ary.get(queue=queue)
+
+    return with_object_array_or_scalar(from_dev, vec)
+
+
 def gather_arguments(kernel_likes):
     result = {}
     for knl in kernel_likes:
