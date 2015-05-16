@@ -202,10 +202,10 @@ class LayerPotential(LayerPotentialBase):
         return [
                 lp.GlobalArg("strength_%d" % i, None, shape="nsources", order="C")
                 for i in xrange(self.strength_count)
-            ]+[
+                ]+[
                 lp.GlobalArg("result_%d" % i, None, shape="ntargets", order="C")
                 for i in xrange(len(self.kernels))
-            ]
+                ]
 
     def get_result_store_instructions(self):
         return [
@@ -243,7 +243,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
         return [
                 lp.GlobalArg("result_%d" % i, dtype, shape="ntargets,nsources")
                 for i, dtype in enumerate(self.value_dtypes)
-            ]
+                ]
 
     def get_result_store_instructions(self):
         return [

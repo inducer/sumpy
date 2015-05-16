@@ -134,7 +134,7 @@ class P2P(P2PBase):
                     lp.ValueArg("nsources", None),
                     lp.ValueArg("ntargets", None),
                     lp.GlobalArg("strength", None, shape="nstrengths,nsources"),
-                    lp.GlobalArg("result", self.value_dtypes[0],  # FIXME
+                    lp.GlobalArg("result", None,
                         shape="nresults,ntargets", dim_tags="sep,C")
                 ] + gather_loopy_source_arguments(self.kernels),
                 name=self.name, assumptions="nsources>=1 and ntargets>=1",
@@ -242,7 +242,7 @@ class P2PFromCSR(P2PBase):
                     lp.GlobalArg("source_box_starts, source_box_lists,",
                         None, shape=None),
                     lp.GlobalArg("strength", None, shape="nstrengths,nsources"),
-                    lp.GlobalArg("result", self.value_dtypes[0],  # FIXME
+                    lp.GlobalArg("result", None,
                         shape="nkernels,ntargets", dim_tags="sep,c"),
                     lp.GlobalArg("targets", None,
                         shape="dim,ntargets", dim_tags="sep,c"),
