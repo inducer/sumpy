@@ -110,7 +110,9 @@ class ExpansionBase(object):
 class VolumeTaylorExpansionBase(object):
     @memoize_method
     def _storage_loc_dict(self):
-        return dict((idx, i) for i, idx in enumerate(self.get_coefficient_indices()))
+        return dict(
+                (idx, i)
+                for i, idx in enumerate(self.get_coefficient_identifiers()))
 
     def get_storage_index(self, k):
         return self._storage_loc_dict()[k]

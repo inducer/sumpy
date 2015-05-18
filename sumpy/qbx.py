@@ -252,7 +252,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
                 ]
 
     def __call__(self, queue, targets, sources, centers, **kwargs):
-        cknl = self.get_compiled_kernel()
+        cknl = self.get_optimized_kernel()
 
         return cknl(queue, src=sources, tgt=targets, center=centers,
                 **kwargs)
