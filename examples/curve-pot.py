@@ -31,9 +31,12 @@ def draw_pot_figure(aspect_ratio,
         nsrc=100, novsmp=None, helmholtz_k=0,
         what_operator="S",
         what_operator_lpot=None,
-        order=5,
+        order=4,
         ovsmp_center_exp=0.66,
         force_center_side=None):
+
+    import logging
+    logging.basicConfig(level=logging.INFO)
 
     if novsmp is None:
         novsmp = 4*nsrc
@@ -48,7 +51,7 @@ def draw_pot_figure(aspect_ratio,
 
     center = np.asarray([0, 0], dtype=np.float64)
     from sumpy.visualization import FieldPlotter
-    fp = FieldPlotter(center, npoints=1000, extent=3)
+    fp = FieldPlotter(center, npoints=1000, extent=6)
 
     # }}}
 
@@ -58,9 +61,15 @@ def draw_pot_figure(aspect_ratio,
     from sumpy.kernel import LaplaceKernel, HelmholtzKernel
     from sumpy.expansion.local import H2DLocalExpansion, LineTaylorLocalExpansion
     if helmholtz_k:
-        knl = HelmholtzKernel(2)
-        expn_class = H2DLocalExpansion
-        knl_kwargs = {"k": helmholtz_k}
+        if isinstance(helmholtz_k, complex):
+            knl = HelmholtzKernel(2, allow_evanescent=True)
+            expn_class = H2DLocalExpansion
+            knl_kwargs = {"k": helmholtz_k}
+        else:
+            knl = HelmholtzKernel(2)
+            expn_class = H2DLocalExpansion
+            knl_kwargs = {"k": helmholtz_k}
+
     else:
         knl = LaplaceKernel(2)
         expn_class = LineTaylorLocalExpansion
@@ -166,8 +175,9 @@ def draw_pot_figure(aspect_ratio,
 
     # {{{ compute potentials
 
-    density = np.cos(3*2*np.pi*native_t).astype(np.complex128)
-    ovsmp_density = np.cos(3*2*np.pi*ovsmp_t).astype(np.complex128)
+    mode_nr = 0
+    density = np.cos(mode_nr*2*np.pi*native_t).astype(np.complex128)
+    ovsmp_density = np.cos(mode_nr*2*np.pi*ovsmp_t).astype(np.complex128)
     evt, (vol_pot,) = p2p(queue, fp.points, native_curve.pos,
             [native_curve.speed*native_weights*density], **volpot_kwargs)
 
@@ -178,7 +188,7 @@ def draw_pot_figure(aspect_ratio,
 
     # }}}
 
-    if 1:
+    if 0:
         # {{{ plot on-surface potential in 2D
 
         pt.plot(curve_pot, label="pot")
@@ -247,16 +257,16 @@ def draw_pot_figure(aspect_ratio,
 
 
 if __name__ == "__main__":
-    draw_pot_figure(aspect_ratio=1, nsrc=100, novsmp=100, helmholtz_k=0,
+    draw_pot_figure(aspect_ratio=1, nsrc=100, novsmp=100, helmholtz_k=(15+4j)*0.3,
             what_operator="D", what_operator_lpot="D", force_center_side=1)
     pt.savefig("eigvals-ext-nsrc100-novsmp100.pdf")
-    pt.clf()
-    draw_pot_figure(aspect_ratio=1, nsrc=100, novsmp=100, helmholtz_k=0,
-            what_operator="D", what_operator_lpot="D", force_center_side=-1)
-    pt.savefig("eigvals-int-nsrc100-novsmp100.pdf")
-    pt.clf()
-    draw_pot_figure(aspect_ratio=1, nsrc=100, novsmp=200, helmholtz_k=0,
-            what_operator="D", what_operator_lpot="D", force_center_side=-1)
-    pt.savefig("eigvals-int-nsrc100-novsmp200.pdf")
+    #pt.clf()
+    #draw_pot_figure(aspect_ratio=1, nsrc=100, novsmp=100, helmholtz_k=0,
+    #        what_operator="D", what_operator_lpot="D", force_center_side=-1)
+    #pt.savefig("eigvals-int-nsrc100-novsmp100.pdf")
+    #pt.clf()
+    #draw_pot_figure(aspect_ratio=1, nsrc=100, novsmp=200, helmholtz_k=0,
+    #        what_operator="D", what_operator_lpot="D", force_center_side=-1)
+    #pt.savefig("eigvals-int-nsrc100-novsmp200.pdf")
 
 # vim: fdm=marker

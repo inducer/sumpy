@@ -158,10 +158,6 @@ class LayerPotentialBase(KernelComputation):
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.tag_data_axes(loopy_knl, "center", "sep,C")
-        # loopy_knl = lp.set_options(loopy_knl,
-        #         #write_cl=True, highlight_cl=True,
-        #         #trace_assignment_values=True
-        #         )
 
         return loopy_knl
 

@@ -48,7 +48,7 @@ class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
         self.assignments = assignments
         self.derivative_cse_names = set()
 
-    def map_Derivative(self, expr):
+    def map_Derivative(self, expr):  # noqa
         # Sympy has picked up the habit of picking arguments out of derivatives
         # and pronounce them common subexpressions. Me no like. Undo it, so
         # that the bessel substitutor further down can do its job.
@@ -70,9 +70,12 @@ class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
 BESSEL_PREAMBLE = """//CL//
 #include <pyopencl-bessel-j.cl>
 #include <pyopencl-bessel-y.cl>
+#include <pyopencl-bessel-j-complex.cl>
 """
 
 HANKEL_PREAMBLE = """//CL//
+#include <pyopencl-hankel-complex.cl>
+
 typedef struct hank1_01_result_str
 {
     cdouble_t order0, order1;
@@ -83,6 +86,13 @@ hank1_01_result hank1_01(cdouble_t z)
     hank1_01_result result;
     result.order0 = cdouble_new(bessel_j0(z.x), bessel_y0(z.x));
     result.order1 = cdouble_new(bessel_j1(z.x), bessel_y1(z.x));
+    return result;
+}
+
+hank1_01_result hank1_01_complex(cdouble_t z)
+{
+    hank1_01_result result;
+    hankel_01_complex(z, &result.order0, &result.order1, 1);
     return result;
 }
 """
@@ -120,6 +130,9 @@ def bessel_mangler(target, identifier, arg_dtypes):
         raise NotImplementedError("Only the PyOpenCLTarget is supported as of now")
 
     if identifier == "hank1_01":
+        if arg_dtypes[0].kind == "c":
+            identifier = "hank1_01_complex"
+
         return (np.dtype(hank1_01_result_dtype),
                 identifier, (np.dtype(np.complex128),))
     elif identifier == "bessel_jv":
@@ -227,6 +240,7 @@ class BesselDerivativeReplacer(IdentityMapper):
             import sympy as sp
 
             # AS (9.1.31)
+            # http://dlmf.nist.gov/10.6.7
             if order >= 0:
                 order_str = str(order)
             else:
