@@ -155,7 +155,7 @@ class E2PFromSingleBox(E2PBase):
                     ),
                 silenced_warnings="write_race(write_result*)")
 
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "compute_b",
+        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:compute_b",
                 tags={"idim": "unr"})
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
 
@@ -245,9 +245,9 @@ class E2PFromCSR(E2PBase):
                     ),
                 silenced_warnings="write_race(write_result*)")
 
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "fetch_tgt",
+        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_tgt",
                 tags={"idim": "unr"})
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "fetch_center",
+        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_center",
                 tags={"idim": "unr"})
         loopy_knl = lp.set_loop_priority(loopy_knl, "itgt_box,itgt,isrc_box")
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)

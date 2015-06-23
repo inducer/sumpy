@@ -146,7 +146,7 @@ class P2P(P2PBase):
                     ))
 
         for where in ["compute_d"]:
-            loopy_knl = lp.duplicate_inames(loopy_knl, "idim", where,
+            loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:"+where,
                     tags=dict(idim="unr"))
 
         for knl in self.kernels:
@@ -260,7 +260,7 @@ class P2PFromCSR(P2PBase):
                     nkernels=len(self.kernels),
                     ))
 
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "compute_d",
+        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:compute_d",
                 tags=dict(idim="unr"))
 
         loopy_knl = lp.tag_data_axes(loopy_knl, "strength", "sep,C")

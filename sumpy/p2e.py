@@ -136,7 +136,7 @@ class P2EFromSingleBox(P2EBase):
                 silenced_warnings="write_race(write_expn*)")
 
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "fetch_center",
+        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_center",
                 tags={"idim": "unr"})
         loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
 
@@ -225,7 +225,7 @@ class P2EFromCSR(P2EBase):
                 silenced_warnings="write_race(write_expn*)")
 
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "fetch_center",
+        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_center",
                 tags={"idim": "unr"})
         loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
 

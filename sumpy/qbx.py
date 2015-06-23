@@ -151,7 +151,7 @@ class LayerPotentialBase(KernelComputation):
                 )
 
         for where in ["compute_a", "compute_b"]:
-            loopy_knl = lp.duplicate_inames(loopy_knl, "idim", where,
+            loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:"+where,
                     tags={"idim": "unr"})
 
         for expn in self.expansions:

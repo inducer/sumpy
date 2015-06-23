@@ -178,7 +178,7 @@ class E2EFromCSR(E2EBase):
         for expn in [self.src_expansion, self.tgt_expansion]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "fetch_tgt_center",
+        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_tgt_center",
                 tags={"idim": "unr"})
         loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
 
@@ -275,7 +275,7 @@ class E2EFromChildren(E2EBase):
         for expn in [self.src_expansion, self.tgt_expansion]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "fetch_tgt_center",
+        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_tgt_center",
                 tags={"idim": "unr"})
         loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
 
@@ -361,7 +361,7 @@ class E2EFromParent(E2EBase):
         for expn in [self.src_expansion, self.tgt_expansion]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "fetch_tgt_center",
+        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_tgt_center",
                 tags={"idim": "unr"})
         loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
 
