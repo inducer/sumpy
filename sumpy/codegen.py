@@ -71,6 +71,26 @@ BESSEL_PREAMBLE = """//CL//
 #include <pyopencl-bessel-j.cl>
 #include <pyopencl-bessel-y.cl>
 #include <pyopencl-bessel-j-complex.cl>
+
+typedef struct bessel_j_two_result_str
+{
+    cdouble_t jv, jvp1;
+} bessel_j_two_result;
+
+bessel_j_two_result bessel_jv_two(int v, double z)
+{
+    bessel_j_two_result result;
+    result.jv = cdouble_fromreal(bessel_jv(v, z));
+    result.jvp1 = cdouble_fromreal(bessel_jv(v+1, z));
+    return result;
+}
+
+bessel_j_two_result bessel_jv_two_complex(int v, cdouble_t z)
+{
+    bessel_j_two_result result;
+    bessel_j_complex(v, z, &result.jv, &result.jvp1);
+    return result;
+}
 """
 
 HANKEL_PREAMBLE = """//CL//
@@ -81,11 +101,11 @@ typedef struct hank1_01_result_str
     cdouble_t order0, order1;
 } hank1_01_result;
 
-hank1_01_result hank1_01(cdouble_t z)
+hank1_01_result hank1_01(double z)
 {
     hank1_01_result result;
-    result.order0 = cdouble_new(bessel_j0(z.x), bessel_y0(z.x));
-    result.order1 = cdouble_new(bessel_j1(z.x), bessel_y1(z.x));
+    result.order0 = cdouble_new(bessel_j0(z), bessel_y0(z));
+    result.order1 = cdouble_new(bessel_j1(z), bessel_y1(z));
     return result;
 }
 
@@ -107,13 +127,22 @@ def bessel_preamble_generator(target, seen_dtypes, seen_functions):
     if any(func.name == "hank1_01" for func in seen_functions):
         yield ("50-sumpy-hankel", HANKEL_PREAMBLE)
         require_bessel = True
-    if require_bessel or any(func.name == "bessel_jv" for func in seen_functions):
+    if (require_bessel
+            or any(func.name == "bessel_jv_two" for func in seen_functions)):
         yield ("40-sumpy-bessel", BESSEL_PREAMBLE)
+
 
 hank1_01_result_dtype = cl.tools.get_or_register_dtype("hank1_01_result",
         np.dtype([
             ("order0", np.complex128),
             ("order1", np.complex128),
+            ]),
+        )
+
+bessel_j_two_result_dtype = cl.tools.get_or_register_dtype("bessel_j_two_result",
+        np.dtype([
+            ("jv", np.complex128),
+            ("jvp1", np.complex128),
             ]),
         )
 
@@ -132,11 +161,21 @@ def bessel_mangler(target, identifier, arg_dtypes):
     if identifier == "hank1_01":
         if arg_dtypes[0].kind == "c":
             identifier = "hank1_01_complex"
+            return (np.dtype(hank1_01_result_dtype),
+                    identifier, (np.dtype(np.complex128),))
+        else:
+            return (np.dtype(hank1_01_result_dtype),
+                    identifier, (np.dtype(np.float64),))
 
-        return (np.dtype(hank1_01_result_dtype),
-                identifier, (np.dtype(np.complex128),))
-    elif identifier == "bessel_jv":
-        return np.dtype(np.float64), identifier
+    elif identifier == "bessel_jv_two":
+        if arg_dtypes[1].kind == "c":
+            identifier = "bessel_jv_two_complex"
+            return (np.dtype(bessel_j_two_result_dtype),
+                    identifier, (np.dtype(np.int32), np.dtype(np.complex128),))
+        else:
+            return (np.dtype(bessel_j_two_result_dtype),
+                    identifier, (np.dtype(np.int32), np.dtype(np.float64),))
+
     else:
         return None
 
@@ -150,8 +189,8 @@ class BesselGetter(object):
         return prim.Variable("hank1_01")(arg)
 
     @memoize_method
-    def bessel_j_impl(self, order, arg):
-        return prim.Variable("bessel_jv")(order, arg)
+    def bessel_jv_two(self, order, arg):
+        return prim.Variable("bessel_jv_two")(order, arg)
 
     @memoize_method
     def hankel_1(self, order, arg):
@@ -183,14 +222,14 @@ class BesselGetter(object):
     def bessel_j(self, order, arg):
         top_order = self.bessel_j_arg_to_top_order[arg]
 
+        bessel_two = (
+                prim.CommonSubexpression(self.bessel_jv_two(top_order-1, arg),
+                    "bessel_jv_two_result"))
+
         if order == top_order:
-            return prim.CommonSubexpression(
-                    self.bessel_j_impl(order, arg),
-                    "bessel_j_%d" % order)
+            return prim.Lookup(bessel_two, "jvp1")
         elif order == top_order-1:
-            return prim.CommonSubexpression(
-                    self.bessel_j_impl(order, arg),
-                    "bessel_j_%d" % order)
+            return prim.Lookup(bessel_two, "jv")
         elif order < 0:
             return (-1)**order*self.bessel_j(-order, arg)
         else:

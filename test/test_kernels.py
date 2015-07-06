@@ -88,21 +88,26 @@ def test_p2p(ctx_getter):
     assert rel_err < 1e-3
 
 
-@pytest.mark.parametrize("order", [2, 3, 4, 5])
-@pytest.mark.parametrize(("knl", "expn_class"), [
+@pytest.mark.parametrize("order", [4])
+@pytest.mark.parametrize(("base_knl", "expn_class"), [
     (LaplaceKernel(2), VolumeTaylorLocalExpansion),
     (LaplaceKernel(2), VolumeTaylorMultipoleExpansion),
 
     (HelmholtzKernel(2), VolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), VolumeTaylorLocalExpansion),
     (HelmholtzKernel(2), H2DLocalExpansion),
-    (HelmholtzKernel(2), H2DMultipoleExpansion)
+    (HelmholtzKernel(2), H2DMultipoleExpansion),
+
+    (HelmholtzKernel(2, allow_evanescent=True), VolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2, allow_evanescent=True), VolumeTaylorLocalExpansion),
+    (HelmholtzKernel(2, allow_evanescent=True), H2DLocalExpansion),
+    (HelmholtzKernel(2, allow_evanescent=True), H2DMultipoleExpansion),
     ])
 @pytest.mark.parametrize("with_source_derivative", [
     False,
     True
     ])
-def test_p2e2p(ctx_getter, knl, expn_class, order, with_source_derivative):
+def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
     #logging.basicConfig(level=logging.INFO)
 
     from sympy.core.cache import clear_cache
@@ -117,11 +122,16 @@ def test_p2e2p(ctx_getter, knl, expn_class, order, with_source_derivative):
     nsources = 100
 
     extra_kwargs = {}
-    if isinstance(knl, HelmholtzKernel):
-        extra_kwargs["k"] = 0.05
+    if isinstance(base_knl, HelmholtzKernel):
+        if base_knl.allow_evanescent:
+            extra_kwargs["k"] = 0.2 * (0.707 + 0.707j)
+        else:
+            extra_kwargs["k"] = 0.2
 
     if with_source_derivative:
-        knl = DirectionalSourceDerivative(knl, "dir_vec")
+        knl = DirectionalSourceDerivative(base_knl, "dir_vec")
+    else:
+        knl = base_knl
 
     out_kernels = [
             knl,
@@ -276,6 +286,14 @@ def test_p2e2p(ctx_getter, knl, expn_class, order, with_source_derivative):
     if isinstance(knl, DirectionalSourceDerivative):
         slack += 1
         grad_slack += 2
+
+    if isinstance(base_knl, HelmholtzKernel) and base_knl.allow_evanescent:
+        slack += 0.5
+        grad_slack += 0.5
+
+        if expn_class is VolumeTaylorMultipoleExpansion:
+            slack += 0.3
+            grad_slack += 0.3
 
     assert eoc_rec_pot.order_estimate() > tgt_order - slack
     assert eoc_rec_grad_x.order_estimate() > tgt_order_grad - grad_slack

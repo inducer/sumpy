@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import os
 from sumpy.p2p import P2P, P2PFromCSR
 from sumpy.p2e import P2EFromSingleBox, P2EFromCSR
 from sumpy.e2p import E2PFromSingleBox, E2PFromCSR
@@ -36,12 +37,17 @@ __all__ = [
     "E2EFromCSR", "E2EFromChildren", "E2EFromParent"]
 
 
-code_cache = PersistentDict("sumpy-code-cache-v4-"+VERSION_TEXT)
+code_cache = PersistentDict("sumpy-code-cache-v5-"+VERSION_TEXT)
 
 
 # {{{ cache control
 
 CACHING_ENABLED = True
+
+CACHING_ENABLED = (
+    "SUMPY_NO_CACHE" not in os.environ
+    and
+    "CG_NO_CACHE" not in os.environ)
 
 
 def set_caching_enabled(flag):
@@ -53,7 +59,7 @@ def set_caching_enabled(flag):
 
 
 class CacheMode(object):
-    """A context manager for setting whether :mod:`loopy` is allowed to use
+    """A context manager for setting whether :mod:`sumpy` is allowed to use
     disk caches.
     """
 
