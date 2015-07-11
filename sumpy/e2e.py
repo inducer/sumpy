@@ -1,4 +1,7 @@
 from __future__ import division
+from __future__ import absolute_import
+import six
+from six.moves import range
 
 __copyright__ = "Copyright (C) 2013 Andreas Kloeckner"
 
@@ -65,7 +68,7 @@ class E2EBase(KernelCacheWrapper):
         dvec = make_sympy_vector("d", self.dim)
 
         src_coeff_exprs = [sp.Symbol("src_coeff%d" % i)
-                for i in xrange(len(self.src_expansion))]
+                for i in range(len(self.src_expansion))]
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
@@ -80,7 +83,7 @@ class E2EBase(KernelCacheWrapper):
         from sumpy.symbolic import kill_trivial_assignments
         assignments = kill_trivial_assignments([
                 (name, expr)
-                for name, expr in sac.assignments.iteritems()],
+                for name, expr in six.iteritems(sac.assignments)],
                 retain_names=tgt_coeff_names)
 
         from sumpy.codegen import to_loopy_insns
@@ -170,8 +173,8 @@ class E2EFromCSR(E2EBase):
                 name=self.name, assumptions="ntgt_boxes>=1",
                 defines=dict(
                     dim=self.dim,
-                    SRC_COEFFIDX=[str(i) for i in xrange(ncoeff_src)],
-                    TGT_COEFFIDX=[str(i) for i in xrange(ncoeff_tgt)],
+                    SRC_COEFFIDX=[str(i) for i in range(ncoeff_src)],
+                    TGT_COEFFIDX=[str(i) for i in range(ncoeff_tgt)],
                     ),
                 silenced_warnings="write_race(write_expn*)")
 
@@ -268,7 +271,7 @@ class E2EFromChildren(E2EBase):
                 defines=dict(
                     dim=self.dim,
                     nchildren=2**self.dim,
-                    COEFFIDX=[str(i) for i in xrange(ncoeffs)],
+                    COEFFIDX=[str(i) for i in range(ncoeffs)],
                     ),
                 silenced_warnings="write_race(write_expn*)")
 
@@ -354,7 +357,7 @@ class E2EFromParent(E2EBase):
                 defines=dict(
                     dim=self.dim,
                     nchildren=2**self.dim,
-                    COEFFIDX=[str(i) for i in xrange(ncoeffs)],
+                    COEFFIDX=[str(i) for i in range(ncoeffs)],
                     ),
                 silenced_warnings="write_race(write_expn*)")
 

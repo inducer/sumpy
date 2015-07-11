@@ -1,4 +1,7 @@
 from __future__ import division
+from __future__ import absolute_import
+import six
+from six.moves import range
 
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
@@ -71,7 +74,7 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
         sac.run_global_cse()
 
         from sumpy.codegen import to_loopy_insns
-        loopy_insns = to_loopy_insns(sac.assignments.iteritems(),
+        loopy_insns = to_loopy_insns(six.iteritems(sac.assignments),
                 vector_names=set(["d"]),
                 pymbolic_expr_maps=[knl.transform_to_code for knl in self.kernels],
                 complex_dtype=np.complex128  # FIXME
@@ -139,7 +142,7 @@ class P2P(P2PBase):
                 ] + gather_loopy_source_arguments(self.kernels),
                 name=self.name, assumptions="nsources>=1 and ntargets>=1",
                 defines=dict(
-                    KNLIDX=range(len(exprs)),
+                    KNLIDX=list(range(len(exprs))),
                     dim=self.dim,
                     nstrengths=self.strength_count,
                     nresults=len(self.kernels),
@@ -254,7 +257,7 @@ class P2PFromCSR(P2PBase):
                 ] + gather_loopy_source_arguments(self.kernels),
                 name=self.name, assumptions="ntgt_boxes>=1",
                 defines=dict(
-                    KNLIDX=range(len(exprs)),
+                    KNLIDX=list(range(len(exprs))),
                     dim=self.dim,
                     nstrengths=self.strength_count,
                     nkernels=len(self.kernels),

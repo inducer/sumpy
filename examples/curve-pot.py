@@ -1,4 +1,5 @@
 from __future__ import division
+from __future__ import absolute_import
 import pyopencl as cl
 import numpy as np
 import numpy.linalg as la

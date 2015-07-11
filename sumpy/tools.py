@@ -1,4 +1,8 @@
 from __future__ import division
+from __future__ import absolute_import
+import six
+from six.moves import range
+from six.moves import zip
 
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
@@ -109,7 +113,7 @@ def gather_arguments(kernel_likes):
             result[arg.name] = arg
             # FIXME: possibly check that arguments match before overwriting
 
-    return sorted(result.itervalues(), key=lambda arg: arg.name)
+    return sorted(six.itervalues(result), key=lambda arg: arg.name)
 
 
 def gather_source_arguments(kernel_likes):
@@ -119,7 +123,7 @@ def gather_source_arguments(kernel_likes):
             result[arg.name] = arg
             # FIXME: possibly check that arguments match before overwriting
 
-    return sorted(result.itervalues(), key=lambda arg: arg.name)
+    return sorted(six.itervalues(result), key=lambda arg: arg.name)
 
 
 def gather_loopy_arguments(kernel_likes):
@@ -212,7 +216,7 @@ class KernelCacheWrapper(object):
             import loopy.version
             cache_key = (
                     self.get_cache_key()
-                    + tuple(sorted(kwargs.iteritems()))
+                    + tuple(sorted(six.iteritems(kwargs)))
                     + (loopy.version.DATA_MODEL_VERSION,))
 
             try:

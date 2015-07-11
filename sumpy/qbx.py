@@ -1,4 +1,8 @@
 from __future__ import division
+from __future__ import absolute_import
+import six
+from six.moves import range
+from six.moves import zip
 
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
@@ -101,7 +105,7 @@ class LayerPotentialBase(KernelComputation):
         from sumpy.symbolic import kill_trivial_assignments
         assignments = kill_trivial_assignments([
                 (name, expr.subs("tau", 0))
-                for name, expr in sac.assignments.iteritems()],
+                for name, expr in six.iteritems(sac.assignments)],
                 retain_names=result_names)
 
         from sumpy.codegen import to_loopy_insns
@@ -145,7 +149,7 @@ class LayerPotentialBase(KernelComputation):
                     for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
                 ]+self.get_result_store_instructions(),
                 arguments,
-                defines=dict(KNLIDX=range(len(exprs))),
+                defines=dict(KNLIDX=list(range(len(exprs)))),
                 name=self.name, assumptions="nsources>=1 and ntargets>=1",
                 default_offset=lp.auto,
                 )
@@ -198,10 +202,10 @@ class LayerPotential(LayerPotentialBase):
     def get_input_and_output_arguments(self):
         return [
                 lp.GlobalArg("strength_%d" % i, None, shape="nsources", order="C")
-                for i in xrange(self.strength_count)
+                for i in range(self.strength_count)
                 ]+[
                 lp.GlobalArg("result_%d" % i, None, shape="ntargets", order="C")
-                for i in xrange(len(self.kernels))
+                for i in range(len(self.kernels))
                 ]
 
     def get_result_store_instructions(self):

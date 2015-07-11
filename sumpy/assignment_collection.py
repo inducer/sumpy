@@ -1,4 +1,7 @@
 from __future__ import division
+from __future__ import absolute_import
+import six
+from six.moves import zip
 
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
@@ -143,7 +146,7 @@ class SymbolicAssignmentCollection(object):
     def __str__(self):
         return "\n".join(
             "%s <- %s" % (name, expr)
-            for name, expr in self.assignments.iteritems())
+            for name, expr in six.iteritems(self.assignments))
 
     def get_all_dependencies(self, var_name):
         """Including recursive dependencies."""
@@ -228,7 +231,7 @@ class SymbolicAssignmentCollection(object):
         rejected_assignments = []
 
         from sumpy.symbolic import is_assignment_nontrivial
-        for name, value in self.assignments.iteritems():
+        for name, value in six.iteritems(self.assignments):
             if name in self.user_symbols or is_assignment_nontrivial(name, value):
                 approved_assignments.append((name, value))
             else:

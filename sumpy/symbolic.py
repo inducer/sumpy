@@ -1,4 +1,8 @@
 from __future__ import division
+from __future__ import absolute_import
+import six
+from six.moves import range
+from six.moves import zip
 
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
@@ -90,7 +94,7 @@ class _DerivativeKiller(IdentityMapperBase):
 
 
 def _get_assignments_in_maxima(assignments, prefix=""):
-    my_variable_names = set(assignments.iterkeys())
+    my_variable_names = set(six.iterkeys(assignments))
     written_assignments = set()
 
     prefix_subst_dict = dict(
@@ -118,7 +122,7 @@ def _get_assignments_in_maxima(assignments, prefix=""):
                 assignments[name].subs(prefix_subst_dict))))))
         written_assignments.add(name)
 
-    for name in assignments.iterkeys():
+    for name in six.iterkeys(assignments):
         if name not in written_assignments:
             write_assignment(name)
 
@@ -146,7 +150,7 @@ def checked_cse(exprs, symbols=None):
         outf.write("ratprint:false;\n")
         outf.write("%s\n\n" % max_old)
         outf.write("%s\n" % max_new)
-        for i in xrange(len(exprs)):
+        for i in range(len(exprs)):
             outf.write("print(\"diff in expr %d:\n\");\n" % i)
             outf.write("print(ratsimp(old_expr%d - new_expr%d));\n" % (i, i))
 

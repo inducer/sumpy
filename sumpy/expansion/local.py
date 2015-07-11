@@ -1,4 +1,7 @@
 from __future__ import division
+from __future__ import absolute_import
+from six.moves import range
+from six.moves import zip
 
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
@@ -41,7 +44,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
         return k
 
     def get_coefficient_identifiers(self):
-        return range(self.order+1)
+        return list(range(self.order+1))
 
     def coefficients_from_source(self, avec, bvec):
         if bvec is None:
@@ -120,7 +123,7 @@ class H2DLocalExpansion(LocalExpansionBase):
         return self.order+k
 
     def get_coefficient_identifiers(self):
-        return range(-self.order, self.order+1)
+        return list(range(-self.order, self.order+1))
 
     def coefficients_from_source(self, avec, bvec):
         from sumpy.symbolic import sympy_real_norm_2

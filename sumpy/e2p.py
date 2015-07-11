@@ -1,4 +1,7 @@
 from __future__ import division
+from __future__ import absolute_import
+import six
+from six.moves import range
 
 __copyright__ = "Copyright (C) 2013 Andreas Kloeckner"
 
@@ -66,7 +69,7 @@ class E2PBase(KernelCacheWrapper):
         sac = SymbolicAssignmentCollection()
 
         coeff_exprs = [sp.Symbol("coeff%d" % i)
-                for i in xrange(len(self.expansion.get_coefficient_identifiers()))]
+                for i in range(len(self.expansion.get_coefficient_identifiers()))]
         value = self.expansion.evaluate(coeff_exprs, bvec)
         result_names = [
             sac.assign_unique("result_%d_p" % i,
@@ -79,7 +82,7 @@ class E2PBase(KernelCacheWrapper):
         from sumpy.symbolic import kill_trivial_assignments
         assignments = kill_trivial_assignments([
                 (name, expr)
-                for name, expr in sac.assignments.iteritems()],
+                for name, expr in six.iteritems(sac.assignments)],
                 retain_names=result_names)
 
         from sumpy.codegen import to_loopy_insns
@@ -149,8 +152,8 @@ class E2PFromSingleBox(E2PBase):
                 name=self.name, assumptions="ntgt_boxes>=1",
                 defines=dict(
                     dim=self.dim,
-                    COEFFIDX=[str(i) for i in xrange(ncoeffs)],
-                    RESULTIDX=[str(i) for i in xrange(len(result_names))],
+                    COEFFIDX=[str(i) for i in range(ncoeffs)],
+                    RESULTIDX=[str(i) for i in range(len(result_names))],
                     nresults=len(result_names),
                     ),
                 silenced_warnings="write_race(write_result*)")
@@ -239,8 +242,8 @@ class E2PFromCSR(E2PBase):
                 name=self.name, assumptions="ntgt_boxes>=1",
                 defines=dict(
                     dim=self.dim,
-                    COEFFIDX=[str(i) for i in xrange(ncoeffs)],
-                    RESULTIDX=[str(i) for i in xrange(len(result_names))],
+                    COEFFIDX=[str(i) for i in range(ncoeffs)],
+                    RESULTIDX=[str(i) for i in range(len(result_names))],
                     nresults=len(result_names),
                     ),
                 silenced_warnings="write_race(write_result*)")

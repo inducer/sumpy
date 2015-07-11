@@ -1,4 +1,7 @@
 from __future__ import division
+from __future__ import absolute_import
+from __future__ import print_function
+from six.moves import range
 
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
@@ -75,7 +78,7 @@ def test_p2p(ctx_getter):
 
     targets = targets.T
     sources = sources.T
-    for itarg in xrange(n):
+    for itarg in range(n):
         potential_ref[itarg] = np.sum(
                 strengths
                 /
@@ -84,7 +87,7 @@ def test_p2p(ctx_getter):
     potential_ref *= 1/(4*np.pi)
 
     rel_err = la.norm(potential - potential_ref)/la.norm(potential_ref)
-    print rel_err
+    print(rel_err)
     assert rel_err < 1e-3
 
 
@@ -262,7 +265,7 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
         eoc_rec_pot.add_data_point(h, err_pot)
         eoc_rec_grad_x.add_data_point(h, err_grad_x)
 
-    print expn_class, knl, order
+    print(expn_class, knl, order)
     print("POTENTIAL:")
     print(eoc_rec_pot)
     print("X TARGET DERIVATIVE:")
@@ -524,11 +527,11 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
             ("p2m2m2l2p", pconv_verifier_p2m2m2l2p),
             ("full", pconv_verifier_full),
             ]:
-        print 30*"-"
-        print name
-        print 30*"-"
-        print verifier
-        print 30*"-"
+        print(30*"-")
+        print(name)
+        print(30*"-")
+        print(verifier)
+        print(30*"-")
         verifier()
 
 

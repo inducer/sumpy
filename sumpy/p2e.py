@@ -1,4 +1,7 @@
 from __future__ import division
+from __future__ import absolute_import
+import six
+from six.moves import range
 
 __copyright__ = "Copyright (C) 2013 Andreas Kloeckner"
 
@@ -71,7 +74,7 @@ class P2EBase(KernelCacheWrapper):
         from sumpy.symbolic import kill_trivial_assignments
         assignments = kill_trivial_assignments([
                 (name, expr)
-                for name, expr in sac.assignments.iteritems()],
+                for name, expr in six.iteritems(sac.assignments)],
                 retain_names=coeff_names)
 
         from sumpy.codegen import to_loopy_insns
@@ -131,7 +134,7 @@ class P2EFromSingleBox(P2EBase):
                 name=self.name, assumptions="nsrc_boxes>=1",
                 defines=dict(
                     dim=self.dim,
-                    COEFFIDX=[str(i) for i in xrange(ncoeffs)]
+                    COEFFIDX=[str(i) for i in range(ncoeffs)]
                     ),
                 silenced_warnings="write_race(write_expn*)")
 
@@ -220,7 +223,7 @@ class P2EFromCSR(P2EBase):
                 name=self.name, assumptions="ntgt_boxes>=1",
                 defines=dict(
                     dim=self.dim,
-                    COEFFIDX=[str(i) for i in xrange(ncoeffs)]
+                    COEFFIDX=[str(i) for i in range(ncoeffs)]
                     ),
                 silenced_warnings="write_race(write_expn*)")
 

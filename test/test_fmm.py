@@ -1,4 +1,7 @@
 from __future__ import division
+from __future__ import absolute_import
+from __future__ import print_function
+from six.moves import range
 
 __copyright__ = "Copyright (C) 2013 Andreas Kloeckner"
 
@@ -83,7 +86,7 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
         fp = FieldPlotter(np.array([0.5, 0]), extent=3, npoints=200)
         from pytools.obj_array import make_obj_array
         targets = make_obj_array(
-                [fp.points[i] for i in xrange(knl.dim)])
+                [fp.points[i] for i in range(knl.dim)])
 
     from boxtree import TreeBuilder
     tb = TreeBuilder(ctx)
@@ -102,10 +105,10 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
         host_trav = trav.get()
 
         if 1:
-            print "src_box", host_tree.find_box_nr_for_source(403)
-            print "tgt_box", host_tree.find_box_nr_for_target(28)
-            print list(host_trav.target_or_target_parent_boxes).index(37)
-            print host_trav.get_box_list("sep_bigger", 22)
+            print("src_box", host_tree.find_box_nr_for_source(403))
+            print("tgt_box", host_tree.find_box_nr_for_target(28))
+            print(list(host_trav.target_or_target_parent_boxes).index(37))
+            print(host_trav.get_box_list("sep_bigger", 22))
 
         from boxtree.visualization import TreePlotter
         plotter = TreePlotter(host_tree)
@@ -166,7 +169,7 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
 
         pconv_verifier.add_data_point(order, rel_err)
 
-    print pconv_verifier
+    print(pconv_verifier)
     pconv_verifier()
 
 

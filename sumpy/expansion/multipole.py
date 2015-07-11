@@ -1,4 +1,7 @@
 from __future__ import division
+from __future__ import absolute_import
+from six.moves import range
+from six.moves import zip
 
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
@@ -55,7 +58,7 @@ class VolumeTaylorMultipoleExpansion(
             coeff_identifiers = self.get_coefficient_identifiers()
             result = [0] * len(coeff_identifiers)
 
-            for idim in xrange(kernel.dim):
+            for idim in range(kernel.dim):
                 for i, mi in enumerate(coeff_identifiers):
                     if mi[idim] == 0:
                         continue
@@ -115,7 +118,7 @@ class VolumeTaylorMultipoleExpansion(
 
                 contrib = src_coeff_exprs[src_index]
 
-                for idim in xrange(self.dim):
+                for idim in range(self.dim):
                     n = tgt_mi[idim]
                     k = src_mi[idim]
                     assert n >= k
@@ -144,7 +147,7 @@ class H2DMultipoleExpansion(MultipoleExpansionBase):
         return self.order+k
 
     def get_coefficient_identifiers(self):
-        return range(-self.order, self.order+1)
+        return list(range(-self.order, self.order+1))
 
     def coefficients_from_source(self, avec, bvec):
         from sumpy.symbolic import sympy_real_norm_2
