@@ -41,7 +41,7 @@ def _generate_unique_possibilities(prefix):
         try_num += 1
 
 
-class _SymbolGenerator:
+class _SymbolGenerator(object):
     def __init__(self, taken_symbols):
         self.taken_symbols = taken_symbols
         self.generated_names = set()
@@ -58,6 +58,8 @@ class _SymbolGenerator:
 
     def next(self):
         return self()
+
+    __next__ = next
 
 
 # {{{ CSE caching
