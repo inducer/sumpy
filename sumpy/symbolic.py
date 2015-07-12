@@ -1,8 +1,4 @@
-from __future__ import division
-from __future__ import absolute_import
-import six
-from six.moves import range
-from six.moves import zip
+from __future__ import division, absolute_import
 
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
@@ -27,10 +23,17 @@ THE SOFTWARE.
 """
 
 
+import six
+from six.moves import range
+from six.moves import zip
+
 import sympy as sp
 import numpy as np
 from pymbolic.mapper import IdentityMapper as IdentityMapperBase
 from pymbolic.sympy_interface import PymbolicToSympyMapper
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 # {{{ trivial assignment elimination
@@ -38,12 +41,12 @@ from pymbolic.sympy_interface import PymbolicToSympyMapper
 def make_one_step_subst(assignments):
     unwanted_vars = set(sp.Symbol(name) for name, value in assignments)
 
-    result = []
+    result = {}
     for name, value in assignments:
         while value.atoms() & unwanted_vars:
             value = value.subs(assignments)
 
-        result.append((name, value))
+        result[sp.Symbol(name)] = value
 
     return result
 
@@ -64,6 +67,7 @@ def is_assignment_nontrivial(name, value):
 
 
 def kill_trivial_assignments(assignments, retain_names=set()):
+    logger.info("kill trivial assignments (plain): start")
     approved_assignments = []
     rejected_assignments = []
 
@@ -76,8 +80,12 @@ def kill_trivial_assignments(assignments, retain_names=set()):
     # un-substitute rejected assignments
     unsubst_rej = make_one_step_subst(rejected_assignments)
 
-    return [(name, expr.subs(unsubst_rej))
+    result = [(name, expr.xreplace(unsubst_rej))
             for name, expr in approved_assignments]
+
+    logger.info("kill trivial assignments (plain): done")
+
+    return result
 
 # }}}
 

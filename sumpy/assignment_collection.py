@@ -227,7 +227,7 @@ class SymbolicAssignmentCollection(object):
         return new_extra_exprs
 
     def kill_trivial_assignments(self, exprs):
-        logger.debug("kill trivial assignments: start")
+        logger.info("kill trivial assignments: start")
 
         approved_assignments = []
         rejected_assignments = []
