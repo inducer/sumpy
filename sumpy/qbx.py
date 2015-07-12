@@ -172,17 +172,16 @@ class LayerPotentialBase(KernelComputation):
 
         import pyopencl as cl
         dev = self.context.devices[0]
-        if 0:
-            if dev.type & cl.device_type.CPU:
-                loopy_knl = lp.split_iname(loopy_knl, "itgt", 16, outer_tag="g.0",
-                        inner_tag="l.0")
-                loopy_knl = lp.split_iname(loopy_knl, "isrc", 256)
-                loopy_knl = lp.set_loop_priority(loopy_knl,
-                        ["isrc_outer", "itgt_inner"])
-            else:
-                from warnings import warn
-                warn("don't know how to tune layer potential computation for '%s'" % dev)
-                loopy_knl = lp.split_iname(loopy_knl, "itgt", 128, outer_tag="g.0")
+        if dev.type & cl.device_type.CPU:
+            loopy_knl = lp.split_iname(loopy_knl, "itgt", 16, outer_tag="g.0",
+                    inner_tag="l.0")
+            loopy_knl = lp.split_iname(loopy_knl, "isrc", 256)
+            loopy_knl = lp.set_loop_priority(loopy_knl,
+                    ["isrc_outer", "itgt_inner"])
+        else:
+            from warnings import warn
+            warn("don't know how to tune layer potential computation for '%s'" % dev)
+            loopy_knl = lp.split_iname(loopy_knl, "itgt", 128, outer_tag="g.0")
 
         return loopy_knl
 
@@ -254,8 +253,6 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
 
     def __call__(self, queue, targets, sources, centers, **kwargs):
         knl = self.get_optimized_kernel()
-
-        knl = lp.set_options(knl, cl_build_options=["-g", "-O0"])
 
         return knl(queue, src=sources, tgt=targets, center=centers,
                 **kwargs)
