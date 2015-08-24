@@ -1,7 +1,4 @@
-from __future__ import division
-from __future__ import absolute_import
-from __future__ import print_function
-from six.moves import range
+from __future__ import division, absolute_import, print_function
 
 __copyright__ = "Copyright (C) 2013 Andreas Kloeckner"
 
@@ -24,6 +21,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+
+from six.moves import range
 
 import sys
 import numpy as np
@@ -140,6 +139,8 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
 
         if knl.dim == 3:
             order_values = [1, 2]
+        elif knl.dim == 2 and issubclass(local_expn_class, H2DLocalExpansion):
+            order_values = [10, 12]
 
     for order in order_values:
         mpole_expn = mpole_expn_class(knl, order)

@@ -1,6 +1,4 @@
-from __future__ import division
-from __future__ import absolute_import
-from six.moves import range
+from __future__ import division, absolute_import, print_function
 
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
@@ -24,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from six.moves import range
 
 import numpy as np
 import pyopencl as cl
@@ -31,7 +30,7 @@ import pyopencl.tools  # noqa
 
 import re
 
-from pymbolic.mapper import IdentityMapper, WalkMapper
+from pymbolic.mapper import IdentityMapper, WalkMapper, CSECachingMapperMixin
 import pymbolic.primitives as prim
 
 from pytools import memoize_method
@@ -245,7 +244,7 @@ class BesselGetter(object):
                     "bessel_j_%d" % order)
 
 
-class BesselTopOrderGatherer(WalkMapper):
+class BesselTopOrderGatherer(CSECachingMapperMixin, WalkMapper):
     """This mapper walks the expression tree to find the highest-order
     Bessel J being used, so that all other Js can be computed by the
     (stable) downward recurrence.
@@ -265,8 +264,10 @@ class BesselTopOrderGatherer(WalkMapper):
         else:
             return WalkMapper.map_call(self, expr)
 
+    map_common_subexpression_uncached = WalkMapper.map_common_subexpression
 
-class BesselDerivativeReplacer(IdentityMapper):
+
+class BesselDerivativeReplacer(CSECachingMapperMixin, IdentityMapper):
     def map_substitution(self, expr):
         assert isinstance(expr.child, prim.Derivative)
         call = expr.child.child
@@ -295,8 +296,10 @@ class BesselDerivativeReplacer(IdentityMapper):
         else:
             return IdentityMapper.map_substitution(self, expr)
 
+    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
-class BesselSubstitutor(IdentityMapper):
+
+class BesselSubstitutor(CSECachingMapperMixin, IdentityMapper):
     def __init__(self, bessel_getter):
         self.bessel_getter = bessel_getter
 
@@ -309,12 +312,14 @@ class BesselSubstitutor(IdentityMapper):
 
         return IdentityMapper.map_call(self, expr)
 
+    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+
 # }}}
 
 
 # {{{ power rewriter
 
-class PowerRewriter(IdentityMapper):
+class PowerRewriter(CSECachingMapperMixin, IdentityMapper):
     def map_power(self, expr):
         exp = expr.exponent
         if isinstance(exp, int):
@@ -357,12 +362,14 @@ class PowerRewriter(IdentityMapper):
 
         return IdentityMapper.map_power(self, expr)
 
+    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+
 # }}}
 
 
 # {{{ fraction killer
 
-class FractionKiller(IdentityMapper):
+class FractionKiller(CSECachingMapperMixin, IdentityMapper):
     """Kills fractions where the numerator is evenly divisible by the
     denominator.
 
@@ -379,6 +386,8 @@ class FractionKiller(IdentityMapper):
 
         return IdentityMapper.map_quotient(self, expr)
 
+    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+
 # }}}
 
 
@@ -387,7 +396,7 @@ class FractionKiller(IdentityMapper):
 INDEXED_VAR_RE = re.compile("^([a-zA-Z_]+)([0-9]+)$")
 
 
-class VectorComponentRewriter(IdentityMapper):
+class VectorComponentRewriter(CSECachingMapperMixin, IdentityMapper):
     """For names in name_whitelist, turn ``a3`` into ``a[3]``."""
 
     def __init__(self, name_whitelist=set()):
@@ -405,12 +414,14 @@ class VectorComponentRewriter(IdentityMapper):
         else:
             return IdentityMapper.map_variable(self, expr)
 
+    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+
 # }}}
 
 
 # {{{ sum sign grouper
 
-class SumSignGrouper(IdentityMapper):
+class SumSignGrouper(CSECachingMapperMixin, IdentityMapper):
     """Anti-cancellation cargo-cultism."""
 
     def map_sum(self, expr):
@@ -437,15 +448,19 @@ class SumSignGrouper(IdentityMapper):
 
         return prim.Sum(tuple(first_group+second_group))
 
+    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+
 # }}}
 
 
-class MathConstantRewriter(IdentityMapper):
+class MathConstantRewriter(CSECachingMapperMixin, IdentityMapper):
     def map_variable(self, expr):
         if expr.name == "pi":
             return prim.Variable("M_PI")
         else:
             return IdentityMapper.map_variable(self, expr)
+
+    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
 
 def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
