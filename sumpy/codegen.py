@@ -119,9 +119,9 @@ hank1_01_result hank1_01_complex(cdouble_t z)
 """
 
 
-def bessel_preamble_generator(target, seen_dtypes, seen_functions):
+def bessel_preamble_generator(kernel, seen_dtypes, seen_functions):
     from loopy.target.pyopencl import PyOpenCLTarget
-    if not isinstance(target, PyOpenCLTarget):
+    if not isinstance(kernel.target, PyOpenCLTarget):
         raise NotImplementedError("Only the PyOpenCLTarget is supported as of now")
 
     require_bessel = False
