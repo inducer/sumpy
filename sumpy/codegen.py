@@ -148,7 +148,7 @@ bessel_j_two_result_dtype = cl.tools.get_or_register_dtype("bessel_j_two_result"
         )
 
 
-def bessel_mangler(target, identifier, arg_dtypes):
+def bessel_mangler(kernel, identifier, arg_dtypes):
     """A function "mangler" to make Bessel functions
     digestible for :mod:`loopy`.
 
@@ -156,7 +156,7 @@ def bessel_mangler(target, identifier, arg_dtypes):
     """
 
     from loopy.target.pyopencl import PyOpenCLTarget
-    if not isinstance(target, PyOpenCLTarget):
+    if not isinstance(kernel.target, PyOpenCLTarget):
         raise NotImplementedError("Only the PyOpenCLTarget is supported as of now")
 
     if identifier == "hank1_01":
