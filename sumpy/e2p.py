@@ -220,8 +220,8 @@ class E2PFromCSR(E2PBase):
 
                     <> b[idim] = tgt[idim] - center[idim]
                     result[${RESULTIDX}, itgt] = \
-                            kernel_scaling * sum(isrc_box, result_${RESULTIDX}_p) \
-                            {id_prefix=write_result}
+                            kernel_scaling * simul_reduce(sum, isrc_box, \
+                            result_${RESULTIDX}_p) {id_prefix=write_result}
                 """],
                 [
                     lp.GlobalArg("targets", None, shape=(self.dim, "ntargets"),
