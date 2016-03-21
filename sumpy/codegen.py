@@ -33,6 +33,8 @@ import re
 from pymbolic.mapper import IdentityMapper, WalkMapper, CSECachingMapperMixin
 import pymbolic.primitives as prim
 
+from loopy.types import NumpyType
+
 from pytools import memoize_method
 
 from pymbolic.sympy_interface import (
@@ -160,22 +162,30 @@ def bessel_mangler(kernel, identifier, arg_dtypes):
         raise NotImplementedError("Only the PyOpenCLTarget is supported as of now")
 
     if identifier == "hank1_01":
-        if arg_dtypes[0].kind == "c":
+        if arg_dtypes[0].is_complex():
             identifier = "hank1_01_complex"
-            return (np.dtype(hank1_01_result_dtype),
-                    identifier, (np.dtype(np.complex128),))
+            return (NumpyType(np.dtype(hank1_01_result_dtype)),
+                    identifier, (
+                        NumpyType(np.dtype(np.complex128)),
+                        ))
         else:
-            return (np.dtype(hank1_01_result_dtype),
-                    identifier, (np.dtype(np.float64),))
+            return (NumpyType(np.dtype(hank1_01_result_dtype)),
+                    identifier, (
+                        NumpyType(np.dtype(np.float64)),
+                        ))
 
     elif identifier == "bessel_jv_two":
-        if arg_dtypes[1].kind == "c":
+        if arg_dtypes[1].is_complex():
             identifier = "bessel_jv_two_complex"
-            return (np.dtype(bessel_j_two_result_dtype),
-                    identifier, (np.dtype(np.int32), np.dtype(np.complex128),))
+            return (NumpyType(np.dtype(bessel_j_two_result_dtype)),
+                    identifier, (
+                        NumpyType(np.dtype(np.int32)),
+                        NumpyType(np.dtype(np.complex128)),))
         else:
-            return (np.dtype(bessel_j_two_result_dtype),
-                    identifier, (np.dtype(np.int32), np.dtype(np.float64),))
+            return (NumpyType(np.dtype(bessel_j_two_result_dtype)),
+                    identifier, (
+                        NumpyType(np.dtype(np.int32)),
+                        NumpyType(np.dtype(np.float64)),))
 
     else:
         return None
