@@ -137,17 +137,17 @@ def bessel_preamble_generator(preamble_info):
 
 
 hank1_01_result_dtype = cl.tools.get_or_register_dtype("hank1_01_result",
-        np.dtype([
+        NumpyType(np.dtype([
             ("order0", np.complex128),
             ("order1", np.complex128),
-            ]),
+            ])),
         )
 
 bessel_j_two_result_dtype = cl.tools.get_or_register_dtype("bessel_j_two_result",
-        np.dtype([
+        NumpyType(np.dtype([
             ("jv", np.complex128),
             ("jvp1", np.complex128),
-            ]),
+            ])),
         )
 
 
