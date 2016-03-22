@@ -121,17 +121,18 @@ hank1_01_result hank1_01_complex(cdouble_t z)
 """
 
 
-def bessel_preamble_generator(kernel, seen_dtypes, seen_functions):
+def bessel_preamble_generator(preamble_info):
     from loopy.target.pyopencl import PyOpenCLTarget
-    if not isinstance(kernel.target, PyOpenCLTarget):
+    if not isinstance(preamble_info.kernel.target, PyOpenCLTarget):
         raise NotImplementedError("Only the PyOpenCLTarget is supported as of now")
 
     require_bessel = False
-    if any(func.name == "hank1_01" for func in seen_functions):
+    if any(func.name == "hank1_01" for func in preamble_info.seen_functions):
         yield ("50-sumpy-hankel", HANKEL_PREAMBLE)
         require_bessel = True
     if (require_bessel
-            or any(func.name == "bessel_jv_two" for func in seen_functions)):
+            or any(func.name == "bessel_jv_two"
+                for func in preamble_info.seen_functions)):
         yield ("40-sumpy-bessel", BESSEL_PREAMBLE)
 
 
