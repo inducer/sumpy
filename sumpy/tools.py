@@ -227,8 +227,9 @@ class KernelCacheWrapper(object):
                 pass
 
         logger.info("%s: kernel cache miss" % self.name)
-        logger.info("%s: missed cache key: %s" % (
-            self.name, cache_key))
+        if CACHING_ENABLED:
+            logger.info("%s: missed cache key: %s" % (
+                self.name, cache_key))
 
         knl = self.get_optimized_kernel(**kwargs)
 
