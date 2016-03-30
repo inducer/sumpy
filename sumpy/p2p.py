@@ -229,7 +229,7 @@ class P2PFromCSR(P2PBase):
 
                     result[${KNLIDX}, itgt] = result[${KNLIDX}, itgt] + \
                             knl_${KNLIDX}_scaling \
-                            * sum(isrc, pair_result_${KNLIDX})
+                            * simul_reduce(sum, isrc, pair_result_${KNLIDX})
                     """
                 ]+[
                     lp.ExpressionInstruction(id=None,

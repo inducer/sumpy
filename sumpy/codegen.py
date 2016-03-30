@@ -33,6 +33,8 @@ import re
 from pymbolic.mapper import IdentityMapper, WalkMapper, CSECachingMapperMixin
 import pymbolic.primitives as prim
 
+from loopy.types import NumpyType
+
 from pytools import memoize_method
 
 from pymbolic.sympy_interface import (
@@ -119,32 +121,33 @@ hank1_01_result hank1_01_complex(cdouble_t z)
 """
 
 
-def bessel_preamble_generator(kernel, seen_dtypes, seen_functions):
+def bessel_preamble_generator(preamble_info):
     from loopy.target.pyopencl import PyOpenCLTarget
-    if not isinstance(kernel.target, PyOpenCLTarget):
+    if not isinstance(preamble_info.kernel.target, PyOpenCLTarget):
         raise NotImplementedError("Only the PyOpenCLTarget is supported as of now")
 
     require_bessel = False
-    if any(func.name == "hank1_01" for func in seen_functions):
+    if any(func.name == "hank1_01" for func in preamble_info.seen_functions):
         yield ("50-sumpy-hankel", HANKEL_PREAMBLE)
         require_bessel = True
     if (require_bessel
-            or any(func.name == "bessel_jv_two" for func in seen_functions)):
+            or any(func.name == "bessel_jv_two"
+                for func in preamble_info.seen_functions)):
         yield ("40-sumpy-bessel", BESSEL_PREAMBLE)
 
 
 hank1_01_result_dtype = cl.tools.get_or_register_dtype("hank1_01_result",
-        np.dtype([
+        NumpyType(np.dtype([
             ("order0", np.complex128),
             ("order1", np.complex128),
-            ]),
+            ])),
         )
 
 bessel_j_two_result_dtype = cl.tools.get_or_register_dtype("bessel_j_two_result",
-        np.dtype([
+        NumpyType(np.dtype([
             ("jv", np.complex128),
             ("jvp1", np.complex128),
-            ]),
+            ])),
         )
 
 
@@ -160,22 +163,30 @@ def bessel_mangler(kernel, identifier, arg_dtypes):
         raise NotImplementedError("Only the PyOpenCLTarget is supported as of now")
 
     if identifier == "hank1_01":
-        if arg_dtypes[0].kind == "c":
+        if arg_dtypes[0].is_complex():
             identifier = "hank1_01_complex"
-            return (np.dtype(hank1_01_result_dtype),
-                    identifier, (np.dtype(np.complex128),))
+            return (NumpyType(np.dtype(hank1_01_result_dtype)),
+                    identifier, (
+                        NumpyType(np.dtype(np.complex128)),
+                        ))
         else:
-            return (np.dtype(hank1_01_result_dtype),
-                    identifier, (np.dtype(np.float64),))
+            return (NumpyType(np.dtype(hank1_01_result_dtype)),
+                    identifier, (
+                        NumpyType(np.dtype(np.float64)),
+                        ))
 
     elif identifier == "bessel_jv_two":
-        if arg_dtypes[1].kind == "c":
+        if arg_dtypes[1].is_complex():
             identifier = "bessel_jv_two_complex"
-            return (np.dtype(bessel_j_two_result_dtype),
-                    identifier, (np.dtype(np.int32), np.dtype(np.complex128),))
+            return (NumpyType(np.dtype(bessel_j_two_result_dtype)),
+                    identifier, (
+                        NumpyType(np.dtype(np.int32)),
+                        NumpyType(np.dtype(np.complex128)),))
         else:
-            return (np.dtype(bessel_j_two_result_dtype),
-                    identifier, (np.dtype(np.int32), np.dtype(np.float64),))
+            return (NumpyType(np.dtype(bessel_j_two_result_dtype)),
+                    identifier, (
+                        NumpyType(np.dtype(np.int32)),
+                        NumpyType(np.dtype(np.float64)),))
 
     else:
         return None

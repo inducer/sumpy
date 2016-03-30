@@ -156,7 +156,7 @@ class E2EFromCSR(E2EBase):
                         {dep=read_src_ibox}
 
                     tgt_expansions[tgt_ibox, ${TGT_COEFFIDX}] = \
-                            sum(isrc_box, coeff${TGT_COEFFIDX}) \
+                            simul_reduce(sum, isrc_box, coeff${TGT_COEFFIDX}) \
                             {id_prefix=write_expn}
                     """],
                 [

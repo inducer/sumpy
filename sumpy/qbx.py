@@ -210,7 +210,8 @@ class LayerPotential(LayerPotentialBase):
     def get_result_store_instructions(self):
         return [
                 "result_${KNLIDX}[itgt] = \
-                        knl_${KNLIDX}_scaling*simul_reduce(sum, isrc, pair_result_${KNLIDX})"
+                        knl_${KNLIDX}_scaling*simul_reduce(\
+                            sum, isrc, pair_result_${KNLIDX})"
                 ]
 
     def __call__(self, queue, targets, sources, centers, strengths, **kwargs):

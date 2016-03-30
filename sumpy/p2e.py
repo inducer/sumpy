@@ -115,7 +115,7 @@ class P2EFromSingleBox(P2EBase):
                             {id=compute_a}
                     <> strength = strengths[isrc]
                     expansions[src_ibox, ${COEFFIDX}] = \
-                            sum(isrc, strength*coeff${COEFFIDX}) \
+                            simul_reduce(sum, isrc, strength*coeff${COEFFIDX}) \
                             {id_prefix=write_expn}
                     """],
                 [
@@ -216,8 +216,9 @@ class P2EFromCSR(P2EBase):
                     <> a[idim] = center[idim] - sources[idim, isrc] {id=compute_a}
                     <> strength = strengths[isrc]
                     expansions[tgt_ibox, ${COEFFIDX}] = \
-                            sum((isrc_box, isrc), strength*coeff${COEFFIDX}) \
-                            {id_prefix=write_expn}
+                            simul_reduce(sum, (isrc_box, isrc), \
+                                strength*coeff${COEFFIDX}) \
+                                {id_prefix=write_expn}
                     """],
                 arguments,
                 name=self.name, assumptions="ntgt_boxes>=1",
