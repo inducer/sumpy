@@ -51,6 +51,7 @@ PDE kernels
 
 .. autoclass:: LaplaceKernel
 .. autoclass:: HelmholtzKernel
+.. autoclass:: StokesletKernel
 
 Derivatives
 -----------
@@ -456,7 +457,8 @@ class StokesletKernel(ExpressionKernel):
 
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode())
-        key_builder.rec(key_hash, (self.dim, self.icomp, self.jcomp, self.viscosity_mu_name))
+        key_builder.rec(key_hash,
+                (self.dim, self.icomp, self.jcomp, self.viscosity_mu_name))
 
     def __repr__(self):
         return "StokesletKnl%dD_%d%d" % (self.dim, self.icomp, self.jcomp)
