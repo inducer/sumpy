@@ -25,6 +25,9 @@ THE SOFTWARE.
 """
 
 __doc__ = """Integrates :mod:`boxtree` with :mod:`sumpy`.
+
+.. autoclass:: SumpyExpansionWranglerCodeContainer
+.. autoclass:: SumpyExpansionWrangler
 """
 
 

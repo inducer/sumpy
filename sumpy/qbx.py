@@ -1,8 +1,4 @@
-from __future__ import division
-from __future__ import absolute_import
-import six
-from six.moves import range
-from six.moves import zip
+from __future__ import division, absolute_import
 
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
@@ -27,6 +23,8 @@ THE SOFTWARE.
 """
 
 
+import six
+from six.moves import range, zip
 import numpy as np
 import loopy as lp
 import sympy as sp
@@ -37,6 +35,18 @@ from sumpy.tools import KernelComputation
 
 import logging
 logger = logging.getLogger(__name__)
+
+
+__doc__ = """
+
+QBX for Layer Potentials
+------------------------
+
+.. autoclass:: LayerPotentialBase
+.. autoclass:: LayerPotential
+.. autoclass:: LayerPotentialMatrixGenerator
+
+"""
 
 
 def stringify_expn_index(i):

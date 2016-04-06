@@ -25,6 +25,10 @@ THE SOFTWARE.
 
 from pytools import memoize_method
 
+__doc__ = """
+.. autoclass:: ExpansionBase
+"""
+
 
 # {{{ base class
 

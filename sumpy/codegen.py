@@ -44,6 +44,17 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+__doc__ = """
+
+Conversion of :mod:`sympy` expressions to :mod:`loopy`
+------------------------------------------------------
+
+.. autoclass:: SympyToPymbolicMapper
+.. autofunction:: to_loopy_insns
+
+"""
+
+
 # {{{ sympy -> pymbolic mapper
 
 class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
