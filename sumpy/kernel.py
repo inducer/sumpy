@@ -412,6 +412,63 @@ class HelmholtzKernel(ExpressionKernel):
 
     mapper_method = "map_helmholtz_kernel"
 
+
+class StokesletKernel(ExpressionKernel):
+    init_arg_names = ("dim", "icomp", "jcomp", "viscosity_mu_name")
+
+    def __init__(self, dim, icomp, jcomp, viscosity_mu_name="mu"):
+        """
+        :arg viscosity_mu_name: The argument name to use for
+                dynamic viscosity :math:`\mu` the then generating functions to
+                evaluate this kernel.
+        """
+        mu = var(viscosity_mu_name)
+
+        if dim == 2:
+            d = make_sym_vector("d", dim)
+            r = pymbolic_real_norm_2(d)
+            expr = (
+                -var("log")(r)*(1 if icomp == jcomp else 0)
+                +
+                d[icomp]*d[jcomp]/r**2
+                )
+            scaling = 1/(4*var("pi")*mu)
+
+        elif dim is None:
+            expr = None
+            scaling = None
+        else:
+            raise RuntimeError("unsupported dimensionality")
+
+        self.viscosity_mu_name = viscosity_mu_name
+        self.icomp = icomp
+        self.jcomp = jcomp
+
+        ExpressionKernel.__init__(
+                self,
+                dim,
+                expression=expr,
+                scaling=scaling,
+                is_complex_valued=False)
+
+    def __getinitargs__(self):
+        return (self._dim, self.icomp, self.jcomp, self.viscosity_mu_name)
+
+    def update_persistent_hash(self, key_hash, key_builder):
+        key_hash.update(type(self).__name__.encode())
+        key_builder.rec(key_hash, (self.dim, self.icomp, self.jcomp, self.viscosity_mu_name))
+
+    def __repr__(self):
+        return "StokesletKnl%dD_%d%d" % (self.dim, self.icomp, self.jcomp)
+
+    def get_args(self):
+        return [
+                KernelArgument(
+                    loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64),
+                    )]
+
+    mapper_method = "map_stokeslet_kernel"
+
 # }}}
 
 
