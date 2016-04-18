@@ -1,7 +1,4 @@
-from __future__ import division
-from __future__ import absolute_import
-import six
-from six.moves import range
+from __future__ import division, absolute_import
 
 __copyright__ = "Copyright (C) 2013 Andreas Kloeckner"
 
@@ -25,12 +22,27 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import six
+from six.moves import range
+
 import numpy as np
 import loopy as lp
 from sumpy.tools import KernelCacheWrapper
 
 import logging
 logger = logging.getLogger(__name__)
+
+
+__doc__ = """
+
+Particle-to-expansion
+---------------------
+
+.. autoclass:: P2EBase
+.. autoclass:: P2EFromSingleBox
+.. autoclass:: P2EFromCSR
+
+"""
 
 
 # {{{ P2E base class

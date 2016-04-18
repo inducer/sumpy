@@ -24,10 +24,23 @@ THE SOFTWARE.
 
 import six
 from six.moves import range
+
 import numpy as np
 import loopy as lp
 
 from sumpy.tools import KernelComputation, KernelCacheWrapper
+
+
+__doc__ = """
+
+Particle-to-particle
+--------------------
+
+.. autoclass:: P2PBase
+.. autoclass:: P2P
+.. autoclass:: P2PFromCSR
+
+"""
 
 
 # LATER:

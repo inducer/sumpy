@@ -33,6 +33,49 @@ from sumpy.symbolic import pymbolic_real_norm_2
 from pymbolic.primitives import make_sym_vector
 from pymbolic import var
 
+__doc__ = """
+
+Kernel interface
+----------------
+
+.. autoclass:: Kernel
+.. autoclass:: KernelArgument
+
+Symbolic kernels
+----------------
+
+.. autoclass:: ExpressionKernel
+
+PDE kernels
+-----------
+
+.. autoclass:: LaplaceKernel
+.. autoclass:: HelmholtzKernel
+.. autoclass:: StokesletKernel
+
+Derivatives
+-----------
+
+These objects *wrap* other kernels and take derivatives
+of them in the process.
+
+.. autoclass:: DerivativeBase
+.. autoclass:: AxisTargetDerivative
+.. autoclass:: DirectionalTargetDerivative
+.. autoclass:: DirectionalSourceDerivative
+
+Transforming kernels
+--------------------
+
+.. autoclass:: KernelMapper
+.. autoclass:: KernelCombineMapper
+.. autoclass:: KernelIdentityMapper
+.. autoclass:: AxisTargetDerivativeRemover
+.. autoclass:: TargetDerivativeRemover
+.. autoclass:: DerivativeCounter
+.. autoclass:: KernelDimensionSetter
+"""
+
 
 class KernelArgument(object):
     """
@@ -160,13 +203,13 @@ class Kernel(object):
         raise NotImplementedError
 
     def get_args(self):
-        """Return list of :cls:`KernelArgument` instances describing
+        """Return list of :class:`KernelArgument` instances describing
         extra arguments used by the kernel.
         """
         return []
 
     def get_source_args(self):
-        """Return list of :cls:`KernelArgument` instances describing
+        """Return list of :class:`KernelArgument` instances describing
         extra arguments used by kernel in picking up contributions
         from point sources.
         """
@@ -414,7 +457,8 @@ class StokesletKernel(ExpressionKernel):
 
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode())
-        key_builder.rec(key_hash, (self.dim, self.icomp, self.jcomp, self.viscosity_mu_name))
+        key_builder.rec(key_hash,
+                (self.dim, self.icomp, self.jcomp, self.viscosity_mu_name))
 
     def __repr__(self):
         return "StokesletKnl%dD_%d%d" % (self.dim, self.icomp, self.jcomp)

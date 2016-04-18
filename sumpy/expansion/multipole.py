@@ -1,7 +1,4 @@
-from __future__ import division
-from __future__ import absolute_import
-from six.moves import range
-from six.moves import zip
+from __future__ import division, absolute_import
 
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
@@ -25,12 +22,21 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from six.moves import range, zip
 import sympy as sp  # noqa
 
 from sumpy.expansion import ExpansionBase, VolumeTaylorExpansionBase
 
 import logging
 logger = logging.getLogger(__name__)
+
+
+__doc__ = """
+
+.. autoclass:: VolumeTaylorMultipoleExpansion
+.. autoclass:: H2DMultipoleExpansion
+
+"""
 
 
 class MultipoleExpansionBase(ExpansionBase):

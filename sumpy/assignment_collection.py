@@ -31,6 +31,15 @@ import sympy as sp
 import logging
 logger = logging.getLogger(__name__)
 
+__doc__ = """
+
+Manipulating batches of assignments
+-----------------------------------
+
+.. autoclass:: SymbolicAssignmentCollection
+
+"""
+
 
 def _generate_unique_possibilities(prefix):
     yield prefix
