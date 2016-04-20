@@ -133,7 +133,7 @@ class P2P(P2PBase):
                     "<> d[idim] = targets[idim,itgt] - sources[idim,isrc] \
                             {id=compute_d}",
                 ]+[
-                    lp.ExpressionInstruction(id=None,
+                    lp.Assignment(id=None,
                         assignee="pair_result_%d" % i, expression=expr,
                         temp_var_type=lp.auto)
                     for i, expr in enumerate(exprs)
@@ -245,7 +245,7 @@ class P2PFromCSR(P2PBase):
                             * simul_reduce(sum, isrc, pair_result_${KNLIDX})
                     """
                 ]+[
-                    lp.ExpressionInstruction(id=None,
+                    lp.Assignment(id=None,
                         assignee="pair_result_%d" % i, expression=expr,
                         temp_var_type=lp.auto)
                     for i, expr in enumerate(exprs)
