@@ -265,7 +265,7 @@ class ExpressionKernel(Kernel):
             raise ValueError("dist_vec length does not match expected dimension")
 
         expr = expr.subs([
-            ("d_%d" % i, dist_vec_i)
+            ("d%d" % i, dist_vec_i)
             for i, dist_vec_i in enumerate(dist_vec)
             ])
 
@@ -470,6 +470,84 @@ class StokesletKernel(ExpressionKernel):
                     )]
 
     mapper_method = "map_stokeslet_kernel"
+
+
+class StressletKernel(ExpressionKernel):
+    init_arg_names = ("dim", "icomp", "jcomp", "viscosity_mu_name",
+        "stresslet_vector_name")
+
+    def __init__(self, dim=None, icomp=None, jcomp=None, viscosity_mu_name="mu",
+                        stresslet_vector_name="stresslet_vec"):
+        """
+        :arg viscosity_mu_name: The argument name to use for
+                dynamic viscosity :math:`\mu` the then generating functions to
+                evaluate this kernel.
+        """
+        mu = var(viscosity_mu_name)
+         #Remove mu?  (Not needed inside kernel?)
+
+        if dim == 2:
+            d = make_sym_vector("d", dim)
+            n = make_sym_vector(stresslet_vector_name, dim)
+            r = pymbolic_real_norm_2(d)
+            expr = (
+                sum(n[axis]*d[axis] for axis in range(dim))
+                * 
+                d[icomp]*d[jcomp]/r**4
+                )
+            scaling = 1/(var("pi"))
+
+        elif dim is None:
+            expr = None
+            scaling = None
+        else:
+            raise RuntimeError("unsupported dimensionality")
+
+        self.viscosity_mu_name = viscosity_mu_name
+        self.stresslet_vector_name = stresslet_vector_name
+        self.icomp = icomp
+        self.jcomp = jcomp
+
+        ExpressionKernel.__init__(
+                self,
+                dim,
+                expression=expr,
+                scaling=scaling,
+                is_complex_valued=False)
+
+    def __getinitargs__(self):
+        return (self._dim, self.icomp, self.jcomp, self.viscosity_mu_name,
+                      self.stresslet_vector_name)
+
+    def update_persistent_hash(self, key_hash, key_builder):
+        key_hash.update(type(self).__name__.encode())
+        key_builder.rec(key_hash, (self.dim, self.icomp, self.jcomp, self.viscosity_mu_name, self.stresslet_vector_name))
+
+    def __repr__(self):
+        return "StressletKnl%dD_%d%d[%s]" % (self.dim, self.icomp, self.jcomp,
+                self.stresslet_vector_name)
+
+    def get_args(self):
+        return [
+                KernelArgument(
+                    loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64),
+                    ),
+                KernelArgument(
+                        lp.GlobalArg(self.stresslet_vector_name,
+                        None,
+                        shape=(self.dim, "nsources"),
+                        dim_tags="sep,C"),
+                    )
+                    ]
+
+    def transform_to_code(self, expr):
+        from sumpy.codegen import VectorComponentRewriter
+        vcr = VectorComponentRewriter([self.stresslet_vector_name])
+        from pymbolic.primitives import Variable
+        return _VectorIndexAdder(self.stresslet_vector_name, (Variable("isrc"),))(
+                vcr(expr))
+
+    mapper_method = "map_stresslet_kernel"
 
 # }}}
 
@@ -682,6 +760,8 @@ class KernelIdentityMapper(KernelMapper):
 
     map_laplace_kernel = map_expression_kernel
     map_helmholtz_kernel = map_expression_kernel
+    map_stokeslet_kernel = map_expression_kernel
+    map_stresslet_kernel = map_expression_kernel
 
     def map_axis_target_derivative(self, kernel):
         return AxisTargetDerivative(kernel.axis, self.rec(kernel.inner_kernel))
@@ -713,6 +793,8 @@ class DerivativeCounter(KernelCombineMapper):
 
     map_laplace_kernel = map_expression_kernel
     map_helmholtz_kernel = map_expression_kernel
+    map_stokeslet_kernel = map_expression_kernel
+    map_stresslet_kernel = map_expression_kernel
 
     def map_axis_target_derivative(self, kernel):
         return 1 + self.rec(kernel.inner_kernel)
@@ -750,6 +832,29 @@ class KernelDimensionSetter(KernelIdentityMapper):
         return HelmholtzKernel(self.dim,
                 helmholtz_k_name=kernel.helmholtz_k_name,
                 allow_evanescent=kernel.allow_evanescent)
+
+    def map_stokeslet_kernel(self, kernel):
+        if kernel._dim is not None and self.dim != kernel.dim:
+            raise RuntimeError("cannot set kernel dimension to new value (%d)"
+                    "different from existing one (%d)"
+                    % (self.dim, kernel.dim))
+
+        return StressletKernel(self.dim,
+                kernel.icomp,
+                kernel.jcomp,
+                viscosity_mu_name=kernel.viscosity_mu_name)
+
+    def map_stresslet_kernel(self, kernel):
+        if kernel._dim is not None and self.dim != kernel.dim:
+            raise RuntimeError("cannot set kernel dimension to new value (%d)"
+                    "different from existing one (%d)"
+                    % (self.dim, kernel.dim))
+
+        return StressletKernel(self.dim,
+                kernel.icomp,
+                kernel.jcomp,
+                viscosity_mu_name=kernel.viscosity_mu_name,
+                stresslet_vector_name=kernel.stresslet_vector_name) 
 
 # }}}
 

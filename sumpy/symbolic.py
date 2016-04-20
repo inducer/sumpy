@@ -31,6 +31,7 @@ import sympy as sp
 import numpy as np
 from pymbolic.mapper import IdentityMapper as IdentityMapperBase
 from pymbolic.sympy_interface import PymbolicToSympyMapper
+import pymbolic.primitives as prim
 
 import logging
 logger = logging.getLogger(__name__)
@@ -209,5 +210,12 @@ class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):
             return sp.pi
         else:
             return PymbolicToSympyMapper.map_variable(self, expr)
+
+    def map_subscript(self, expr):
+        if isinstance(expr.aggregate, prim.Variable) and isinstance(expr.index, int):
+            return sp.Symbol("%s%d" % (expr.aggregate.name, expr.index))
+        else:
+            raise RuntimeError("do not know how to translate '%s' to sympy"
+                    % expr)
 
 # vim: fdm=marker
