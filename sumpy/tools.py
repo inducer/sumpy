@@ -197,7 +197,7 @@ class KernelComputation(object):
 
         import loopy as lp
         return [
-                lp.ExpressionInstruction(id=None,
+                lp.Assignment(id=None,
                     assignee="knl_%d_scaling" % i,
                     expression=sympy_conv(kernel.get_scaling()),
                     temp_var_type=dtype)

@@ -107,7 +107,7 @@ class E2PBase(KernelCacheWrapper):
         from pymbolic.sympy_interface import SympyToPymbolicMapper
         sympy_conv = SympyToPymbolicMapper()
         loopy_insns.append(
-                lp.ExpressionInstruction(id=None,
+                lp.Assignment(id=None,
                     assignee="kernel_scaling",
                     expression=sympy_conv(self.expansion.kernel.get_scaling()),
                     temp_var_type=lp.auto))
