@@ -533,7 +533,7 @@ class StressletKernel(ExpressionKernel):
                     loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64),
                     ),
                 KernelArgument(
-                        lp.GlobalArg(self.stresslet_vector_name,
+                        loopy_arg=lp.GlobalArg(self.stresslet_vector_name,
                         None,
                         shape=(self.dim, "nsources"),
                         dim_tags="sep,C"),
@@ -839,7 +839,7 @@ class KernelDimensionSetter(KernelIdentityMapper):
                     "different from existing one (%d)"
                     % (self.dim, kernel.dim))
 
-        return StressletKernel(self.dim,
+        return StokesletKernel(self.dim,
                 kernel.icomp,
                 kernel.jcomp,
                 viscosity_mu_name=kernel.viscosity_mu_name)
