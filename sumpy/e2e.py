@@ -263,10 +263,10 @@ class E2EFromChildren(E2EBase):
 
                     <> src_coeff${COEFFIDX} = \
                         expansions[src_ibox, ${COEFFIDX}] \
-                        {if=is_src_box_valid,dep=read_src_ibox}
+                        {id_prefix=read_coeff,if=is_src_box_valid,dep=read_src_ibox}
                     expansions[tgt_ibox, ${COEFFIDX}] = \
                         expansions[tgt_ibox, ${COEFFIDX}] + coeff${COEFFIDX} \
-                        {id_prefix=write_expn,if=is_src_box_valid,dep=compute_coeff*}
+                        {id_prefix=write_expn,if=is_src_box_valid,dep=compute_coeff*,nosync=read_coeff*}
                     """],
                 [
                     lp.GlobalArg("target_boxes", None, shape=lp.auto,
@@ -351,10 +351,10 @@ class E2EFromParent(E2EBase):
 
                     <> src_coeff${COEFFIDX} = \
                         expansions[src_ibox, ${COEFFIDX}] \
-                        {dep=read_src_ibox}
+                        {id_prefix=read_expn,dep=read_src_ibox}
                     expansions[tgt_ibox, ${COEFFIDX}] = \
                         expansions[tgt_ibox, ${COEFFIDX}] + coeff${COEFFIDX} \
-                        {id_prefix=write_expn}
+                        {id_prefix=write_expn,nosync=read_expn*}
                     """],
                 [
                     lp.GlobalArg("target_boxes", None, shape=lp.auto,
