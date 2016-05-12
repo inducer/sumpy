@@ -435,6 +435,16 @@ class StokesletKernel(ExpressionKernel):
                 )
             scaling = 1/(4*var("pi")*mu)
 
+        elif dim == 3:
+            d = make_sym_vector("d", dim)
+            r = pymbolic_real_norm_2(d)
+            expr = (
+                (1/r)*(1 if icomp == jcomp else 0)
+                +
+                d[icomp]*d[jcomp]/r**3
+                )
+            scaling = -1/(8*var("pi")*mu)
+
         elif dim is None:
             expr = None
             scaling = None
@@ -495,6 +505,17 @@ class StressletKernel(ExpressionKernel):
                 d[icomp]*d[jcomp]/r**4
                 )
             scaling = 1/(var("pi"))
+
+        elif dim == 3:
+            d = make_sym_vector("d", dim)
+            n = make_sym_vector(stresslet_vector_name, dim)
+            r = pymbolic_real_norm_2(d)
+            expr = (
+                sum(n[axis]*d[axis] for axis in range(dim))
+                *
+                d[icomp]*d[jcomp]/r**5
+                )
+            scaling = -3/(4*var("pi"))
 
         elif dim is None:
             expr = None
