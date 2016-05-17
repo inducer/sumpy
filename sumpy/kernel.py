@@ -435,6 +435,16 @@ class StokesletKernel(ExpressionKernel):
                 )
             scaling = 1/(4*var("pi")*mu)
 
+        elif dim == 3:
+            d = make_sym_vector("d", dim)
+            r = pymbolic_real_norm_2(d)
+            expr = (
+                (1/r)*(1 if icomp == jcomp else 0)
+                +
+                d[icomp]*d[jcomp]/r**3
+                )
+            scaling = -1/(8*var("pi")*mu)
+
         elif dim is None:
             expr = None
             scaling = None
@@ -496,6 +506,17 @@ class StressletKernel(ExpressionKernel):
                 )
             scaling = 1/(var("pi"))
 
+        elif dim == 3:
+            d = make_sym_vector("d", dim)
+            n = make_sym_vector(stresslet_vector_name, dim)
+            r = pymbolic_real_norm_2(d)
+            expr = (
+                sum(n[axis]*d[axis] for axis in range(dim))
+                *
+                d[icomp]*d[jcomp]/r**5
+                )
+            scaling = -3/(4*var("pi"))
+
         elif dim is None:
             expr = None
             scaling = None
@@ -534,11 +555,11 @@ class StressletKernel(ExpressionKernel):
                     loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64),
                     ),
                 KernelArgument(
-                        lp.GlobalArg(self.stresslet_vector_name,
-                            None,
-                            shape=(self.dim, "nsources"),
-                            dim_tags="sep,C")
-                        )
+                        loopy_arg=lp.GlobalArg(self.stresslet_vector_name,
+                        None,
+                        shape=(self.dim, "nsources"),
+                        dim_tags="sep,C"),
+                    )
                     ]
 
     def transform_to_code(self, expr):
@@ -840,7 +861,7 @@ class KernelDimensionSetter(KernelIdentityMapper):
                     "different from existing one (%d)"
                     % (self.dim, kernel.dim))
 
-        return StressletKernel(self.dim,
+        return StokesletKernel(self.dim,
                 kernel.icomp,
                 kernel.jcomp,
                 viscosity_mu_name=kernel.viscosity_mu_name)
