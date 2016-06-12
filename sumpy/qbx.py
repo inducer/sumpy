@@ -171,7 +171,7 @@ class LayerPotentialBase(KernelComputation):
         for expn in self.expansions:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
-        loopy_knl = lp.tag_data_axes(loopy_knl, "center", "sep,C")
+        loopy_knl = lp.tag_array_axes(loopy_knl, "center", "sep,C")
 
         return loopy_knl
 

@@ -128,19 +128,31 @@ class P2P(P2PBase):
                 "{[isrc,itgt,idim]: 0<=itgt<ntargets and 0<=isrc<nsources \
                         and 0<=idim<dim}",
                 self.get_kernel_scaling_assignments()
+                + ["for itgt"]
+                + ["for isrc"]
                 + loopy_insns
                 + [
-                    "<> d[idim] = targets[idim,itgt] - sources[idim,isrc] \
-                            {id=compute_d}",
+                    """
+                    for idim
+                    <> d[idim] = targets[idim,itgt] - sources[idim,isrc] \
+                            {id=compute_d}
+                    end
+                    """
                 ]+[
                     lp.Assignment(id=None,
                         assignee="pair_result_%d" % i, expression=expr,
                         temp_var_type=lp.auto)
                     for i, expr in enumerate(exprs)
-                ]+[
-                    "result[${KNLIDX}, itgt] = knl_${KNLIDX}_scaling \
-                            * simul_reduce(sum, isrc, pair_result_${KNLIDX})"
-                ],
+                ]
+                + ["end"]
+                + [
+                    """
+                    result[KNLIDX, itgt] = knl_KNLIDX_scaling \
+                            * simul_reduce(sum, isrc, pair_result_KNLIDX)
+                    """.replace("KNLIDX", str(iknl))
+                    for iknl in range(len(exprs))
+                ]
+                + ["end"],
                 [
                     lp.GlobalArg("sources", None,
                         shape=(self.dim, "nsources")),
@@ -152,13 +164,14 @@ class P2P(P2PBase):
                     lp.GlobalArg("result", None,
                         shape="nresults,ntargets", dim_tags="sep,C")
                 ] + gather_loopy_source_arguments(self.kernels),
-                name=self.name, assumptions="nsources>=1 and ntargets>=1",
-                defines=dict(
-                    KNLIDX=list(range(len(exprs))),
-                    dim=self.dim,
-                    nstrengths=self.strength_count,
-                    nresults=len(self.kernels),
-                    ))
+                name=self.name,
+                assumptions="nsources>=1 and ntargets>=1")
+
+        loopy_knl = lp.fix_parameters(
+                loopy_knl,
+                dim=self.dim,
+                nstrengths=self.strength_count,
+                nresults=len(self.kernels))
 
         for where in ["compute_d"]:
             loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:"+where,
@@ -167,7 +180,7 @@ class P2P(P2PBase):
         for knl in self.kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
-        loopy_knl = lp.tag_data_axes(loopy_knl, "strength", "sep,C")
+        loopy_knl = lp.tag_array_axes(loopy_knl, "strength", "sep,C")
 
         return loopy_knl
 
@@ -176,9 +189,9 @@ class P2P(P2PBase):
         knl = self.get_kernel()
 
         if sources_is_obj_array:
-            knl = lp.tag_data_axes(knl, "sources", "sep,C")
+            knl = lp.tag_array_axes(knl, "sources", "sep,C")
         if targets_is_obj_array:
-            knl = lp.tag_data_axes(knl, "targets", "sep,C")
+            knl = lp.tag_array_axes(knl, "targets", "sep,C")
 
         knl = lp.split_iname(knl, "itgt", 1024, outer_tag="g.0")
         return knl
@@ -239,11 +252,14 @@ class P2PFromCSR(P2PBase):
 
                     <> d[idim] = targets[idim,itgt] - sources[idim,isrc] \
                             {id=compute_d}
-
-                    result[${KNLIDX}, itgt] = result[${KNLIDX}, itgt] + \
-                            knl_${KNLIDX}_scaling \
-                            * simul_reduce(sum, isrc, pair_result_${KNLIDX})
                     """
+                ] + [
+                    """
+                    result[KNLIDX, itgt] = result[KNLIDX, itgt] + \
+                            knl_KNLIDX_scaling \
+                            * simul_reduce(sum, isrc, pair_result_KNLIDX)
+                    """.replace("KNLIDX", str(iknl))
+                    for iknl in range(len(exprs))
                 ]+[
                     lp.Assignment(id=None,
                         assignee="pair_result_%d" % i, expression=expr,
@@ -267,18 +283,18 @@ class P2PFromCSR(P2PBase):
                     lp.ValueArg("ntargets", np.int32),
                     "...",
                 ] + gather_loopy_source_arguments(self.kernels),
-                name=self.name, assumptions="ntgt_boxes>=1",
-                defines=dict(
-                    KNLIDX=list(range(len(exprs))),
-                    dim=self.dim,
-                    nstrengths=self.strength_count,
-                    nkernels=len(self.kernels),
-                    ))
+                name=self.name, assumptions="ntgt_boxes>=1")
+
+        loopy_knl = lp.fix_parameters(
+                loopy_knl,
+                dim=self.dim,
+                nstrengths=self.strength_count,
+                nkernels=len(self.kernels))
 
         loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:compute_d",
                 tags=dict(idim="unr"))
 
-        loopy_knl = lp.tag_data_axes(loopy_knl, "strength", "sep,C")
+        loopy_knl = lp.tag_array_axes(loopy_knl, "strength", "sep,C")
 
         for knl in self.kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
