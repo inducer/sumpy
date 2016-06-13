@@ -149,18 +149,29 @@ class LayerPotentialBase(KernelComputation):
         loopy_knl = lp.make_kernel(
                 "{[isrc,itgt,idim]: 0<=itgt<ntargets and 0<=isrc<nsources "
                 "and 0<=idim<%d}" % self.dim,
+                self.get_kernel_scaling_assignments()
+                +
                 [
-                    "<> a[idim] = center[idim,itgt] - src[idim,isrc] {id=compute_a}",
-                    "<> b[idim] = tgt[idim,itgt] - center[idim,itgt] {id=compute_b}",
-                ]+self.get_kernel_scaling_assignments()+loopy_insns+[
+                    """
+                    for itgt, isrc
+                    for idim
+                    <> a[idim] = center[idim,itgt] - src[idim,isrc] {id=compute_a}
+                    <> b[idim] = tgt[idim,itgt] - center[idim,itgt] {id=compute_b}
+                    end
+                    """
+                ]
+                + loopy_insns
+                + [
                     lp.Assignment(id=None,
                         assignee="pair_result_%d" % i, expression=expr,
                         temp_var_type=lp.auto)
                     for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
-                ]+self.get_result_store_instructions(),
+                ]
+                + ["end"]
+                + self.get_result_store_instructions(),
                 arguments,
-                defines=dict(KNLIDX=list(range(len(exprs)))),
-                name=self.name, assumptions="nsources>=1 and ntargets>=1",
+                name=self.name,
+                assumptions="nsources>=1 and ntargets>=1",
                 default_offset=lp.auto,
                 )
 
@@ -219,9 +230,12 @@ class LayerPotential(LayerPotentialBase):
 
     def get_result_store_instructions(self):
         return [
-                "result_${KNLIDX}[itgt] = \
-                        knl_${KNLIDX}_scaling*simul_reduce(\
-                            sum, isrc, pair_result_${KNLIDX})"
+                """
+                result_KNLIDX[itgt] = \
+                        knl_KNLIDX_scaling*simul_reduce(\
+                            sum, isrc, pair_result_KNLIDX)  {inames=itgt}
+                """.replace("KNLIDX", str(iknl))
+                for iknl in range(len(self.expansions))
                 ]
 
     def __call__(self, queue, targets, sources, centers, strengths, **kwargs):
@@ -258,8 +272,11 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
 
     def get_result_store_instructions(self):
         return [
-                "result_${KNLIDX}[itgt, isrc] = \
-                        knl_${KNLIDX}_scaling*pair_result_${KNLIDX}"
+                """
+                result_KNLIDX[itgt, isrc] = \
+                        knl_KNLIDX_scaling*pair_result_KNLIDX  {inames=isrc:itgt}
+                """.replace("KNLIDX", str(iknl))
+                for iknl in range(len(self.expansions))
                 ]
 
     def __call__(self, queue, targets, sources, centers, **kwargs):
