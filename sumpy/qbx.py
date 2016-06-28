@@ -93,6 +93,26 @@ class LayerPotentialBase(KernelComputation):
     def expansions(self):
         return self.kernels
 
+    def get_compute_a_and_b_vecs(self):
+        return """
+            for idim
+            <> a[idim] = center[idim,itgt] - src[idim,isrc] {id=compute_a}
+            <> b[idim] = tgt[idim,itgt] - center[idim,itgt] {id=compute_b}
+            end
+            """
+
+    def get_src_tgt_arguments(self):
+        return [
+                lp.GlobalArg("src", None,
+                    shape=(self.dim, "nsources"), order="C"),
+                lp.GlobalArg("tgt", None,
+                    shape=(self.dim, "ntargets"), order="C"),
+                lp.GlobalArg("center", None,
+                    shape=(self.dim, "ntargets"), order="C"),
+                lp.ValueArg("nsources", None),
+                lp.ValueArg("ntargets", None),
+                ]
+
     @memoize_method
     def get_kernel(self):
         from sumpy.symbolic import make_sympy_vector
@@ -134,35 +154,32 @@ class LayerPotentialBase(KernelComputation):
 
         from sumpy.tools import gather_loopy_source_arguments
         arguments = (
-                [
-                    lp.GlobalArg("src", None,
-                        shape=(self.dim, "nsources"), order="C"),
-                    lp.GlobalArg("tgt", None,
-                        shape=(self.dim, "ntargets"), order="C"),
-                    lp.GlobalArg("center", None,
-                        shape=(self.dim, "ntargets"), order="C"),
-                    lp.ValueArg("nsources", None),
-                    lp.ValueArg("ntargets", None),
-                ] + self.get_input_and_output_arguments()
+                self.get_src_tgt_arguments()
+                + self.get_input_and_output_arguments()
                 + gather_loopy_source_arguments(self.kernels))
 
         loopy_knl = lp.make_kernel(
                 "{[isrc,itgt,idim]: 0<=itgt<ntargets and 0<=isrc<nsources "
-                "and 0<=idim<%d}" % self.dim,
-                [
-                    "<> a[idim] = center[idim,itgt] - src[idim,isrc] {id=compute_a}",
-                    "<> b[idim] = tgt[idim,itgt] - center[idim,itgt] {id=compute_b}",
-                ]+self.get_kernel_scaling_assignments()+loopy_insns+[
+                "and 0<=idim<dim}",
+                self.get_kernel_scaling_assignments()
+                + ["for itgt, isrc"]
+                + [self.get_compute_a_and_b_vecs()]
+                + loopy_insns
+                + [
                     lp.Assignment(id=None,
                         assignee="pair_result_%d" % i, expression=expr,
                         temp_var_type=lp.auto)
                     for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
-                ]+self.get_result_store_instructions(),
+                ]
+                + ["end"]
+                + self.get_result_store_instructions(),
                 arguments,
-                defines=dict(KNLIDX=list(range(len(exprs)))),
-                name=self.name, assumptions="nsources>=1 and ntargets>=1",
+                name=self.name,
+                assumptions="nsources>=1 and ntargets>=1",
                 default_offset=lp.auto,
                 )
+
+        loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
 
         for where in ["compute_a", "compute_b"]:
             loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:"+where,
@@ -171,7 +188,7 @@ class LayerPotentialBase(KernelComputation):
         for expn in self.expansions:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
-        loopy_knl = lp.tag_data_axes(loopy_knl, "center", "sep,C")
+        loopy_knl = lp.tag_array_axes(loopy_knl, "center", "sep,C")
 
         return loopy_knl
 
@@ -219,9 +236,12 @@ class LayerPotential(LayerPotentialBase):
 
     def get_result_store_instructions(self):
         return [
-                "result_${KNLIDX}[itgt] = \
-                        knl_${KNLIDX}_scaling*simul_reduce(\
-                            sum, isrc, pair_result_${KNLIDX})"
+                """
+                result_KNLIDX[itgt] = \
+                        knl_KNLIDX_scaling*simul_reduce(\
+                            sum, isrc, pair_result_KNLIDX)  {inames=itgt}
+                """.replace("KNLIDX", str(iknl))
+                for iknl in range(len(self.expansions))
                 ]
 
     def __call__(self, queue, targets, sources, centers, strengths, **kwargs):
@@ -258,8 +278,11 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
 
     def get_result_store_instructions(self):
         return [
-                "result_${KNLIDX}[itgt, isrc] = \
-                        knl_${KNLIDX}_scaling*pair_result_${KNLIDX}"
+                """
+                result_KNLIDX[itgt, isrc] = \
+                        knl_KNLIDX_scaling*pair_result_KNLIDX  {inames=isrc:itgt}
+                """.replace("KNLIDX", str(iknl))
+                for iknl in range(len(self.expansions))
                 ]
 
     def __call__(self, queue, targets, sources, centers, **kwargs):

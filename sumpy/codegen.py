@@ -27,6 +27,7 @@ from six.moves import range
 import numpy as np
 import pyopencl as cl
 import pyopencl.tools  # noqa
+import loopy as lp
 
 import re
 
@@ -176,26 +177,34 @@ def bessel_mangler(kernel, identifier, arg_dtypes):
     if identifier == "hank1_01":
         if arg_dtypes[0].is_complex():
             identifier = "hank1_01_complex"
-            return (NumpyType(np.dtype(hank1_01_result_dtype)),
-                    identifier, (
+            return lp.CallMangleInfo(
+                    target_name=identifier,
+                    result_dtypes=(NumpyType(np.dtype(hank1_01_result_dtype)),),
+                    arg_dtypes=(
                         NumpyType(np.dtype(np.complex128)),
                         ))
         else:
-            return (NumpyType(np.dtype(hank1_01_result_dtype)),
-                    identifier, (
+            return lp.CallMangleInfo(
+                    target_name=identifier,
+                    result_dtypes=(NumpyType(np.dtype(hank1_01_result_dtype)),),
+                    arg_dtypes=(
                         NumpyType(np.dtype(np.float64)),
                         ))
 
     elif identifier == "bessel_jv_two":
         if arg_dtypes[1].is_complex():
             identifier = "bessel_jv_two_complex"
-            return (NumpyType(np.dtype(bessel_j_two_result_dtype)),
-                    identifier, (
+            return lp.CallMangleInfo(
+                    target_name=identifier,
+                    result_dtypes=(NumpyType(np.dtype(bessel_j_two_result_dtype)),),
+                    arg_dtypes=(
                         NumpyType(np.dtype(np.int32)),
                         NumpyType(np.dtype(np.complex128)),))
         else:
-            return (NumpyType(np.dtype(bessel_j_two_result_dtype)),
-                    identifier, (
+            return lp.CallMangleInfo(
+                    target_name=identifier,
+                    result_dtypes=(NumpyType(np.dtype(bessel_j_two_result_dtype)),),
+                    arg_dtypes=(
                         NumpyType(np.dtype(np.int32)),
                         NumpyType(np.dtype(np.float64)),))
 
