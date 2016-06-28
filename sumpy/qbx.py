@@ -93,6 +93,26 @@ class LayerPotentialBase(KernelComputation):
     def expansions(self):
         return self.kernels
 
+    def get_compute_a_and_b_vecs(self):
+        return """
+            for idim
+            <> a[idim] = center[idim,itgt] - src[idim,isrc] {id=compute_a}
+            <> b[idim] = tgt[idim,itgt] - center[idim,itgt] {id=compute_b}
+            end
+            """
+
+    def get_src_tgt_arguments(self):
+        return [
+                lp.GlobalArg("src", None,
+                    shape=(self.dim, "nsources"), order="C"),
+                lp.GlobalArg("tgt", None,
+                    shape=(self.dim, "ntargets"), order="C"),
+                lp.GlobalArg("center", None,
+                    shape=(self.dim, "ntargets"), order="C"),
+                lp.ValueArg("nsources", None),
+                lp.ValueArg("ntargets", None),
+                ]
+
     @memoize_method
     def get_kernel(self):
         from sumpy.symbolic import make_sympy_vector
@@ -134,32 +154,16 @@ class LayerPotentialBase(KernelComputation):
 
         from sumpy.tools import gather_loopy_source_arguments
         arguments = (
-                [
-                    lp.GlobalArg("src", None,
-                        shape=(self.dim, "nsources"), order="C"),
-                    lp.GlobalArg("tgt", None,
-                        shape=(self.dim, "ntargets"), order="C"),
-                    lp.GlobalArg("center", None,
-                        shape=(self.dim, "ntargets"), order="C"),
-                    lp.ValueArg("nsources", None),
-                    lp.ValueArg("ntargets", None),
-                ] + self.get_input_and_output_arguments()
+                self.get_src_tgt_arguments()
+                + self.get_input_and_output_arguments()
                 + gather_loopy_source_arguments(self.kernels))
 
         loopy_knl = lp.make_kernel(
                 "{[isrc,itgt,idim]: 0<=itgt<ntargets and 0<=isrc<nsources "
-                "and 0<=idim<%d}" % self.dim,
+                "and 0<=idim<dim}",
                 self.get_kernel_scaling_assignments()
-                +
-                [
-                    """
-                    for itgt, isrc
-                    for idim
-                    <> a[idim] = center[idim,itgt] - src[idim,isrc] {id=compute_a}
-                    <> b[idim] = tgt[idim,itgt] - center[idim,itgt] {id=compute_b}
-                    end
-                    """
-                ]
+                + ["for itgt, isrc"]
+                + [self.get_compute_a_and_b_vecs()]
                 + loopy_insns
                 + [
                     lp.Assignment(id=None,
@@ -174,6 +178,8 @@ class LayerPotentialBase(KernelComputation):
                 assumptions="nsources>=1 and ntargets>=1",
                 default_offset=lp.auto,
                 )
+
+        loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
 
         for where in ["compute_a", "compute_b"]:
             loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:"+where,
