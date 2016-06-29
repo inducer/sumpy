@@ -192,7 +192,7 @@ class KernelComputation(object):
         self.name = name or self.default_name
 
     def get_kernel_scaling_assignments(self):
-        from pymbolic.sympy_interface import SympyToPymbolicMapper
+        from pymbolic.interop.sympy import SympyToPymbolicMapper
         sympy_conv = SympyToPymbolicMapper()
 
         import loopy as lp

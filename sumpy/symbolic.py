@@ -30,7 +30,7 @@ from six.moves import zip
 import sympy as sp
 import numpy as np
 from pymbolic.mapper import IdentityMapper as IdentityMapperBase
-from pymbolic.sympy_interface import PymbolicToSympyMapper
+from pymbolic.interop.sympy import PymbolicToSympyMapper
 import pymbolic.primitives as prim
 
 import logging
@@ -111,7 +111,7 @@ def _get_assignments_in_maxima(assignments, prefix=""):
 
     from pymbolic.maxima import MaximaStringifyMapper
     mstr = MaximaStringifyMapper()
-    from pymbolic.sympy_interface import SympyToPymbolicMapper
+    from pymbolic.interop.sympy import SympyToPymbolicMapper
     s2p = SympyToPymbolicMapper()
     dkill = _DerivativeKiller()
 

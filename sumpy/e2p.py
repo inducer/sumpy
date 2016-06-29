@@ -104,7 +104,7 @@ class E2PBase(KernelCacheWrapper):
                 complex_dtype=np.complex128  # FIXME
                 )
 
-        from pymbolic.sympy_interface import SympyToPymbolicMapper
+        from pymbolic.interop.sympy import SympyToPymbolicMapper
         sympy_conv = SympyToPymbolicMapper()
         loopy_insns.append(
                 lp.Assignment(id=None,
