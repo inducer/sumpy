@@ -556,11 +556,10 @@ class StressletKernel(ExpressionKernel):
                     ),
                 KernelArgument(
                         loopy_arg=lp.GlobalArg(self.stresslet_vector_name,
-                        None,
-                        shape=(self.dim, "nsources"),
-                        dim_tags="sep,C"),
-                    )
-                    ]
+                            None,
+                            shape=(self.dim, "nsources"),
+                            dim_tags="sep,C"))
+                ]
 
     def transform_to_code(self, expr):
         from sumpy.codegen import VectorComponentRewriter
