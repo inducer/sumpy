@@ -153,10 +153,9 @@ class E2EFromCSR(E2EBase):
                 ["""
                 for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
-                    for idim
-                        <> tgt_center[idim] = centers[idim, tgt_ibox] \
-                                {id=fetch_tgt_center}
-                    end
+
+                    <> tgt_center[idim] = centers[idim, tgt_ibox] \
+                            {id=fetch_tgt_center}
 
                     <> isrc_start = src_box_starts[itgt_box]
                     <> isrc_stop = src_box_starts[itgt_box+1]
@@ -164,11 +163,10 @@ class E2EFromCSR(E2EBase):
                     for isrc_box
                         <> src_ibox = src_box_lists[isrc_box] \
                                 {id=read_src_ibox}
-                        for idim
-                            <> src_center[idim] = centers[idim, src_ibox] \
-                                    {id=fetch_src_center}
-                            <> d[idim] = tgt_center[idim] - src_center[idim]
-                        end
+
+                        <> src_center[idim] = centers[idim, src_ibox] \
+                                {id=fetch_src_center}
+                        <> d[idim] = tgt_center[idim] - src_center[idim]
 
                         """] + ["""
                         <> src_coeff{coeffidx} = \
@@ -262,10 +260,8 @@ class E2EFromChildren(E2EBase):
                 for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
 
-                    for idim
-                        <> tgt_center[idim] = centers[idim, tgt_ibox] \
-                            {id=fetch_tgt_center}
-                    end
+                    <> tgt_center[idim] = centers[idim, tgt_ibox] \
+                        {id=fetch_tgt_center}
 
                     for isrc_box
                         <> src_ibox = box_child_ids[isrc_box,tgt_ibox] \
@@ -273,11 +269,9 @@ class E2EFromChildren(E2EBase):
                         <> is_src_box_valid = src_ibox != 0
 
                         if is_src_box_valid
-                            for idim
-                                <> src_center[idim] = centers[idim, src_ibox] \
-                                    {id=fetch_src_center}
-                                <> d[idim] = tgt_center[idim] - src_center[idim]
-                            end
+                            <> src_center[idim] = centers[idim, src_ibox] \
+                                {id=fetch_src_center}
+                            <> d[idim] = tgt_center[idim] - src_center[idim]
 
                             """] + ["""
                             <> src_coeff{i} = \
@@ -367,22 +361,15 @@ class E2EFromParent(E2EBase):
                 for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
 
-                    for idim
-                        <> tgt_center[idim] = centers[idim, tgt_ibox] \
-                            {id=fetch_tgt_center}
-                    end
+                    <> tgt_center[idim] = centers[idim, tgt_ibox] \
+                        {id=fetch_tgt_center}
 
                     <> src_ibox = box_parent_ids[tgt_ibox] \
                         {id=read_src_ibox}
 
-                    for idim
-                        <> src_center[idim] = centers[idim, src_ibox] \
-                            {id=fetch_src_center}
-                    end
-
-                    for idim
-                        <> d[idim] = tgt_center[idim] - src_center[idim]
-                    end
+                    <> src_center[idim] = centers[idim, src_ibox] \
+                        {id=fetch_src_center}
+                    <> d[idim] = tgt_center[idim] - src_center[idim]
 
                     """] + ["""
                     <> src_coeff{i} = \

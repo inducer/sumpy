@@ -133,10 +133,8 @@ class P2P(P2PBase):
                 + loopy_insns
                 + [
                     """
-                    for idim
                     <> d[idim] = targets[idim,itgt] - sources[idim,isrc] \
                             {id=compute_d}
-                    end
                     """
                 ]+[
                     lp.Assignment(id=None,
@@ -254,30 +252,24 @@ class P2PFromCSR(P2PBase):
 
                         for itgt
                             for isrc
-                                for idim
-                                    <> d[idim] = \
-                                            targets[idim,itgt] - sources[idim,isrc] \
-                                            {id=compute_d}
-                                end
-                """
-            ] + loopy_insns + [
-                lp.Assignment(id=None,
-                    assignee="pair_result_%d" % i, expression=expr,
-                    temp_var_type=lp.auto)
-                for i, expr in enumerate(exprs)
-            ] + [
-                """
+                                <> d[idim] = \
+                                        targets[idim,itgt] - sources[idim,isrc] \
+                                        {id=compute_d}
+                                """
+                                ] + loopy_insns + [
+                                lp.Assignment(id=None,
+                                    assignee="pair_result_%d" % i, expression=expr,
+                                    temp_var_type=lp.auto)
+                                for i, expr in enumerate(exprs)
+                                ] + [
+                                """
                             end
-                """
-            ] + [
-                """
-                result[KNLIDX, itgt] = result[KNLIDX, itgt] + \
-                        knl_KNLIDX_scaling \
-                        * simul_reduce(sum, isrc, pair_result_KNLIDX)
-                """.replace("KNLIDX", str(iknl))
-                for iknl in range(len(exprs))
-            ] + [
-                """
+                            """] + ["""
+                            result[KNLIDX, itgt] = result[KNLIDX, itgt] + \
+                                knl_KNLIDX_scaling \
+                                * simul_reduce(sum, isrc, pair_result_KNLIDX)
+                            """.replace("KNLIDX", str(iknl))
+                            for iknl in range(len(exprs))] + ["""
                         end
                     end
                 end

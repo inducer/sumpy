@@ -95,10 +95,8 @@ class LayerPotentialBase(KernelComputation):
 
     def get_compute_a_and_b_vecs(self):
         return """
-            for idim
             <> a[idim] = center[idim,itgt] - src[idim,isrc] {id=compute_a}
             <> b[idim] = tgt[idim,itgt] - center[idim,itgt] {id=compute_b}
-            end
             """
 
     def get_src_tgt_arguments(self):

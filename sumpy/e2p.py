@@ -140,19 +140,16 @@ class E2PFromSingleBox(E2PBase):
                     <> tgt_ibox = target_boxes[itgt_box]
                     <> itgt_start = box_target_starts[tgt_ibox]
                     <> itgt_end = itgt_start+box_target_counts_nonchild[tgt_ibox]
-                    for idim
-                        <> center[idim] = centers[idim, tgt_ibox] {id=fetch_center}
-                    end
+
+                    <> center[idim] = centers[idim, tgt_ibox] {id=fetch_center}
 
                     """] + ["""
                     <> coeff{coeffidx} = expansions[tgt_ibox, {coeffidx}]
                     """.format(coeffidx=i) for i in range(ncoeffs)] + ["""
 
                     for itgt
-                        for idim
-                            <> b[idim] = targets[idim, itgt] - center[idim] \
-                                    {id=compute_b}
-                        end
+                        <> b[idim] = targets[idim, itgt] - center[idim] \
+                                {id=compute_b}
 
                         """] + loopy_insns + ["""
 
@@ -237,9 +234,7 @@ class E2PFromCSR(E2PBase):
                     <> itgt_end = itgt_start+box_target_counts_nonchild[tgt_ibox]
 
                     for itgt
-                        for idim
-                            <> tgt[idim] = targets[idim,itgt] {id=fetch_tgt}
-                        end
+                        <> tgt[idim] = targets[idim,itgt] {id=fetch_tgt}
 
                         <> isrc_box_start = source_box_starts[itgt_box]
                         <> isrc_box_end = source_box_starts[itgt_box+1]
@@ -250,11 +245,9 @@ class E2PFromCSR(E2PBase):
                             <> coeff{coeffidx} = expansions[src_ibox, {coeffidx}]
                             """.format(coeffidx=i) for i in range(ncoeffs)] + ["""
 
-                            for idim
-                                <> center[idim] = centers[idim, src_ibox] \
-                                        {id=fetch_center}
-                                <> b[idim] = tgt[idim] - center[idim]
-                            end
+                            <> center[idim] = centers[idim, src_ibox] \
+                                    {id=fetch_center}
+                            <> b[idim] = tgt[idim] - center[idim]
 
                             """] + loopy_insns + ["""
                         end

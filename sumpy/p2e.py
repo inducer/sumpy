@@ -123,15 +123,11 @@ class P2EFromSingleBox(P2EBase):
                     <> isrc_start = box_source_starts[src_ibox]
                     <> isrc_end = isrc_start+box_source_counts_nonchild[src_ibox]
 
-                    for idim
-                        <> center[idim] = centers[idim, src_ibox] {id=fetch_center}
-                    end
+                    <> center[idim] = centers[idim, src_ibox] {id=fetch_center}
 
                     for isrc
-                        for idim
-                            <> a[idim] = center[idim] - sources[idim, isrc] \
-                                    {id=compute_a}
-                        end
+                        <> a[idim] = center[idim] - sources[idim, isrc] \
+                                {id=compute_a}
 
                         <> strength = strengths[isrc]
                         """] + self.get_loopy_instructions() + ["""
@@ -230,9 +226,7 @@ class P2EFromCSR(P2EBase):
                 for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
 
-                    for idim
-                        <> center[idim] = centers[idim, tgt_ibox] {id=fetch_center}
-                    end
+                    <> center[idim] = centers[idim, tgt_ibox] {id=fetch_center}
 
                     <> isrc_box_start = source_box_starts[itgt_box]
                     <> isrc_box_stop = source_box_starts[itgt_box+1]
@@ -243,10 +237,8 @@ class P2EFromCSR(P2EBase):
                         <> isrc_end = isrc_start+box_source_counts_nonchild[src_ibox]
 
                         for isrc
-                            for idim
-                                <> a[idim] = center[idim] - sources[idim, isrc] \
-                                        {id=compute_a}
-                            end
+                            <> a[idim] = center[idim] - sources[idim, isrc] \
+                                    {id=compute_a}
 
                             <> strength = strengths[isrc]
                             """] + self.get_loopy_instructions() + ["""
