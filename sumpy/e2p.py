@@ -123,7 +123,7 @@ class E2PBase(KernelCacheWrapper):
 # {{{ E2P to single box (L2P, likely)
 
 class E2PFromSingleBox(E2PBase):
-    default_name = "e2p_from_local"
+    default_name = "e2p_from_single_box"
 
     def get_kernel(self):
         ncoeffs = len(self.expansion)
@@ -135,18 +135,34 @@ class E2PFromSingleBox(E2PBase):
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
                     "{[itgt,idim]: itgt_start<=itgt<itgt_end and 0<=idim<dim}",
                     ],
-                loopy_insns
-                + ["""
+                ["""
+                for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
                     <> itgt_start = box_target_starts[tgt_ibox]
                     <> itgt_end = itgt_start+box_target_counts_nonchild[tgt_ibox]
-                    <> center[idim] = centers[idim, tgt_ibox] {id=fetch_center}
-                    <> b[idim] = targets[idim, itgt] - center[idim] \
-                            {id=compute_b}
-                    <> coeff${COEFFIDX} = expansions[tgt_ibox, ${COEFFIDX}]
-                    result[${RESULTIDX},itgt] = \
-                            kernel_scaling * result_${RESULTIDX}_p \
-                            {id_prefix=write_result}
+                    for idim
+                        <> center[idim] = centers[idim, tgt_ibox] {id=fetch_center}
+                    end
+
+                    """] + ["""
+                    <> coeff{coeffidx} = expansions[tgt_ibox, {coeffidx}]
+                    """.format(coeffidx=i) for i in range(ncoeffs)] + ["""
+
+                    for itgt
+                        for idim
+                            <> b[idim] = targets[idim, itgt] - center[idim] \
+                                    {id=compute_b}
+                        end
+
+                        """] + loopy_insns + ["""
+
+                        result[{resultidx},itgt] = \
+                                kernel_scaling * result_{resultidx}_p \
+                                {{id_prefix=write_result}}
+                        """.format(resultidx=i) for i in range(len(result_names))
+                        ] + ["""
+                    end
+                end
                 """],
                 [
                     lp.GlobalArg("targets", None, shape=(self.dim, "ntargets"),
@@ -161,14 +177,13 @@ class E2PFromSingleBox(E2PBase):
                     lp.ValueArg("ntargets", np.int32),
                     "..."
                 ] + [arg.loopy_arg for arg in self.expansion.get_args()],
-                name=self.name, assumptions="ntgt_boxes>=1",
-                defines=dict(
-                    dim=self.dim,
-                    COEFFIDX=[str(i) for i in range(ncoeffs)],
-                    RESULTIDX=[str(i) for i in range(len(result_names))],
-                    nresults=len(result_names),
-                    ),
+                name=self.name,
+                assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_result*)")
+
+        loopy_knl = lp.fix_parameters(loopy_knl,
+                dim=self.dim,
+                nresults=len(result_names))
 
         loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:compute_b",
                 tags={"idim": "unr"})
