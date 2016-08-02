@@ -228,17 +228,18 @@ class P2PFromCSR(P2PBase):
 
         from sumpy.tools import gather_loopy_source_arguments
         loopy_knl = lp.make_kernel(
-                [
-                    "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
-                    "{[isrc_box]: isrc_box_start<=isrc_box<isrc_box_end}",
-                    "{[itgt,isrc,idim]: \
-                            itgt_start<=itgt<itgt_end and \
-                            isrc_start<=isrc<isrc_end and \
-                            0<=idim<dim }",
-                    ],
-                self.get_kernel_scaling_assignments()
-                + loopy_insns + [
-                    """
+            [
+                "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
+                "{[isrc_box]: isrc_box_start<=isrc_box<isrc_box_end}",
+                "{[itgt,isrc,idim]: \
+                        itgt_start<=itgt<itgt_end and \
+                        isrc_start<=isrc<isrc_end and \
+                        0<=idim<dim }",
+                ],
+            self.get_kernel_scaling_assignments()
+            + [
+                """
+                for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
                     <> itgt_start = box_target_starts[tgt_ibox]
                     <> itgt_end = itgt_start+box_target_counts_nonchild[tgt_ibox]
@@ -246,44 +247,59 @@ class P2PFromCSR(P2PBase):
                     <> isrc_box_start = source_box_starts[itgt_box]
                     <> isrc_box_end = source_box_starts[itgt_box+1]
 
-                    <> src_ibox = source_box_lists[isrc_box]
-                    <> isrc_start = box_source_starts[src_ibox]
-                    <> isrc_end = isrc_start+box_source_counts_nonchild[src_ibox]
+                    for isrc_box
+                        <> src_ibox = source_box_lists[isrc_box]
+                        <> isrc_start = box_source_starts[src_ibox]
+                        <> isrc_end = isrc_start+box_source_counts_nonchild[src_ibox]
 
-                    <> d[idim] = targets[idim,itgt] - sources[idim,isrc] \
-                            {id=compute_d}
-                    """
-                ] + [
-                    """
-                    result[KNLIDX, itgt] = result[KNLIDX, itgt] + \
-                            knl_KNLIDX_scaling \
-                            * simul_reduce(sum, isrc, pair_result_KNLIDX)
-                    """.replace("KNLIDX", str(iknl))
-                    for iknl in range(len(exprs))
-                ]+[
-                    lp.Assignment(id=None,
-                        assignee="pair_result_%d" % i, expression=expr,
-                        temp_var_type=lp.auto)
-                    for i, expr in enumerate(exprs)
-                ],
-                [
-                    lp.GlobalArg("box_target_starts,box_target_counts_nonchild,"
-                        "box_source_starts,box_source_counts_nonchild,",
-                        None, shape=None),
-                    lp.GlobalArg("source_box_starts, source_box_lists,",
-                        None, shape=None),
-                    lp.GlobalArg("strength", None, shape="nstrengths,nsources"),
-                    lp.GlobalArg("result", None,
-                        shape="nkernels,ntargets", dim_tags="sep,c"),
-                    lp.GlobalArg("targets", None,
-                        shape="dim,ntargets", dim_tags="sep,c"),
-                    lp.GlobalArg("sources", None,
-                        shape="dim,nsources", dim_tags="sep,c"),
-                    lp.ValueArg("nsources", np.int32),
-                    lp.ValueArg("ntargets", np.int32),
-                    "...",
-                ] + gather_loopy_source_arguments(self.kernels),
-                name=self.name, assumptions="ntgt_boxes>=1")
+                        for itgt
+                            for isrc
+                                for idim
+                                    <> d[idim] = \
+                                            targets[idim,itgt] - sources[idim,isrc] \
+                                            {id=compute_d}
+                                end
+                """
+            ] + loopy_insns + [
+                lp.Assignment(id=None,
+                    assignee="pair_result_%d" % i, expression=expr,
+                    temp_var_type=lp.auto)
+                for i, expr in enumerate(exprs)
+            ] + [
+                """
+                            end
+                """
+            ] + [
+                """
+                result[KNLIDX, itgt] = result[KNLIDX, itgt] + \
+                        knl_KNLIDX_scaling \
+                        * simul_reduce(sum, isrc, pair_result_KNLIDX)
+                """.replace("KNLIDX", str(iknl))
+                for iknl in range(len(exprs))
+            ] + [
+                """
+                        end
+                    end
+                end
+                """],
+            [
+                lp.GlobalArg("box_target_starts,box_target_counts_nonchild,"
+                    "box_source_starts,box_source_counts_nonchild,",
+                    None, shape=None),
+                lp.GlobalArg("source_box_starts, source_box_lists,",
+                    None, shape=None),
+                lp.GlobalArg("strength", None, shape="nstrengths,nsources"),
+                lp.GlobalArg("result", None,
+                    shape="nkernels,ntargets", dim_tags="sep,c"),
+                lp.GlobalArg("targets", None,
+                    shape="dim,ntargets", dim_tags="sep,c"),
+                lp.GlobalArg("sources", None,
+                    shape="dim,nsources", dim_tags="sep,c"),
+                lp.ValueArg("nsources", np.int32),
+                lp.ValueArg("ntargets", np.int32),
+                "...",
+            ] + gather_loopy_source_arguments(self.kernels),
+            name=self.name, assumptions="ntgt_boxes>=1")
 
         loopy_knl = lp.fix_parameters(
                 loopy_knl,
