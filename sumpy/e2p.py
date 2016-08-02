@@ -215,25 +215,41 @@ class E2PFromCSR(E2PBase):
                     "{[isrc_box]: isrc_box_start<=isrc_box<isrc_box_end }",
                     "{[idim]: 0<=idim<dim}",
                     ],
-                loopy_insns
-                + ["""
+                ["""
+                for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
                     <> itgt_start = box_target_starts[tgt_ibox]
                     <> itgt_end = itgt_start+box_target_counts_nonchild[tgt_ibox]
 
-                    <> tgt[idim] = targets[idim,itgt] {id=fetch_tgt}
+                    for itgt
+                        for idim
+                            <> tgt[idim] = targets[idim,itgt] {id=fetch_tgt}
+                        end
 
-                    <> isrc_box_start = source_box_starts[itgt_box]
-                    <> isrc_box_end = source_box_starts[itgt_box+1]
+                        <> isrc_box_start = source_box_starts[itgt_box]
+                        <> isrc_box_end = source_box_starts[itgt_box+1]
 
-                    <> src_ibox = source_box_lists[isrc_box]
-                    <> coeff${COEFFIDX} = expansions[src_ibox, ${COEFFIDX}]
-                    <> center[idim] = centers[idim, src_ibox] {id=fetch_center}
+                        for isrc_box
+                            <> src_ibox = source_box_lists[isrc_box]
+                            """] + ["""
+                            <> coeff{coeffidx} = expansions[src_ibox, {coeffidx}]
+                            """.format(coeffidx=i) for i in range(ncoeffs)] + ["""
 
-                    <> b[idim] = tgt[idim] - center[idim]
-                    result[${RESULTIDX}, itgt] = \
-                            kernel_scaling * simul_reduce(sum, isrc_box, \
-                            result_${RESULTIDX}_p) {id_prefix=write_result}
+                            for idim
+                                <> center[idim] = centers[idim, src_ibox] \
+                                        {id=fetch_center}
+                                <> b[idim] = tgt[idim] - center[idim]
+                            end
+
+                            """] + loopy_insns + ["""
+                        end
+                        """] + ["""
+                        result[{resultidx}, itgt] = \
+                                kernel_scaling * simul_reduce(sum, isrc_box,
+                                result_{resultidx}_p) {{id_prefix=write_result}}
+                        """.format(resultidx=i) for i in range(len(result_names))] + ["""
+                    end
+                end
                 """],
                 [
                     lp.GlobalArg("targets", None, shape=(self.dim, "ntargets"),
@@ -251,14 +267,13 @@ class E2PFromCSR(E2PBase):
                         None, shape=None),
                     "..."
                 ] + [arg.loopy_arg for arg in self.expansion.get_args()],
-                name=self.name, assumptions="ntgt_boxes>=1",
-                defines=dict(
-                    dim=self.dim,
-                    COEFFIDX=[str(i) for i in range(ncoeffs)],
-                    RESULTIDX=[str(i) for i in range(len(result_names))],
-                    nresults=len(result_names),
-                    ),
+                name=self.name,
+                assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_result*)")
+
+        loopy_knl = lp.fix_parameters(loopy_knl,
+                dim=self.dim,
+                nresults=len(result_names))
 
         loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_tgt",
                 tags={"idim": "unr"})
