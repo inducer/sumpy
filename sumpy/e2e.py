@@ -150,28 +150,42 @@ class E2EFromCSR(E2EBase):
                     "{[isrc_box]: isrc_start<=isrc_box<isrc_stop}",
                     "{[idim]: 0<=idim<dim}",
                     ],
-                self.get_translation_loopy_insns()
-                + ["""
+                ["""
+                for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
-                    <> tgt_center[idim] = centers[idim, tgt_ibox] \
-                            {id=fetch_tgt_center}
+                    for idim
+                        <> tgt_center[idim] = centers[idim, tgt_ibox] \
+                                {id=fetch_tgt_center}
+                    end
 
                     <> isrc_start = src_box_starts[itgt_box]
                     <> isrc_stop = src_box_starts[itgt_box+1]
 
-                    <> src_ibox = src_box_lists[isrc_box] \
-                            {id=read_src_ibox}
-                    <> src_center[idim] = centers[idim, src_ibox] \
-                            {id=fetch_src_center}
-                    <> d[idim] = tgt_center[idim] - src_center[idim]
-                    <> src_coeff${SRC_COEFFIDX} = \
-                        src_expansions[src_ibox, ${SRC_COEFFIDX}] \
-                        {dep=read_src_ibox}
+                    for isrc_box
+                        <> src_ibox = src_box_lists[isrc_box] \
+                                {id=read_src_ibox}
+                        for idim
+                            <> src_center[idim] = centers[idim, src_ibox] \
+                                    {id=fetch_src_center}
+                            <> d[idim] = tgt_center[idim] - src_center[idim]
+                        end
 
-                    tgt_expansions[tgt_ibox, ${TGT_COEFFIDX}] = \
-                            simul_reduce(sum, isrc_box, coeff${TGT_COEFFIDX}) \
-                            {id_prefix=write_expn}
-                    """],
+                        """] + ["""
+                        <> src_coeff{coeffidx} = \
+                            src_expansions[src_ibox, {coeffidx}] \
+                            {{dep=read_src_ibox}}
+                        """.format(coeffidx=i) for i in range(ncoeff_src)] + [
+
+                        ] + self.get_translation_loopy_insns() + ["""
+                    end
+
+                    """] + ["""
+                    tgt_expansions[tgt_ibox, {coeffidx}] = \
+                            simul_reduce(sum, isrc_box, coeff{coeffidx}) \
+                            {{id_prefix=write_expn}}
+                    """.format(coeffidx=i) for i in range(ncoeff_tgt)] + ["""
+                end
+                """],
                 [
                     lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
                     lp.GlobalArg("src_box_starts, src_box_lists",
@@ -183,13 +197,11 @@ class E2EFromCSR(E2EBase):
                         shape=("nboxes", ncoeff_tgt)),
                     "..."
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
-                name=self.name, assumptions="ntgt_boxes>=1",
-                defines=dict(
-                    dim=self.dim,
-                    SRC_COEFFIDX=[str(i) for i in range(ncoeff_src)],
-                    TGT_COEFFIDX=[str(i) for i in range(ncoeff_tgt)],
-                    ),
+                name=self.name,
+                assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)")
+
+        loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
 
         for expn in [self.src_expansion, self.tgt_expansion]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
