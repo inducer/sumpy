@@ -120,8 +120,8 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
 
     # }}}
 
-    from pyopencl.clrandom import RanluxGenerator
-    rng = RanluxGenerator(queue, seed=20)
+    from pyopencl.clrandom import PhiloxGenerator
+    rng = PhiloxGenerator(ctx)
     weights = rng.uniform(queue, nsources, dtype=np.float64)
 
     logger.info("computing direct (reference) result")
