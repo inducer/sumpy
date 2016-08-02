@@ -117,19 +117,32 @@ class P2EFromSingleBox(P2EBase):
                     "{[isrc_box]: 0<=isrc_box<nsrc_boxes}",
                     "{[isrc,idim]: isrc_start<=isrc<isrc_end and 0<=idim<dim}",
                     ],
-                self.get_loopy_instructions()
-                + ["""
+                ["""
+                for isrc_box
                     <> src_ibox = source_boxes[isrc_box]
                     <> isrc_start = box_source_starts[src_ibox]
                     <> isrc_end = isrc_start+box_source_counts_nonchild[src_ibox]
-                    <> center[idim] = centers[idim, src_ibox] {id=fetch_center}
-                    <> a[idim] = center[idim] - sources[idim, isrc] \
-                            {id=compute_a}
-                    <> strength = strengths[isrc]
-                    expansions[src_ibox, ${COEFFIDX}] = \
-                            simul_reduce(sum, isrc, strength*coeff${COEFFIDX}) \
-                            {id_prefix=write_expn}
-                    """],
+
+                    for idim
+                        <> center[idim] = centers[idim, src_ibox] {id=fetch_center}
+                    end
+
+                    for isrc
+                        for idim
+                            <> a[idim] = center[idim] - sources[idim, isrc] \
+                                    {id=compute_a}
+                        end
+
+                        <> strength = strengths[isrc]
+                        """] + self.get_loopy_instructions() + ["""
+                    end
+                    """] + ["""
+                    expansions[src_ibox, {coeffidx}] = \
+                            simul_reduce(sum, isrc, strength*coeff{coeffidx}) \
+                            {{id_prefix=write_expn}}
+                    """.format(coeffidx=i) for i in range(ncoeffs)] + ["""
+                end
+                """],
                 [
                     lp.GlobalArg("sources", None, shape=(self.dim, "nsources"),
                         dim_tags="sep,c"),
@@ -143,12 +156,11 @@ class P2EFromSingleBox(P2EBase):
                     lp.ValueArg("nsources", np.int32),
                     "..."
                 ] + gather_loopy_source_arguments([self.expansion]),
-                name=self.name, assumptions="nsrc_boxes>=1",
-                defines=dict(
-                    dim=self.dim,
-                    COEFFIDX=[str(i) for i in range(ncoeffs)]
-                    ),
+                name=self.name,
+                assumptions="nsrc_boxes>=1",
                 silenced_warnings="write_race(write_expn*)")
+
+        loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
 
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
         loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_center",
