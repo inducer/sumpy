@@ -155,7 +155,6 @@ class E2EFromCSR(E2EBase):
                     <> tgt_ibox = target_boxes[itgt_box]
 
                     <> tgt_center[idim] = centers[idim, tgt_ibox] \
-                            {id=fetch_tgt_center}
 
                     <> isrc_start = src_box_starts[itgt_box]
                     <> isrc_stop = src_box_starts[itgt_box+1]
@@ -164,9 +163,9 @@ class E2EFromCSR(E2EBase):
                         <> src_ibox = src_box_lists[isrc_box] \
                                 {id=read_src_ibox}
 
-                        <> src_center[idim] = centers[idim, src_ibox] \
-                                {id=fetch_src_center}
-                        <> d[idim] = tgt_center[idim] - src_center[idim]
+                        <> src_center[idim] = centers[idim, src_ibox] {dup=idim}
+                        <> d[idim] = tgt_center[idim] - src_center[idim] \
+                            {dup=idim}
 
                         """] + ["""
                         <> src_coeff{coeffidx} = \
@@ -204,8 +203,7 @@ class E2EFromCSR(E2EBase):
         for expn in [self.src_expansion, self.tgt_expansion]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_tgt_center",
-                tags={"idim": "unr"})
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
 
         return loopy_knl
@@ -261,7 +259,6 @@ class E2EFromChildren(E2EBase):
                     <> tgt_ibox = target_boxes[itgt_box]
 
                     <> tgt_center[idim] = centers[idim, tgt_ibox] \
-                        {id=fetch_tgt_center}
 
                     for isrc_box
                         <> src_ibox = box_child_ids[isrc_box,tgt_ibox] \
@@ -269,9 +266,9 @@ class E2EFromChildren(E2EBase):
                         <> is_src_box_valid = src_ibox != 0
 
                         if is_src_box_valid
-                            <> src_center[idim] = centers[idim, src_ibox] \
-                                {id=fetch_src_center}
-                            <> d[idim] = tgt_center[idim] - src_center[idim]
+                            <> src_center[idim] = centers[idim, src_ibox] {dup=idim}
+                            <> d[idim] = tgt_center[idim] - src_center[idim] \
+                                    {dup=idim}
 
                             """] + ["""
                             <> src_coeff{i} = \
@@ -311,9 +308,7 @@ class E2EFromChildren(E2EBase):
         for expn in [self.src_expansion, self.tgt_expansion]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_tgt_center",
-                tags={"idim": "unr"})
-        loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         return loopy_knl
 
@@ -362,14 +357,12 @@ class E2EFromParent(E2EBase):
                     <> tgt_ibox = target_boxes[itgt_box]
 
                     <> tgt_center[idim] = centers[idim, tgt_ibox] \
-                        {id=fetch_tgt_center}
 
                     <> src_ibox = box_parent_ids[tgt_ibox] \
                         {id=read_src_ibox}
 
-                    <> src_center[idim] = centers[idim, src_ibox] \
-                        {id=fetch_src_center}
-                    <> d[idim] = tgt_center[idim] - src_center[idim]
+                    <> src_center[idim] = centers[idim, src_ibox] {dup=idim}
+                    <> d[idim] = tgt_center[idim] - src_center[idim] {dup=idim}
 
                     """] + ["""
                     <> src_coeff{i} = \
@@ -404,9 +397,7 @@ class E2EFromParent(E2EBase):
         for expn in [self.src_expansion, self.tgt_expansion]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_tgt_center",
-                tags={"idim": "unr"})
-        loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         return loopy_knl
 

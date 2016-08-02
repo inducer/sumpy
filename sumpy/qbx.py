@@ -95,8 +95,8 @@ class LayerPotentialBase(KernelComputation):
 
     def get_compute_a_and_b_vecs(self):
         return """
-            <> a[idim] = center[idim,itgt] - src[idim,isrc] {id=compute_a}
-            <> b[idim] = tgt[idim,itgt] - center[idim,itgt] {id=compute_b}
+            <> a[idim] = center[idim,itgt] - src[idim,isrc] {dup=idim}
+            <> b[idim] = tgt[idim,itgt] - center[idim,itgt] {dup=idim}
             """
 
     def get_src_tgt_arguments(self):
@@ -179,9 +179,7 @@ class LayerPotentialBase(KernelComputation):
 
         loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
 
-        for where in ["compute_a", "compute_b"]:
-            loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:"+where,
-                    tags={"idim": "unr"})
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         for expn in self.expansions:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)

@@ -126,8 +126,7 @@ class P2EFromSingleBox(P2EBase):
                     <> center[idim] = centers[idim, src_ibox] {id=fetch_center}
 
                     for isrc
-                        <> a[idim] = center[idim] - sources[idim, isrc] \
-                                {id=compute_a}
+                        <> a[idim] = center[idim] - sources[idim, isrc] {dup=idim}
 
                         <> strength = strengths[isrc]
                         """] + self.get_loopy_instructions() + ["""
@@ -159,9 +158,7 @@ class P2EFromSingleBox(P2EBase):
         loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
 
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_center",
-                tags={"idim": "unr"})
-        loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         return loopy_knl
 
@@ -238,7 +235,7 @@ class P2EFromCSR(P2EBase):
 
                         for isrc
                             <> a[idim] = center[idim] - sources[idim, isrc] \
-                                    {id=compute_a}
+                                    {dup=idim}
 
                             <> strength = strengths[isrc]
                             """] + self.get_loopy_instructions() + ["""
@@ -259,9 +256,7 @@ class P2EFromCSR(P2EBase):
         loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
 
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_center",
-                tags={"idim": "unr"})
-        loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         return loopy_knl
 

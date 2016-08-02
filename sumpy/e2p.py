@@ -148,8 +148,7 @@ class E2PFromSingleBox(E2PBase):
                     """.format(coeffidx=i) for i in range(ncoeffs)] + ["""
 
                     for itgt
-                        <> b[idim] = targets[idim, itgt] - center[idim] \
-                                {id=compute_b}
+                        <> b[idim] = targets[idim, itgt] - center[idim] {dup=idim}
 
                         """] + loopy_insns + ["""
 
@@ -182,8 +181,7 @@ class E2PFromSingleBox(E2PBase):
                 dim=self.dim,
                 nresults=len(result_names))
 
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:compute_b",
-                tags={"idim": "unr"})
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
@@ -234,7 +232,7 @@ class E2PFromCSR(E2PBase):
                     <> itgt_end = itgt_start+box_target_counts_nonchild[tgt_ibox]
 
                     for itgt
-                        <> tgt[idim] = targets[idim,itgt] {id=fetch_tgt}
+                        <> tgt[idim] = targets[idim,itgt]
 
                         <> isrc_box_start = source_box_starts[itgt_box]
                         <> isrc_box_end = source_box_starts[itgt_box+1]
@@ -245,9 +243,8 @@ class E2PFromCSR(E2PBase):
                             <> coeff{coeffidx} = expansions[src_ibox, {coeffidx}]
                             """.format(coeffidx=i) for i in range(ncoeffs)] + ["""
 
-                            <> center[idim] = centers[idim, src_ibox] \
-                                    {id=fetch_center}
-                            <> b[idim] = tgt[idim] - center[idim]
+                            <> center[idim] = centers[idim, src_ibox] {dup=idim}
+                            <> b[idim] = tgt[idim] - center[idim] {dup=idim}
 
                             """] + loopy_insns + ["""
                         end
@@ -283,10 +280,7 @@ class E2PFromCSR(E2PBase):
                 dim=self.dim,
                 nresults=len(result_names))
 
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_tgt",
-                tags={"idim": "unr"})
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_center",
-                tags={"idim": "unr"})
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.set_loop_priority(loopy_knl, "itgt_box,itgt,isrc_box")
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
 
