@@ -31,7 +31,7 @@ import sympy as sp
 from pytools import memoize_method
 from pymbolic import parse, var
 
-from sumpy.tools import KernelComputation
+from sumpy.tools import KernelComputation, KernelCacheWrapper
 
 import logging
 logger = logging.getLogger(__name__)
@@ -78,7 +78,7 @@ def expand(expansion_nr, sac, expansion, avec, bvec):
 
 # {{{ base class
 
-class LayerPotentialBase(KernelComputation):
+class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
     def __init__(self, ctx, expansions, strength_usage=None,
             value_dtypes=None,
             options=[], name="layerpot", device=None):
@@ -88,6 +88,10 @@ class LayerPotentialBase(KernelComputation):
 
         from pytools import single_valued
         self.dim = single_valued(knl.dim for knl in self.expansions)
+
+    def get_cache_key(self):
+        return (type(self).__name__, tuple(self.kernels),
+                tuple(self.strength_usage), tuple(self.value_dtypes))
 
     @property
     def expansions(self):
@@ -175,6 +179,7 @@ class LayerPotentialBase(KernelComputation):
                 name=self.name,
                 assumptions="nsources>=1 and ntargets>=1",
                 default_offset=lp.auto,
+                silenced_warnings="write_race(write_lpot*)"
                 )
 
         loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
@@ -233,10 +238,11 @@ class LayerPotential(LayerPotentialBase):
     def get_result_store_instructions(self):
         return [
                 """
-                result_KNLIDX[itgt] = \
-                        knl_KNLIDX_scaling*simul_reduce(\
-                            sum, isrc, pair_result_KNLIDX)  {inames=itgt}
-                """.replace("KNLIDX", str(iknl))
+                result_{i}[itgt] = \
+                        knl_{i}_scaling*simul_reduce(
+                            sum, isrc, pair_result_{i}) \
+                                    {{id_prefix=write_lpot,inames=itgt}}
+                """.format(i=iknl)
                 for iknl in range(len(self.expansions))
                 ]
 
@@ -246,7 +252,7 @@ class LayerPotential(LayerPotentialBase):
             already multiplied in.
         """
 
-        knl = self.get_optimized_kernel()
+        knl = self.get_cached_optimized_kernel()
 
         for i, dens in enumerate(strengths):
             kwargs["strength_%d" % i] = dens
