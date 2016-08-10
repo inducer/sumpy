@@ -175,7 +175,8 @@ class E2PFromSingleBox(E2PBase):
                 ] + [arg.loopy_arg for arg in self.expansion.get_args()],
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
-                silenced_warnings="write_race(write_result*)")
+                silenced_warnings="write_race(write_result*)",
+                default_offset=lp.auto)
 
         loopy_knl = lp.fix_parameters(loopy_knl,
                 dim=self.dim,
@@ -269,12 +270,13 @@ class E2PFromCSR(E2PBase):
                     lp.GlobalArg("result", None, shape="nresults,ntargets",
                         dim_tags="sep,C"),
                     lp.GlobalArg("source_box_starts, source_box_lists,",
-                        None, shape=None),
+                        None, shape=None, offset=lp.auto),
                     "..."
                 ] + [arg.loopy_arg for arg in self.expansion.get_args()],
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
-                silenced_warnings="write_race(write_result*)")
+                silenced_warnings="write_race(write_result*)",
+                default_offset=lp.auto)
 
         loopy_knl = lp.fix_parameters(loopy_knl,
                 dim=self.dim,

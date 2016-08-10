@@ -153,7 +153,8 @@ class P2EFromSingleBox(P2EBase):
                 ] + gather_loopy_source_arguments([self.expansion]),
                 name=self.name,
                 assumptions="nsrc_boxes>=1",
-                silenced_warnings="write_race(write_expn*)")
+                silenced_warnings="write_race(write_expn*)",
+                default_offset=lp.auto)
 
         loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
 
@@ -201,7 +202,7 @@ class P2EFromCSR(P2EBase):
                         dim_tags="sep,c"),
                     lp.GlobalArg("strengths", None, shape="nsources"),
                     lp.GlobalArg("source_box_starts,source_box_lists",
-                        None, shape=None),
+                        None, shape=None, offset=lp.auto),
                     lp.GlobalArg("box_source_starts,box_source_counts_nonchild",
                         None, shape=None),
                     lp.GlobalArg("centers", None, shape="dim, naligned_boxes"),
@@ -251,7 +252,8 @@ class P2EFromCSR(P2EBase):
                 arguments,
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
-                silenced_warnings="write_race(write_expn*)")
+                silenced_warnings="write_race(write_expn*)",
+                default_offset=lp.auto)
 
         loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
 

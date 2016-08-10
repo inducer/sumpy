@@ -142,15 +142,18 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
         elif knl.dim == 2 and issubclass(local_expn_class, H2DLocalExpansion):
             order_values = [10, 12]
 
+    from functools import partial
     for order in order_values:
-        mpole_expn = mpole_expn_class(knl, order)
-        local_expn = local_expn_class(knl, order)
         out_kernels = [knl]
 
         from sumpy.fmm import SumpyExpansionWranglerCodeContainer
         wcc = SumpyExpansionWranglerCodeContainer(
-                ctx, mpole_expn, local_expn, out_kernels)
+                ctx,
+                partial(mpole_expn_class, knl),
+                partial(local_expn_class, knl),
+                out_kernels)
         wrangler = wcc.get_wrangler(queue, tree, dtype,
+                level_to_order=lambda lev: order,
                 kernel_extra_kwargs=extra_kwargs)
 
         from boxtree.fmm import drive_fmm

@@ -186,7 +186,7 @@ class E2EFromCSR(E2EBase):
                 [
                     lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
                     lp.GlobalArg("src_box_starts, src_box_lists",
-                        None, shape=None, strides=(1,)),
+                        None, shape=None, strides=(1,), offset=lp.auto),
                     lp.ValueArg("aligned_nboxes,nboxes", np.int32),
                     lp.GlobalArg("src_expansions", None,
                         shape=("nboxes", ncoeff_src)),
@@ -196,7 +196,8 @@ class E2EFromCSR(E2EBase):
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
-                silenced_warnings="write_race(write_expn*)")
+                silenced_warnings="write_race(write_expn*)",
+                default_offset=lp.auto)
 
         loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
 
@@ -230,7 +231,8 @@ class E2EFromChildren(E2EBase):
     def get_kernel(self):
         if self.src_expansion is not self.tgt_expansion:
             raise RuntimeError("%s requires that the source "
-                    "and target expansion are the same object")
+                    "and target expansion are the same object"
+                    % type(self).__name__)
 
         ncoeffs = len(self.src_expansion)
 
