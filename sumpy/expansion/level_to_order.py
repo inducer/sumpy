@@ -55,7 +55,7 @@ def h2d_level_to_order_lookup(tree, helmholtz_k, epsilon):
     for level in range(tree.nlevels):
         nterms, ier = h2dterms(bbox_area / 2 ** level, helmholtz_k, epsilon)
         if ier != 0:
-            raise ValueError(
+            raise RuntimeError(
                 "h2dterms returned error code {ier}".format(ier=ier))
         orders[level] = nterms
 
@@ -81,7 +81,7 @@ def l2d_level_to_order_lookup(tree, epsilon):
     from pyfmmlib import l2dterms
     nterms, ier = l2dterms(epsilon)
     if ier != 0:
-        raise ValueError(
+        raise RuntimeError(
             "l2dterms returned error code {ier}".format(ier=ier))
 
     orders = np.empty(tree.nlevels, dtype=int)
