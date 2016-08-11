@@ -1,6 +1,4 @@
-from __future__ import division
-from __future__ import absolute_import
-from six.moves import zip
+from __future__ import division, absolute_import
 
 __copyright__ = "Copyright (C) 2013 Andreas Kloeckner"
 
@@ -30,6 +28,8 @@ __doc__ = """Integrates :mod:`boxtree` with :mod:`sumpy`.
 .. autoclass:: SumpyExpansionWrangler
 """
 
+
+from six.moves import zip
 
 import pyopencl as cl
 import pyopencl.array  # noqa
