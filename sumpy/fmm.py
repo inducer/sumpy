@@ -135,8 +135,9 @@ class SumpyExpansionWranglerCodeContainer(object):
 def _enqueue_barrier(queue, wait_for):
     if queue.device.platform.name == "Portable Computing Language":
         # pocl 0.13 and below crash on clEnqueueBarrierWithWaitList
+        evt = cl.enqueue_marker(queue, wait_for=wait_for)
         queue.finish()
-        return cl.enqueue_marker()
+        return evt
     else:
         return cl.enqueue_barrier(queue, wait_for=wait_for)
 
