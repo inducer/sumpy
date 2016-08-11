@@ -301,7 +301,8 @@ class SumpyExpansionWrangler(object):
                     self.level_to_order(source_level),
                     self.level_to_order(target_level))
 
-            evt, (mpoles_res,) = m2m(self.queue,
+            evt, (mpoles_res,) = m2m(
+                    self.queue,
                     expansions=mpoles,
                     target_boxes=source_parent_boxes[start:stop],
                     box_child_ids=self.tree.box_child_ids,
@@ -384,7 +385,7 @@ class SumpyExpansionWrangler(object):
         kwargs.update(self.box_target_list_kwargs())
 
         events = []
-        for lev in range(self.tree.nlevels):
+        for lev in [0]:
             start, stop = level_start_target_box_nrs[lev:lev+2]
             if start == stop:
                 continue
@@ -394,8 +395,8 @@ class SumpyExpansionWrangler(object):
             evt, pot_res = m2p(
                     self.level_queues[lev],
                     expansions=mpole_exps,
-                    target_boxes=target_boxes[start:stop],
-                    source_box_starts=source_box_starts[start:stop],
+                    target_boxes=target_boxes,
+                    source_box_starts=source_box_starts,
                     source_box_lists=source_box_lists,
                     centers=self.tree.box_centers,
                     result=pot,
@@ -423,7 +424,7 @@ class SumpyExpansionWrangler(object):
         kwargs.update(self.box_source_list_kwargs())
 
         events = []
-        for lev in range(self.tree.nlevels):
+        for lev in [0]:
             start, stop = \
                     level_start_target_or_target_parent_box_nrs[lev:lev+2]
             if start == stop:
@@ -433,8 +434,8 @@ class SumpyExpansionWrangler(object):
 
             evt, (result,) = p2l(
                     self.level_queues[lev],
-                    target_boxes=target_or_target_parent_boxes[start:stop],
-                    source_box_starts=starts[start:stop],
+                    target_boxes=target_or_target_parent_boxes,
+                    source_box_starts=starts,
                     source_box_lists=lists,
                     centers=self.tree.box_centers,
                     strengths=src_weights,
