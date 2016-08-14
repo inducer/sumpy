@@ -385,7 +385,7 @@ class SumpyExpansionWrangler(object):
         kwargs.update(self.box_target_list_kwargs())
 
         events = []
-        for lev in [0]:
+        for lev in range(self.tree.nlevels):
             start, stop = level_start_target_box_nrs[lev:lev+2]
             if start == stop:
                 continue
@@ -395,8 +395,8 @@ class SumpyExpansionWrangler(object):
             evt, pot_res = m2p(
                     self.level_queues[lev],
                     expansions=mpole_exps,
-                    target_boxes=target_boxes,
-                    source_box_starts=source_box_starts,
+                    target_boxes=target_boxes[start:stop],
+                    source_box_starts=source_box_starts[start:stop+1],
                     source_box_lists=source_box_lists,
                     centers=self.tree.box_centers,
                     result=pot,
@@ -424,7 +424,7 @@ class SumpyExpansionWrangler(object):
         kwargs.update(self.box_source_list_kwargs())
 
         events = []
-        for lev in [0]:
+        for lev in range(self.tree.nlevels):
             start, stop = \
                     level_start_target_or_target_parent_box_nrs[lev:lev+2]
             if start == stop:
@@ -434,8 +434,8 @@ class SumpyExpansionWrangler(object):
 
             evt, (result,) = p2l(
                     self.level_queues[lev],
-                    target_boxes=target_or_target_parent_boxes,
-                    source_box_starts=starts,
+                    target_boxes=target_or_target_parent_boxes[start:stop],
+                    source_box_starts=starts[start:stop+1],
                     source_box_lists=lists,
                     centers=self.tree.box_centers,
                     strengths=src_weights,
