@@ -121,10 +121,10 @@ class SumpyExpansionWranglerCodeContainer(object):
         # FIXME figure out what to do about exclude_self
         return P2PFromCSR(self.cl_context, self.out_kernels, exclude_self=False)
 
-    def get_wrangler(self, queue, tree, dtype, level_to_order,
+    def get_wrangler(self, queue, tree, dtype, fmm_level_to_order,
             source_extra_kwargs={},
             kernel_extra_kwargs=None):
-        return SumpyExpansionWrangler(self, queue, tree, dtype, level_to_order,
+        return SumpyExpansionWrangler(self, queue, tree, dtype, fmm_level_to_order,
                 source_extra_kwargs, kernel_extra_kwargs)
 
 # }}}
@@ -157,7 +157,7 @@ class SumpyExpansionWrangler(object):
         expansions, but not source particles.
     """
 
-    def __init__(self, code_container,  queue, tree, dtype, level_to_order,
+    def __init__(self, code_container,  queue, tree, dtype, fmm_level_to_order,
             source_extra_kwargs,
             kernel_extra_kwargs=None):
         self.code = code_container
@@ -166,9 +166,9 @@ class SumpyExpansionWrangler(object):
 
         self.dtype = dtype
 
-        if not callable(level_to_order):
-            raise TypeError("level_to_order not passed")
-        self.level_to_order = level_to_order
+        if not callable(fmm_level_to_order):
+            raise TypeError("fmm_level_to_order not passed")
+        self.fmm_level_to_order = fmm_level_to_order
 
         if kernel_extra_kwargs is None:
             kernel_extra_kwargs = {}
@@ -186,7 +186,8 @@ class SumpyExpansionWrangler(object):
     # {{{ data vector utilities
 
     def multipole_expansion_zeros(self):
-        order = self.level_to_order(0)  # AAARGH FIXME
+        # AARGH FIXME order may vary by level
+        order = self.fmm_level_to_order(0)
         m_expn = self.code.multipole_expansion_factory(order)
         return cl.array.zeros(
                 self.queue,
@@ -194,7 +195,8 @@ class SumpyExpansionWrangler(object):
                 dtype=self.dtype)
 
     def local_expansion_zeros(self):
-        order = self.level_to_order(0)  # AAARGH FIXME
+        # AARGH FIXME order may vary by level
+        order = self.fmm_level_to_order(0)
         l_expn = self.code.local_expansion_factory(order)
         return cl.array.zeros(
                 self.queue,
@@ -254,7 +256,7 @@ class SumpyExpansionWrangler(object):
 
         events = []
         for lev in range(self.tree.nlevels):
-            p2m = self.code.p2m(self.level_to_order(lev))
+            p2m = self.code.p2m(self.fmm_level_to_order(lev))
             start, stop = level_start_source_box_nrs[lev:lev+2]
             if start == stop:
                 continue
@@ -298,8 +300,8 @@ class SumpyExpansionWrangler(object):
             assert target_level > 0
 
             m2m = self.code.m2m(
-                    self.level_to_order(source_level),
-                    self.level_to_order(target_level))
+                    self.fmm_level_to_order(source_level),
+                    self.fmm_level_to_order(target_level))
 
             evt, (mpoles_res,) = m2m(
                     self.queue,
@@ -351,7 +353,7 @@ class SumpyExpansionWrangler(object):
             if start == stop:
                 continue
 
-            order = self.level_to_order(lev)
+            order = self.fmm_level_to_order(lev)
             m2l = self.code.m2l(order, order)
 
             evt, (local_exps_res,) = m2l(
@@ -390,7 +392,7 @@ class SumpyExpansionWrangler(object):
             if start == stop:
                 continue
 
-            m2p = self.code.m2p(self.level_to_order(lev))
+            m2p = self.code.m2p(self.fmm_level_to_order(lev))
 
             evt, pot_res = m2p(
                     self.level_queues[lev],
@@ -430,7 +432,7 @@ class SumpyExpansionWrangler(object):
             if start == stop:
                 continue
 
-            p2l = self.code.p2l(self.level_to_order(lev))
+            p2l = self.code.p2l(self.fmm_level_to_order(lev))
 
             evt, (result,) = p2l(
                     self.level_queues[lev],
@@ -465,8 +467,8 @@ class SumpyExpansionWrangler(object):
 
             source_lev = target_lev - 1
             l2l = self.code.l2l(
-                    self.level_to_order(source_lev),
-                    self.level_to_order(target_lev))
+                    self.fmm_level_to_order(source_lev),
+                    self.fmm_level_to_order(target_lev))
 
             evt, (local_exps_res,) = l2l(self.queue,
                     expansions=local_exps,
@@ -493,7 +495,7 @@ class SumpyExpansionWrangler(object):
             if start == stop:
                 continue
 
-            l2p = self.code.l2p(self.level_to_order(lev))
+            l2p = self.code.l2p(self.fmm_level_to_order(lev))
             evt, pot_res = l2p(
                     self.level_queues[lev],
                     expansions=local_exps,
