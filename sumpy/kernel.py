@@ -244,7 +244,8 @@ class ExpressionKernel(Kernel):
         self.is_complex_valued = is_complex_valued
 
     def __getinitargs__(self):
-        return (self._dim,)
+        return (self._dim, self.expression, self.scaling,
+                self.is_complex_valued)
 
     def __repr__(self):
         if self._dim is not None:
@@ -281,6 +282,16 @@ class ExpressionKernel(Kernel):
 
         from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
         return PymbolicToSympyMapperWithSymbols()(self.scaling)
+
+    def update_persistent_hash(self, key_hash, key_builder):
+        key_hash.update(type(self).__name__.encode("utf8"))
+        for name, value in zip(self.init_arg_names, self.__getinitargs__()):
+            if name in ["expression", "scaling"]:
+                from pymbolic.mapper.persistent_hash import (
+                        PersistentHashWalkMapper as PersistentHashWalkMapper)
+                PersistentHashWalkMapper(key_hash)(value)
+            else:
+                key_builder.rec(key_hash, value)
 
     mapper_method = "map_expression_kernel"
 
