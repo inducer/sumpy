@@ -379,40 +379,40 @@ class SumpyExpansionWrangler(object):
 
     def eval_multipoles(self,
             level_start_target_box_nrs,
-            target_boxes, source_box_starts,
-            source_box_lists, mpole_exps):
+            target_boxes, source_boxes_by_level, mpole_exps):
         pot = self.potential_zeros()
 
         kwargs = self.kernel_extra_kwargs.copy()
         kwargs.update(self.box_target_list_kwargs())
 
-        events = []
-        for lev in range(self.tree.nlevels):
-            start, stop = level_start_target_box_nrs[lev:lev+2]
-            if start == stop:
+        wait_for = mpole_exps.events
+
+        for isrc_level, ssn in enumerate(source_boxes_by_level):
+            if len(target_boxes) == 0:
                 continue
 
-            m2p = self.code.m2p(self.fmm_level_to_order(lev))
+            m2p = self.code.m2p(self.fmm_level_to_order(isrc_level))
 
             evt, pot_res = m2p(
-                    self.level_queues[lev],
+                    self.queue,
                     expansions=mpole_exps,
-                    target_boxes=target_boxes[start:stop],
-                    source_box_starts=source_box_starts[start:stop+1],
-                    source_box_lists=source_box_lists,
+                    target_boxes=target_boxes,
+                    source_box_starts=ssn.starts,
+                    source_box_lists=ssn.lists,
                     centers=self.tree.box_centers,
                     result=pot,
 
-                    wait_for=mpole_exps.events,
+                    wait_for=wait_for,
 
                     **kwargs)
 
+            wait_for = [evt]
+
             for pot_i, pot_res_i in zip(pot, pot_res):
                 assert pot_i is pot_res_i
-            events.append(evt)
 
-        evt = _enqueue_barrier(self.queue, wait_for=events)
         for pot_i in pot:
+            # Intentionally only adding the last event.
             pot_i.add_event(evt)
 
         return pot

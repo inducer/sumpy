@@ -250,7 +250,7 @@ class E2PFromCSR(E2PBase):
                             """] + loopy_insns + ["""
                         end
                         """] + ["""
-                        result[{resultidx}, itgt] = \
+                        result[{resultidx}, itgt] = result[{resultidx}, itgt] + \
                                 kernel_scaling * simul_reduce(sum, isrc_box,
                                 result_{resultidx}_p) {{id_prefix=write_result}}
                         """.format(resultidx=i) for i in range(len(result_names))] + ["""
