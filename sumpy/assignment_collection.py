@@ -96,7 +96,7 @@ def cached_cse(exprs, symbols):
     # (as of Jun 7, 2013)
     # https://code.google.com/p/sympy/issues/detail?id=1198
 
-    from pymbolic.sympy_interface import (
+    from pymbolic.interop.sympy import (
             SympyToPymbolicMapper,
             PymbolicToSympyMapper)
 

@@ -150,32 +150,43 @@ class E2EFromCSR(E2EBase):
                     "{[isrc_box]: isrc_start<=isrc_box<isrc_stop}",
                     "{[idim]: 0<=idim<dim}",
                     ],
-                self.get_translation_loopy_insns()
-                + ["""
+                ["""
+                for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
+
                     <> tgt_center[idim] = centers[idim, tgt_ibox] \
-                            {id=fetch_tgt_center}
 
                     <> isrc_start = src_box_starts[itgt_box]
                     <> isrc_stop = src_box_starts[itgt_box+1]
 
-                    <> src_ibox = src_box_lists[isrc_box] \
-                            {id=read_src_ibox}
-                    <> src_center[idim] = centers[idim, src_ibox] \
-                            {id=fetch_src_center}
-                    <> d[idim] = tgt_center[idim] - src_center[idim]
-                    <> src_coeff${SRC_COEFFIDX} = \
-                        src_expansions[src_ibox, ${SRC_COEFFIDX}] \
-                        {dep=read_src_ibox}
+                    for isrc_box
+                        <> src_ibox = src_box_lists[isrc_box] \
+                                {id=read_src_ibox}
 
-                    tgt_expansions[tgt_ibox, ${TGT_COEFFIDX}] = \
-                            simul_reduce(sum, isrc_box, coeff${TGT_COEFFIDX}) \
-                            {id_prefix=write_expn}
-                    """],
+                        <> src_center[idim] = centers[idim, src_ibox] {dup=idim}
+                        <> d[idim] = tgt_center[idim] - src_center[idim] \
+                            {dup=idim}
+
+                        """] + ["""
+                        <> src_coeff{coeffidx} = \
+                            src_expansions[src_ibox, {coeffidx}] \
+                            {{dep=read_src_ibox}}
+                        """.format(coeffidx=i) for i in range(ncoeff_src)] + [
+
+                        ] + self.get_translation_loopy_insns() + ["""
+                    end
+
+                    """] + ["""
+                    tgt_expansions[tgt_ibox, {coeffidx}] = \
+                            simul_reduce(sum, isrc_box, coeff{coeffidx}) \
+                            {{id_prefix=write_expn}}
+                    """.format(coeffidx=i) for i in range(ncoeff_tgt)] + ["""
+                end
+                """],
                 [
                     lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
                     lp.GlobalArg("src_box_starts, src_box_lists",
-                        None, shape=None, strides=(1,)),
+                        None, shape=None, strides=(1,), offset=lp.auto),
                     lp.ValueArg("aligned_nboxes,nboxes", np.int32),
                     lp.GlobalArg("src_expansions", None,
                         shape=("nboxes", ncoeff_src)),
@@ -183,19 +194,17 @@ class E2EFromCSR(E2EBase):
                         shape=("nboxes", ncoeff_tgt)),
                     "..."
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
-                name=self.name, assumptions="ntgt_boxes>=1",
-                defines=dict(
-                    dim=self.dim,
-                    SRC_COEFFIDX=[str(i) for i in range(ncoeff_src)],
-                    TGT_COEFFIDX=[str(i) for i in range(ncoeff_tgt)],
-                    ),
-                silenced_warnings="write_race(write_expn*)")
+                name=self.name,
+                assumptions="ntgt_boxes>=1",
+                silenced_warnings="write_race(write_expn*)",
+                default_offset=lp.auto)
+
+        loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
 
         for expn in [self.src_expansion, self.tgt_expansion]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_tgt_center",
-                tags={"idim": "unr"})
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
 
         return loopy_knl
@@ -222,7 +231,8 @@ class E2EFromChildren(E2EBase):
     def get_kernel(self):
         if self.src_expansion is not self.tgt_expansion:
             raise RuntimeError("%s requires that the source "
-                    "and target expansion are the same object")
+                    "and target expansion are the same object"
+                    % type(self).__name__)
 
         ncoeffs = len(self.src_expansion)
 
@@ -246,28 +256,37 @@ class E2EFromChildren(E2EBase):
                     "{[isrc_box]: 0<=isrc_box<nchildren}",
                     "{[idim]: 0<=idim<dim}",
                     ],
-                loopy_insns
-                + ["""
+                ["""
+                for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
+
                     <> tgt_center[idim] = centers[idim, tgt_ibox] \
-                        {id=fetch_tgt_center}
 
-                    <> src_ibox = box_child_ids[isrc_box,tgt_ibox] \
-                            {id=read_src_ibox}
-                    <> is_src_box_valid = src_ibox != 0
+                    for isrc_box
+                        <> src_ibox = box_child_ids[isrc_box,tgt_ibox] \
+                                {id=read_src_ibox}
+                        <> is_src_box_valid = src_ibox != 0
 
-                    <> src_center[idim] = centers[idim, src_ibox] \
-                        {id=fetch_src_center,if=is_src_box_valid}
-                    <> d[idim] = tgt_center[idim] - src_center[idim] \
-                        {if=is_src_box_valid}
+                        if is_src_box_valid
+                            <> src_center[idim] = centers[idim, src_ibox] {dup=idim}
+                            <> d[idim] = tgt_center[idim] - src_center[idim] \
+                                    {dup=idim}
 
-                    <> src_coeff${COEFFIDX} = \
-                        expansions[src_ibox, ${COEFFIDX}] \
-                        {id_prefix=read_coeff,if=is_src_box_valid,dep=read_src_ibox}
-                    expansions[tgt_ibox, ${COEFFIDX}] = \
-                        expansions[tgt_ibox, ${COEFFIDX}] + coeff${COEFFIDX} \
-                        {id_prefix=write_expn,if=is_src_box_valid,dep=compute_coeff*,nosync=read_coeff*}
-                    """],
+                            """] + ["""
+                            <> src_coeff{i} = \
+                                expansions[src_ibox, {i}] \
+                                {{id_prefix=read_coeff,dep=read_src_ibox}}
+                            """.format(i=i) for i in range(ncoeffs)] + [
+                            ] + loopy_insns + ["""
+                            expansions[tgt_ibox, {i}] = \
+                                expansions[tgt_ibox, {i}] + coeff{i} \
+                                {{id_prefix=write_expn,dep=compute_coeff*,
+                                    nosync=read_coeff*}}
+                            """.format(i=i) for i in range(ncoeffs)] + ["""
+                        end
+                    end
+                end
+                """],
                 [
                     lp.GlobalArg("target_boxes", None, shape=lp.auto,
                         offset=lp.auto),
@@ -280,20 +299,18 @@ class E2EFromChildren(E2EBase):
                     lp.ValueArg("aligned_nboxes", np.int32),
                     "..."
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
-                name=self.name, assumptions="ntgt_boxes>=1",
-                defines=dict(
-                    dim=self.dim,
-                    nchildren=2**self.dim,
-                    COEFFIDX=[str(i) for i in range(ncoeffs)],
-                    ),
+                name=self.name,
+                assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)")
+
+        loopy_knl = lp.fix_parameters(loopy_knl,
+                dim=self.dim,
+                nchildren=2**self.dim)
 
         for expn in [self.src_expansion, self.tgt_expansion]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_tgt_center",
-                tags={"idim": "unr"})
-        loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         return loopy_knl
 
@@ -337,25 +354,32 @@ class E2EFromParent(E2EBase):
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
                     "{[idim]: 0<=idim<dim}",
                     ],
-                self.get_translation_loopy_insns()
-                + ["""
+                ["""
+                for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
+
                     <> tgt_center[idim] = centers[idim, tgt_ibox] \
-                        {id=fetch_tgt_center}
 
                     <> src_ibox = box_parent_ids[tgt_ibox] \
                         {id=read_src_ibox}
-                    <> src_center[idim] = centers[idim, src_ibox] \
-                        {id=fetch_src_center}
-                    <> d[idim] = tgt_center[idim] - src_center[idim]
 
-                    <> src_coeff${COEFFIDX} = \
-                        expansions[src_ibox, ${COEFFIDX}] \
-                        {id_prefix=read_expn,dep=read_src_ibox}
-                    expansions[tgt_ibox, ${COEFFIDX}] = \
-                        expansions[tgt_ibox, ${COEFFIDX}] + coeff${COEFFIDX} \
-                        {id_prefix=write_expn,nosync=read_expn*}
-                    """],
+                    <> src_center[idim] = centers[idim, src_ibox] {dup=idim}
+                    <> d[idim] = tgt_center[idim] - src_center[idim] {dup=idim}
+
+                    """] + ["""
+                    <> src_coeff{i} = \
+                        expansions[src_ibox, {i}] \
+                        {{id_prefix=read_expn,dep=read_src_ibox}}
+                    """.format(i=i) for i in range(ncoeffs)] + [
+
+                    ] + self.get_translation_loopy_insns() + ["""
+
+                    expansions[tgt_ibox, {i}] = \
+                        expansions[tgt_ibox, {i}] + coeff{i} \
+                        {{id_prefix=write_expn,nosync=read_expn*}}
+                    """.format(i=i) for i in range(ncoeffs)] + ["""
+                end
+                """],
                 [
                     lp.GlobalArg("target_boxes", None, shape=lp.auto,
                         offset=lp.auto),
@@ -367,19 +391,15 @@ class E2EFromParent(E2EBase):
                     "..."
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name, assumptions="ntgt_boxes>=1",
-                defines=dict(
-                    dim=self.dim,
-                    nchildren=2**self.dim,
-                    COEFFIDX=[str(i) for i in range(ncoeffs)],
-                    ),
                 silenced_warnings="write_race(write_expn*)")
 
+        loopy_knl = lp.fix_parameters(loopy_knl,
+                dim=self.dim,
+                nchildren=2**self.dim)
         for expn in [self.src_expansion, self.tgt_expansion]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_tgt_center",
-                tags={"idim": "unr"})
-        loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         return loopy_knl
 

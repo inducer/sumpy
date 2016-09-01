@@ -117,19 +117,27 @@ class P2EFromSingleBox(P2EBase):
                     "{[isrc_box]: 0<=isrc_box<nsrc_boxes}",
                     "{[isrc,idim]: isrc_start<=isrc<isrc_end and 0<=idim<dim}",
                     ],
-                self.get_loopy_instructions()
-                + ["""
+                ["""
+                for isrc_box
                     <> src_ibox = source_boxes[isrc_box]
                     <> isrc_start = box_source_starts[src_ibox]
                     <> isrc_end = isrc_start+box_source_counts_nonchild[src_ibox]
+
                     <> center[idim] = centers[idim, src_ibox] {id=fetch_center}
-                    <> a[idim] = center[idim] - sources[idim, isrc] \
-                            {id=compute_a}
-                    <> strength = strengths[isrc]
-                    expansions[src_ibox, ${COEFFIDX}] = \
-                            simul_reduce(sum, isrc, strength*coeff${COEFFIDX}) \
-                            {id_prefix=write_expn}
-                    """],
+
+                    for isrc
+                        <> a[idim] = center[idim] - sources[idim, isrc] {dup=idim}
+
+                        <> strength = strengths[isrc]
+                        """] + self.get_loopy_instructions() + ["""
+                    end
+                    """] + ["""
+                    expansions[src_ibox, {coeffidx}] = \
+                            simul_reduce(sum, isrc, strength*coeff{coeffidx}) \
+                            {{id_prefix=write_expn}}
+                    """.format(coeffidx=i) for i in range(ncoeffs)] + ["""
+                end
+                """],
                 [
                     lp.GlobalArg("sources", None, shape=(self.dim, "nsources"),
                         dim_tags="sep,c"),
@@ -143,17 +151,15 @@ class P2EFromSingleBox(P2EBase):
                     lp.ValueArg("nsources", np.int32),
                     "..."
                 ] + gather_loopy_source_arguments([self.expansion]),
-                name=self.name, assumptions="nsrc_boxes>=1",
-                defines=dict(
-                    dim=self.dim,
-                    COEFFIDX=[str(i) for i in range(ncoeffs)]
-                    ),
-                silenced_warnings="write_race(write_expn*)")
+                name=self.name,
+                assumptions="nsrc_boxes>=1",
+                silenced_warnings="write_race(write_expn*)",
+                default_offset=lp.auto)
+
+        loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
 
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_center",
-                tags={"idim": "unr"})
-        loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         return loopy_knl
 
@@ -196,7 +202,7 @@ class P2EFromCSR(P2EBase):
                         dim_tags="sep,c"),
                     lp.GlobalArg("strengths", None, shape="nsources"),
                     lp.GlobalArg("source_box_starts,source_box_lists",
-                        None, shape=None),
+                        None, shape=None, offset=lp.auto),
                     lp.GlobalArg("box_source_starts,box_source_counts_nonchild",
                         None, shape=None),
                     lp.GlobalArg("centers", None, shape="dim, naligned_boxes"),
@@ -211,39 +217,48 @@ class P2EFromCSR(P2EBase):
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
                     "{[isrc_box]: isrc_box_start<=isrc_box<isrc_box_stop}",
-                    "{[isrc,idim]: isrc_start<=isrc<isrc_end and 0<=idim<dim}",
+                    "{[isrc]: isrc_start<=isrc<isrc_end}",
+                    "{[idim]: 0<=idim<dim}",
                     ],
-                self.get_loopy_instructions()
-                + ["""
+                ["""
+                for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
+
+                    <> center[idim] = centers[idim, tgt_ibox] {id=fetch_center}
 
                     <> isrc_box_start = source_box_starts[itgt_box]
                     <> isrc_box_stop = source_box_starts[itgt_box+1]
 
-                    <> src_ibox = source_box_lists[isrc_box]
-                    <> isrc_start = box_source_starts[src_ibox]
-                    <> isrc_end = isrc_start+box_source_counts_nonchild[src_ibox]
+                    for isrc_box
+                        <> src_ibox = source_box_lists[isrc_box]
+                        <> isrc_start = box_source_starts[src_ibox]
+                        <> isrc_end = isrc_start+box_source_counts_nonchild[src_ibox]
 
-                    <> center[idim] = centers[idim, tgt_ibox] {id=fetch_center}
-                    <> a[idim] = center[idim] - sources[idim, isrc] {id=compute_a}
-                    <> strength = strengths[isrc]
-                    expansions[tgt_ibox, ${COEFFIDX}] = \
-                            simul_reduce(sum, (isrc_box, isrc), \
-                                strength*coeff${COEFFIDX}) \
-                                {id_prefix=write_expn}
-                    """],
+                        for isrc
+                            <> a[idim] = center[idim] - sources[idim, isrc] \
+                                    {dup=idim}
+
+                            <> strength = strengths[isrc]
+                            """] + self.get_loopy_instructions() + ["""
+                        end
+                    end
+                    """] + ["""
+                    expansions[tgt_ibox, {coeffidx}] = \
+                            simul_reduce(sum, (isrc_box, isrc),
+                                strength*coeff{coeffidx}) {{id_prefix=write_expn}}
+                    """.format(coeffidx=i) for i in range(ncoeffs)] + ["""
+                end
+                """],
                 arguments,
-                name=self.name, assumptions="ntgt_boxes>=1",
-                defines=dict(
-                    dim=self.dim,
-                    COEFFIDX=[str(i) for i in range(ncoeffs)]
-                    ),
-                silenced_warnings="write_race(write_expn*)")
+                name=self.name,
+                assumptions="ntgt_boxes>=1",
+                silenced_warnings="write_race(write_expn*)",
+                default_offset=lp.auto)
+
+        loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
 
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
-        loopy_knl = lp.duplicate_inames(loopy_knl, "idim", "id:fetch_center",
-                tags={"idim": "unr"})
-        loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         return loopy_knl
 

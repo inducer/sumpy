@@ -192,7 +192,7 @@ class KernelComputation(object):
         self.name = name or self.default_name
 
     def get_kernel_scaling_assignments(self):
-        from pymbolic.sympy_interface import SympyToPymbolicMapper
+        from pymbolic.interop.sympy import SympyToPymbolicMapper
         sympy_conv = SympyToPymbolicMapper()
 
         import loopy as lp
@@ -223,14 +223,15 @@ class KernelCacheWrapper(object):
 
             try:
                 result = code_cache[cache_key]
-                logger.debug("%s: kernel cache hit" % self.name)
+                logger.debug("%s: kernel cache hit [key=%s]" % (
+                    self.name, cache_key))
                 return result
             except KeyError:
                 pass
 
         logger.info("%s: kernel cache miss" % self.name)
         if CACHING_ENABLED:
-            logger.info("%s: missed cache key: %s" % (
+            logger.info("%s: kernel cache miss [key=%s]" % (
                 self.name, cache_key))
 
         knl = self.get_optimized_kernel(**kwargs)

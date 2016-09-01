@@ -36,6 +36,10 @@ from sumpy.expansion.multipole import (
 from sumpy.expansion.local import (
     VolumeTaylorLocalExpansion, H2DLocalExpansion)
 
+from sumpy.expansion.level_to_order import (
+    h2d_level_to_order_lookup,
+    l2d_level_to_order_lookup)
+
 import pytest
 
 import logging
@@ -48,6 +52,34 @@ except ImportError:
     pass
 else:
     faulthandler.enable()
+
+
+@pytest.mark.parametrize("lookup_func, extra_args", [
+    (h2d_level_to_order_lookup, (100,)),
+    (l2d_level_to_order_lookup, ()),
+    ])
+def test_level_to_order_lookup(ctx_getter, lookup_func, extra_args):
+    ctx = ctx_getter()
+    queue = cl.CommandQueue(ctx)
+
+    nsources = 500
+    dtype = np.float64
+    epsilon = 1e-9
+
+    from boxtree.tools import (
+            make_normal_particle_array as p_normal)
+
+    sources = p_normal(queue, nsources, 2, dtype, seed=15)
+    from boxtree import TreeBuilder
+    tb = TreeBuilder(ctx)
+
+    tree, _ = tb(queue, sources, max_particles_in_box=30, debug=True)
+
+    levels = lookup_func(tree, *(extra_args + (epsilon,)))
+
+    assert len(levels) == tree.nlevels
+    # Should be monotonically nonincreasing.
+    assert all(levels[i] >= levels[i+1] for i in range(tree.nlevels - 1))
 
 
 @pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class", [
@@ -120,8 +152,8 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
 
     # }}}
 
-    from pyopencl.clrandom import RanluxGenerator
-    rng = RanluxGenerator(queue, seed=20)
+    from pyopencl.clrandom import PhiloxGenerator
+    rng = PhiloxGenerator(ctx)
     weights = rng.uniform(queue, nsources, dtype=np.float64)
 
     logger.info("computing direct (reference) result")
@@ -142,15 +174,18 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
         elif knl.dim == 2 and issubclass(local_expn_class, H2DLocalExpansion):
             order_values = [10, 12]
 
+    from functools import partial
     for order in order_values:
-        mpole_expn = mpole_expn_class(knl, order)
-        local_expn = local_expn_class(knl, order)
         out_kernels = [knl]
 
         from sumpy.fmm import SumpyExpansionWranglerCodeContainer
         wcc = SumpyExpansionWranglerCodeContainer(
-                ctx, mpole_expn, local_expn, out_kernels)
+                ctx,
+                partial(mpole_expn_class, knl),
+                partial(local_expn_class, knl),
+                out_kernels)
         wrangler = wcc.get_wrangler(queue, tree, dtype,
+                fmm_level_to_order=lambda lev: order,
                 kernel_extra_kwargs=extra_kwargs)
 
         from boxtree.fmm import drive_fmm

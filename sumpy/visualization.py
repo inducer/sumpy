@@ -1,6 +1,4 @@
-from __future__ import division
-from __future__ import absolute_import
-from six.moves import range
+from __future__ import division, absolute_import
 
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
@@ -26,6 +24,7 @@ THE SOFTWARE.
 
 
 import numpy as np
+from six.moves import range
 
 
 def separate_by_real_and_imag(data, real_only):
@@ -143,7 +142,5 @@ class FieldPlotter:
 
         from mayavi import mlab
         mlab.surf(self.nd_points[0], self.nd_points[1], fld, **kwargs)
-
-
 
 # vim: foldmethod=marker

@@ -38,7 +38,7 @@ from loopy.types import NumpyType
 
 from pytools import memoize_method
 
-from pymbolic.sympy_interface import (
+from pymbolic.interop.sympy import (
         SympyToPymbolicMapper as SympyToPymbolicMapperBase)
 
 import logging
