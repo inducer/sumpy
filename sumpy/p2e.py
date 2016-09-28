@@ -132,7 +132,7 @@ class P2EFromSingleBox(P2EBase):
                         """] + self.get_loopy_instructions() + ["""
                     end
                     """] + ["""
-                    expansions[src_ibox-base_ibox, {coeffidx}] = \
+                    tgt_expansions[src_ibox-tgt_base_ibox, {coeffidx}] = \
                             simul_reduce(sum, isrc, strength*coeff{coeffidx}) \
                             {{id_prefix=write_expn}}
                     """.format(coeffidx=i) for i in range(ncoeffs)] + ["""
@@ -145,9 +145,9 @@ class P2EFromSingleBox(P2EBase):
                     lp.GlobalArg("box_source_starts,box_source_counts_nonchild",
                         None, shape=None),
                     lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
-                    lp.GlobalArg("expansions", None,
+                    lp.GlobalArg("tgt_expansions", None,
                         shape=("nboxes", ncoeffs), offset=lp.auto),
-                    lp.ValueArg("nboxes,aligned_nboxes,base_ibox", np.int32),
+                    lp.ValueArg("nboxes,aligned_nboxes,tgt_base_ibox", np.int32),
                     lp.ValueArg("nsources", np.int32),
                     "..."
                 ] + gather_loopy_source_arguments([self.expansion]),

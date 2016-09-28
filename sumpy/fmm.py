@@ -304,8 +304,8 @@ class SumpyExpansionWrangler(object):
                     source_boxes=source_boxes[start:stop],
                     centers=self.tree.box_centers,
                     strengths=src_weights,
-                    expansions=mpoles_view,
-                    base_ibox=level_start_ibox,
+                    tgt_expansions=mpoles_view,
+                    tgt_base_ibox=level_start_ibox,
 
                     wait_for=src_weights.events,
 

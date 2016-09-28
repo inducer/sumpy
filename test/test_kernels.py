@@ -199,6 +199,7 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
                 sources=sources,
                 strengths=strengths,
                 nboxes=1,
+                tgt_base_ibox=0,
 
                 #flags="print_hl_cl",
                 out_host=True, **extra_source_kwargs)
@@ -214,7 +215,8 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
 
         evt, (pot, grad_x, ) = e2p(
                 queue,
-                expansions=mpoles,
+                src_expansions=mpoles,
+                src_base_ibox=0,
                 target_boxes=source_boxes,
                 box_target_starts=box_target_starts,
                 box_target_counts_nonchild=box_target_counts_nonchild,
@@ -381,7 +383,10 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
 
         evt, (pot,) = e2p(
                 queue,
-                expansions=mpoles,
+
+                src_expansions=mpoles,
+                src_base_ibox=0,
+
                 target_boxes=e2p_target_boxes,
                 box_target_starts=e2p_box_target_starts,
                 box_target_counts_nonchild=e2p_box_target_counts_nonchild,
@@ -435,6 +440,8 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
                 strengths=strengths,
                 nboxes=nboxes,
 
+                tgt_base_ibox=0,
+
                 #flags="print_hl_wrapper",
                 out_host=True, **extra_kwargs)
 
@@ -457,7 +464,12 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
 
         evt, (mpoles,) = m2m(queue,
                 src_expansions=mpoles,
+                src_base_ibox=0,
+                tgt_base_ibox=0,
+                ntgt_level_boxes=mpoles.shape[0],
+
                 target_boxes=m2m_target_boxes,
+
                 src_box_starts=m2m_src_box_starts,
                 src_box_lists=m2m_src_box_lists,
                 centers=centers,
@@ -481,6 +493,10 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
 
         evt, (mpoles,) = m2l(queue,
                 src_expansions=mpoles,
+                src_base_ibox=0,
+                tgt_base_ibox=0,
+                ntgt_level_boxes=mpoles.shape[0],
+
                 target_boxes=m2l_target_boxes,
                 src_box_starts=m2l_src_box_starts,
                 src_box_lists=m2l_src_box_lists,
@@ -505,6 +521,10 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
 
         evt, (mpoles,) = l2l(queue,
                 src_expansions=mpoles,
+                src_base_ibox=0,
+                tgt_base_ibox=0,
+                ntgt_level_boxes=mpoles.shape[0],
+
                 target_boxes=l2l_target_boxes,
                 src_box_starts=l2l_src_box_starts,
                 src_box_lists=l2l_src_box_lists,
