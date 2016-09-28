@@ -132,7 +132,7 @@ class P2EFromSingleBox(P2EBase):
                         """] + self.get_loopy_instructions() + ["""
                     end
                     """] + ["""
-                    expansions[src_ibox, {coeffidx}] = \
+                    expansions[src_ibox-base_ibox, {coeffidx}] = \
                             simul_reduce(sum, isrc, strength*coeff{coeffidx}) \
                             {{id_prefix=write_expn}}
                     """.format(coeffidx=i) for i in range(ncoeffs)] + ["""
@@ -146,8 +146,8 @@ class P2EFromSingleBox(P2EBase):
                         None, shape=None),
                     lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
                     lp.GlobalArg("expansions", None,
-                        shape=("nboxes", ncoeffs)),
-                    lp.ValueArg("nboxes,aligned_nboxes", np.int32),
+                        shape=("nboxes", ncoeffs), offset=lp.auto),
+                    lp.ValueArg("nboxes,aligned_nboxes,base_ibox", np.int32),
                     lp.ValueArg("nsources", np.int32),
                     "..."
                 ] + gather_loopy_source_arguments([self.expansion]),
@@ -206,9 +206,10 @@ class P2EFromCSR(P2EBase):
                     lp.GlobalArg("box_source_starts,box_source_counts_nonchild",
                         None, shape=None),
                     lp.GlobalArg("centers", None, shape="dim, naligned_boxes"),
-                    lp.GlobalArg("expansions", None,
-                        shape=("nboxes", ncoeffs)),
-                    lp.ValueArg("naligned_boxes,nboxes", np.int32),
+                    lp.GlobalArg("tgt_expansions", None,
+                        shape=("ntgt_level_boxes", ncoeffs), offset=lp.auto),
+                    lp.ValueArg("naligned_boxes,ntgt_level_boxes,tgt_base_ibox",
+                        np.int32),
                     lp.ValueArg("nsources", np.int32),
                     "..."
                 ] + gather_loopy_source_arguments([self.expansion]))
@@ -243,7 +244,7 @@ class P2EFromCSR(P2EBase):
                         end
                     end
                     """] + ["""
-                    expansions[tgt_ibox, {coeffidx}] = \
+                    tgt_expansions[tgt_ibox - tgt_base_ibox, {coeffidx}] = \
                             simul_reduce(sum, (isrc_box, isrc),
                                 strength*coeff{coeffidx}) {{id_prefix=write_expn}}
                     """.format(coeffidx=i) for i in range(ncoeffs)] + ["""

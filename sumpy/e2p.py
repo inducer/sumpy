@@ -144,7 +144,8 @@ class E2PFromSingleBox(E2PBase):
                     <> center[idim] = centers[idim, tgt_ibox] {id=fetch_center}
 
                     """] + ["""
-                    <> coeff{coeffidx} = expansions[tgt_ibox, {coeffidx}]
+                    <> coeff{coeffidx} = \
+                            src_expansions[tgt_ibox - src_base_ibox, {coeffidx}]
                     """.format(coeffidx=i) for i in range(ncoeffs)] + ["""
 
                     for itgt
@@ -168,8 +169,10 @@ class E2PFromSingleBox(E2PBase):
                     lp.GlobalArg("centers", None, shape="dim, naligned_boxes"),
                     lp.GlobalArg("result", None, shape="nresults, ntargets",
                         dim_tags="sep,C"),
-                    lp.GlobalArg("expansions", None, shape=("nboxes", ncoeffs)),
-                    lp.ValueArg("nboxes,naligned_boxes", np.int32),
+                    lp.GlobalArg("src_expansions", None,
+                        shape=("nsrc_level_boxes", ncoeffs), offset=lp.auto),
+                    lp.ValueArg("nsrc_level_boxes,naligned_boxes", np.int32),
+                    lp.ValueArg("src_base_ibox", np.int32),
                     lp.ValueArg("ntargets", np.int32),
                     "..."
                 ] + [arg.loopy_arg for arg in self.expansion.get_args()],
@@ -241,7 +244,8 @@ class E2PFromCSR(E2PBase):
                         for isrc_box
                             <> src_ibox = source_box_lists[isrc_box]
                             """] + ["""
-                            <> coeff{coeffidx} = expansions[src_ibox, {coeffidx}]
+                            <> coeff{coeffidx} = \
+                                src_expansions[src_ibox - src_base_ibox, {coeffidx}]
                             """.format(coeffidx=i) for i in range(ncoeffs)] + ["""
 
                             <> center[idim] = centers[idim, src_ibox] {dup=idim}
@@ -263,9 +267,10 @@ class E2PFromCSR(E2PBase):
                     lp.GlobalArg("box_target_starts,box_target_counts_nonchild",
                         None, shape=None),
                     lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
-                    lp.GlobalArg("expansions", None,
-                        shape=("nboxes", ncoeffs)),
-                    lp.ValueArg("nboxes,aligned_nboxes", np.int32),
+                    lp.GlobalArg("src_expansions", None,
+                        shape=("nsrc_level_boxes", ncoeffs), offset=lp.auto),
+                    lp.ValueArg("src_base_ibox", np.int32),
+                    lp.ValueArg("nsrc_level_boxes,aligned_nboxes", np.int32),
                     lp.ValueArg("ntargets", np.int32),
                     lp.GlobalArg("result", None, shape="nresults,ntargets",
                         dim_tags="sep,C"),
