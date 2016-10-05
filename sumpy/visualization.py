@@ -153,7 +153,10 @@ class FieldPlotter:
         if len(fld.shape) == 1:
             fld = fld.reshape(self.nd_points.shape[1:])
 
+        nd_points = self.nd_points.squeeze()
+        squeezed_fld = fld.squeeze()
+
         from mayavi import mlab
-        mlab.surf(self.nd_points[0], self.nd_points[1], fld, **kwargs)
+        mlab.surf(nd_points[0], nd_points[1], squeezed_fld, **kwargs)
 
 # vim: foldmethod=marker
