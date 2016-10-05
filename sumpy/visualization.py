@@ -89,8 +89,11 @@ class FieldPlotter:
         from pytools import product
         self.npoints = product(npoints)
 
+    def _get_nontrivial_dims(self):
+        return np.array(self.nd_points.shape[1:]) != 1
+
     def _get_squeezed_bounds(self):
-        non1_dims = np.array(self.nd_points.shape[1:]) != 1
+        nontriv_dims = self._get_nontrivial_dims()
 
         return self.a[non1_dims], self.b[non1_dims]
 
@@ -153,7 +156,7 @@ class FieldPlotter:
         if len(fld.shape) == 1:
             fld = fld.reshape(self.nd_points.shape[1:])
 
-        nd_points = self.nd_points.squeeze()
+        nd_points = self.nd_points.squeeze()[self._get_nontrivial_dims()]
         squeezed_fld = fld.squeeze()
 
         from mayavi import mlab
