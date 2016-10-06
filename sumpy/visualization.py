@@ -95,7 +95,7 @@ class FieldPlotter:
     def _get_squeezed_bounds(self):
         nontriv_dims = self._get_nontrivial_dims()
 
-        return self.a[non1_dims], self.b[non1_dims]
+        return self.a[nontriv_dims], self.b[nontriv_dims]
 
     def show_scalar_in_matplotlib(self, fld, max_val=None,
             func_name="imshow", **kwargs):
