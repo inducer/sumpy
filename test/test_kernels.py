@@ -35,8 +35,14 @@ from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 
 from sumpy.expansion.multipole import (
-        VolumeTaylorMultipoleExpansion, H2DMultipoleExpansion)
-from sumpy.expansion.local import VolumeTaylorLocalExpansion, H2DLocalExpansion
+        VolumeTaylorMultipoleExpansion, H2DMultipoleExpansion,
+        VolumeTaylorMultipoleExpansionBase,
+        LaplaceConformingVolumeTaylorMultipoleExpansion,
+        HelmholtzConformingVolumeTaylorMultipoleExpansion)
+from sumpy.expansion.local import (
+        VolumeTaylorLocalExpansion, H2DLocalExpansion,
+        LaplaceConformingVolumeTaylorLocalExpansion,
+        HelmholtzConformingVolumeTaylorLocalExpansion)
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, AxisTargetDerivative,
         DirectionalSourceDerivative)
 from pytools.convergence import PConvergenceVerifier
@@ -95,14 +101,22 @@ def test_p2p(ctx_getter):
 @pytest.mark.parametrize(("base_knl", "expn_class"), [
     (LaplaceKernel(2), VolumeTaylorLocalExpansion),
     (LaplaceKernel(2), VolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(2), LaplaceConformingVolumeTaylorLocalExpansion),
+    (LaplaceKernel(2), LaplaceConformingVolumeTaylorMultipoleExpansion),
 
     (HelmholtzKernel(2), VolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), VolumeTaylorLocalExpansion),
+    (HelmholtzKernel(2), HelmholtzConformingVolumeTaylorLocalExpansion),
+    (HelmholtzKernel(2), HelmholtzConformingVolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), H2DLocalExpansion),
     (HelmholtzKernel(2), H2DMultipoleExpansion),
 
     (HelmholtzKernel(2, allow_evanescent=True), VolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2, allow_evanescent=True), VolumeTaylorLocalExpansion),
+    (HelmholtzKernel(2, allow_evanescent=True),
+     HelmholtzConformingVolumeTaylorLocalExpansion),
+    (HelmholtzKernel(2, allow_evanescent=True),
+     HelmholtzConformingVolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2, allow_evanescent=True), H2DLocalExpansion),
     (HelmholtzKernel(2, allow_evanescent=True), H2DMultipoleExpansion),
     ])
@@ -292,11 +306,12 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
         slack += 1
         grad_slack += 2
 
-    if isinstance(base_knl, HelmholtzKernel) and base_knl.allow_evanescent:
-        slack += 0.5
-        grad_slack += 0.5
+    if isinstance(base_knl, HelmholtzKernel):
+        if base_knl.allow_evanescent:
+            slack += 0.5
+            grad_slack += 0.5
 
-        if expn_class is VolumeTaylorMultipoleExpansion:
+        if issubclass(expn_class, VolumeTaylorMultipoleExpansionBase):
             slack += 0.3
             grad_slack += 0.3
 
@@ -306,7 +321,11 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
 
 @pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class", [
     (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(2), LaplaceConformingVolumeTaylorLocalExpansion,
+     LaplaceConformingVolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2), HelmholtzConformingVolumeTaylorLocalExpansion,
+     HelmholtzConformingVolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion)
     ])
 def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
