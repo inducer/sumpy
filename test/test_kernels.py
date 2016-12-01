@@ -110,6 +110,7 @@ def test_p2p(ctx_getter):
     False,
     True
     ])
+# Sample: test_p2e2p(cl._csc, LaplaceKernel(2), VolumeTaylorLocalExpansion, 4, False)
 def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
     #logging.basicConfig(level=logging.INFO)
 
