@@ -25,7 +25,9 @@ THE SOFTWARE.
 
 import sympy as sp
 
-from sumpy.expansion import ExpansionBase, VolumeTaylorExpansionBase
+from sumpy.expansion import (
+    ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
+    HelmholtzConformingVolumeTaylorExpansion)
 
 
 class LocalExpansionBase(ExpansionBase):
@@ -46,6 +48,7 @@ __doc__ = """
 # {{{ line taylor
 
 class LineTaylorLocalExpansion(LocalExpansionBase):
+
     def get_storage_index(self, k):
         return k
 
@@ -81,7 +84,11 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
 
 # {{{ volume taylor
 
-class VolumeTaylorLocalExpansion(LocalExpansionBase, VolumeTaylorExpansionBase):
+class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
+    """
+    Coefficients represent derivative values of the kernel.
+    """
+
     def coefficients_from_source(self, avec, bvec):
         from sumpy.tools import mi_derivative
         ppkernel = self.kernel.postprocess_at_source(
@@ -91,11 +98,14 @@ class VolumeTaylorLocalExpansion(LocalExpansionBase, VolumeTaylorExpansionBase):
 
     def evaluate(self, coeffs, bvec):
         from sumpy.tools import mi_power, mi_factorial
-        return sum(
+        evaluated_coeffs = self.stored_to_full(coeffs)
+        result = sum(
                 coeff
                 * self.kernel.postprocess_at_target(mi_power(bvec, mi), bvec)
                 / mi_factorial(mi)
-                for coeff, mi in zip(coeffs, self.get_coefficient_identifiers()))
+                for coeff, mi in zip(
+                        evaluated_coeffs, self.get_full_coefficient_identifiers()))
+        return result
 
     def translate_from(self, src_expansion, src_coeff_exprs, dvec):
         logger.info("building translation operator: %s(%d) -> %s(%d): start"
@@ -111,6 +121,33 @@ class VolumeTaylorLocalExpansion(LocalExpansionBase, VolumeTaylorExpansionBase):
 
         logger.info("building translation operator: done")
         return result
+
+
+class VolumeTaylorLocalExpansion(
+        VolumeTaylorLocalExpansionBase,
+        VolumeTaylorExpansion):
+
+    def __init__(self, kernel, order):
+        VolumeTaylorLocalExpansionBase.__init__(self, kernel, order)
+        VolumeTaylorExpansion.__init__(self)
+
+
+class LaplaceConformingVolumeTaylorLocalExpansion(
+        VolumeTaylorLocalExpansionBase,
+        LaplaceConformingVolumeTaylorExpansion):
+
+    def __init__(self, kernel, order):
+        VolumeTaylorLocalExpansionBase.__init__(self, kernel, order)
+        LaplaceConformingVolumeTaylorExpansion.__init__(self)
+
+
+class HelmholtzConformingVolumeTaylorLocalExpansion(
+        VolumeTaylorLocalExpansionBase,
+        HelmholtzConformingVolumeTaylorExpansion):
+
+    def __init__(self, kernel, order):
+        VolumeTaylorLocalExpansionBase.__init__(self, kernel, order)
+        HelmholtzConformingVolumeTaylorExpansion.__init__(self)
 
 # }}}
 

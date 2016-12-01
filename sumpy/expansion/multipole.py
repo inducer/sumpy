@@ -25,7 +25,9 @@ THE SOFTWARE.
 from six.moves import range, zip
 import sympy as sp  # noqa
 
-from sumpy.expansion import ExpansionBase, VolumeTaylorExpansionBase
+from sumpy.expansion import (
+    ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
+    HelmholtzConformingVolumeTaylorExpansion)
 
 import logging
 logger = logging.getLogger(__name__)
@@ -45,13 +47,16 @@ class MultipoleExpansionBase(ExpansionBase):
 
 # {{{ volume taylor
 
-class VolumeTaylorMultipoleExpansion(
-        MultipoleExpansionBase, VolumeTaylorExpansionBase):
+class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
+    """
+    Coefficients represent the terms in front of the kernel derivatives.
+    """
+
     def coefficients_from_source(self, avec, bvec):
         from sumpy.kernel import DirectionalSourceDerivative
         kernel = self.kernel
 
-        from sumpy.tools import mi_power
+        from sumpy.tools import mi_power, mi_factorial
 
         if isinstance(kernel, DirectionalSourceDerivative):
             if kernel.get_base_kernel() is not kernel.inner_kernel:
@@ -61,7 +66,7 @@ class VolumeTaylorMultipoleExpansion(
             from sumpy.symbolic import make_sympy_vector
             dir_vec = make_sympy_vector(kernel.dir_vec_name, kernel.dim)
 
-            coeff_identifiers = self.get_coefficient_identifiers()
+            coeff_identifiers = self.get_full_coefficient_identifiers()
             result = [0] * len(coeff_identifiers)
 
             for idim in range(kernel.dim):
@@ -75,22 +80,23 @@ class VolumeTaylorMultipoleExpansion(
                     result[i] += (
                         - mi_power(avec, derivative_mi) * mi[idim]
                         * dir_vec[idim])
-
-            return result
+            for i, mi in enumerate(coeff_identifiers):
+                result[i] /= mi_factorial(mi)
         else:
-            return [
-                    mi_power(avec, mi)
-                    for mi in self.get_coefficient_identifiers()]
+            result = [
+                    mi_power(avec, mi) / mi_factorial(mi)
+                    for mi in self.get_full_coefficient_identifiers()]
+        return self.full_to_stored(result)
 
     def evaluate(self, coeffs, bvec):
         ppkernel = self.kernel.postprocess_at_target(
                 self.kernel.get_expression(bvec), bvec)
 
-        from sumpy.tools import mi_derivative, mi_factorial
-        return sum(
-                coeff / mi_factorial(mi)
-                * mi_derivative(ppkernel, bvec, mi)
+        from sumpy.tools import mi_derivative
+        result = sum(
+                coeff * mi_derivative(ppkernel, bvec, mi)
                 for coeff, mi in zip(coeffs, self.get_coefficient_identifiers()))
+        return result
 
     def translate_from(self, src_expansion, src_coeff_exprs, dvec):
         if not isinstance(src_expansion, type(self)):
@@ -104,14 +110,19 @@ class VolumeTaylorMultipoleExpansion(
                     type(self).__name__,
                     self.order))
 
+        from sumpy.tools import mi_factorial
+
         src_mi_to_index = dict((mi, i) for i, mi in enumerate(
             src_expansion.get_coefficient_identifiers()))
 
-        result = [0] * len(self.get_coefficient_identifiers())
+        for i, mi in enumerate(src_expansion.get_coefficient_identifiers()):
+            src_coeff_exprs[i] *= mi_factorial(mi)
+
+        result = [0] * len(self.get_full_coefficient_identifiers())
         from pytools import generate_nonnegative_integer_tuples_below as gnitb
 
         for i, tgt_mi in enumerate(
-                self.get_coefficient_identifiers()):
+                self.get_full_coefficient_identifiers()):
 
             tgt_mi_plus_one = tuple(mi_i + 1 for mi_i in tgt_mi)
 
@@ -119,7 +130,7 @@ class VolumeTaylorMultipoleExpansion(
                 try:
                     src_index = src_mi_to_index[src_mi]
                 except KeyError:
-                    # tgt higher-order than source--dumb, but not life-threatening
+                    # Omitted coefficients: not life-threatening
                     continue
 
                 contrib = src_coeff_exprs[src_index]
@@ -133,8 +144,37 @@ class VolumeTaylorMultipoleExpansion(
 
                 result[i] += contrib
 
+            result[i] /= mi_factorial(tgt_mi)
+
         logger.info("building translation operator: done")
-        return result
+        return self.full_to_stored(result)
+
+
+class VolumeTaylorMultipoleExpansion(
+        VolumeTaylorMultipoleExpansionBase,
+        VolumeTaylorExpansion):
+
+    def __init__(self, kernel, order):
+        VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order)
+        VolumeTaylorExpansion.__init__(self)
+
+
+class LaplaceConformingVolumeTaylorMultipoleExpansion(
+        VolumeTaylorMultipoleExpansionBase,
+        LaplaceConformingVolumeTaylorExpansion):
+
+    def __init__(self, kernel, order):
+        VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order)
+        LaplaceConformingVolumeTaylorExpansion.__init__(self)
+
+
+class HelmholtzConformingVolumeTaylorMultipoleExpansion(
+        VolumeTaylorMultipoleExpansionBase,
+        HelmholtzConformingVolumeTaylorExpansion):
+
+    def __init__(self, kernel, order):
+        VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order)
+        HelmholtzConformingVolumeTaylorExpansion.__init__(self)
 
 # }}}
 
