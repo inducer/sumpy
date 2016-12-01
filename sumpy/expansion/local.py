@@ -234,8 +234,4 @@ class H2DLocalExpansion(LocalExpansionBase):
 
 # }}}
 
-
-if __name__ == "__main__":
-    pass
-
 # vim: fdm=marker
