@@ -326,6 +326,7 @@ class SumpyExpansionWrangler(object):
             mpoles):
         tree = self.tree
 
+        evt = None
         # 2 is the last relevant source_level.
         # 1 is the last relevant target_level.
         # (Nobody needs a multipole on level 0, i.e. for the root box.)
@@ -362,7 +363,8 @@ class SumpyExpansionWrangler(object):
 
             assert mpoles_res is target_mpoles_view
 
-        mpoles.add_event(evt)
+        if evt is not None:
+            mpoles.add_event(evt)
 
         return mpoles
 
@@ -403,6 +405,9 @@ class SumpyExpansionWrangler(object):
 
             order = self.level_orders[lev]
             m2l = self.code.m2l(order, order)
+
+            with open("/home/matt/sad.loopy", "w") as outf:
+                print(m2l.get_kernel().stringify(with_dependencies=False), file=outf)
 
             source_level_start_ibox, source_mpoles_view = \
                     self.multipole_expansions_view(mpole_exps, lev)
