@@ -288,7 +288,7 @@ class E2PFromCSR(E2PBase):
                 nresults=len(result_names))
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-        loopy_knl = lp.set_loop_priority(loopy_knl, "itgt_box,itgt,isrc_box")
+        loopy_knl = lp.prioritize_loops(loopy_knl, "itgt_box,itgt,isrc_box")
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
