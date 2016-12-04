@@ -122,6 +122,7 @@ class VolumeTaylorExpansionBase(object):
         """
         raise NotImplementedError
 
+    @property
     @memoize_method
     def _storage_loc_dict(self):
         return dict((i, idx) for idx, i in
