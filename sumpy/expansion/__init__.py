@@ -123,6 +123,14 @@ class VolumeTaylorExpansionBase(object):
         raise NotImplementedError
 
     @memoize_method
+    def _storage_loc_dict(self):
+        return dict((i, idx) for idx, i in
+                    enumerate(self.get_coefficient_identifiers()))
+
+    def get_storage_index(self, i):
+        return self._storage_loc_dict[i]
+
+    @memoize_method
     def get_full_coefficient_identifiers(self):
         """
         Returns identifiers for every coefficient in the complete expansion.
