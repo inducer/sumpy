@@ -406,9 +406,6 @@ class SumpyExpansionWrangler(object):
             order = self.level_orders[lev]
             m2l = self.code.m2l(order, order)
 
-            with open("/home/matt/sad.loopy", "w") as outf:
-                print(m2l.get_kernel().stringify(with_dependencies=False), file=outf)
-
             source_level_start_ibox, source_mpoles_view = \
                     self.multipole_expansions_view(mpole_exps, lev)
             target_level_start_ibox, target_local_exps_view = \
