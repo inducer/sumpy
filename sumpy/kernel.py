@@ -26,7 +26,7 @@ from six.moves import range, zip
 
 import loopy as lp
 import numpy as np
-from pymbolic.mapper import IdentityMapper
+from pymbolic.mapper import IdentityMapper, CSECachingMapperMixin
 from sumpy.symbolic import pymbolic_real_norm_2
 from pymbolic.primitives import make_sym_vector
 from pymbolic import var
@@ -652,7 +652,7 @@ class AxisTargetDerivative(DerivativeBase):
     mapper_method = "map_axis_target_derivative"
 
 
-class _VectorIndexAdder(IdentityMapper):
+class _VectorIndexAdder(CSECachingMapperMixin, IdentityMapper):
     def __init__(self, vec_name, additional_indices):
         self.vec_name = vec_name
         self.additional_indices = additional_indices
@@ -665,6 +665,8 @@ class _VectorIndexAdder(IdentityMapper):
                     (expr.index,) + self.additional_indices))
         else:
             return IdentityMapper.map_subscript(self, expr)
+
+    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
 
 class DirectionalDerivative(DerivativeBase):
