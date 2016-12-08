@@ -1,7 +1,4 @@
-from __future__ import division
-from __future__ import absolute_import
-from six.moves import range
-from six.moves import zip
+from __future__ import division, absolute_import
 
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
@@ -25,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from six.moves import range, zip
 
 import loopy as lp
 import numpy as np
@@ -644,6 +642,9 @@ class AxisTargetDerivative(DerivativeBase):
     def __str__(self):
         return "d/dx%d %s" % (self.axis, self.inner_kernel)
 
+    def __repr__(self):
+        return "AxisTargetDerivative(%d, %r)" % (self.axis, self.inner_kernel)
+
     def postprocess_at_target(self, expr, bvec):
         expr = self.inner_kernel.postprocess_at_target(expr, bvec)
         return expr.diff(bvec[self.axis])
@@ -691,6 +692,12 @@ class DirectionalDerivative(DerivativeBase):
     def __str__(self):
         return r"%s . \/_%s %s" % (
                 self.dir_vec_name, self.directional_kind[0], self.inner_kernel)
+
+    def __repr__(self):
+        return "%s(%r, %s)" % (
+                type(self).__name__,
+                self.inner_kernel,
+                self.dir_vec_name)
 
     def get_source_args(self):
         return [

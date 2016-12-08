@@ -12,7 +12,6 @@ setuptools.pth
 distribute*egg
 distribute*tar.gz
 a.out
-
 doc/_build
-
 .cache
+.DS_Store

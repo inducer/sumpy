@@ -204,7 +204,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
             loopy_knl = lp.split_iname(loopy_knl, "itgt", 16, outer_tag="g.0",
                     inner_tag="l.0")
             loopy_knl = lp.split_iname(loopy_knl, "isrc", 256)
-            loopy_knl = lp.set_loop_priority(loopy_knl,
+            loopy_knl = lp.prioritize_loops(loopy_knl,
                     ["isrc_outer", "itgt_inner"])
         else:
             from warnings import warn

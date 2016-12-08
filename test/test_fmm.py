@@ -32,9 +32,13 @@ from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 from sumpy.kernel import LaplaceKernel, HelmholtzKernel
 from sumpy.expansion.multipole import (
-    VolumeTaylorMultipoleExpansion, H2DMultipoleExpansion)
+    VolumeTaylorMultipoleExpansion, H2DMultipoleExpansion,
+    LaplaceConformingVolumeTaylorMultipoleExpansion,
+    HelmholtzConformingVolumeTaylorMultipoleExpansion)
 from sumpy.expansion.local import (
-    VolumeTaylorLocalExpansion, H2DLocalExpansion)
+    VolumeTaylorLocalExpansion, H2DLocalExpansion,
+    LaplaceConformingVolumeTaylorLocalExpansion,
+    HelmholtzConformingVolumeTaylorLocalExpansion)
 
 from sumpy.expansion.level_to_order import (
     h2d_level_to_order_lookup,
@@ -84,10 +88,18 @@ def test_level_to_order_lookup(ctx_getter, lookup_func, extra_args):
 
 @pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class", [
     (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(2), LaplaceConformingVolumeTaylorLocalExpansion,
+                       LaplaceConformingVolumeTaylorMultipoleExpansion),
     (LaplaceKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(3), LaplaceConformingVolumeTaylorLocalExpansion,
+                       LaplaceConformingVolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2), HelmholtzConformingVolumeTaylorLocalExpansion,
+                         HelmholtzConformingVolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion),
-    (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion)
+    (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(3), HelmholtzConformingVolumeTaylorLocalExpansion,
+                         HelmholtzConformingVolumeTaylorMultipoleExpansion),
     ])
 def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
     logging.basicConfig(level=logging.INFO)

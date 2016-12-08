@@ -169,7 +169,7 @@ class E2EFromCSR(E2EBase):
 
                         """] + ["""
                         <> src_coeff{coeffidx} = \
-                            src_expansions[src_ibox, {coeffidx}] \
+                            src_expansions[src_ibox - src_base_ibox, {coeffidx}] \
                             {{dep=read_src_ibox}}
                         """.format(coeffidx=i) for i in range(ncoeff_src)] + [
 
@@ -177,7 +177,7 @@ class E2EFromCSR(E2EBase):
                     end
 
                     """] + ["""
-                    tgt_expansions[tgt_ibox, {coeffidx}] = \
+                    tgt_expansions[tgt_ibox - tgt_base_ibox, {coeffidx}] = \
                             simul_reduce(sum, isrc_box, coeff{coeffidx}) \
                             {{id_prefix=write_expn}}
                     """.format(coeffidx=i) for i in range(ncoeff_tgt)] + ["""
@@ -187,11 +187,14 @@ class E2EFromCSR(E2EBase):
                     lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
                     lp.GlobalArg("src_box_starts, src_box_lists",
                         None, shape=None, strides=(1,), offset=lp.auto),
-                    lp.ValueArg("aligned_nboxes,nboxes", np.int32),
+                    lp.ValueArg("aligned_nboxes,tgt_base_ibox,src_base_ibox",
+                        np.int32),
+                    lp.ValueArg("nsrc_level_boxes,ntgt_level_boxes",
+                        np.int32),
                     lp.GlobalArg("src_expansions", None,
-                        shape=("nboxes", ncoeff_src)),
+                        shape=("nsrc_level_boxes", ncoeff_src), offset=lp.auto),
                     lp.GlobalArg("tgt_expansions", None,
-                        shape=("nboxes", ncoeff_tgt)),
+                        shape=("ntgt_level_boxes", ncoeff_tgt), offset=lp.auto),
                     "..."
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
@@ -274,12 +277,13 @@ class E2EFromChildren(E2EBase):
 
                             """] + ["""
                             <> src_coeff{i} = \
-                                expansions[src_ibox, {i}] \
+                                src_expansions[src_ibox - src_base_ibox, {i}] \
                                 {{id_prefix=read_coeff,dep=read_src_ibox}}
                             """.format(i=i) for i in range(ncoeffs)] + [
                             ] + loopy_insns + ["""
-                            expansions[tgt_ibox, {i}] = \
-                                expansions[tgt_ibox, {i}] + coeff{i} \
+                            tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] = \
+                                tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] \
+                                + coeff{i} \
                                 {{id_prefix=write_expn,dep=compute_coeff*,
                                     nosync=read_coeff*}}
                             """.format(i=i) for i in range(ncoeffs)] + ["""
@@ -293,9 +297,12 @@ class E2EFromChildren(E2EBase):
                     lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
                     lp.GlobalArg("box_child_ids", None,
                         shape="nchildren, aligned_nboxes"),
-                    lp.GlobalArg("expansions", None,
-                        shape=("nboxes", ncoeffs)),
-                    lp.ValueArg("nboxes", np.int32),
+                    lp.GlobalArg("tgt_expansions", None,
+                        shape=("ntgt_level_boxes", ncoeffs), offset=lp.auto),
+                    lp.GlobalArg("src_expansions", None,
+                        shape=("nsrc_level_boxes", ncoeffs), offset=lp.auto),
+                    lp.ValueArg("src_base_ibox,tgt_base_ibox", np.int32),
+                    lp.ValueArg("ntgt_level_boxes,nsrc_level_boxes", np.int32),
                     lp.ValueArg("aligned_nboxes", np.int32),
                     "..."
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
@@ -368,14 +375,14 @@ class E2EFromParent(E2EBase):
 
                     """] + ["""
                     <> src_coeff{i} = \
-                        expansions[src_ibox, {i}] \
+                        src_expansions[src_ibox - src_base_ibox, {i}] \
                         {{id_prefix=read_expn,dep=read_src_ibox}}
                     """.format(i=i) for i in range(ncoeffs)] + [
 
                     ] + self.get_translation_loopy_insns() + ["""
 
-                    expansions[tgt_ibox, {i}] = \
-                        expansions[tgt_ibox, {i}] + coeff{i} \
+                    tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] = \
+                        tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] + coeff{i} \
                         {{id_prefix=write_expn,nosync=read_expn*}}
                     """.format(i=i) for i in range(ncoeffs)] + ["""
                 end
@@ -385,9 +392,13 @@ class E2EFromParent(E2EBase):
                         offset=lp.auto),
                     lp.GlobalArg("centers", None, shape="dim, naligned_boxes"),
                     lp.ValueArg("naligned_boxes,nboxes", np.int32),
+                    lp.ValueArg("tgt_base_ibox,src_base_ibox", np.int32),
+                    lp.ValueArg("ntgt_level_boxes,nsrc_level_boxes", np.int32),
                     lp.GlobalArg("box_parent_ids", None, shape="nboxes"),
-                    lp.GlobalArg("expansions", None,
-                        shape=("nboxes", ncoeffs)),
+                    lp.GlobalArg("tgt_expansions", None,
+                        shape=("ntgt_level_boxes", ncoeffs), offset=lp.auto),
+                    lp.GlobalArg("src_expansions", None,
+                        shape=("nsrc_level_boxes", ncoeffs), offset=lp.auto),
                     "..."
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name, assumptions="ntgt_boxes>=1",

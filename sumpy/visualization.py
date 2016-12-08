@@ -89,33 +89,49 @@ class FieldPlotter:
         from pytools import product
         self.npoints = product(npoints)
 
+    def _get_nontrivial_dims(self):
+        return np.array(self.nd_points.shape[1:]) != 1
+
+    def _get_squeezed_bounds(self):
+        nontriv_dims = self._get_nontrivial_dims()
+
+        return self.a[nontriv_dims], self.b[nontriv_dims]
+
     def show_scalar_in_matplotlib(self, fld, max_val=None,
             func_name="imshow", **kwargs):
-        if len(self.a) != 2:
+        squeezed_points = self.points.squeeze()
+
+        if len(squeezed_points.shape) != 2:
             raise RuntimeError(
                     "matplotlib plotting requires 2D geometry")
 
         if len(fld.shape) == 1:
             fld = fld.reshape(self.nd_points.shape[1:])
 
-        if max_val is not None:
-            fld[fld > max_val] = max_val
-            fld[fld < -max_val] = -max_val
+        squeezed_fld = fld.squeeze()
 
-        fld = fld[..., ::-1]
+        if max_val is not None:
+            squeezed_fld[squeezed_fld > max_val] = max_val
+            squeezed_fld[squeezed_fld < -max_val] = -max_val
+
+        squeezed_fld = squeezed_fld[..., ::-1]
+
+        a, b = self._get_squeezed_bounds()
 
         kwargs["extent"] = (
                 # (left, right, bottom, top)
-                self.a[0], self.b[0],
-                self.a[1], self.b[1])
+                a[0], b[0],
+                a[1], b[1])
 
         import matplotlib.pyplot as pt
-        return getattr(pt, func_name)(fld.T, **kwargs)
+        return getattr(pt, func_name)(squeezed_fld.T, **kwargs)
 
     def set_matplotlib_limits(self):
         import matplotlib.pyplot as pt
-        pt.xlim((self.a[0], self.b[0]))
-        pt.ylim((self.a[1], self.b[1]))
+
+        a, b = self._get_squeezed_bounds()
+        pt.xlim((a[0], b[0]))
+        pt.ylim((a[1], b[1]))
 
     def show_vector_in_mayavi(self, fld, do_show=True, **kwargs):
         c = self.points
@@ -140,7 +156,10 @@ class FieldPlotter:
         if len(fld.shape) == 1:
             fld = fld.reshape(self.nd_points.shape[1:])
 
+        nd_points = self.nd_points.squeeze()[self._get_nontrivial_dims()]
+        squeezed_fld = fld.squeeze()
+
         from mayavi import mlab
-        mlab.surf(self.nd_points[0], self.nd_points[1], fld, **kwargs)
+        mlab.surf(nd_points[0], nd_points[1], squeezed_fld, **kwargs)
 
 # vim: foldmethod=marker

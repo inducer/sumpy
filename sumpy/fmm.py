@@ -168,7 +168,8 @@ class SumpyExpansionWrangler(object):
 
         if not callable(fmm_level_to_order):
             raise TypeError("fmm_level_to_order not passed")
-        self.fmm_level_to_order = fmm_level_to_order
+        self.level_orders = [
+                fmm_level_to_order(lev) for lev in range(tree.nlevels)]
 
         if kernel_extra_kwargs is None:
             kernel_extra_kwargs = {}
@@ -185,23 +186,57 @@ class SumpyExpansionWrangler(object):
 
     # {{{ data vector utilities
 
+    def _expansions_level_starts(self, order_to_size):
+        result = [0]
+        for lev in range(self.tree.nlevels):
+            lev_nboxes = (
+                    self.tree.level_start_box_nrs[lev+1]
+                    - self.tree.level_start_box_nrs[lev])
+
+            expn_size = order_to_size(self.level_orders[lev])
+            result.append(
+                    result[-1]
+                    + expn_size * lev_nboxes)
+
+        return result
+
+    @memoize_method
+    def multipole_expansions_level_starts(self):
+        return self._expansions_level_starts(
+                lambda order: len(self.code.multipole_expansion_factory(order)))
+
+    @memoize_method
+    def local_expansions_level_starts(self):
+        return self._expansions_level_starts(
+                lambda order: len(self.code.multipole_expansion_factory(order)))
+
     def multipole_expansion_zeros(self):
-        # AARGH FIXME order may vary by level
-        order = self.fmm_level_to_order(0)
-        m_expn = self.code.multipole_expansion_factory(order)
         return cl.array.zeros(
                 self.queue,
-                (self.tree.nboxes, len(m_expn)),
+                self.multipole_expansions_level_starts()[-1],
                 dtype=self.dtype)
 
     def local_expansion_zeros(self):
-        # AARGH FIXME order may vary by level
-        order = self.fmm_level_to_order(0)
-        l_expn = self.code.local_expansion_factory(order)
         return cl.array.zeros(
                 self.queue,
-                (self.tree.nboxes, len(l_expn)),
+                self.local_expansions_level_starts()[-1],
                 dtype=self.dtype)
+
+    def multipole_expansions_view(self, mpole_exps, level):
+        expn_start, expn_stop = \
+                self.multipole_expansions_level_starts()[level:level+2]
+        box_start, box_stop = self.tree.level_start_box_nrs[level:level+2]
+
+        return (box_start,
+                mpole_exps[expn_start:expn_stop].reshape(box_stop-box_start, -1))
+
+    def local_expansions_view(self, local_exps, level):
+        expn_start, expn_stop = \
+                self.local_expansions_level_starts()[level:level+2]
+        box_start, box_stop = self.tree.level_start_box_nrs[level:level+2]
+
+        return (box_start,
+                local_exps[expn_start:expn_stop].reshape(box_stop-box_start, -1))
 
     def potential_zeros(self):
         from pytools.obj_array import make_obj_array
@@ -256,23 +291,27 @@ class SumpyExpansionWrangler(object):
 
         events = []
         for lev in range(self.tree.nlevels):
-            p2m = self.code.p2m(self.fmm_level_to_order(lev))
+            p2m = self.code.p2m(self.level_orders[lev])
             start, stop = level_start_source_box_nrs[lev:lev+2]
             if start == stop:
                 continue
+
+            level_start_ibox, mpoles_view = self.multipole_expansions_view(
+                    mpoles, lev)
 
             evt, (mpoles_res,) = p2m(
                     self.level_queues[lev],
                     source_boxes=source_boxes[start:stop],
                     centers=self.tree.box_centers,
                     strengths=src_weights,
-                    expansions=mpoles,
+                    tgt_expansions=mpoles_view,
+                    tgt_base_ibox=level_start_ibox,
 
                     wait_for=src_weights.events,
 
                     **kwargs)
 
-            assert mpoles_res is mpoles
+            assert mpoles_res is mpoles_view
 
             events.append(evt)
 
@@ -287,6 +326,7 @@ class SumpyExpansionWrangler(object):
             mpoles):
         tree = self.tree
 
+        evt = None
         # 2 is the last relevant source_level.
         # 1 is the last relevant target_level.
         # (Nobody needs a multipole on level 0, i.e. for the root box.)
@@ -300,21 +340,31 @@ class SumpyExpansionWrangler(object):
             assert target_level > 0
 
             m2m = self.code.m2m(
-                    self.fmm_level_to_order(source_level),
-                    self.fmm_level_to_order(target_level))
+                    self.level_orders[source_level],
+                    self.level_orders[target_level])
+
+            source_level_start_ibox, source_mpoles_view = \
+                    self.multipole_expansions_view(mpoles, source_level)
+            target_level_start_ibox, target_mpoles_view = \
+                    self.multipole_expansions_view(mpoles, target_level)
 
             evt, (mpoles_res,) = m2m(
                     self.queue,
-                    expansions=mpoles,
+                    src_expansions=source_mpoles_view,
+                    src_base_ibox=source_level_start_ibox,
+                    tgt_expansions=target_mpoles_view,
+                    tgt_base_ibox=target_level_start_ibox,
+
                     target_boxes=source_parent_boxes[start:stop],
                     box_child_ids=self.tree.box_child_ids,
                     centers=self.tree.box_centers,
 
                     **self.kernel_extra_kwargs)
 
-            assert mpoles_res is mpoles
+            assert mpoles_res is target_mpoles_view
 
-        mpoles.add_event(evt)
+        if evt is not None:
+            mpoles.add_event(evt)
 
         return mpoles
 
@@ -353,23 +403,32 @@ class SumpyExpansionWrangler(object):
             if start == stop:
                 continue
 
-            order = self.fmm_level_to_order(lev)
+            order = self.level_orders[lev]
             m2l = self.code.m2l(order, order)
+
+            source_level_start_ibox, source_mpoles_view = \
+                    self.multipole_expansions_view(mpole_exps, lev)
+            target_level_start_ibox, target_local_exps_view = \
+                    self.local_expansions_view(local_exps, lev)
 
             evt, (local_exps_res,) = m2l(
                     self.level_queues[lev],
-                    src_expansions=mpole_exps,
+
+                    src_expansions=source_mpoles_view,
+                    src_base_ibox=source_level_start_ibox,
+                    tgt_expansions=target_local_exps_view,
+                    tgt_base_ibox=target_level_start_ibox,
+
                     target_boxes=target_boxes[start:stop],
                     src_box_starts=src_box_starts[start:stop],
                     src_box_lists=src_box_lists,
                     centers=self.tree.box_centers,
-                    tgt_expansions=local_exps,
 
                     wait_for=mpole_exps.events,
 
                     **self.kernel_extra_kwargs)
 
-            assert local_exps_res is local_exps
+            assert local_exps_res is target_local_exps_view
             events.append(evt)
 
         evt = _enqueue_barrier(self.queue, wait_for=events)
@@ -391,11 +450,17 @@ class SumpyExpansionWrangler(object):
             if len(target_boxes) == 0:
                 continue
 
-            m2p = self.code.m2p(self.fmm_level_to_order(isrc_level))
+            m2p = self.code.m2p(self.level_orders[isrc_level])
+
+            source_level_start_ibox, source_mpoles_view = \
+                    self.multipole_expansions_view(mpole_exps, isrc_level)
 
             evt, pot_res = m2p(
                     self.queue,
-                    expansions=mpole_exps,
+
+                    src_expansions=source_mpoles_view,
+                    src_base_ibox=source_level_start_ibox,
+
                     target_boxes=target_boxes,
                     source_box_starts=ssn.starts,
                     source_box_lists=ssn.lists,
@@ -432,7 +497,10 @@ class SumpyExpansionWrangler(object):
             if start == stop:
                 continue
 
-            p2l = self.code.p2l(self.fmm_level_to_order(lev))
+            p2l = self.code.p2l(self.level_orders[lev])
+
+            target_level_start_ibox, target_local_exps_view = \
+                    self.multipole_expansions_view(local_exps, lev)
 
             evt, (result,) = p2l(
                     self.level_queues[lev],
@@ -441,19 +509,21 @@ class SumpyExpansionWrangler(object):
                     source_box_lists=lists,
                     centers=self.tree.box_centers,
                     strengths=src_weights,
-                    expansions=local_exps,
+
+                    tgt_expansions=target_local_exps_view,
+                    tgt_base_ibox=target_level_start_ibox,
 
                     wait_for=src_weights.events,
 
                     **kwargs)
 
-            assert local_exps is result
+            assert result is target_local_exps_view
             events.append(evt)
 
         evt = _enqueue_barrier(self.queue, wait_for=events)
         result.add_event(evt)
 
-        return result
+        return local_exps
 
     def refine_locals(self,
             level_start_target_or_target_parent_box_nrs,
@@ -467,20 +537,30 @@ class SumpyExpansionWrangler(object):
 
             source_lev = target_lev - 1
             l2l = self.code.l2l(
-                    self.fmm_level_to_order(source_lev),
-                    self.fmm_level_to_order(target_lev))
+                    self.level_orders[source_lev],
+                    self.level_orders[target_lev])
+
+            source_level_start_ibox, source_local_exps_view = \
+                    self.local_expansions_view(local_exps, source_lev)
+            target_level_start_ibox, target_local_exps_view = \
+                    self.local_expansions_view(local_exps, target_lev)
 
             evt, (local_exps_res,) = l2l(self.queue,
-                    expansions=local_exps,
+                    src_expansions=source_local_exps_view,
+                    src_base_ibox=source_level_start_ibox,
+                    tgt_expansions=target_local_exps_view,
+                    tgt_base_ibox=target_level_start_ibox,
+
                     target_boxes=target_or_target_parent_boxes[start:stop],
                     box_parent_ids=self.tree.box_parent_ids,
                     centers=self.tree.box_centers,
 
                     **self.kernel_extra_kwargs)
 
+            assert local_exps_res is target_local_exps_view
+
         local_exps.add_event(evt)
 
-        assert local_exps_res is local_exps
         return local_exps
 
     def eval_locals(self, level_start_target_box_nrs, target_boxes, local_exps):
@@ -495,10 +575,17 @@ class SumpyExpansionWrangler(object):
             if start == stop:
                 continue
 
-            l2p = self.code.l2p(self.fmm_level_to_order(lev))
+            l2p = self.code.l2p(self.level_orders[lev])
+
+            source_level_start_ibox, source_local_exps_view = \
+                    self.local_expansions_view(local_exps, lev)
+
             evt, pot_res = l2p(
                     self.level_queues[lev],
-                    expansions=local_exps,
+
+                    src_expansions=source_local_exps_view,
+                    src_base_ibox=source_level_start_ibox,
+
                     target_boxes=target_boxes[start:stop],
                     centers=self.tree.box_centers,
                     result=pot,
