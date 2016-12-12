@@ -144,7 +144,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
         loopy_insns = to_loopy_insns(assignments,
                 vector_names=set(["a", "b"]),
                 pymbolic_expr_maps=[
-                    expn.kernel.transform_to_code for expn in self.expansions],
+                    expn.kernel.get_code_transformer() for expn in self.expansions],
                 complex_dtype=np.complex128  # FIXME
                 )
 

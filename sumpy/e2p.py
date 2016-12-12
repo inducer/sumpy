@@ -100,7 +100,7 @@ class E2PBase(KernelCacheWrapper):
         from sumpy.codegen import to_loopy_insns
         loopy_insns = to_loopy_insns(assignments,
                 vector_names=set(["b"]),
-                pymbolic_expr_maps=[self.expansion.transform_to_code],
+                pymbolic_expr_maps=[self.expansion.get_code_transformer()],
                 complex_dtype=np.complex128  # FIXME
                 )
 

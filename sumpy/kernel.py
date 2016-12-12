@@ -166,12 +166,12 @@ class Kernel(object):
         """
         return loopy_knl
 
-    def transform_to_code(self, expr):
-        """Postprocess the :mod:`pymbolic` expression
-        generated from the result of :meth:`get_expression`
-        on the way to code generation.
+    def get_code_transformer(self):
+        """Return a function to postprocess the :mod:`pymbolic`
+        expression generated from the result of
+        :meth:`get_expression` on the way to code generation.
         """
-        return expr
+        return lambda expr: expr
 
     def get_expression(self, dist_vec):
         """Return a :mod:`sympy` expression for the kernel.
@@ -570,12 +570,16 @@ class StressletKernel(ExpressionKernel):
                             dim_tags="sep,C"))
                 ]
 
-    def transform_to_code(self, expr):
+    def get_code_tranformer(self):
         from sumpy.codegen import VectorComponentRewriter
         vcr = VectorComponentRewriter([self.stresslet_vector_name])
         from pymbolic.primitives import Variable
-        return _VectorIndexAdder(self.stresslet_vector_name, (Variable("isrc"),))(
-                vcr(expr))
+        via = _VectorIndexAdder(self.stresslet_vector_name, (Variable("isrc"),))
+
+        def transform(expr):
+            return via(vcr(expr))
+
+        return transform
 
     mapper_method = "map_stresslet_kernel"
 
@@ -611,8 +615,8 @@ class KernelWrapper(Kernel):
     def get_scaling(self):
         return self.inner_kernel.get_scaling()
 
-    def transform_to_code(self, expr):
-        return self.inner_kernel.transform_to_code(expr)
+    def get_code_transformer(self):
+        return self.inner_kernel.get_code_transformer()
 
     def get_args(self):
         return self.inner_kernel.get_args()
@@ -716,12 +720,16 @@ class DirectionalDerivative(DerivativeBase):
 class DirectionalTargetDerivative(DirectionalDerivative):
     directional_kind = "tgt"
 
-    def transform_to_code(self, expr):
+    def get_code_transformer(self):
         from sumpy.codegen import VectorComponentRewriter
         vcr = VectorComponentRewriter([self.dir_vec_name])
         from pymbolic.primitives import Variable
-        return _VectorIndexAdder(self.dir_vec_name, (Variable("itgt"),))(
-                vcr(self.inner_kernel.transform_to_code(expr)))
+        via = _VectorIndexAdder(self.dir_vec_name, (Variable("itgt"),))
+
+        def transform(expr):
+            return via(vcr(expr))
+
+        return transform
 
     def postprocess_at_target(self, expr, bvec):
         expr = self.inner_kernel.postprocess_at_target(expr, bvec)
@@ -742,12 +750,17 @@ class DirectionalTargetDerivative(DirectionalDerivative):
 class DirectionalSourceDerivative(DirectionalDerivative):
     directional_kind = "src"
 
-    def transform_to_code(self, expr):
+    def get_code_transformer(self):
+        inner = self.inner_kernel.get_code_transformer()
         from sumpy.codegen import VectorComponentRewriter
         vcr = VectorComponentRewriter([self.dir_vec_name])
         from pymbolic.primitives import Variable
-        return _VectorIndexAdder(self.dir_vec_name, (Variable("isrc"),))(
-                vcr(self.inner_kernel.transform_to_code(expr)))
+        via = _VectorIndexAdder(self.dir_vec_name, (Variable("isrc"),))
+
+        def transform(expr):
+            return via(vcr(inner(expr)))
+
+        return transform
 
     def postprocess_at_source(self, expr, avec):
         expr = self.inner_kernel.postprocess_at_source(expr, avec)
