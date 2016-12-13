@@ -57,8 +57,8 @@ class ExpansionBase(object):
     def prepare_loopy_kernel(self, loopy_knl):
         return self.kernel.prepare_loopy_kernel(loopy_knl)
 
-    def transform_to_code(self, expr):
-        return self.kernel.transform_to_code(expr)
+    def get_code_transformer(self):
+        return self.kernel.get_code_transformer()
 
     def get_scaling(self):
         return self.kernel.get_scaling()
