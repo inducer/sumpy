@@ -69,7 +69,7 @@ class MiDerivativeTaker(object):
             (other_mi
                 for other_mi in self.cache_by_mi.keys()
                 if (np.array(mi) >= np.array(other_mi)).all()),
-            key = lambda other_mi: sum(self.mi_dist(mi, other_mi)))
+            key=lambda other_mi: sum(self.mi_dist(mi, other_mi)))
 
         expr = self.cache_by_mi[closest_mi]
         current_mi = np.array(closest_mi, dtype=int)
