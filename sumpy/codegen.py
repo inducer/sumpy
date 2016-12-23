@@ -430,6 +430,41 @@ class FractionKiller(CSECachingMapperMixin, IdentityMapper):
 # }}}
 
 
+# {{{ convert big integers into floats
+
+from loopy.tools import is_integer
+
+
+class BigIntegerKiller(CSECachingMapperMixin, IdentityMapper):
+
+    def __init__(self, warn_on_first=True, int_type=np.int64, float_type=np.float64):
+        IdentityMapper.__init__(self)
+        self.bits = 64
+        self.warn = warn_on_first
+        self.float_type = float_type
+        self.iinfo = np.iinfo(int_type)
+
+    def map_constant(self, expr):
+        if not is_integer(expr):
+            return IdentityMapper.map_constant(self, expr)
+
+        if self.iinfo.min <= expr <= self.iinfo.max:
+            return expr
+
+        if self.warn:
+            from warnings import warn
+            warn("Converting '%d' to float: this may result in "
+                 "loss of digits." % expr)
+            # Suppress further warnings.
+            self.warn = False
+
+        return self.float_type(expr)
+
+    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+
+# }}}
+
+
 # {{{ vector component rewriter
 
 INDEXED_VAR_RE = re.compile("^([a-zA-Z_]+)([0-9]+)$")
@@ -534,6 +569,7 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
     pwr = PowerRewriter()
     ssg = SumSignGrouper()
     fck = FractionKiller()
+    bik = BigIntegerKiller()
 
     def convert_expr(name, expr):
         logger.debug("generate expression for: %s" % name)
@@ -543,6 +579,7 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
         expr = pwr(expr)
         expr = fck(expr)
         expr = ssg(expr)
+        expr = bik(expr)
         #expr = cse_tag(expr)
         for m in pymbolic_expr_maps:
             expr = m(expr)
