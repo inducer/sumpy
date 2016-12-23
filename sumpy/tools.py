@@ -74,7 +74,7 @@ class MiDerivativeTaker(object):
         expr = self.cache_by_mi[closest_mi]
         current_mi = np.array(closest_mi, dtype=int)
         for idx, (mi_i, vec_i) in enumerate(
-                    zip(self.mi_distvec(mi, closest_mi), self.var_list)):
+                    zip(self.mi_dist(mi, closest_mi), self.var_list)):
             for i in range(1, 1 + mi_i):
                 current_mi[idx] += 1
                 expr = expr.diff(vec_i)
