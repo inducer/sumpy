@@ -92,9 +92,10 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         ppkernel = self.kernel.postprocess_at_target(
                 self.kernel.get_expression(bvec), bvec)
 
-        from sumpy.tools import mi_derivative
+        from sumpy.tools import MiDerivativeTaker
+        taker = MiDerivativeTaker(ppkernel, bvec)
         result = sum(
-                coeff * mi_derivative(ppkernel, bvec, mi)
+                coeff * taker.diff(mi)
                 for coeff, mi in zip(coeffs, self.get_coefficient_identifiers()))
         return result
 

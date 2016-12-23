@@ -54,10 +54,33 @@ def mi_power(vector, mi):
     return result
 
 
-def mi_derivative(expr, vector, mi):
-    for mi_i, vec_i in zip(mi, vector):
-        expr = expr.diff(vec_i, mi_i)
-    return expr
+class MiDerivativeTaker(object):
+
+    def __init__(self, expr, var_list):
+        self.var_list = var_list
+        empty_mi = (0,) * len(var_list)
+        self.cache_by_mi = {empty_mi: expr}
+
+    def mi_dist(self, a, b):
+        return np.array(a, dtype=int) - np.array(b, dtype=int)
+
+    def diff(self, mi):
+        closest_mi = min(
+            (other_mi
+                for other_mi in self.cache_by_mi.keys()
+                if (np.array(mi) >= np.array(other_mi)).all()),
+            key = lambda other_mi: sum(self.mi_dist(mi, other_mi)))
+
+        expr = self.cache_by_mi[closest_mi]
+        current_mi = np.array(closest_mi, dtype=int)
+        for idx, (mi_i, vec_i) in enumerate(
+                    zip(self.mi_distvec(mi, closest_mi), self.var_list)):
+            for i in range(1, 1 + mi_i):
+                current_mi[idx] += 1
+                expr = expr.diff(vec_i)
+                self.cache_by_mi[tuple(current_mi)] = expr
+
+        return expr
 
 # }}}
 

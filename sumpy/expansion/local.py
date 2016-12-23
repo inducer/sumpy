@@ -91,11 +91,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
     """
 
     def coefficients_from_source(self, avec, bvec):
-        from sumpy.tools import mi_derivative
+        from sumpy.tools import MiDerivativeTaker
         ppkernel = self.kernel.postprocess_at_source(
                 self.kernel.get_expression(avec), avec)
-        return [mi_derivative(ppkernel, avec, mi)
-                for mi in self.get_coefficient_identifiers()]
+        taker = MiDerivativeTaker(ppkernel, avec)
+        return [taker.diff(mi) for mi in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec):
         from sumpy.tools import mi_power, mi_factorial
@@ -115,10 +115,10 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                     type(self).__name__,
                     self.order))
 
-        from sumpy.tools import mi_derivative
+        from sumpy.tools import MiDerivativeTaker
         expr = src_expansion.evaluate(src_coeff_exprs, dvec)
-        result = [mi_derivative(expr, dvec, mi)
-                for mi in self.get_coefficient_identifiers()]
+        taker = MiDerivativeTaker(expr, dvec)
+        result = [taker.diff(mi) for mi in self.get_coefficient_identifiers()]
 
         logger.info("building translation operator: done")
         return result
