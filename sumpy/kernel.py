@@ -506,26 +506,22 @@ class StressletKernel(ExpressionKernel):
 
         if dim == 2:
             d = make_sym_vector("d", dim)
-            n = make_sym_vector(stresslet_vector_name, dim)
             r = pymbolic_real_norm_2(d)
             expr = (
-                sum(n[axis]*d[axis] for axis in range(dim))
-                *
-                d[icomp]*d[jcomp]/r**4
+                -var("log")(r)*(1 if icomp == jcomp else 0)
+                +
+                d[icomp]*d[jcomp]/r**2
                 )
-            scaling = 1/(var("pi"))
-
+            scaling = 1/(4*var("pi"))
         elif dim == 3:
             d = make_sym_vector("d", dim)
-            n = make_sym_vector(stresslet_vector_name, dim)
             r = pymbolic_real_norm_2(d)
             expr = (
-                sum(n[axis]*d[axis] for axis in range(dim))
-                *
-                d[icomp]*d[jcomp]/r**5
+                (1/r)*(1 if icomp == jcomp else 0)
+                +
+                d[icomp]*d[jcomp]/r**3
                 )
-            scaling = -3/(4*var("pi"))
-
+            scaling = -1/(8*var("pi"))
         elif dim is None:
             expr = None
             scaling = None
@@ -562,15 +558,28 @@ class StressletKernel(ExpressionKernel):
         return [
                 KernelArgument(
                     loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64),
-                    ),
+                    )]
+
+    def get_source_args(self):
+        return [
                 KernelArgument(
                         loopy_arg=lp.GlobalArg(self.stresslet_vector_name,
                             None,
                             shape=(self.dim, "nsources"),
-                            dim_tags="sep,C"))
-                ]
+                            dim_tags="sep,C"))]
 
-    def get_code_tranformer(self):
+    def postprocess_at_source(self, expr, avec):
+        dimensions = len(avec)
+        assert dimensions == self.dim
+
+        from sumpy.symbolic import make_sympy_vector
+        n = make_sympy_vector(self.stresslet_vector_name, dimensions)
+
+        # avec = center-src -> minus sign from chain rule
+        return sum(-n[axis]*expr.diff(avec[axis])
+                for axis in range(dimensions))
+
+    def get_code_transformer(self):
         from sumpy.codegen import VectorComponentRewriter
         vcr = VectorComponentRewriter([self.stresslet_vector_name])
         from pymbolic.primitives import Variable
