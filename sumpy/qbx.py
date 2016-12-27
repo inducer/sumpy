@@ -111,8 +111,8 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                     shape=(self.dim, "ntargets"), order="C"),
                 lp.GlobalArg("center", None,
                     shape=(self.dim, "ntargets"), order="C"),
-                lp.ValueArg("nsources", None),
-                lp.ValueArg("ntargets", None),
+                lp.ValueArg("nsources", np.int32),
+                lp.ValueArg("ntargets", np.int32),
                 ]
 
     @memoize_method
