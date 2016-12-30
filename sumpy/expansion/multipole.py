@@ -89,15 +89,18 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         return self.full_to_stored(result)
 
     def evaluate(self, coeffs, bvec):
-        ppkernel = self.kernel.postprocess_at_target(
-                self.kernel.get_expression(bvec), bvec)
-
-        from sumpy.tools import MiDerivativeTaker
-        taker = MiDerivativeTaker(ppkernel, bvec)
+        taker = self.get_kernel_derivative_taker(bvec)
         result = sum(
                 coeff * taker.diff(mi)
                 for coeff, mi in zip(coeffs, self.get_coefficient_identifiers()))
         return result
+
+    def get_kernel_derivative_taker(self, bvec):
+        ppkernel = self.kernel.postprocess_at_target(
+                self.kernel.get_expression(bvec), bvec)
+
+        from sumpy.tools import MiDerivativeTaker
+        return MiDerivativeTaker(ppkernel, bvec)
 
     def translate_from(self, src_expansion, src_coeff_exprs, dvec):
         if not isinstance(src_expansion, type(self)):
