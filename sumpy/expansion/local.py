@@ -91,11 +91,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
     """
 
     def coefficients_from_source(self, avec, bvec):
-        from sumpy.tools import mi_derivative
+        from sumpy.tools import MiDerivativeTaker
         ppkernel = self.kernel.postprocess_at_source(
                 self.kernel.get_expression(avec), avec)
-        return [mi_derivative(ppkernel, avec, mi)
-                for mi in self.get_coefficient_identifiers()]
+        taker = MiDerivativeTaker(ppkernel, avec)
+        return [taker.diff(mi) for mi in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec):
         from sumpy.tools import mi_power, mi_factorial
@@ -115,10 +115,36 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                     type(self).__name__,
                     self.order))
 
-        from sumpy.tools import mi_derivative
-        expr = src_expansion.evaluate(src_coeff_exprs, dvec)
-        result = [mi_derivative(expr, dvec, mi)
-                for mi in self.get_coefficient_identifiers()]
+        from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansionBase
+        if isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
+            # We know the general form of the multipole expansion is:
+            #
+            #    coeff0 * diff(kernel, mi0) + coeff1 * diff(kernel, mi1) + ...
+            #
+            # To get the local expansion coefficients, we take derivatives of
+            # the multipole expansion.
+            #
+            # This code speeds up derivative taking by caching all kernel
+            # derivatives.
+            taker = src_expansion.get_kernel_derivative_taker(dvec)
+
+            def mi_sum(a, b):
+                return tuple(aval + bval for aval, bval in zip(a, b))
+
+            result = []
+            for deriv in self.get_coefficient_identifiers():
+                local_result = []
+                for coeff, term in zip(
+                        src_coeff_exprs,
+                        src_expansion.get_coefficient_identifiers()):
+                    kernel_deriv = taker.diff(mi_sum(deriv, term))
+                    local_result.append(coeff * kernel_deriv)
+                result.append(sp.Add(*local_result))
+        else:
+            from sumpy.tools import MiDerivativeTaker
+            expr = src_expansion.evaluate(src_coeff_exprs, dvec)
+            taker = MiDerivativeTaker(expr, dvec)
+            result = [taker.diff(mi) for mi in self.get_coefficient_identifiers()]
 
         logger.info("building translation operator: done")
         return result

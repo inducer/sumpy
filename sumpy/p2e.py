@@ -93,7 +93,7 @@ class P2EBase(KernelCacheWrapper):
         return to_loopy_insns(
                 assignments,
                 vector_names=set(["a"]),
-                pymbolic_expr_maps=[self.expansion.transform_to_code],
+                pymbolic_expr_maps=[self.expansion.get_code_transformer()],
                 complex_dtype=np.complex128  # FIXME
                 )
 

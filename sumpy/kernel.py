@@ -166,12 +166,12 @@ class Kernel(object):
         """
         return loopy_knl
 
-    def transform_to_code(self, expr):
-        """Postprocess the :mod:`pymbolic` expression
-        generated from the result of :meth:`get_expression`
-        on the way to code generation.
+    def get_code_transformer(self):
+        """Return a function to postprocess the :mod:`pymbolic`
+        expression generated from the result of
+        :meth:`get_expression` on the way to code generation.
         """
-        return expr
+        return lambda expr: expr
 
     def get_expression(self, dist_vec):
         """Return a :mod:`sympy` expression for the kernel.
@@ -506,26 +506,22 @@ class StressletKernel(ExpressionKernel):
 
         if dim == 2:
             d = make_sym_vector("d", dim)
-            n = make_sym_vector(stresslet_vector_name, dim)
             r = pymbolic_real_norm_2(d)
             expr = (
-                sum(n[axis]*d[axis] for axis in range(dim))
-                *
-                d[icomp]*d[jcomp]/r**4
+                -var("log")(r)*(1 if icomp == jcomp else 0)
+                +
+                d[icomp]*d[jcomp]/r**2
                 )
-            scaling = 1/(var("pi"))
-
+            scaling = 1/(4*var("pi"))
         elif dim == 3:
             d = make_sym_vector("d", dim)
-            n = make_sym_vector(stresslet_vector_name, dim)
             r = pymbolic_real_norm_2(d)
             expr = (
-                sum(n[axis]*d[axis] for axis in range(dim))
-                *
-                d[icomp]*d[jcomp]/r**5
+                (1/r)*(1 if icomp == jcomp else 0)
+                +
+                d[icomp]*d[jcomp]/r**3
                 )
-            scaling = -3/(4*var("pi"))
-
+            scaling = -1/(8*var("pi"))
         elif dim is None:
             expr = None
             scaling = None
@@ -562,20 +558,37 @@ class StressletKernel(ExpressionKernel):
         return [
                 KernelArgument(
                     loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64),
-                    ),
+                    )]
+
+    def get_source_args(self):
+        return [
                 KernelArgument(
                         loopy_arg=lp.GlobalArg(self.stresslet_vector_name,
                             None,
                             shape=(self.dim, "nsources"),
-                            dim_tags="sep,C"))
-                ]
+                            dim_tags="sep,C"))]
 
-    def transform_to_code(self, expr):
+    def postprocess_at_source(self, expr, avec):
+        dimensions = len(avec)
+        assert dimensions == self.dim
+
+        from sumpy.symbolic import make_sympy_vector
+        n = make_sympy_vector(self.stresslet_vector_name, dimensions)
+
+        # avec = center-src -> minus sign from chain rule
+        return sum(-n[axis]*expr.diff(avec[axis])
+                for axis in range(dimensions))
+
+    def get_code_transformer(self):
         from sumpy.codegen import VectorComponentRewriter
         vcr = VectorComponentRewriter([self.stresslet_vector_name])
         from pymbolic.primitives import Variable
-        return _VectorIndexAdder(self.stresslet_vector_name, (Variable("isrc"),))(
-                vcr(expr))
+        via = _VectorIndexAdder(self.stresslet_vector_name, (Variable("isrc"),))
+
+        def transform(expr):
+            return via(vcr(expr))
+
+        return transform
 
     mapper_method = "map_stresslet_kernel"
 
@@ -611,8 +624,8 @@ class KernelWrapper(Kernel):
     def get_scaling(self):
         return self.inner_kernel.get_scaling()
 
-    def transform_to_code(self, expr):
-        return self.inner_kernel.transform_to_code(expr)
+    def get_code_transformer(self):
+        return self.inner_kernel.get_code_transformer()
 
     def get_args(self):
         return self.inner_kernel.get_args()
@@ -716,12 +729,16 @@ class DirectionalDerivative(DerivativeBase):
 class DirectionalTargetDerivative(DirectionalDerivative):
     directional_kind = "tgt"
 
-    def transform_to_code(self, expr):
+    def get_code_transformer(self):
         from sumpy.codegen import VectorComponentRewriter
         vcr = VectorComponentRewriter([self.dir_vec_name])
         from pymbolic.primitives import Variable
-        return _VectorIndexAdder(self.dir_vec_name, (Variable("itgt"),))(
-                vcr(self.inner_kernel.transform_to_code(expr)))
+        via = _VectorIndexAdder(self.dir_vec_name, (Variable("itgt"),))
+
+        def transform(expr):
+            return via(vcr(expr))
+
+        return transform
 
     def postprocess_at_target(self, expr, bvec):
         expr = self.inner_kernel.postprocess_at_target(expr, bvec)
@@ -742,12 +759,17 @@ class DirectionalTargetDerivative(DirectionalDerivative):
 class DirectionalSourceDerivative(DirectionalDerivative):
     directional_kind = "src"
 
-    def transform_to_code(self, expr):
+    def get_code_transformer(self):
+        inner = self.inner_kernel.get_code_transformer()
         from sumpy.codegen import VectorComponentRewriter
         vcr = VectorComponentRewriter([self.dir_vec_name])
         from pymbolic.primitives import Variable
-        return _VectorIndexAdder(self.dir_vec_name, (Variable("isrc"),))(
-                vcr(self.inner_kernel.transform_to_code(expr)))
+        via = _VectorIndexAdder(self.dir_vec_name, (Variable("isrc"),))
+
+        def transform(expr):
+            return via(vcr(inner(expr)))
+
+        return transform
 
     def postprocess_at_source(self, expr, avec):
         expr = self.inner_kernel.postprocess_at_source(expr, avec)

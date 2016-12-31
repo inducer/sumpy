@@ -103,7 +103,7 @@ class E2EBase(KernelCacheWrapper):
         return to_loopy_insns(
                 assignments,
                 vector_names=set(["d"]),
-                pymbolic_expr_maps=[self.tgt_expansion.transform_to_code],
+                pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
                 complex_dtype=np.complex128  # FIXME
                 )
 

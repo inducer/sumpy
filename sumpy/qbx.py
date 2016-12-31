@@ -111,8 +111,8 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                     shape=(self.dim, "ntargets"), order="C"),
                 lp.GlobalArg("center", None,
                     shape=(self.dim, "ntargets"), order="C"),
-                lp.ValueArg("nsources", None),
-                lp.ValueArg("ntargets", None),
+                lp.ValueArg("nsources", np.int32),
+                lp.ValueArg("ntargets", np.int32),
                 ]
 
     @memoize_method
@@ -144,7 +144,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
         loopy_insns = to_loopy_insns(assignments,
                 vector_names=set(["a", "b"]),
                 pymbolic_expr_maps=[
-                    expn.kernel.transform_to_code for expn in self.expansions],
+                    expn.kernel.get_code_transformer() for expn in self.expansions],
                 complex_dtype=np.complex128  # FIXME
                 )
 

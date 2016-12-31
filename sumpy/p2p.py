@@ -88,7 +88,8 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
         from sumpy.codegen import to_loopy_insns
         loopy_insns = to_loopy_insns(six.iteritems(sac.assignments),
                 vector_names=set(["d"]),
-                pymbolic_expr_maps=[knl.transform_to_code for knl in self.kernels],
+                pymbolic_expr_maps=[
+                        knl.get_code_transformer() for knl in self.kernels],
                 complex_dtype=np.complex128  # FIXME
                 )
 
@@ -153,8 +154,8 @@ class P2P(P2PBase):
                         shape=(self.dim, "nsources")),
                     lp.GlobalArg("targets", None,
                         shape=(self.dim, "ntargets")),
-                    lp.ValueArg("nsources", None),
-                    lp.ValueArg("ntargets", None),
+                    lp.ValueArg("nsources", np.int32),
+                    lp.ValueArg("ntargets", np.int32),
                     lp.GlobalArg("strength", None, shape="nstrengths,nsources"),
                     lp.GlobalArg("result", None,
                         shape="nresults,ntargets", dim_tags="sep,C")
