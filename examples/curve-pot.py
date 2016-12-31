@@ -199,6 +199,10 @@ def draw_pot_figure(aspect_ratio,
 
         # }}}
 
+    fp.write_vtk_file("potential.vts", [
+        ("potential", vol_pot.real)
+        ])
+
     if 0:
         # {{{ 2D false-color plot
 
