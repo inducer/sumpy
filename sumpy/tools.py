@@ -82,6 +82,9 @@ class MiDerivativeTaker(object):
 
         return expr
 
+    def get_needed_derivatives(self, mi, dest_mi):
+        pass
+
 # }}}
 
 

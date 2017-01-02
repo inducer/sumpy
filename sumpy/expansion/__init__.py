@@ -160,13 +160,47 @@ class VolumeTaylorExpansion(VolumeTaylorExpansionBase):
     full_to_stored = stored_to_full
 
 
-class LinearRecurrenceBasedVolumeTaylorExpansion(VolumeTaylorExpansionBase):
+class DerivativeWrangler(object):
 
-    def __init__(self):
+    def __init__(self, kernel, order):
+        self.kernel = kernel
+        self.order = order
+
+    def get_full_coefficient_identifiers(self):
+        raise NotImplementedError
+
+    def get_coefficient_identifiers(self):
+        raise NotImplementedError
+
+    def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives):
+        raise NotImplementedError
+
+    def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients):
+        raise NotImplementedError
+
+    def get_kernel_derivative_taker(self, dvec):
+        raise NotImplementedError
+
+
+class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
+
+    def __init__(self, kernel, order):
+        DerivativeWrangler.__init__(self, kernel, order)
         self.precompute_coeff_matrix()
 
     def get_coefficient_identifiers(self):
         return self.stored_identifiers
+
+    @memoize_method
+    def get_full_coefficient_identifiers(self):
+        """
+        Returns identifiers for every coefficient in the complete expansion.
+        """
+        from pytools import (
+                generate_nonnegative_integer_tuples_summing_to_at_most
+                as gnitstam)
+
+        return sorted(gnitstam(self.order, self.kernel.dim), key=sum)
 
     def stored_to_full(self, stored_coeffs):
         return self.coeff_matrix.dot(stored_coeffs)
@@ -175,40 +209,132 @@ class LinearRecurrenceBasedVolumeTaylorExpansion(VolumeTaylorExpansionBase):
         return self.coeff_matrix.T.dot(full_coeffs)
 
     def precompute_coeff_matrix(self):
+        """
+        Build up a matrix that expresses every derivative in terms of a
+        set of "stored" derivatives.
+
+        For example, for the recurrence
+
+            u_xx + u_yy + u_zz = 0
+
+        the coefficient matrix features the following entries:
+
+              ... u_xx u_yy ... <= cols = only stored derivatives
+             ==================
+         ...| ...  ...  ... ...
+            |
+        u_zz| ...  -1   -1  ...
+
+           ^ rows = one for every derivative
+        """
         stored_identifiers = []
-        identifiers_so_far = []
+        identifiers_so_far = {}
 
         ncoeffs = len(self.get_full_coefficient_identifiers())
-        coeff_matrix = []
+        from sympy.matrices.sparse import SparseMatrix
+        #coeff_matrix_transpose = SparseMatrix(ncoeffs, ncoeffs, {}).as_mutable()
+
+        # Sparse matrix, indexed by row
+        from collections import defaultdict
+        coeff_matrix_transpose = defaultdict(lambda row: [])
 
         # Build up the matrix by row.
-        for identifier in self.get_full_coefficient_identifiers():
+        for i, identifier in enumerate(self.get_full_coefficient_identifiers()):
             expr = self.try_get_recurrence_for_derivative(
-                    identifier, identifiers_so_far, ncoeffs)
+                    identifier, identifiers_so_far)
 
             if expr is None:
                 # Identifier should be stored
-                row = np.zeros(ncoeffs, dtype=object)
-                row[len(stored_identifiers)] = 1
+                coeff_matrix_transpose[len(stored_identifiers)] = [(i, 1)]
                 stored_identifiers.append(identifier)
             else:
-                # Rewrite in terms of the stored identifiers
-                ncoeffs_so_far = len(coeff_matrix)
-                row = np.dot(np.transpose(coeff_matrix), expr[:ncoeffs_so_far])
+                nstored = len(stored_identifiers)
+                ntotal = len(identifiers_so_far)
 
-            coeff_matrix.append(row)
-            identifiers_so_far.append(identifier)
+                result = {}
+                for row in range(nstored):
+                    acc = 0
+
+                    """
+                    # Use the smaller of the two.
+                    if len(coeff_matrix_transpose[row]) < len(expr):
+                        smaller = coeff_matrix_transpose[row]
+                        indices, vals = zip(*sorted(expr.items()))
+                    else:
+                        smaller = expr.items()
+                        indices, vals = zip(*coeff_matrix_transpose[row])
+                    indices = list(indices)
+                    vals = list(vals)
+
+                    import bisect
+                    for idx, coeff in smaller:
+                        if coeff == 0:
+                            continue
+                        pos = bisect.bisect_left(indices, idx)
+                        if pos == len(indices) or indices[pos] != idx or vals[pos] == 0:
+                            continue
+                        acc += coeff * vals[pos]
+                    """
+
+                    for j, val in coeff_matrix_transpose[row]:
+                        if expr.get(j, 0) == 0:
+                            continue
+                        acc += expr[j] * val
+
+                    if acc != 0:
+                        result[row] = acc
+
+                for j, item in result.items():
+                    coeff_matrix_transpose[j].append((i, item))
+
+            identifiers_so_far[identifier] = i
 
         self.stored_identifiers = stored_identifiers
-        ncols = len(stored_identifiers)
-        self.coeff_matrix = np.vstack(coeff_matrix)[:, :ncols]
+        #self.coeff_matrix = coeff_matrix_transpose.T[:,:len(stored_identifiers)]
+        self.coeff_matrix = coeff_matrix_transpose
+        print(self.coeff_matrix)
+        print(ncoeffs, len(self.stored_identifiers))
+
+    def try_get_recurrence_for_derivative(self, deriv, in_terms_of):
+        raise NotImplementedError
 
 
-class LaplaceConformingVolumeTaylorExpansion(
-        LinearRecurrenceBasedVolumeTaylorExpansion):
+    def get_derivative_taker(self, expr, dvec):
+        return LinearRecurrenceBasedDerivativeWrangler(
+                expr, dvec, self)
 
-    def try_get_recurrence_for_derivative(self, deriv, in_terms_of, ncoeffs):
-        deriv = np.array(deriv)
+
+from sumpy.tools import MiDerviativeTaker
+
+class LinearRecurrenceBasedMiDerivativeTaker(MiDerviativeTaker):
+
+    def __init__(self, expr, dvec, wrangler):
+        MiDerviativeTaker.__init__(expr, dvec)
+        self.wrangler = wrangler
+
+    def diff(self, mi):
+        try:
+            return self.cache_by_mi[mi]
+        except KeyError:
+            closest_mi = self.get_closest_mi(mi)
+            expr = self.cache_by_mi[closest_mi]
+
+            for needed_mi in self.get_needed_derivatives(closest_mi, dest_mi):
+                recurrence = self.wranger.try_get_recurrence_for_derivative(
+                        needed_mi, self.cache_by_mi)
+                if recurrence is not None:
+                    pass
+                else:
+                    
+                # For each derivative that we need
+                # 1. Use try_get_recurrence_for_derivative
+                # 2. Otherwise, do it the old fashioned way.
+
+
+class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
+
+    def try_get_recurrence_for_derivative(self, deriv, in_terms_of):
+        deriv = np.array(deriv, dtype=int)
 
         for dim in np.nonzero(2 <= deriv)[0]:
             # Check if we can reduce this dimension in terms of the other
@@ -216,27 +342,69 @@ class LaplaceConformingVolumeTaylorExpansion(
 
             reduced_deriv = deriv.copy()
             reduced_deriv[dim] -= 2
-
             needed_derivs = []
+
             for other_dim in range(self.kernel.dim):
                 if other_dim == dim:
                     continue
                 needed_deriv = reduced_deriv.copy()
                 needed_deriv[other_dim] += 2
+                needed_deriv = tuple(needed_deriv)
 
-                needed_derivs.append(tuple(needed_deriv))
+                if needed_deriv not in in_terms_of:
+                    break
 
-            expr = np.zeros(ncoeffs, dtype=object)
-            try:
+                needed_derivs.append(needed_deriv)
+            else:
+                expr = {}
                 for needed_deriv in needed_derivs:
-                    deriv_idx = in_terms_of.index(needed_deriv)
-                    expr[deriv_idx] = -1
-            except ValueError:
-                continue
+                    expr[in_terms_of[needed_deriv]] = -1
 
-            return expr
+                return expr
 
 
+class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
+
+    def __init__(self, kernel, order):
+        k = sp.Symbol(kernel.get_base_kernel().helmholtz_k_name)
+        self.k = -k*k
+        LinearRecurrenceBasedDerivativeWrangler.__init__(self, kernel, order)
+        print("HI HI")
+        print("self.k", k)
+
+
+    def try_get_recurrence_for_derivative(self, deriv, in_terms_of):
+        deriv = np.array(deriv, dtype=int)
+
+        for dim in np.nonzero(2 <= deriv)[0]:
+            # Check if we can reduce this dimension in terms of the other
+            # dimensions.
+
+            reduced_deriv = deriv.copy()
+            reduced_deriv[dim] -= 2
+            needed_derivs = []
+
+            for other_dim in range(self.kernel.dim):
+                if other_dim == dim:
+                    continue
+                needed_deriv = reduced_deriv.copy()
+                needed_deriv[other_dim] += 2
+                needed_deriv = tuple(needed_deriv)
+
+                if needed_deriv not in in_terms_of:
+                    break
+
+                needed_derivs.append((-1, needed_deriv))
+            else:
+                needed_derivs.append((self.k, tuple(reduced_deriv)))
+
+                expr = {}
+                for coeff, needed_deriv in needed_derivs:
+                    expr[in_terms_of[needed_deriv]] = coeff
+
+                return expr
+
+"""
 class HelmholtzConformingVolumeTaylorExpansion(
         LinearRecurrenceBasedVolumeTaylorExpansion):
 
@@ -272,6 +440,7 @@ class HelmholtzConformingVolumeTaylorExpansion(
                 continue
 
             return expr
+"""
 
 # }}}
 
