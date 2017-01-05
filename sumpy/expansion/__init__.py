@@ -1,5 +1,6 @@
 from __future__ import division
 from __future__ import absolute_import
+from six.moves import range
 
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
@@ -25,11 +26,15 @@ THE SOFTWARE.
 
 import numpy as np
 import sympy as sp
+import logging
 from pytools import memoize_method
+from sumpy.tools import MiDerivativeTaker
 
 __doc__ = """
 .. autoclass:: ExpansionBase
 """
+
+logger = logging.getLogger(__name__)
 
 
 # {{{ base class
@@ -112,62 +117,13 @@ class ExpansionBase(object):
 # }}}
 
 
-# {{{ volume taylor
-
-class VolumeTaylorExpansionBase(object):
-
-    def get_coefficient_identifiers(self):
-        """
-        Returns the identifiers of the coefficients that actually get stored.
-        """
-        raise NotImplementedError
-
-    @property
-    @memoize_method
-    def _storage_loc_dict(self):
-        return dict((i, idx) for idx, i in
-                    enumerate(self.get_coefficient_identifiers()))
-
-    def get_storage_index(self, i):
-        return self._storage_loc_dict[i]
-
-    @memoize_method
-    def get_full_coefficient_identifiers(self):
-        """
-        Returns identifiers for every coefficient in the complete expansion.
-        """
-        from pytools import (
-                generate_nonnegative_integer_tuples_summing_to_at_most
-                as gnitstam)
-
-        return sorted(gnitstam(self.order, self.kernel.dim), key=sum)
-
-    def stored_to_full(self, coeff_idx, stored_coeffs):
-        raise NotImplementedError
-
-    def full_to_stored(self, coeff_idx, full_coeffs):
-        raise NotImplementedError
-
-
-class VolumeTaylorExpansion(VolumeTaylorExpansionBase):
-
-    get_coefficient_identifiers = (
-        VolumeTaylorExpansionBase.get_full_coefficient_identifiers)
-
-    def stored_to_full(self, stored_coeffs):
-        return stored_coeffs
-
-    full_to_stored = stored_to_full
-
+# {{{ derivative wrangler
 
 class DerivativeWrangler(object):
 
-    def __init__(self, kernel, order):
-        self.kernel = kernel
+    def __init__(self, order, dim):
         self.order = order
-
-    def get_full_coefficient_identifiers(self):
-        raise NotImplementedError
+        self.dim = dim
 
     def get_coefficient_identifiers(self):
         raise NotImplementedError
@@ -178,18 +134,8 @@ class DerivativeWrangler(object):
     def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients):
         raise NotImplementedError
 
-    def get_kernel_derivative_taker(self, dvec):
+    def get_derivative_taker(self, expr, var_list):
         raise NotImplementedError
-
-
-class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
-
-    def __init__(self, kernel, order):
-        DerivativeWrangler.__init__(self, kernel, order)
-        self.precompute_coeff_matrix()
-
-    def get_coefficient_identifiers(self):
-        return self.stored_identifiers
 
     @memoize_method
     def get_full_coefficient_identifiers(self):
@@ -200,15 +146,81 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
                 generate_nonnegative_integer_tuples_summing_to_at_most
                 as gnitstam)
 
-        return sorted(gnitstam(self.order, self.kernel.dim), key=sum)
+        res = sorted(gnitstam(self.order, self.dim), key=sum)
+        return res
 
-    def stored_to_full(self, stored_coeffs):
-        return self.coeff_matrix.dot(stored_coeffs)
 
-    def full_to_stored(self, full_coeffs):
-        return self.coeff_matrix.T.dot(full_coeffs)
+class FullDerivativeWrangler(DerivativeWrangler):
 
-    def precompute_coeff_matrix(self):
+    def get_derivative_taker(self, expr, dvec):
+        return MiDerivativeTaker(expr, dvec)
+
+    get_coefficient_identifiers = (
+            DerivativeWrangler.get_full_coefficient_identifiers)
+
+    def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives):
+        return stored_kernel_derivatives
+
+    get_stored_mpole_coefficients_from_full = (
+            get_full_kernel_derivatives_from_stored)
+
+
+# {{{ sparse matrix-vector multiplication
+
+def _spmv(spmat, x, sparse_vectors):
+    """
+    :param spmat: maps row indices to list of (col idx, value)
+    :param x: maps vector indices to values
+    :param sparse_vectors: If True, treat vectors as dict-like, otherwise list-like
+    """
+    if sparse_vectors:
+        result = {}
+    else:
+        result = []
+
+    for row in range(len(spmat)):
+        acc = 0
+
+        for j, coeff in spmat[row]:
+            if sparse_vectors:
+                # Check if the index exists in the vector.
+                if x.get(j, 0) == 0:
+                    continue
+
+            acc += coeff * x[j]
+
+        if sparse_vectors:
+            if acc != 0:
+                result[row] = acc
+        else:
+            result.append(acc)
+
+    return result
+
+# }}}
+
+
+class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
+
+    def __init__(self, order, dim):
+        DerivativeWrangler.__init__(self, order, dim)
+
+    def get_coefficient_identifiers(self):
+        return self.stored_identifiers
+
+    def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives):
+        return _spmv(self.coeff_matrix, stored_kernel_derivatives,
+                     sparse_vectors=False)
+
+    def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients):
+        # = M^T x, where M = coeff matrix
+        result = [0] * len(self.stored_identifiers)
+        for row, coeff in enumerate(full_mpole_coefficients):
+            for col, val in self.coeff_matrix[row]:
+                result[col] += coeff * val
+        return result
+
+    def precompute_recurrences(self):
         """
         Build up a matrix that expresses every derivative in terms of a
         set of "stored" derivatives.
@@ -230,15 +242,16 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
         stored_identifiers = []
         identifiers_so_far = {}
 
-        ncoeffs = len(self.get_full_coefficient_identifiers())
-        from sympy.matrices.sparse import SparseMatrix
-        #coeff_matrix_transpose = SparseMatrix(ncoeffs, ncoeffs, {}).as_mutable()
+        import time
+        start_time = time.time()
+        logger.debug("computing recurrence for Taylor coefficients: start")
 
         # Sparse matrix, indexed by row
         from collections import defaultdict
-        coeff_matrix_transpose = defaultdict(lambda row: [])
+        coeff_matrix_transpose = defaultdict(lambda: [])
 
-        # Build up the matrix by row.
+        # Build up the matrix transpose by row.
+        from six import iteritems
         for i, identifier in enumerate(self.get_full_coefficient_identifiers()):
             expr = self.try_get_recurrence_for_derivative(
                     identifier, identifiers_so_far)
@@ -248,91 +261,45 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
                 coeff_matrix_transpose[len(stored_identifiers)] = [(i, 1)]
                 stored_identifiers.append(identifier)
             else:
-                nstored = len(stored_identifiers)
-                ntotal = len(identifiers_so_far)
-
-                result = {}
-                for row in range(nstored):
-                    acc = 0
-
-                    """
-                    # Use the smaller of the two.
-                    if len(coeff_matrix_transpose[row]) < len(expr):
-                        smaller = coeff_matrix_transpose[row]
-                        indices, vals = zip(*sorted(expr.items()))
-                    else:
-                        smaller = expr.items()
-                        indices, vals = zip(*coeff_matrix_transpose[row])
-                    indices = list(indices)
-                    vals = list(vals)
-
-                    import bisect
-                    for idx, coeff in smaller:
-                        if coeff == 0:
-                            continue
-                        pos = bisect.bisect_left(indices, idx)
-                        if pos == len(indices) or indices[pos] != idx or vals[pos] == 0:
-                            continue
-                        acc += coeff * vals[pos]
-                    """
-
-                    for j, val in coeff_matrix_transpose[row]:
-                        if expr.get(j, 0) == 0:
-                            continue
-                        acc += expr[j] * val
-
-                    if acc != 0:
-                        result[row] = acc
-
-                for j, item in result.items():
+                expr = dict((identifiers_so_far[ident], val) for ident, val in
+                            iteritems(expr))
+                result = _spmv(coeff_matrix_transpose, expr, sparse_vectors=True)
+                for j, item in iteritems(result):
                     coeff_matrix_transpose[j].append((i, item))
 
             identifiers_so_far[identifier] = i
 
         self.stored_identifiers = stored_identifiers
-        #self.coeff_matrix = coeff_matrix_transpose.T[:,:len(stored_identifiers)]
-        self.coeff_matrix = coeff_matrix_transpose
-        print(self.coeff_matrix)
-        print(ncoeffs, len(self.stored_identifiers))
+
+        coeff_matrix = defaultdict(lambda: [])
+        for i, row in iteritems(coeff_matrix_transpose):
+            for j, val in row:
+                coeff_matrix[j].append((i, val))
+
+        logger.debug("computing recurrence for Taylor coefficients: "
+                     "done after {dur:.2f} seconds"
+                     .format(dur=time.time() - start_time))
+
+        logger.debug("number of Taylor coefficients was reduced from {orig} to {red}"
+                     .format(orig=len(self.get_full_coefficient_identifiers()),
+                             red=len(self.stored_identifiers)))
+
+        self.coeff_matrix = coeff_matrix
 
     def try_get_recurrence_for_derivative(self, deriv, in_terms_of):
         raise NotImplementedError
 
-
-    def get_derivative_taker(self, expr, dvec):
-        return LinearRecurrenceBasedDerivativeWrangler(
-                expr, dvec, self)
-
-
-from sumpy.tools import MiDerviativeTaker
-
-class LinearRecurrenceBasedMiDerivativeTaker(MiDerviativeTaker):
-
-    def __init__(self, expr, dvec, wrangler):
-        MiDerviativeTaker.__init__(expr, dvec)
-        self.wrangler = wrangler
-
-    def diff(self, mi):
-        try:
-            return self.cache_by_mi[mi]
-        except KeyError:
-            closest_mi = self.get_closest_mi(mi)
-            expr = self.cache_by_mi[closest_mi]
-
-            for needed_mi in self.get_needed_derivatives(closest_mi, dest_mi):
-                recurrence = self.wranger.try_get_recurrence_for_derivative(
-                        needed_mi, self.cache_by_mi)
-                if recurrence is not None:
-                    pass
-                else:
-                    
-                # For each derivative that we need
-                # 1. Use try_get_recurrence_for_derivative
-                # 2. Otherwise, do it the old fashioned way.
+    def get_derivative_taker(self, expr, var_list):
+        from sumpy.tools import LinearRecurrenceBasedMiDerivativeTaker
+        return LinearRecurrenceBasedMiDerivativeTaker(expr, var_list, self)
 
 
 class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
 
+    def __init__(self, order, dim):
+        LinearRecurrenceBasedDerivativeWrangler.__init__(self, order, dim)
+        self.precompute_recurrences()
+
     def try_get_recurrence_for_derivative(self, deriv, in_terms_of):
         deriv = np.array(deriv, dtype=int)
 
@@ -342,9 +309,9 @@ class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
 
             reduced_deriv = deriv.copy()
             reduced_deriv[dim] -= 2
-            needed_derivs = []
+            coeffs = {}
 
-            for other_dim in range(self.kernel.dim):
+            for other_dim in range(self.dim):
                 if other_dim == dim:
                     continue
                 needed_deriv = reduced_deriv.copy()
@@ -354,24 +321,17 @@ class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
                 if needed_deriv not in in_terms_of:
                     break
 
-                needed_derivs.append(needed_deriv)
+                coeffs[needed_deriv] = -1
             else:
-                expr = {}
-                for needed_deriv in needed_derivs:
-                    expr[in_terms_of[needed_deriv]] = -1
-
-                return expr
+                return coeffs
 
 
 class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
 
-    def __init__(self, kernel, order):
-        k = sp.Symbol(kernel.get_base_kernel().helmholtz_k_name)
-        self.k = -k*k
-        LinearRecurrenceBasedDerivativeWrangler.__init__(self, kernel, order)
-        print("HI HI")
-        print("self.k", k)
-
+    def __init__(self, order, dim, helmholtz_k_name):
+        LinearRecurrenceBasedDerivativeWrangler.__init__(self, order, dim)
+        self.helmholtz_k_name = helmholtz_k_name
+        self.precompute_recurrences()
 
     def try_get_recurrence_for_derivative(self, deriv, in_terms_of):
         deriv = np.array(deriv, dtype=int)
@@ -382,9 +342,9 @@ class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
 
             reduced_deriv = deriv.copy()
             reduced_deriv[dim] -= 2
-            needed_derivs = []
+            coeffs = {}
 
-            for other_dim in range(self.kernel.dim):
+            for other_dim in range(self.dim):
                 if other_dim == dim:
                     continue
                 needed_deriv = reduced_deriv.copy()
@@ -394,53 +354,83 @@ class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
                 if needed_deriv not in in_terms_of:
                     break
 
-                needed_derivs.append((-1, needed_deriv))
+                coeffs[needed_deriv] = -1
             else:
-                needed_derivs.append((self.k, tuple(reduced_deriv)))
+                k = sp.Symbol(self.helmholtz_k_name)
+                coeffs[tuple(reduced_deriv)] = -k*k
+                return coeffs
 
-                expr = {}
-                for coeff, needed_deriv in needed_derivs:
-                    expr[in_terms_of[needed_deriv]] = coeff
+# }}}
 
-                return expr
 
-"""
-class HelmholtzConformingVolumeTaylorExpansion(
-        LinearRecurrenceBasedVolumeTaylorExpansion):
+# {{{ volume taylor
 
-    def try_get_recurrence_for_derivative(self, deriv, in_terms_of, ncoeffs):
-        deriv = np.array(deriv)
+class VolumeTaylorExpansionBase(object):
 
-        for dim in np.nonzero(2 <= deriv)[0]:
-            # Check if we can reduce this dimension in terms of the other
-            # dimensions.
+    @classmethod
+    def get_or_make_derivative_wrangler(cls, *key):
+        """
+        This stores the derivative wrangler at the class attribute level because
+        precomputing the derivative wrangler may become expensive.
+        """
+        try:
+            wrangler = cls.derivative_wrangler_cache[key]
+        except KeyError:
+            wrangler = cls.derivative_wrangler_class(*key)
+            wrangler.initialize()
+            cls.derivative_wrangler_cache[key] = wrangler
 
-            reduced_deriv = deriv.copy()
-            reduced_deriv[dim] -= 2
+        return wrangler
 
-            needed_derivs = []
-            for other_dim in range(self.kernel.dim):
-                if other_dim == dim:
-                    continue
-                needed_deriv = reduced_deriv.copy()
-                needed_deriv[other_dim] += 2
+    @property
+    def derivative_wrangler(self):
+        return self.get_or_make_derivative_wrangler(*self.derivative_wrangler_key)
 
-                needed_derivs.append((-1, tuple(needed_deriv)))
+    def get_coefficient_identifiers(self):
+        """
+        Returns the identifiers of the coefficients that actually get stored.
+        """
+        return self.derivative_wrangler.get_coefficient_identifiers()
 
-            k = sp.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
+    def get_full_coefficient_identifiers(self):
+        return self.derivative_wrangler.get_full_coefficient_identifiers()
 
-            needed_derivs.append((-k*k, tuple(reduced_deriv)))
+    @property
+    @memoize_method
+    def _storage_loc_dict(self):
+        return dict((i, idx) for idx, i in
+                    enumerate(self.get_coefficient_identifiers()))
 
-            expr = np.zeros(ncoeffs, dtype=object)
-            try:
-                for coeff, needed_deriv in needed_derivs:
-                    deriv_idx = in_terms_of.index(needed_deriv)
-                    expr[deriv_idx] = coeff
-            except ValueError:
-                continue
+    def get_storage_index(self, i):
+        return self._storage_loc_dict[i]
 
-            return expr
-"""
+
+class VolumeTaylorExpansion(VolumeTaylorExpansionBase):
+
+    derivative_wrangler_class = FullDerivativeWrangler
+    derivative_wrangler_cache = {}
+
+    def __init__(self, kernel, order):
+        self.derivative_wrangler_key = (order, kernel.dim)
+
+
+class LaplaceConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
+
+    derivative_wrangler_class = LaplaceDerivativeWrangler
+    derivative_wrangler_cache = {}
+
+    def __init__(self, kernel, order):
+        self.derivative_wrangler_key = (order, kernel.dim)
+
+
+class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
+
+    derivative_wrangler_class = HelmholtzDerivativeWrangler
+    derivative_wrangler_cache = {}
+
+    def __init__(self, kernel, order):
+        helmholtz_k_name = kernel.get_base_kernel().helmholtz_k_name
+        self.derivative_wrangler_key = (order, kernel.dim, helmholtz_k_name)
 
 # }}}
 
