@@ -154,8 +154,8 @@ class P2P(P2PBase):
                         shape=(self.dim, "nsources")),
                     lp.GlobalArg("targets", None,
                         shape=(self.dim, "ntargets")),
-                    lp.ValueArg("nsources", np.int32),
-                    lp.ValueArg("ntargets", np.int32),
+                    lp.ValueArg("nsources", None),
+                    lp.ValueArg("ntargets", None),
                     lp.GlobalArg("strength", None, shape="nstrengths,nsources"),
                     lp.GlobalArg("result", None,
                         shape="nresults,ntargets", dim_tags="sep,C")
