@@ -44,7 +44,6 @@ setup(name="sumpy",
           "pytools>=2013.5.6",
           "boxtree>=2013.1",
           "pytest>=2.3",
-          "pyfmmlib>=2016.1",
           "six",
 
           # If this causes issues, see:
