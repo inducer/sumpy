@@ -68,21 +68,67 @@ class MiDerivativeTaker(object):
         try:
             expr = self.cache_by_mi[mi]
         except KeyError:
-            closest_mi = min(
-                (other_mi
-                    for other_mi in self.cache_by_mi.keys()
-                    if (np.array(mi) >= np.array(other_mi)).all()),
-                key=lambda other_mi: sum(self.mi_dist(mi, other_mi)))
+            current_mi = self.get_closest_cached_mi(mi)
+            expr = self.cache_by_mi[current_mi]
 
+            for next_deriv, next_mi in self.get_derivative_taking_sequence(
+                    current_mi, mi):
+                expr = expr.diff(next_deriv)
+                self.cache_by_mi[next_mi] = expr
+
+        return expr
+
+    def get_derivative_taking_sequence(self, start_mi, end_mi):
+        current_mi = np.array(start_mi, dtype=int)
+        for idx, (mi_i, vec_i) in enumerate(
+                zip(self.mi_dist(end_mi, start_mi), self.var_list)):
+            for i in range(1, 1 + mi_i):
+                current_mi[idx] += 1
+                yield vec_i, tuple(current_mi)
+
+    def get_closest_cached_mi(self, mi):
+        return min((other_mi
+                for other_mi in self.cache_by_mi.keys()
+                if (np.array(mi) >= np.array(other_mi)).all()),
+            key=lambda other_mi: sum(self.mi_dist(mi, other_mi)))
+
+
+class LinearRecurrenceBasedMiDerivativeTaker(MiDerivativeTaker):
+    """
+    See :class:`sumpy.expansion.LinearRecurrenceBasedDerivativeWrangler`
+    """
+
+    def __init__(self, expr, var_list, wrangler):
+        MiDerivativeTaker.__init__(self, expr, var_list)
+        self.wrangler = wrangler
+
+    def diff(self, mi):
+        try:
+            expr = self.cache_by_mi[mi]
+        except KeyError:
+            from six import iteritems
+            from sympy import Add
+
+            closest_mi = self.get_closest_cached_mi(mi)
             expr = self.cache_by_mi[closest_mi]
-            current_mi = np.array(closest_mi, dtype=int)
-            for idx, (mi_i, vec_i) in enumerate(
-                        zip(self.mi_dist(mi, closest_mi), self.var_list)):
-                for i in range(1, 1 + mi_i):
-                    current_mi[idx] += 1
-                    expr = expr.diff(vec_i)
-                    self.cache_by_mi[tuple(current_mi)] = expr
 
+            # Try to reduce the derivative using recurrences first, and if that
+            # fails fall back to derivative taking.
+            for next_deriv, next_mi in (
+                        self.get_derivative_taking_sequence(closest_mi, mi)):
+
+                recurrence = (
+                        self.wrangler.try_get_recurrence_for_derivative(
+                            next_mi, self.cache_by_mi))
+
+                if recurrence is not None:
+                    expr = Add(*tuple(
+                            coeff * self.cache_by_mi[ident]
+                            for ident, coeff in iteritems(recurrence)))
+                else:
+                    expr = expr.diff(next_deriv)
+
+                self.cache_by_mi[next_mi] = expr
         return expr
 
 # }}}
