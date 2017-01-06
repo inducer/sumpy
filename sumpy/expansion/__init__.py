@@ -377,7 +377,6 @@ class VolumeTaylorExpansionBase(object):
             wrangler = cls.derivative_wrangler_cache[key]
         except KeyError:
             wrangler = cls.derivative_wrangler_class(*key)
-            wrangler.initialize()
             cls.derivative_wrangler_cache[key] = wrangler
 
         return wrangler
