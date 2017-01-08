@@ -306,7 +306,12 @@ class P2PFromCSR(P2PBase):
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
-        #knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
+        import pyopencl as cl
+        dev = self.context.devices[0]
+        if dev.type & cl.device_type.CPU:
+            knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
+        else:
+            knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
         return knl
 
     def __call__(self, queue, **kwargs):
