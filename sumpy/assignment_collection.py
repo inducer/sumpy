@@ -109,9 +109,10 @@ def cached_cse(exprs, symbols):
             frozenset(symbols.generated_names))
 
     try:
-        result = cache_dict[key]
+        result = cache_dict[7]
     except KeyError:
-        result = sp.cse(exprs, symbols)
+        from sumpy.cse import cse
+        result = cse(exprs, symbols)
         cache_dict[key] = _map_cse_result(s2p, result)
         return result
     else:
@@ -216,7 +217,7 @@ class SymbolicAssignmentCollection(object):
         # - cached_cse: Uses on-disk cache to speed up CSE.
         # - checked_cse: if you mistrust the result of the cse.
         #   Uses maxima to verify.
-        # - sp.cse: The underlying sympy thing.
+        # - sumpy.cse: The underlying thing.
         #from sumpy.symbolic import checked_cse
 
         new_assignments, new_exprs = cached_cse(assign_exprs + extra_exprs,
