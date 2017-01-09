@@ -21,7 +21,7 @@ if __name__ == "__main__":
     from sumpy.expansion.local import LaplaceConformingVolumeTaylorLocalExpansion as LExpn
     from sumpy.expansion.multipole import LaplaceConformingVolumeTaylorMultipoleExpansion as MExpn
     results = []
-    for order in range(20, 22):
+    for order in range(30, 31):
         results.append((order, test_m2l_creation(ctx, MExpn, LExpn, LaplaceKernel(2), order)))
     print("order\ttime (s)")
     for order, time in results:

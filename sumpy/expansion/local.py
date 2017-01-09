@@ -94,12 +94,14 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         from sumpy.tools import MiDerivativeTaker
         ppkernel = self.kernel.postprocess_at_source(
                 self.kernel.get_expression(avec), avec)
+
         taker = MiDerivativeTaker(ppkernel, avec)
         return [taker.diff(mi) for mi in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec):
         from sumpy.tools import mi_power, mi_factorial
-        evaluated_coeffs = self.stored_to_full(coeffs)
+        evaluated_coeffs = (
+            self.derivative_wrangler.get_full_kernel_derivatives_from_stored(coeffs))
         result = sum(
                 coeff
                 * self.kernel.postprocess_at_target(mi_power(bvec, mi), bvec)
@@ -128,8 +130,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # derivatives.
             taker = src_expansion.get_kernel_derivative_taker(dvec)
 
-            def mi_sum(a, b):
-                return tuple(aval + bval for aval, bval in zip(a, b))
+            from sumpy.tools import add_mi
 
             result = []
             for deriv in self.get_coefficient_identifiers():
@@ -137,7 +138,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 for coeff, term in zip(
                         src_coeff_exprs,
                         src_expansion.get_coefficient_identifiers()):
-                    kernel_deriv = taker.diff(mi_sum(deriv, term))
+                    kernel_deriv = taker.diff(add_mi(deriv, term))
                     local_result.append(coeff * kernel_deriv)
                 result.append(sp.Add(*local_result))
         else:
@@ -156,7 +157,7 @@ class VolumeTaylorLocalExpansion(
 
     def __init__(self, kernel, order):
         VolumeTaylorLocalExpansionBase.__init__(self, kernel, order)
-        VolumeTaylorExpansion.__init__(self)
+        VolumeTaylorExpansion.__init__(self, kernel, order)
 
 
 class LaplaceConformingVolumeTaylorLocalExpansion(
@@ -165,7 +166,7 @@ class LaplaceConformingVolumeTaylorLocalExpansion(
 
     def __init__(self, kernel, order):
         VolumeTaylorLocalExpansionBase.__init__(self, kernel, order)
-        LaplaceConformingVolumeTaylorExpansion.__init__(self)
+        LaplaceConformingVolumeTaylorExpansion.__init__(self, kernel, order)
 
 
 class HelmholtzConformingVolumeTaylorLocalExpansion(
@@ -174,7 +175,7 @@ class HelmholtzConformingVolumeTaylorLocalExpansion(
 
     def __init__(self, kernel, order):
         VolumeTaylorLocalExpansionBase.__init__(self, kernel, order)
-        HelmholtzConformingVolumeTaylorExpansion.__init__(self)
+        HelmholtzConformingVolumeTaylorExpansion.__init__(self, kernel, order)
 
 # }}}
 
