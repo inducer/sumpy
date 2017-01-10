@@ -41,26 +41,29 @@ Manipulating batches of assignments
 """
 
 
-def _generate_unique_possibilities(prefix):
-    yield prefix
-
-    try_num = 0
-    while True:
-        yield "%s_%d" % (prefix, try_num)
-        try_num += 1
-
-
 class _SymbolGenerator(object):
+
     def __init__(self, taken_symbols):
         self.taken_symbols = taken_symbols
-        self.generated_names = set()
+        from collections import defaultdict
+        self.base_to_count = defaultdict(lambda: 0)
 
     def __call__(self, base="expr"):
-        for id_str in _generate_unique_possibilities(base):
-            if id_str not in self.taken_symbols \
-                    and id_str not in self.generated_names:
-                self.generated_names.add(id_str)
-                return sp.Symbol(id_str)
+        count = self.base_to_count[base]
+
+        def make_id_str(base, count):
+            return "{base}{suffix}".format(
+                    base=base,
+                    suffix="" if count == 0 else "_" + str(count - 1))
+
+        id_str = make_id_str(base, count)
+        while id_str in self.taken_symbols:
+            count += 1
+            id_str = make_id_str(base, count)
+
+        self.base_to_count[base] = count + 1
+
+        return sp.Symbol(id_str)
 
     def __iter__(self):
         return self
@@ -149,9 +152,7 @@ class SymbolicAssignmentCollection(object):
         """Assign *expr* to a new variable whose name is based on *name_base*.
         Return the new variable name.
         """
-        for new_name in _generate_unique_possibilities(name_base):
-            if new_name not in self.assignments:
-                break
+        new_name = self.symbol_generator(name_base).name
 
         self.add_assignment(new_name, expr)
         self.user_symbols.add(new_name)
@@ -160,7 +161,7 @@ class SymbolicAssignmentCollection(object):
     def run_global_cse(self, extra_exprs=[]):
         logger.info("common subexpression elimination: start")
 
-        assign_names = sorted(self.assign_names)
+        assign_names = sorted(self.assignments)
         assign_exprs = [self.assignments[name] for name in assign_names]
 
         # Options here:
