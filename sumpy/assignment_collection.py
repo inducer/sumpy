@@ -71,58 +71,6 @@ class _SymbolGenerator(object):
     __next__ = next
 
 
-# {{{ CSE caching
-
-def _map_cse_result(mapper, cse_result):
-    replacements, reduced_exprs = cse_result
-
-    new_replacements = [
-            (sym, mapper(repl))
-            for sym, repl in replacements]
-    new_reduced_exprs = [
-            mapper(expr)
-            for expr in reduced_exprs]
-
-    return new_replacements, new_reduced_exprs
-
-
-def cached_cse(exprs, symbols):
-    assert isinstance(symbols, _SymbolGenerator)
-
-    from pytools.diskdict import get_disk_dict
-    cache_dict = get_disk_dict("sumpy-cse-cache", version=1)
-
-    # sympy expressions don't pickle properly :(
-    # (as of Jun 7, 2013)
-    # https://code.google.com/p/sympy/issues/detail?id=1198
-
-    from pymbolic.interop.sympy import (
-            SympyToPymbolicMapper,
-            PymbolicToSympyMapper)
-
-    s2p = SympyToPymbolicMapper()
-    p2s = PymbolicToSympyMapper()
-
-    print(exprs)
-    key_exprs = tuple(s2p(expr) for expr in exprs)
-
-    key = (key_exprs)
-
-    print(key)
-
-    try:
-        result = cache_dict[key]
-    except KeyError:
-        from sumpy.cse import cse
-        result = cse(exprs, symbols)
-        cache_dict[key] = _map_cse_result(s2p, result)
-        return result
-    else:
-        return _map_cse_result(p2s, result)
-
-# }}}
-
-
 # {{{ collection of assignments
 
 class SymbolicAssignmentCollection(object):
