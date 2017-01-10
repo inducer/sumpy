@@ -76,23 +76,6 @@ class E2EBase(KernelCacheWrapper):
 
         self.dim = src_expansion.dim
 
-    def run_translation_and_cse(self):
-        from sumpy.symbolic import make_sympy_vector
-        dvec = make_sympy_vector("d", self.dim)
-
-        src_coeff_exprs = [sp.Symbol("src_coeff%d" % i)
-                for i in range(len(self.src_expansion))]
-
-        from sumpy.assignment_collection import SymbolicAssignmentCollection
-        sac = SymbolicAssignmentCollection()
-        tgt_coeff_names = [
-                sac.assign_unique("coeff%d" % i, coeff_i)
-                for i, coeff_i in enumerate(
-                    self.tgt_expansion.translate_from(
-                        self.src_expansion, src_coeff_exprs, dvec))]
-
-        sac.run_global_cse()
-
     def get_translation_loopy_insns(self):
         from sumpy.symbolic import make_sympy_vector
         dvec = make_sympy_vector("d", self.dim)

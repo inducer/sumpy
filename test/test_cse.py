@@ -64,17 +64,13 @@ DAMAGE.
 # }}}
 
 import pytest
-import itertools
 import sys
 
-from sympy import (Add, Pow, Symbol, exp, sqrt, symbols, sympify, S, cos,
-                   sin, Eq, Function, Tuple, CRootOf, IndexedBase, Idx,
-                   Piecewise)
+from sympy import (Add, Pow, exp, sqrt, symbols, sympify, S, cos, sin, Eq,
+                   Function, Tuple, CRootOf, IndexedBase, Idx, Piecewise)
 from sympy.simplify.cse_opts import sub_pre, sub_post
 from sympy.functions.special.hyper import meijerg
 from sympy.simplify import cse_opts
-
-from sympy.core.compatibility import range
 
 
 from sumpy.cse import (
