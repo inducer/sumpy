@@ -159,6 +159,9 @@ class SymbolicAssignmentCollection(object):
         return new_name
 
     def run_global_cse(self, extra_exprs=[]):
+        import time
+        start_time = time.time()
+
         logger.info("common subexpression elimination: start")
 
         assign_names = sorted(self.assignments)
@@ -185,7 +188,8 @@ class SymbolicAssignmentCollection(object):
             assert isinstance(name, sp.Symbol)
             self.add_assignment(name.name, value)
 
-        logger.info("common subexpression elimination: done")
+        logger.info("common subexpression elimination: done after {dur:.2f} s"
+                    .format(dur=time.time() - start_time))
         return new_extra_exprs
 
     def kill_trivial_assignments(self, exprs):
