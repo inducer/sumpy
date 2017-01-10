@@ -103,10 +103,12 @@ def cached_cse(exprs, symbols):
     s2p = SympyToPymbolicMapper()
     p2s = PymbolicToSympyMapper()
 
+    print(exprs)
     key_exprs = tuple(s2p(expr) for expr in exprs)
 
-    key = (key_exprs, frozenset(symbols.taken_symbols),
-            frozenset(symbols.generated_names))
+    key = (key_exprs)
+
+    print(key)
 
     try:
         result = cache_dict[key]

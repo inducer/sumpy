@@ -67,37 +67,23 @@ import pytest
 import itertools
 import sys
 
-from sympy import (Add, Pow, Symbol, exp, sqrt, symbols, sympify, cse,
-                   Matrix, S, cos, sin, Eq, Function, Tuple, CRootOf,
-                   IndexedBase, Idx, Piecewise, O)
+from sympy import (Add, Pow, Symbol, exp, sqrt, symbols, sympify, S, cos,
+                   sin, Eq, Function, Tuple, CRootOf, IndexedBase, Idx,
+                   Piecewise)
 from sympy.simplify.cse_opts import sub_pre, sub_post
 from sympy.functions.special.hyper import meijerg
-from sympy.simplify import cse_main, cse_opts
-from sympy.utilities.pytest import XFAIL
-from sympy.matrices import (eye, SparseMatrix, MutableDenseMatrix,
-    MutableSparseMatrix, ImmutableDenseMatrix, ImmutableSparseMatrix)
-from sympy.matrices.expressions import MatrixSymbol
+from sympy.simplify import cse_opts
 
 from sympy.core.compatibility import range
 
 
-from sumpy.cse import cse
+from sumpy.cse import (
+    cse, preprocess_for_cse, postprocess_for_cse)
 
 
 w, x, y, z = symbols('w,x,y,z')
 x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12 = symbols('x:13')
 
-
-def test_numbered_symbols():
-    ns = cse_main.numbered_symbols(prefix='y')
-    assert list(itertools.islice(
-        ns, 0, 10)) == [Symbol('y%s' % i) for i in range(0, 10)]
-    ns = cse_main.numbered_symbols(prefix='y')
-    assert list(itertools.islice(
-        ns, 10, 20)) == [Symbol('y%s' % i) for i in range(10, 20)]
-    ns = cse_main.numbered_symbols()
-    assert list(itertools.islice(
-        ns, 0, 10)) == [Symbol('x%s' % i) for i in range(0, 10)]
 
 # Dummy "optimization" functions for testing.
 
@@ -111,21 +97,21 @@ def opt2(expr):
 
 
 def test_preprocess_for_cse():
-    assert cse_main.preprocess_for_cse(x, [(opt1, None)]) == x + y
-    assert cse_main.preprocess_for_cse(x, [(None, opt1)]) == x
-    assert cse_main.preprocess_for_cse(x, [(None, None)]) == x
-    assert cse_main.preprocess_for_cse(x, [(opt1, opt2)]) == x + y
-    assert cse_main.preprocess_for_cse(
+    assert preprocess_for_cse(x, [(opt1, None)]) == x + y
+    assert preprocess_for_cse(x, [(None, opt1)]) == x
+    assert preprocess_for_cse(x, [(None, None)]) == x
+    assert preprocess_for_cse(x, [(opt1, opt2)]) == x + y
+    assert preprocess_for_cse(
         x, [(opt1, None), (opt2, None)]) == (x + y)*z
 
 
 def test_postprocess_for_cse():
-    assert cse_main.postprocess_for_cse(x, [(opt1, None)]) == x
-    assert cse_main.postprocess_for_cse(x, [(None, opt1)]) == x + y
-    assert cse_main.postprocess_for_cse(x, [(None, None)]) == x
-    assert cse_main.postprocess_for_cse(x, [(opt1, opt2)]) == x*z
+    assert postprocess_for_cse(x, [(opt1, None)]) == x
+    assert postprocess_for_cse(x, [(None, opt1)]) == x + y
+    assert postprocess_for_cse(x, [(None, None)]) == x
+    assert postprocess_for_cse(x, [(opt1, opt2)]) == x*z
     # Note the reverse order of application.
-    assert cse_main.postprocess_for_cse(
+    assert postprocess_for_cse(
         x, [(None, opt1), (None, opt2)]) == x*z + y
 
 
@@ -206,25 +192,8 @@ def test_multiple_expressions():
         ([(x0, x*y)], [x0, z + x0, 3 + x0*z])
 
 
-"""
-def test_issue_4498():
-    assert cse(w/(x - y) + z/(y - x), optimizations='basic') == \
-        ([], [(w - z)/(x - y)])
-
-
-def test_issue_4020():
-    assert cse(x**5 + x**4 + x**3 + x**2, optimizations='basic') \
-        == ([(x0, x**2)], [x0*(x**3 + x + x0 + 1)])
-
-
 def test_issue_4203():
     assert cse(sin(x**x)/x**x) == ([(x0, x**x)], [sin(x0)/x0])
-
-
-def test_issue_6263():
-    e = Eq(x*(-x + 1) + x*(x - 1), 0)
-    assert cse(e, optimizations='basic') == ([], [True])
-"""
 
 
 def test_dont_cse_tuples():
@@ -270,22 +239,11 @@ def test_pow_invpow():
         ([(x0, x**(2*y))], [x0 + 1/x0])
 
 
-"""
-fixme
-def test_postprocess():
-    eq = (x + 1 + exp((x + 1)/(y + 1)) + cos(y + 1))
-    assert cse([eq, Eq(x, z + 1), z - 2, (z + 1)*(x + 1)],
-               postprocess=cse_main.cse_separate) == \
-        [[(x0, y + 1), (x2, z + 1), (x, x2), (x1, x + 1)],
-         [x1 + exp(x1/x0) + cos(x0), z - 2, x1*x2]]
-"""
-
-
 def test_issue_4499():
     # previously, this gave 16 constants
     from sympy.abc import a, b
-    B = Function('B')
-    G = Function('G')
+    B = Function('B')  # noqa
+    G = Function('G')  # noqa
     t = Tuple(*
         (a, a + S(1)/2, 2*a, b, 2*a - b + 1, (sqrt(z)/2)**(-2*a + 1)*B(2*a -
         b, sqrt(z))*B(b - 1, sqrt(z))*G(b)*G(2*a - b + 1),
@@ -294,14 +252,8 @@ def test_issue_4499():
         sqrt(z))*B(2*a - b + 1, sqrt(z))*G(b)*G(2*a - b + 1),
         (sqrt(z)/2)**(-2*a + 1)*B(b, sqrt(z))*B(2*a - b + 1,
         sqrt(z))*G(b)*G(2*a - b + 1), 1, 0, S(1)/2, z/2, -b + 1, -2*a + b,
-        -2*a))
+        -2*a))  # noqa
     c = cse(t)
-    ans = (
-        [(x0, 2*a), (x1, -b), (x2, x1 + 1), (x3, x0 + x2), (x4, sqrt(z)), (x5,
-        B(x0 + x1, x4)), (x6, G(b)), (x7, G(x3)), (x8, -x0), (x9,
-        (x4/2)**(x8 + 1)), (x10, x6*x7*x9*B(b - 1, x4)), (x11, x6*x7*x9*B(b,
-        x4)), (x12, B(x3, x4))], [(a, a + S(1)/2, x0, b, x3, x10*x5,
-        x11*x4*x5, x10*x12*x4, x11*x12, 1, 0, S(1)/2, z/2, x2, b + x8, x8)])
     assert len(c[0]) == 13
 
 
@@ -313,11 +265,11 @@ def test_issue_6169():
     assert sub_post(sub_pre((-x - y)*z - x - y)) == -z*(x + y) - x - y
 
 
-def test_cse_Indexed():
+def test_cse_Indexed():  # noqa
     len_y = 5
     y = IndexedBase('y', shape=(len_y,))
     x = IndexedBase('x', shape=(len_y,))
-    Dy = IndexedBase('Dy', shape=(len_y-1,))
+    Dy = IndexedBase('Dy', shape=(len_y-1,))  # noqa
     i = Idx('i', len_y-1)
 
     expr1 = (y[i+1]-y[i])/(x[i+1]-x[i])
@@ -326,10 +278,11 @@ def test_cse_Indexed():
     assert len(replacements) > 0
 
 
-def test_Piecewise():
+def test_Piecewise():  # noqa
     f = Piecewise((-z + x*y, Eq(y, 0)), (-z - x*y, True))
     ans = cse(f)
-    actual_ans = ([(x0, -z), (x1, x*y)], [Piecewise((x0+x1, Eq(y, 0)), (x0 - x1, True))])
+    actual_ans = ([(x0, -z), (x1, x*y)],
+                  [Piecewise((x0+x1, Eq(y, 0)), (x0 - x1, True))])
     assert ans == actual_ans
 
 
@@ -352,27 +305,27 @@ def test_name_conflict_cust_symbols():
 def test_symbols_exhausted_error():
     l = cos(x+y)+x+y+cos(w+y)+sin(w+y)
     sym = [x, y, z]
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(ValueError):
         print(cse(l, symbols=sym))
 
 
 def test_issue_7840():
     # daveknippers' example
-    C393 = sympify( \
+    C393 = sympify(  # noqa
         'Piecewise((C391 - 1.65, C390 < 0.5), (Piecewise((C391 - 1.65, \
         C391 > 2.35), (C392, True)), True))'
     )
-    C391 = sympify( \
+    C391 = sympify(  # noqa
         'Piecewise((2.05*C390**(-1.03), C390 < 0.5), (2.5*C390**(-0.625), True))'
     )
-    C393 = C393.subs('C391',C391)
+    C393 = C393.subs('C391',C391)  # noqa
     # simple substitution
     sub = {}
     sub['C390'] = 0.703451854
     sub['C392'] = 1.01417794
     ss_answer = C393.subs(sub)
     # cse
-    substitutions,new_eqn = cse(C393)
+    substitutions, new_eqn = cse(C393)
     for pair in substitutions:
         sub[pair[0].name] = pair[1].subs(sub)
     cse_answer = new_eqn[0].subs(sub)
