@@ -68,6 +68,16 @@ from sympy.core.compatibility import iterable
 from sympy.utilities.iterables import numbered_symbols
 
 
+__doc__ = """
+
+Common subexpression elimination
+--------------------------------
+
+.. autofunction:: cse
+
+"""
+
+
 # {{{ cse pre/postprocessing
 
 def preprocess_for_cse(expr, optimizations):
@@ -111,7 +121,8 @@ def postprocess_for_cse(expr, optimizations):
 
 class FuncArgTracker(object):
     """
-    A class which manages an inverse mapping from arguments to functions.
+    A class which manages a mapping from functions to arguments and an inverse
+    mapping from arguments to functions.
     """
 
     def __init__(self, funcs):
@@ -455,38 +466,27 @@ def tree_cse(exprs, symbols, opt_subs=None):
 
 
 def cse(exprs, symbols=None, optimizations=None):
-    """Perform common subexpression elimination on an expression.
+    """
+    Perform common subexpression elimination on an expression.
 
     :arg exprs: A list of sympy expressions, or a single sympy expression to reduce
     :arg symbols: An iterator yielding unique Symbols used to label the
         common subexpressions which are pulled out. The ``numbered_symbols``
-        generator is useful. The default is a stream of symbols of the form
-        "x0", "x1", etc. This must be an infinite iterator.
+        generator from sympy is useful. The default is a stream of symbols of the
+        form "x0", "x1", etc. This must be an infinite iterator.
     :arg optimizations: A list of (callable, callable) pairs consisting of
         (preprocessor, postprocessor) pairs of external optimization functions.
 
-    Returns
-    =======
+    :return: This returns a pair ``(replacements, reduced_exprs)``.
 
-    replacements : list of (Symbol, expression) pairs
-        All of the common subexpressions that were replaced. Subexpressions
-        earlier in this list might show up in subexpressions later in this
-        list.
-    reduced_exprs : list of sympy expressions
-        The reduced expressions with all of the replacements above.
-
+        * ``replacements`` is a list of (Symbol, expression) pairs consisting of
+          all of the common subexpressions that were replaced. Subexpressions
+          earlier in this list might show up in subexpressions later in this list.
+        * ``reduced_exprs`` is a list of sympy expressions. This contains the
+          reduced expressions with all of the replacements above.
     """
     if isinstance(exprs, Basic):
         exprs = [exprs]
-
-    import time
-
-    start = time.time()
-
-    import logging
-
-    logger = logging.getLogger(__name__)
-    logger.info("cse: start")
 
     exprs = list(exprs)
 
@@ -510,8 +510,6 @@ def cse(exprs, symbols=None, optimizations=None):
     # Find other optimization opportunities.
     opt_subs = opt_cse(reduced_exprs)
 
-    logger.info("cse: done after {}".format(time.time() - start))
-
     # Main CSE algorithm.
     replacements, reduced_exprs = tree_cse(reduced_exprs, symbols, opt_subs)
 
@@ -522,3 +520,5 @@ def cse(exprs, symbols=None, optimizations=None):
     reduced_exprs = [postprocess_for_cse(e, optimizations) for e in reduced_exprs]
 
     return replacements, reduced_exprs
+
+# vim: fdm=marker

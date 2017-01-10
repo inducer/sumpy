@@ -160,17 +160,18 @@ class SymbolicAssignmentCollection(object):
     def run_global_cse(self, extra_exprs=[]):
         logger.info("common subexpression elimination: start")
 
-        assign_names = list(self.assignments)
+        assign_names = sorted(self.assign_names)
         assign_exprs = [self.assignments[name] for name in assign_names]
 
         # Options here:
-        # - cached_cse: Uses on-disk cache to speed up CSE.
         # - checked_cse: if you mistrust the result of the cse.
         #   Uses maxima to verify.
-        # - sp.cse: The underlying sympy thing.
+        # - sp.cse: The sympy thing.
+        # - sumpy.cse.cse: Based on sympy, designed to go faster.
         #from sumpy.symbolic import checked_cse
 
-        new_assignments, new_exprs = cached_cse(assign_exprs + extra_exprs,
+        from sumpy.cse import cse
+        new_assignments, new_exprs = cse(assign_exprs + extra_exprs,
                 symbols=self.symbol_generator)
 
         new_assign_exprs = new_exprs[:len(assign_exprs)]
