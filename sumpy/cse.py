@@ -8,6 +8,10 @@ Copyright (C) 2006-2016 SymPy Development Team
 # {{{ license and original license
 
 __license__ = """
+Modifications from original are under the following license:
+
+Copyright (C) 2017 Matt Wala
+
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
@@ -28,7 +32,7 @@ THE SOFTWARE.
 
 ===========================================================================
 
-Based on sympy/simplify/cse_main.py from SymPy 1.0, original license as follows:
+Based on sympy/simplify/cse_main.py from SymPy 1.0, license as follows:
 
 Copyright (c) 2006-2016 SymPy Development Team
 
