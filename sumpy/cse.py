@@ -62,7 +62,7 @@ DAMAGE.
 
 # }}}
 
-from sympy.core import Basic, Mul, Add, Pow, Symbol
+from sympy.core import Basic, Mul, Add, Pow
 from sympy.core.function import _coeff_isneg
 from sympy.core.compatibility import iterable
 from sympy.utilities.iterables import numbered_symbols
@@ -371,17 +371,20 @@ def tree_cse(exprs, symbols, opt_subs=None):
     if opt_subs is None:
         opt_subs = dict()
 
-    # {{{ find repeated sub-expressions
+    # {{{ find repeated sub-expressions and used symbols
 
     to_eliminate = set()
 
     seen_subexp = set()
+    excluded_symbols = set()
 
     def find_repeated(expr):
         if not isinstance(expr, Basic):
             return
 
         if expr.is_Atom:
+            if expr.is_Symbol:
+                excluded_symbols.add(expr)
             return
 
         if iterable(expr):
@@ -409,6 +412,9 @@ def tree_cse(exprs, symbols, opt_subs=None):
             find_repeated(e)
 
     # {{{ rebuild tree
+
+    # Remove symbols from the generator that conflict with names in the expressions.
+    symbols = (symbol for symbol in symbols if symbol not in excluded_symbols)
 
     replacements = []
 
@@ -502,10 +508,6 @@ def cse(exprs, symbols=None, optimizations=None):
         # In case we get passed an iterable with an __iter__ method instead of
         # an actual iterator.
         symbols = iter(symbols)
-
-    # Remove symbols from the generator that conflict with names in the expressions.
-    excluded_symbols = set().union(*[expr.atoms(Symbol) for expr in reduced_exprs])
-    symbols = (symbol for symbol in symbols if symbol not in excluded_symbols)
 
     # Find other optimization opportunities.
     opt_subs = opt_cse(reduced_exprs)
