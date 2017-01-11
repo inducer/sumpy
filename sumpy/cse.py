@@ -253,7 +253,7 @@ def match_common_args(func_class, funcs, opt_subs):
             com_args = arg_tracker.func_to_argset[i].intersection(
                     arg_tracker.func_to_argset[j])
 
-            if len(com_args) == 1:
+            if len(com_args) <= 1:
                 # This may happen if a set of common arguments was already
                 # combined in a previous iteration.
                 continue
