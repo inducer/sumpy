@@ -559,16 +559,6 @@ class StressletKernel(ExpressionKernel):
                     )
                 ]
 
-    def get_code_transformer(self):
-        from sumpy.codegen import VectorComponentRewriter
-        vcr = VectorComponentRewriter([self.stresslet_vector_name])
-        from pymbolic.primitives import Variable
-        via = _VectorIndexAdder(self.stresslet_vector_name, (Variable("isrc"),))
-
-        def transform(expr):
-            return via(vcr(expr))
-
-        return transform
 
     mapper_method = "map_stresslet_kernel"
 
