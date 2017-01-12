@@ -570,7 +570,7 @@ class StressletKernel(ExpressionKernel):
                             dim_tags="sep,C"))
                 ]
 
-    def get_code_tranformer(self):
+    def get_code_transformer(self):
         from sumpy.codegen import VectorComponentRewriter
         vcr = VectorComponentRewriter([self.stresslet_vector_name])
         from pymbolic.primitives import Variable
