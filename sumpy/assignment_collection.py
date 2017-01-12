@@ -41,26 +41,29 @@ Manipulating batches of assignments
 """
 
 
-def _generate_unique_possibilities(prefix):
-    yield prefix
-
-    try_num = 0
-    while True:
-        yield "%s_%d" % (prefix, try_num)
-        try_num += 1
-
-
 class _SymbolGenerator(object):
+
     def __init__(self, taken_symbols):
         self.taken_symbols = taken_symbols
-        self.generated_names = set()
+        from collections import defaultdict
+        self.base_to_count = defaultdict(lambda: 0)
 
     def __call__(self, base="expr"):
-        for id_str in _generate_unique_possibilities(base):
-            if id_str not in self.taken_symbols \
-                    and id_str not in self.generated_names:
-                self.generated_names.add(id_str)
-                return sp.Symbol(id_str)
+        count = self.base_to_count[base]
+
+        def make_id_str(base, count):
+            return "{base}{suffix}".format(
+                    base=base,
+                    suffix="" if count == 0 else "_" + str(count - 1))
+
+        id_str = make_id_str(base, count)
+        while id_str in self.taken_symbols:
+            count += 1
+            id_str = make_id_str(base, count)
+
+        self.base_to_count[base] = count + 1
+
+        return sp.Symbol(id_str)
 
     def __iter__(self):
         return self
@@ -69,55 +72,6 @@ class _SymbolGenerator(object):
         return self()
 
     __next__ = next
-
-
-# {{{ CSE caching
-
-def _map_cse_result(mapper, cse_result):
-    replacements, reduced_exprs = cse_result
-
-    new_replacements = [
-            (sym, mapper(repl))
-            for sym, repl in replacements]
-    new_reduced_exprs = [
-            mapper(expr)
-            for expr in reduced_exprs]
-
-    return new_replacements, new_reduced_exprs
-
-
-def cached_cse(exprs, symbols):
-    assert isinstance(symbols, _SymbolGenerator)
-
-    from pytools.diskdict import get_disk_dict
-    cache_dict = get_disk_dict("sumpy-cse-cache", version=1)
-
-    # sympy expressions don't pickle properly :(
-    # (as of Jun 7, 2013)
-    # https://code.google.com/p/sympy/issues/detail?id=1198
-
-    from pymbolic.interop.sympy import (
-            SympyToPymbolicMapper,
-            PymbolicToSympyMapper)
-
-    s2p = SympyToPymbolicMapper()
-    p2s = PymbolicToSympyMapper()
-
-    key_exprs = tuple(s2p(expr) for expr in exprs)
-
-    key = (key_exprs, frozenset(symbols.taken_symbols),
-            frozenset(symbols.generated_names))
-
-    try:
-        result = cache_dict[key]
-    except KeyError:
-        result = sp.cse(exprs, symbols)
-        cache_dict[key] = _map_cse_result(s2p, result)
-        return result
-    else:
-        return _map_cse_result(p2s, result)
-
-# }}}
 
 
 # {{{ collection of assignments
@@ -198,28 +152,30 @@ class SymbolicAssignmentCollection(object):
         """Assign *expr* to a new variable whose name is based on *name_base*.
         Return the new variable name.
         """
-        for new_name in _generate_unique_possibilities(name_base):
-            if new_name not in self.assignments:
-                break
+        new_name = self.symbol_generator(name_base).name
 
         self.add_assignment(new_name, expr)
         self.user_symbols.add(new_name)
         return new_name
 
     def run_global_cse(self, extra_exprs=[]):
+        import time
+        start_time = time.time()
+
         logger.info("common subexpression elimination: start")
 
-        assign_names = list(self.assignments)
+        assign_names = sorted(self.assignments)
         assign_exprs = [self.assignments[name] for name in assign_names]
 
         # Options here:
-        # - cached_cse: Uses on-disk cache to speed up CSE.
         # - checked_cse: if you mistrust the result of the cse.
         #   Uses maxima to verify.
-        # - sp.cse: The underlying sympy thing.
+        # - sp.cse: The sympy thing.
+        # - sumpy.cse.cse: Based on sympy, designed to go faster.
         #from sumpy.symbolic import checked_cse
 
-        new_assignments, new_exprs = cached_cse(assign_exprs + extra_exprs,
+        from sumpy.cse import cse
+        new_assignments, new_exprs = cse(assign_exprs + extra_exprs,
                 symbols=self.symbol_generator)
 
         new_assign_exprs = new_exprs[:len(assign_exprs)]
@@ -232,7 +188,8 @@ class SymbolicAssignmentCollection(object):
             assert isinstance(name, sp.Symbol)
             self.add_assignment(name.name, value)
 
-        logger.info("common subexpression elimination: done")
+        logger.info("common subexpression elimination: done after {dur:.2f} s"
+                    .format(dur=time.time() - start_time))
         return new_extra_exprs
 
     def kill_trivial_assignments(self, exprs):

@@ -100,19 +100,19 @@ class E2PBase(KernelCacheWrapper):
         from sumpy.codegen import to_loopy_insns
         loopy_insns = to_loopy_insns(assignments,
                 vector_names=set(["b"]),
-                pymbolic_expr_maps=[self.expansion.transform_to_code],
+                pymbolic_expr_maps=[self.expansion.get_code_transformer()],
                 complex_dtype=np.complex128  # FIXME
                 )
 
+        return loopy_insns, result_names
+
+    def get_kernel_scaling_assignment(self):
         from pymbolic.interop.sympy import SympyToPymbolicMapper
         sympy_conv = SympyToPymbolicMapper()
-        loopy_insns.append(
-                lp.Assignment(id=None,
+        return [lp.Assignment(id=None,
                     assignee="kernel_scaling",
                     expression=sympy_conv(self.expansion.kernel.get_scaling()),
-                    temp_var_type=lp.auto))
-
-        return loopy_insns, result_names
+                    temp_var_type=lp.auto)]
 
     def get_cache_key(self):
         return (type(self).__name__, self.expansion, tuple(self.kernels))
@@ -135,7 +135,8 @@ class E2PFromSingleBox(E2PBase):
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
                     "{[itgt,idim]: itgt_start<=itgt<itgt_end and 0<=idim<dim}",
                     ],
-                ["""
+                self.get_kernel_scaling_assignment()
+                + ["""
                 for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
                     <> itgt_start = box_target_starts[tgt_ibox]
@@ -229,7 +230,8 @@ class E2PFromCSR(E2PBase):
                     "{[isrc_box]: isrc_box_start<=isrc_box<isrc_box_end }",
                     "{[idim]: 0<=idim<dim}",
                     ],
-                ["""
+                self.get_kernel_scaling_assignment()
+                + ["""
                 for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
                     <> itgt_start = box_target_starts[tgt_ibox]

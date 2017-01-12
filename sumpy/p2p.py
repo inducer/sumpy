@@ -88,7 +88,8 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
         from sumpy.codegen import to_loopy_insns
         loopy_insns = to_loopy_insns(six.iteritems(sac.assignments),
                 vector_names=set(["d"]),
-                pymbolic_expr_maps=[knl.transform_to_code for knl in self.kernels],
+                pymbolic_expr_maps=[
+                        knl.get_code_transformer() for knl in self.kernels],
                 complex_dtype=np.complex128  # FIXME
                 )
 
@@ -305,7 +306,12 @@ class P2PFromCSR(P2PBase):
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
-        #knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
+        import pyopencl as cl
+        dev = self.context.devices[0]
+        if dev.type & cl.device_type.CPU:
+            knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
+        else:
+            knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
         return knl
 
     def __call__(self, queue, **kwargs):
