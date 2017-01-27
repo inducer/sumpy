@@ -23,7 +23,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import sumpy.symbolic as sym
+import sympy as sp
 
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
@@ -61,7 +61,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
             raise RuntimeError("cannot use line-Taylor expansions in a setting "
                     "where the center-target vector is not known at coefficient "
                     "formation")
-        avec_line = avec + sym.Symbol("tau")*bvec
+        avec_line = avec + sp.Symbol("tau")*bvec
 
         line_kernel = self.kernel.get_expression(avec_line)
 
@@ -117,9 +117,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                     type(self).__name__,
                     self.order))
 
-        import time
         from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansionBase
-        if 1 and isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
+        if isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
             # We know the general form of the multipole expansion is:
             #
             #    coeff0 * diff(kernel, mi0) + coeff1 * diff(kernel, mi1) + ...
@@ -141,7 +140,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                         src_expansion.get_coefficient_identifiers()):
                     kernel_deriv = taker.diff(add_mi(deriv, term))
                     local_result.append(coeff * kernel_deriv)
-                result.append(sym.Add(*local_result))
+                result.append(sp.Add(*local_result))
         else:
             from sumpy.tools import MiDerivativeTaker
             expr = src_expansion.evaluate(src_coeff_exprs, dvec)
@@ -198,61 +197,61 @@ class H2DLocalExpansion(LocalExpansionBase):
         return list(range(-self.order, self.order+1))
 
     def coefficients_from_source(self, avec, bvec):
-        from sumpy.symbolic import sym_real_norm_2
-        hankel_1 = sym.Function("hankel_1")
+        from sumpy.symbolic import sympy_real_norm_2
+        hankel_1 = sp.Function("hankel_1")
 
-        k = sym.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
+        k = sp.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
 
         # The coordinates are negated since avec points from source to center.
-        source_angle_rel_center = sym.atan2(-avec[1], -avec[0])
-        avec_len = sym_real_norm_2(avec)
+        source_angle_rel_center = sp.atan2(-avec[1], -avec[0])
+        avec_len = sympy_real_norm_2(avec)
         return [self.kernel.postprocess_at_source(
                     hankel_1(l, k * avec_len)
-                    * sym.exp(sym.I * l * source_angle_rel_center), avec)
+                    * sp.exp(sp.I * l * source_angle_rel_center), avec)
                     for l in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec):
-        from sumpy.symbolic import sym_real_norm_2
-        bessel_j = sym.Function("bessel_j")
-        bvec_len = sym_real_norm_2(bvec)
-        target_angle_rel_center = sym.atan2(bvec[1], bvec[0])
+        from sumpy.symbolic import sympy_real_norm_2
+        bessel_j = sp.Function("bessel_j")
+        bvec_len = sympy_real_norm_2(bvec)
+        target_angle_rel_center = sp.atan2(bvec[1], bvec[0])
 
-        k = sym.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
+        k = sp.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
 
         return sum(coeffs[self.get_storage_index(l)]
                    * self.kernel.postprocess_at_target(
                        bessel_j(l, k * bvec_len)
-                       * sym.exp(sym.I * l * -target_angle_rel_center), bvec)
+                       * sp.exp(sp.I * l * -target_angle_rel_center), bvec)
                 for l in self.get_coefficient_identifiers())
 
     def translate_from(self, src_expansion, src_coeff_exprs, dvec):
-        from sumpy.symbolic import sym_real_norm_2
+        from sumpy.symbolic import sympy_real_norm_2
 
-        k = sym.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
+        k = sp.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
 
         if isinstance(src_expansion, H2DLocalExpansion):
-            dvec_len = sym_real_norm_2(dvec)
-            bessel_j = sym.Function("bessel_j")
-            new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
+            dvec_len = sympy_real_norm_2(dvec)
+            bessel_j = sp.Function("bessel_j")
+            new_center_angle_rel_old_center = sp.atan2(dvec[1], dvec[0])
             translated_coeffs = []
             for l in self.get_coefficient_identifiers():
                 translated_coeffs.append(
                     sum(src_coeff_exprs[src_expansion.get_storage_index(m)]
                         * bessel_j(m - l, k * dvec_len)
-                        * sym.exp(sym.I * (m - l) * -new_center_angle_rel_old_center)
+                        * sp.exp(sp.I * (m - l) * -new_center_angle_rel_old_center)
                     for m in src_expansion.get_coefficient_identifiers()))
             return translated_coeffs
 
         from sumpy.expansion.multipole import H2DMultipoleExpansion
         if isinstance(src_expansion, H2DMultipoleExpansion):
-            dvec_len = sym_real_norm_2(dvec)
-            hankel_1 = sym.Function("hankel_1")
-            new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
+            dvec_len = sympy_real_norm_2(dvec)
+            hankel_1 = sp.Function("hankel_1")
+            new_center_angle_rel_old_center = sp.atan2(dvec[1], dvec[0])
             translated_coeffs = []
             for l in self.get_coefficient_identifiers():
                 translated_coeffs.append(
                     sum((-1) ** l * hankel_1(m + l, k * dvec_len)
-                        * sym.exp(sym.I * (m + l) * new_center_angle_rel_old_center)
+                        * sp.exp(sp.I * (m + l) * new_center_angle_rel_old_center)
                         * src_coeff_exprs[src_expansion.get_storage_index(m)]
                     for m in src_expansion.get_coefficient_identifiers()))
             return translated_coeffs
