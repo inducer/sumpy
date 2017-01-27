@@ -26,7 +26,7 @@ THE SOFTWARE.
 """
 
 
-import sympy as sp
+import sumpy.symbolic as sym
 
 import logging
 logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ class _SymbolGenerator(object):
 
         self.base_to_count[base] = count + 1
 
-        return sp.Symbol(id_str)
+        return sym.Symbol(id_str)
 
     def __iter__(self):
         return self
@@ -125,7 +125,7 @@ class SymbolicAssignmentCollection(object):
 
         result = set()
         for dep in self.assignments[var_name].atoms():
-            if not isinstance(dep, sp.Symbol):
+            if not isinstance(dep, sym.Symbol):
                 continue
 
             dep_name = dep.name
@@ -146,7 +146,7 @@ class SymbolicAssignmentCollection(object):
         if root_name is None:
             root_name = name
 
-        self.assignments[name] = sp.sympify(expr)
+        self.assignments[name] = sym.sympify(expr)
 
     def assign_unique(self, name_base, expr):
         """Assign *expr* to a new variable whose name is based on *name_base*.
@@ -170,7 +170,7 @@ class SymbolicAssignmentCollection(object):
         # Options here:
         # - checked_cse: if you mistrust the result of the cse.
         #   Uses maxima to verify.
-        # - sp.cse: The sympy thing.
+        # - sym.cse: The sympy thing.
         # - sumpy.cse.cse: Based on sympy, designed to go faster.
         #from sumpy.symbolic import checked_cse
 
@@ -185,40 +185,12 @@ class SymbolicAssignmentCollection(object):
             self.assignments[name] = new_expr
 
         for name, value in new_assignments:
-            assert isinstance(name, sp.Symbol)
+            assert isinstance(name, sym.Symbol)
             self.add_assignment(name.name, value)
 
         logger.info("common subexpression elimination: done after {dur:.2f} s"
                     .format(dur=time.time() - start_time))
         return new_extra_exprs
-
-    def kill_trivial_assignments(self, exprs):
-        logger.info("kill trivial assignments: start")
-
-        approved_assignments = []
-        rejected_assignments = []
-
-        from sumpy.symbolic import is_assignment_nontrivial
-        for name, value in six.iteritems(self.assignments):
-            if name in self.user_symbols or is_assignment_nontrivial(name, value):
-                approved_assignments.append((name, value))
-            else:
-                rejected_assignments.append((name, value))
-
-        # un-substitute rejected assignments
-        from sumpy.symbolic import make_one_step_subst
-        unsubst_rej = make_one_step_subst(rejected_assignments)
-
-        new_assignments = dict(
-                (name, expr.subs(unsubst_rej))
-                for name, expr in approved_assignments)
-
-        exprs = [expr.subs(unsubst_rej) for expr in exprs]
-        self.assignments = new_assignments
-
-        logger.info("kill trivial assignments: done")
-
-        return exprs
 
 # }}}
 

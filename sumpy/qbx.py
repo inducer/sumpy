@@ -27,7 +27,7 @@ import six
 from six.moves import range, zip
 import numpy as np
 import loopy as lp
-import sympy as sp
+import sumpy.symbolic as sym
 from pytools import memoize_method
 from pymbolic import parse, var
 
@@ -64,7 +64,7 @@ def expand(expansion_nr, sac, expansion, avec, bvec):
     coefficients = expansion.coefficients_from_source(avec, bvec)
 
     assigned_coeffs = [
-            sp.Symbol(
+            sym.Symbol(
                     sac.assign_unique("expn%dcoeff%s" % (
                         expansion_nr, stringify_expn_index(i)),
                         coefficients[expansion.get_storage_index(i)]))
@@ -117,10 +117,10 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
 
     @memoize_method
     def get_kernel(self):
-        from sumpy.symbolic import make_sympy_vector
+        from sumpy.symbolic import make_sym_vector
 
-        avec = make_sympy_vector("a", self.dim)
-        bvec = make_sympy_vector("b", self.dim)
+        avec = make_sym_vector("a", self.dim)
+        bvec = make_sym_vector("b", self.dim)
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()

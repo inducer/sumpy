@@ -107,7 +107,7 @@ class LinearRecurrenceBasedMiDerivativeTaker(MiDerivativeTaker):
             expr = self.cache_by_mi[mi]
         except KeyError:
             from six import iteritems
-            from sympy import Add
+            from sumpy.symbolic import Add
 
             closest_mi = self.get_closest_cached_mi(mi)
             expr = self.cache_by_mi[closest_mi]
@@ -264,7 +264,7 @@ class KernelComputation(object):
         self.name = name or self.default_name
 
     def get_kernel_scaling_assignments(self):
-        from pymbolic.interop.sympy import SympyToPymbolicMapper
+        from sumpy.symbolic import SympyToPymbolicMapper
         sympy_conv = SympyToPymbolicMapper()
 
         import loopy as lp

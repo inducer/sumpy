@@ -70,8 +70,8 @@ class P2EBase(KernelCacheWrapper):
         self.dim = expansion.dim
 
     def get_loopy_instructions(self):
-        from sumpy.symbolic import make_sympy_vector
-        avec = make_sympy_vector("a", self.dim)
+        from sumpy.symbolic import make_sym_vector
+        avec = make_sym_vector("a", self.dim)
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
@@ -161,6 +161,7 @@ class P2EFromSingleBox(P2EBase):
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
+        print(loopy_knl)
         return loopy_knl
 
     def get_optimized_kernel(self):

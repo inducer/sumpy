@@ -27,7 +27,7 @@ from six.moves import range
 
 import numpy as np
 import loopy as lp
-import sympy as sp
+import sumpy.symbolic as sym
 from sumpy.tools import KernelCacheWrapper
 
 
@@ -74,13 +74,13 @@ class E2PBase(KernelCacheWrapper):
             assert tdr(knl) == expansion.kernel
 
     def get_loopy_insns_and_result_names(self):
-        from sumpy.symbolic import make_sympy_vector
-        bvec = make_sympy_vector("b", self.dim)
+        from sumpy.symbolic import make_sym_vector
+        bvec = make_sym_vector("b", self.dim)
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
 
-        coeff_exprs = [sp.Symbol("coeff%d" % i)
+        coeff_exprs = [sym.Symbol("coeff%d" % i)
                 for i in range(len(self.expansion.get_coefficient_identifiers()))]
         value = self.expansion.evaluate(coeff_exprs, bvec)
         result_names = [
@@ -107,7 +107,7 @@ class E2PBase(KernelCacheWrapper):
         return loopy_insns, result_names
 
     def get_kernel_scaling_assignment(self):
-        from pymbolic.interop.sympy import SympyToPymbolicMapper
+        from sumpy.symbolic import SympyToPymbolicMapper
         sympy_conv = SympyToPymbolicMapper()
         return [lp.Assignment(id=None,
                     assignee="kernel_scaling",

@@ -27,6 +27,7 @@ from six.moves import range, zip
 import loopy as lp
 import numpy as np
 from pymbolic.mapper import IdentityMapper, CSECachingMapperMixin
+import sumpy.symbolic as sym
 from sumpy.symbolic import pymbolic_real_norm_2
 from pymbolic.primitives import make_sym_vector
 from pymbolic import var
@@ -263,10 +264,11 @@ class ExpressionKernel(Kernel):
         if self.dim != len(dist_vec):
             raise ValueError("dist_vec length does not match expected dimension")
 
-        expr = expr.subs([
-            ("d%d" % i, dist_vec_i)
+        import sumpy.symbolic as sym
+        expr = expr.subs(dict(
+            (sym.Symbol("d%d" % i), dist_vec_i)
             for i, dist_vec_i in enumerate(dist_vec)
-            ])
+            ))
 
         return expr
 
@@ -506,22 +508,26 @@ class StressletKernel(ExpressionKernel):
 
         if dim == 2:
             d = make_sym_vector("d", dim)
+            n = make_sym_vector(stresslet_vector_name, dim)
             r = pymbolic_real_norm_2(d)
             expr = (
-                -var("log")(r)*(1 if icomp == jcomp else 0)
-                +
-                d[icomp]*d[jcomp]/r**2
+                sum(n[axis]*d[axis] for axis in range(dim))
+                *
+                d[icomp]*d[jcomp]/r**4
                 )
-            scaling = 1/(4*var("pi"))
+            scaling = 1/(var("pi"))
+
         elif dim == 3:
             d = make_sym_vector("d", dim)
+            n = make_sym_vector(stresslet_vector_name, dim)
             r = pymbolic_real_norm_2(d)
             expr = (
-                (1/r)*(1 if icomp == jcomp else 0)
-                +
-                d[icomp]*d[jcomp]/r**3
+                sum(n[axis]*d[axis] for axis in range(dim))
+                *
+                d[icomp]*d[jcomp]/r**5
                 )
-            scaling = -1/(8*var("pi"))
+            scaling = -3/(4*var("pi"))
+
         elif dim is None:
             expr = None
             scaling = None
@@ -558,28 +564,15 @@ class StressletKernel(ExpressionKernel):
         return [
                 KernelArgument(
                     loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64),
-                    )]
-
-    def get_source_args(self):
-        return [
+                    ),
                 KernelArgument(
                         loopy_arg=lp.GlobalArg(self.stresslet_vector_name,
                             None,
                             shape=(self.dim, "nsources"),
-                            dim_tags="sep,C"))]
+                            dim_tags="sep,C"))
+                ]
 
-    def postprocess_at_source(self, expr, avec):
-        dimensions = len(avec)
-        assert dimensions == self.dim
-
-        from sumpy.symbolic import make_sympy_vector
-        n = make_sympy_vector(self.stresslet_vector_name, dimensions)
-
-        # avec = center-src -> minus sign from chain rule
-        return sum(-n[axis]*expr.diff(avec[axis])
-                for axis in range(dimensions))
-
-    def get_code_transformer(self):
+    def get_code_tranformer(self):
         from sumpy.codegen import VectorComponentRewriter
         vcr = VectorComponentRewriter([self.stresslet_vector_name])
         from pymbolic.primitives import Variable
@@ -746,12 +739,12 @@ class DirectionalTargetDerivative(DirectionalDerivative):
         dim = len(bvec)
         assert dim == self.dim
 
-        from sumpy.symbolic import make_sympy_vector
-        dir_vec = make_sympy_vector(self.dir_vec_name, dim)
+        from sumpy.symbolic import make_sym_vector
+        dir_vec = make_sym_vector(self.dir_vec_name, dim)
 
         # bvec = tgt-center
-        return sum(dir_vec[axis]*expr.diff(bvec[axis])
-                for axis in range(dim))
+        return sym.Add(*tuple(dir_vec[axis]*expr.diff(bvec[axis])
+                for axis in range(dim)))
 
     mapper_method = "map_directional_target_derivative"
 
@@ -777,12 +770,12 @@ class DirectionalSourceDerivative(DirectionalDerivative):
         dimensions = len(avec)
         assert dimensions == self.dim
 
-        from sumpy.symbolic import make_sympy_vector
-        dir_vec = make_sympy_vector(self.dir_vec_name, dimensions)
+        from sumpy.symbolic import make_sym_vector
+        dir_vec = make_sym_vector(self.dir_vec_name, dimensions)
 
         # avec = center-src -> minus sign from chain rule
-        return sum(-dir_vec[axis]*expr.diff(avec[axis])
-                for axis in range(dimensions))
+        return sym.Add(*tuple(-dir_vec[axis]*expr.diff(avec[axis])
+                for axis in range(dimensions)))
 
     mapper_method = "map_directional_source_derivative"
 

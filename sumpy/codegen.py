@@ -38,7 +38,7 @@ from loopy.types import NumpyType
 
 from pytools import memoize_method
 
-from pymbolic.interop.sympy import (
+from sumpy.symbolic import (USE_SYMENGINE,
         SympyToPymbolicMapper as SympyToPymbolicMapperBase)
 
 import logging
@@ -57,6 +57,10 @@ Conversion of :mod:`sympy` expressions to :mod:`loopy`
 
 
 # {{{ sympy -> pymbolic mapper
+
+import sumpy.symbolic as sym
+_SPECIAL_FUNCTION_NAMES = frozenset(dir(sym.functions))
+
 
 class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
     def __init__(self, assignments):
@@ -77,6 +81,24 @@ class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
             expr.expr.subs(self.assignments)),
             tuple(v.name for v in expr.variables))
 
+    def not_supported(self, expr):
+        if isinstance(expr, int):
+            return expr
+        elif getattr(expr, "is_Function", False):
+            if USE_SYMENGINE:
+                try:
+                    func_name = expr.get_name()
+                except AttributeError:
+                    func_name = type(expr).__name__
+            else:
+                func_name = type(expr).__name__
+            # SymEngine capitalizes the names of the special functions.
+            if func_name.lower() in _SPECIAL_FUNCTION_NAMES:
+                func_name = func_name.lower()
+            return prim.Variable(func_name)(
+                    *tuple(self.rec(arg) for arg in expr.args))
+        else:
+            return SympyToPymbolicMapperBase.not_supported(self, expr)
 
 # }}}
 
@@ -318,7 +340,7 @@ class BesselDerivativeReplacer(CSECachingMapperMixin, IdentityMapper):
             arg, = expr.values
 
             n_derivs = len(expr.child.variables)
-            import sympy as sp
+            import sympy as sym
 
             # AS (9.1.31)
             # http://dlmf.nist.gov/10.6.7
@@ -329,7 +351,7 @@ class BesselDerivativeReplacer(CSECachingMapperMixin, IdentityMapper):
             k = n_derivs
             return prim.CommonSubexpression(
                     2**(-k)*sum(
-                        (-1)**idx*int(sp.binomial(k, idx)) * function(i, arg)
+                        (-1)**idx*int(sym.binomial(k, idx)) * function(i, arg)
                         for idx, i in enumerate(range(order-k, order+k+1, 2))),
                     "d%d_%s_%s" % (n_derivs, function.name, order_str))
         else:
