@@ -117,9 +117,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                     type(self).__name__,
                     self.order))
 
-        import time
         from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansionBase
-        if 1 and isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
+        if isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
             # We know the general form of the multipole expansion is:
             #
             #    coeff0 * diff(kernel, mi0) + coeff1 * diff(kernel, mi1) + ...
