@@ -134,17 +134,13 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
 
         sac.run_global_cse()
 
-        from sumpy.symbolic import kill_trivial_assignments
-        assignments = kill_trivial_assignments([
-                (name, expr.subs("tau", 0))
-                for name, expr in six.iteritems(sac.assignments)],
-                retain_names=result_names)
-
         from sumpy.codegen import to_loopy_insns
-        loopy_insns = to_loopy_insns(assignments,
+        loopy_insns = to_loopy_insns(
+                six.iteritems(sac.assignments),
                 vector_names=set(["a", "b"]),
                 pymbolic_expr_maps=[
                     expn.kernel.get_code_transformer() for expn in self.expansions],
+                retain_names=result_names,
                 complex_dtype=np.complex128  # FIXME
                 )
 

@@ -30,27 +30,35 @@ logger = logging.getLogger(__name__)
 
 
 def test_kill_trivial_assignments():
-    from sumpy.symbolic import kill_trivial_assignments, symbols, sympify
-    x, y, nt = symbols("x, y, nt")
-    t0, t1, t2 = symbols("t0:3")
-    u0, u1, u2 = symbols("u0:3")
+    from pymbolic import var
+    x, y, t0, t1, t2 = [var(s) for s in "x y t0 t1 t2".split()]
 
     assignments = (
-        ("t0", sympify(6)),
+        ("t0", 6),
         ("t1", -t0),
         ("t2", 6*x),
         ("nt", x**y),
         # users of trivial assignments
         ("u0", t0 + 1),
         ("u1", t1 + 1),
-        ("u2", t2 + 1)
+        ("u2", t2 + 1),
     )
 
+    from sumpy.codegen import kill_trivial_assignments
     result = kill_trivial_assignments(
         assignments,
         retain_names=("u0", "u1", "u2"))
 
-    assert result == [('nt', x**y), ('u0', 7), ('u1', -5), ('u2', 1 + 6*x)]
+    from pymbolic.primitives import Sum
+
+    def _s(*vals):
+        return Sum(vals)
+
+    assert result == [
+        ('nt', x**y),
+        ('u0', _s(6, 1)),
+        ('u1', _s(-6, 1)),
+        ('u2', _s(6*x, 1))]
 
 
 # You can test individual routines by typing

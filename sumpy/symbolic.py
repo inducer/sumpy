@@ -76,7 +76,7 @@ _find_symbolic_backend()
 # Before adding a function here, make sure it's present in both modules.
 SYMBOLIC_API = """
 Add Basic Mul Pow exp sqrt symbols sympify cos sin atan2 Function Symbol
-Integer Matrix Subs I pi functions""".split()
+Derivative Integer Matrix Subs I pi functions""".split()
 
 if USE_SYMENGINE:
     from symengine import sympy_compat as sym
@@ -99,63 +99,6 @@ def _coeff_isneg(a):
         return a.is_Number and a < 0
     except:
         return False
-
-
-# {{{ trivial assignment elimination
-
-def make_one_step_subst(assignments):
-    unwanted_vars = set(sym.Symbol(name) for name, value in assignments)
-
-    result = {}
-    assignments = dict((sym.Symbol(name), value) for name, value in assignments)
-    for name, value in assignments.items():
-        while value.atoms(sym.Symbol) & unwanted_vars:
-            value = value.subs(assignments)
-
-        result[name] = value
-
-    return result
-
-
-def is_assignment_nontrivial(name, value):
-    if value.is_Number:
-        return False
-    elif isinstance(value, sym.Symbol):
-        return False
-    elif (isinstance(value, sym.Mul)
-            and len(value.args) == 2
-            and sum(1 for arg in value.args if arg.is_Number) == 1
-            and sum(1 for arg in value.args if isinstance(arg, sym.Symbol)) == 1):
-        # const*var: not good enough
-        return False
-
-    return True
-
-
-def kill_trivial_assignments(assignments, retain_names=set()):
-    logger.info("kill trivial assignments (plain): start")
-    approved_assignments = []
-    rejected_assignments = []
-
-    for name, value in assignments:
-        if name in retain_names or is_assignment_nontrivial(name, value):
-            approved_assignments.append((name, value))
-        else:
-            rejected_assignments.append((name, value))
-
-    # un-substitute rejected assignments
-    unsubst_rej = make_one_step_subst(rejected_assignments)
-
-    result = []
-    for name, expr in approved_assignments:
-        r = expr.xreplace(unsubst_rej)
-        result.append((name, r))
-
-    logger.info("kill trivial assignments (plain): done")
-
-    return result
-
-# }}}
 
 
 # {{{ debugging of sympy CSE via Maxima

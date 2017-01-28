@@ -83,17 +83,12 @@ class P2EBase(KernelCacheWrapper):
 
         sac.run_global_cse()
 
-        from sumpy.symbolic import kill_trivial_assignments
-        assignments = kill_trivial_assignments([
-                (name, expr)
-                for name, expr in six.iteritems(sac.assignments)],
-                retain_names=coeff_names)
-
         from sumpy.codegen import to_loopy_insns
         return to_loopy_insns(
-                assignments,
+                six.iteritems(sac.assignments),
                 vector_names=set(["a"]),
                 pymbolic_expr_maps=[self.expansion.get_code_transformer()],
+                retain_names=coeff_names,
                 complex_dtype=np.complex128  # FIXME
                 )
 

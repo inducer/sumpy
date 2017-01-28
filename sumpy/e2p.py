@@ -83,6 +83,7 @@ class E2PBase(KernelCacheWrapper):
         coeff_exprs = [sym.Symbol("coeff%d" % i)
                 for i in range(len(self.expansion.get_coefficient_identifiers()))]
         value = self.expansion.evaluate(coeff_exprs, bvec)
+
         result_names = [
             sac.assign_unique("result_%d_p" % i,
                 knl.postprocess_at_target(value, bvec))
@@ -91,16 +92,12 @@ class E2PBase(KernelCacheWrapper):
 
         sac.run_global_cse()
 
-        from sumpy.symbolic import kill_trivial_assignments
-        assignments = kill_trivial_assignments([
-                (name, expr)
-                for name, expr in six.iteritems(sac.assignments)],
-                retain_names=result_names)
-
         from sumpy.codegen import to_loopy_insns
-        loopy_insns = to_loopy_insns(assignments,
+        loopy_insns = to_loopy_insns(
+                six.iteritems(sac.assignments),
                 vector_names=set(["b"]),
                 pymbolic_expr_maps=[self.expansion.get_code_transformer()],
+                retain_names=result_names,
                 complex_dtype=np.complex128  # FIXME
                 )
 
