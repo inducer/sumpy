@@ -147,29 +147,19 @@ def make_one_step_subst(assignments):
     from pymbolic import substitute
 
     result = {}
-
-    for name in toposort:
-        value = assignments[name]
-        value = substitute(value, result)
-
-        result[name] = value
-
-    # }}}
-
-    # {{{ simplify substitution
-
-    used_names = set(dep
-        for value in six.itervalues(result)
-        for dep in get_dependencies(value))
-
-    used_name_to_var = dict(
-        (used_name, prim.Variable(used_name)) for used_name in used_names)
-
+    used_name_to_var = {}
     from pymbolic import evaluate
     from functools import partial
     simplify = partial(evaluate, context=used_name_to_var)
 
-    for name, value in six.iteritems(result):
+    for name in toposort:
+        value = assignments[name]
+        value = substitute(value, result)
+        used_name_to_var.update(
+            (used_name, prim.Variable(used_name))
+            for used_name in get_dependencies(value)
+            if used_name not in used_name_to_var)
+
         result[name] = simplify(value)
 
     # }}}
