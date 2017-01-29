@@ -197,8 +197,6 @@ class E2EFromCSR(E2EBase):
                 silenced_warnings="write_race(write_expn*)",
                 default_offset=lp.auto)
 
-        print(loopy_knl)
-
         loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
 
         for expn in [self.src_expansion, self.tgt_expansion]:

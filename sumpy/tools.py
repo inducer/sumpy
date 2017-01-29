@@ -74,7 +74,6 @@ class MiDerivativeTaker(object):
             for next_deriv, next_mi in self.get_derivative_taking_sequence(
                     current_mi, mi):
                 expr = expr.diff(next_deriv)
-                print("taking diff", expr)
                 self.cache_by_mi[next_mi] = expr
 
         return expr

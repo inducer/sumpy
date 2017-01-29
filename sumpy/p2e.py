@@ -156,7 +156,6 @@ class P2EFromSingleBox(P2EBase):
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
-        print(loopy_knl)
         return loopy_knl
 
     def get_optimized_kernel(self):
