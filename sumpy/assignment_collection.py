@@ -48,7 +48,14 @@ class _SymbolGenerator(object):
         from collections import defaultdict
         self.base_to_count = defaultdict(lambda: 0)
 
+    def _normalize(self, base):
+        # Strip off any _N suffix, to avoid generating conflicting names.
+        import re
+        base = re.split("_\d+$", base)[0]
+        return base if base != "" else "expr"
+
     def __call__(self, base="expr"):
+        base = self._normalize(base)
         count = self.base_to_count[base]
 
         def make_id_str(base, count):
