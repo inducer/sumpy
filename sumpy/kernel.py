@@ -513,7 +513,6 @@ class StressletKernel(ExpressionKernel):
 
         elif dim == 3:
             d = make_sym_vector("d", dim)
-            n = make_sym_vector(stresslet_vector_name, dim)
             r = pymbolic_real_norm_2(d)
             expr = (
                 d[icomp]*d[jcomp]*d[kcomp]/r**5
