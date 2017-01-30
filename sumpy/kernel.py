@@ -558,7 +558,6 @@ class StressletKernel(ExpressionKernel):
                     )
                 ]
 
-
     mapper_method = "map_stresslet_kernel"
 
 # }}}
