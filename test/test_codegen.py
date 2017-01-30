@@ -61,6 +61,23 @@ def test_kill_trivial_assignments():
         ('u2', _s(6*x, 1))]
 
 
+def test_symbolic_assignment_name_uniqueness():
+    # https://gitlab.tiker.net/inducer/sumpy/issues/13
+    from sumpy.assignment_collection import SymbolicAssignmentCollection
+
+    sac = SymbolicAssignmentCollection({"s_0": 1})
+    sac.assign_unique("s_", 1)
+    sac.assign_unique("s_", 1)
+    assert len(sac.assignments) == 3
+
+    sac = SymbolicAssignmentCollection()
+    sac.assign_unique("s_0", 1)
+    sac.assign_unique("s_", 1)
+    sac.assign_unique("s_", 1)
+
+    assert len(sac.assignments) == 3
+
+
 # You can test individual routines by typing
 # $ python test_fmm.py 'test_sumpy_fmm(cl.create_some_context)'
 
