@@ -494,7 +494,7 @@ class StokesletKernel(ExpressionKernel):
 class StressletKernel(ExpressionKernel):
     init_arg_names = ("dim", "icomp", "jcomp", "kcomp", "viscosity_mu_name")
 
-    def __init__(self, dim=None, icomp=None, jcomp=None, kcomp=None, 
+    def __init__(self, dim=None, icomp=None, jcomp=None, kcomp=None,
                         viscosity_mu_name="mu"):
         """
         :arg viscosity_mu_name: The argument name to use for
@@ -538,7 +538,7 @@ class StressletKernel(ExpressionKernel):
                 is_complex_valued=False)
 
     def __getinitargs__(self):
-        return (self._dim, self.icomp, self.jcomp, self.kcomp, 
+        return (self._dim, self.icomp, self.jcomp, self.kcomp,
                       self.viscosity_mu_name)
 
     def update_persistent_hash(self, key_hash, key_builder):
