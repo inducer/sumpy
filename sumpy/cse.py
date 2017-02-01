@@ -481,7 +481,7 @@ def tree_cse(exprs, symbols, opt_subs=None):
         if expr in opt_subs:
             expr = opt_subs[expr]
 
-        new_args = [rebuild(arg) for arg in expr.args]
+        new_args = tuple(rebuild(arg) for arg in expr.args)
         if isinstance(expr, Unevaluated) or new_args != expr.args:
             new_expr = expr.func(*new_args)
         else:
