@@ -183,12 +183,13 @@ def test_multiple_expressions():
     rsubsts, _ = cse(reversed(l))
     assert substs == rsubsts
     assert reduced == [x1, x1 + z, x0]
-    l = [(x - z)*(y - z), x - z, y - z]
+    f = Function("f")
+    l = [f(x - z, y - z), x - z, y - z]
     substs, reduced = cse(l)
     rsubsts, _ = cse(reversed(l))
     assert substs == [(x0, -z), (x1, x + x0), (x2, x0 + y)]
     assert rsubsts == [(x0, -z), (x1, x0 + y), (x2, x + x0)]
-    assert reduced == [x1*x2, x1, x2]
+    assert reduced == [f(x1,x2), x1, x2]
     l = [w*y + w + x + y + z, w*x*y]
     assert cse(l) == ([(x0, w*y)], [w + x + x0 + y + z, x*x0])
     assert cse([x + y, x + y + z]) == ([(x0, x + y)], [x0, z + x0])
