@@ -656,7 +656,7 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
     assignments = list(assignments)
 
     # convert from sympy
-    sympy_conv = SympyToPymbolicMapper(assignments)
+    sympy_conv = SympyToPymbolicMapper()
     assignments = [(name, sympy_conv(expr)) for name, expr in assignments]
 
     assignments = kill_trivial_assignments(assignments, retain_names)
