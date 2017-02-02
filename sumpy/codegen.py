@@ -63,24 +63,6 @@ _SPECIAL_FUNCTION_NAMES = frozenset(dir(sym.functions))
 
 
 class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
-    def __init__(self, assignments):
-        self.assignments = dict(
-            (sym.Symbol(name), value) for name, value in assignments)
-        self.derivative_cse_names = set()
-
-    def map_Derivative(self, expr):  # noqa
-        # Sympy has picked up the habit of picking arguments out of derivatives
-        # and pronounce them common subexpressions. Me no like. Undo it, so
-        # that the bessel substitutor further down can do its job.
-
-        if expr.expr.is_Symbol:
-            # These will get removed, because loopy wont' be able to deal
-            # with them--they contain undefined placeholder symbols.
-            self.derivative_cse_names.add(expr.expr.name)
-
-        return prim.Derivative(self.rec(
-            expr.expr.subs(self.assignments)),
-            tuple(v.name for v in expr.variables))
 
     def not_supported(self, expr):
         if isinstance(expr, int):
@@ -676,10 +658,6 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
     # convert from sympy
     sympy_conv = SympyToPymbolicMapper(assignments)
     assignments = [(name, sympy_conv(expr)) for name, expr in assignments]
-    assignments = [
-            (name, expr) for name, expr in assignments
-            if name not in sympy_conv.derivative_cse_names
-            ]
 
     assignments = kill_trivial_assignments(assignments, retain_names)
 

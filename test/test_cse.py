@@ -189,7 +189,7 @@ def test_multiple_expressions():
     rsubsts, _ = cse(reversed(l))
     assert substs == [(x0, -z), (x1, x + x0), (x2, x0 + y)]
     assert rsubsts == [(x0, -z), (x1, x0 + y), (x2, x + x0)]
-    assert reduced == [f(x1,x2), x1, x2]
+    assert reduced == [f(x1, x2), x1, x2]
     l = [w*y + w + x + y + z, w*x*y]
     assert cse(l) == ([(x0, w*y)], [w + x + x0 + y + z, x*x0])
     assert cse([x + y, x + y + z]) == ([(x0, x + y)], [x0, z + x0])
@@ -202,27 +202,31 @@ def test_issue_4203():
     assert cse(sin(x**x)/x**x) == ([(x0, x**x)], [sin(x0)/x0])
 
 
-@sympyonly
-def test_dont_cse_tuples():
+def test_dont_cse_subs():
     from sumpy.symbolic import Subs
     f = Function("f")
     g = Function("g")
 
     name_val, (expr,) = cse(
-        Subs(f(x, y), (x, y), (0, 1))
-        + Subs(g(x, y), (x, y), (0, 1)))
-
-    assert name_val == []
-    assert expr == (Subs(f(x, y), (x, y), (0, 1))
-            + Subs(g(x, y), (x, y), (0, 1)))
-
-    name_val, (expr,) = cse(
         Subs(f(x, y), (x, y), (0, x + y))
         + Subs(g(x, y), (x, y), (0, x + y)))
 
-    assert name_val == [(x0, x + y)]
-    assert expr == Subs(f(x, y), (x, y), (0, x0)) + \
-        Subs(g(x, y), (x, y), (0, x0))
+    assert name_val == []
+    assert expr == Subs(f(x, y), (x, y), (0, x + y)) + \
+        Subs(g(x, y), (x, y), (0, x + y))
+
+
+def test_dont_cse_derivative():
+    from sumpy.symbolic import Derivative
+    f = Function("f")
+
+    # FIXME
+    deriv = Derivative(f(x+y), (x,)) if USE_SYMENGINE else Derivative(f(x+y), x)
+
+    name_val, (expr,) = cse(x + y + deriv)
+
+    assert name_val == []
+    assert expr == x + y + deriv
 
 
 def test_pow_invpow():

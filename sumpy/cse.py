@@ -66,7 +66,8 @@ DAMAGE.
 
 # }}}
 
-from sumpy.symbolic import Basic, Mul, Add, Pow, Symbol, _coeff_isneg
+from sumpy.symbolic import (
+    Basic, Mul, Add, Pow, Symbol, _coeff_isneg, Derivative, Subs)
 from sympy.core.compatibility import iterable
 from sympy.utilities.iterables import numbered_symbols
 
@@ -79,6 +80,10 @@ Common subexpression elimination
 .. autofunction:: cse
 
 """
+
+
+# Don't CSE child nodes of these classes.
+CSE_NO_DESCEND_CLASSES = (Derivative, Subs)
 
 
 # {{{ cse pre/postprocessing
@@ -352,6 +357,9 @@ def opt_cse(exprs):
         if expr.is_Atom:
             return
 
+        if isinstance(expr, CSE_NO_DESCEND_CLASSES):
+            return
+
         if iterable(expr):
             for item in expr:
                 find_opts(item)
@@ -443,7 +451,10 @@ def tree_cse(exprs, symbols, opt_subs=None):
             if expr in opt_subs:
                 expr = opt_subs[expr]
 
-            args = expr.args
+            if isinstance(expr, CSE_NO_DESCEND_CLASSES):
+                args = ()
+            else:
+                args = expr.args
 
         for arg in args:
             find_repeated(arg)
@@ -481,11 +492,11 @@ def tree_cse(exprs, symbols, opt_subs=None):
         if expr in opt_subs:
             expr = opt_subs[expr]
 
-        new_args = tuple(rebuild(arg) for arg in expr.args)
-        if isinstance(expr, Unevaluated) or new_args != expr.args:
-            new_expr = expr.func(*new_args)
-        else:
-            new_expr = expr
+        new_expr = expr
+        if not isinstance(expr, CSE_NO_DESCEND_CLASSES):
+            new_args = tuple(rebuild(arg) for arg in expr.args)
+            if isinstance(expr, Unevaluated) or new_args != expr.args:
+                new_expr = expr.func(*new_args)
 
         if orig_expr in to_eliminate:
             try:
