@@ -95,10 +95,7 @@ for _apifunc in SYMBOLIC_API:
 def _coeff_isneg(a):
     if a.is_Mul:
         a = a.args[0]
-    try:
-        return a.is_Number and a < 0
-    except:
-        return False
+    return a.is_Number and a.is_negative
 
 
 # {{{ debugging of sympy CSE via Maxima
