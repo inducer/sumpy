@@ -28,6 +28,7 @@ THE SOFTWARE.
 
 from pytools import memoize_method
 import numpy as np
+import sumpy.symbolic as sym
 
 import logging
 logger = logging.getLogger(__name__)
@@ -57,6 +58,7 @@ def mi_power(vector, mi):
 class MiDerivativeTaker(object):
 
     def __init__(self, expr, var_list):
+        assert isinstance(expr, sym.Basic)
         self.var_list = var_list
         empty_mi = (0,) * len(var_list)
         self.cache_by_mi = {empty_mi: expr}
