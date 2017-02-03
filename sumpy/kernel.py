@@ -50,6 +50,7 @@ PDE kernels
 .. autoclass:: LaplaceKernel
 .. autoclass:: HelmholtzKernel
 .. autoclass:: StokesletKernel
+.. autoclass:: StressletKernel
 
 Derivatives
 -----------
@@ -427,7 +428,7 @@ class StokesletKernel(ExpressionKernel):
     init_arg_names = ("dim", "icomp", "jcomp", "viscosity_mu_name")
 
     def __init__(self, dim, icomp, jcomp, viscosity_mu_name="mu"):
-        """
+        r"""
         :arg viscosity_mu_name: The argument name to use for
                 dynamic viscosity :math:`\mu` the then generating functions to
                 evaluate this kernel.
@@ -496,7 +497,7 @@ class StressletKernel(ExpressionKernel):
 
     def __init__(self, dim=None, icomp=None, jcomp=None, kcomp=None,
                         viscosity_mu_name="mu"):
-        """
+        r"""
         :arg viscosity_mu_name: The argument name to use for
                 dynamic viscosity :math:`\mu` the then generating functions to
                 evaluate this kernel.
