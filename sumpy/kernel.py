@@ -544,7 +544,7 @@ class StressletKernel(ExpressionKernel):
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode())
         key_builder.rec(key_hash, (
-            self.dim, self.icomp, self.jcomp, self.kcomp, self.viscosity_mu_name,
+            self.dim, self.icomp, self.jcomp, self.kcomp,
             self.viscosity_mu_name))
 
     def __repr__(self):
