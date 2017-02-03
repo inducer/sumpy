@@ -884,8 +884,8 @@ class KernelDimensionSetter(KernelIdentityMapper):
         return StressletKernel(self.dim,
                 kernel.icomp,
                 kernel.jcomp,
-                viscosity_mu_name=kernel.viscosity_mu_name,
-                stresslet_vector_name=kernel.stresslet_vector_name)
+                kernel.kcomp,
+                viscosity_mu_name=kernel.viscosity_mu_name)
 
 # }}}
 
