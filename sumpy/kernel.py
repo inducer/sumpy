@@ -492,11 +492,10 @@ class StokesletKernel(ExpressionKernel):
 
 
 class StressletKernel(ExpressionKernel):
-    init_arg_names = ("dim", "icomp", "jcomp", "viscosity_mu_name",
-        "stresslet_vector_name")
+    init_arg_names = ("dim", "icomp", "jcomp", "kcomp", "viscosity_mu_name")
 
-    def __init__(self, dim=None, icomp=None, jcomp=None, viscosity_mu_name="mu",
-                        stresslet_vector_name="stresslet_vec"):
+    def __init__(self, dim=None, icomp=None, jcomp=None, kcomp=None,
+                        viscosity_mu_name="mu"):
         """
         :arg viscosity_mu_name: The argument name to use for
                 dynamic viscosity :math:`\mu` the then generating functions to
@@ -508,20 +507,18 @@ class StressletKernel(ExpressionKernel):
             d = make_sym_vector("d", dim)
             r = pymbolic_real_norm_2(d)
             expr = (
-                -var("log")(r)*(1 if icomp == jcomp else 0)
-                +
-                d[icomp]*d[jcomp]/r**2
+                d[icomp]*d[jcomp]*d[kcomp]/r**4
                 )
-            scaling = 1/(4*var("pi"))
+            scaling = 1/(var("pi"))
+
         elif dim == 3:
             d = make_sym_vector("d", dim)
             r = pymbolic_real_norm_2(d)
             expr = (
-                (1/r)*(1 if icomp == jcomp else 0)
-                +
-                d[icomp]*d[jcomp]/r**3
+                d[icomp]*d[jcomp]*d[kcomp]/r**5
                 )
-            scaling = -1/(8*var("pi"))
+            scaling = -3/(4*var("pi"))
+
         elif dim is None:
             expr = None
             scaling = None
@@ -529,9 +526,9 @@ class StressletKernel(ExpressionKernel):
             raise RuntimeError("unsupported dimensionality")
 
         self.viscosity_mu_name = viscosity_mu_name
-        self.stresslet_vector_name = stresslet_vector_name
         self.icomp = icomp
         self.jcomp = jcomp
+        self.kcomp = kcomp
 
         ExpressionKernel.__init__(
                 self,
@@ -541,54 +538,25 @@ class StressletKernel(ExpressionKernel):
                 is_complex_valued=False)
 
     def __getinitargs__(self):
-        return (self._dim, self.icomp, self.jcomp, self.viscosity_mu_name,
-                      self.stresslet_vector_name)
+        return (self._dim, self.icomp, self.jcomp, self.kcomp,
+                      self.viscosity_mu_name)
 
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode())
         key_builder.rec(key_hash, (
-            self.dim, self.icomp, self.jcomp, self.viscosity_mu_name,
-            self.stresslet_vector_name))
+            self.dim, self.icomp, self.jcomp, self.kcomp,
+            self.viscosity_mu_name))
 
     def __repr__(self):
-        return "StressletKnl%dD_%d%d[%s]" % (self.dim, self.icomp, self.jcomp,
-                self.stresslet_vector_name)
+        return "StressletKnl%dD_%d%d%d" % (self.dim, self.icomp, self.jcomp,
+                self.kcomp)
 
     def get_args(self):
         return [
                 KernelArgument(
                     loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64),
-                    )]
-
-    def get_source_args(self):
-        return [
-                KernelArgument(
-                        loopy_arg=lp.GlobalArg(self.stresslet_vector_name,
-                            None,
-                            shape=(self.dim, "nsources"),
-                            dim_tags="sep,C"))]
-
-    def postprocess_at_source(self, expr, avec):
-        dimensions = len(avec)
-        assert dimensions == self.dim
-
-        from sumpy.symbolic import make_sympy_vector
-        n = make_sympy_vector(self.stresslet_vector_name, dimensions)
-
-        # avec = center-src -> minus sign from chain rule
-        return sum(-n[axis]*expr.diff(avec[axis])
-                for axis in range(dimensions))
-
-    def get_code_transformer(self):
-        from sumpy.codegen import VectorComponentRewriter
-        vcr = VectorComponentRewriter([self.stresslet_vector_name])
-        from pymbolic.primitives import Variable
-        via = _VectorIndexAdder(self.stresslet_vector_name, (Variable("isrc"),))
-
-        def transform(expr):
-            return via(vcr(expr))
-
-        return transform
+                    )
+                ]
 
     mapper_method = "map_stresslet_kernel"
 
@@ -916,8 +884,8 @@ class KernelDimensionSetter(KernelIdentityMapper):
         return StressletKernel(self.dim,
                 kernel.icomp,
                 kernel.jcomp,
-                viscosity_mu_name=kernel.viscosity_mu_name,
-                stresslet_vector_name=kernel.stresslet_vector_name)
+                kernel.kcomp,
+                viscosity_mu_name=kernel.viscosity_mu_name)
 
 # }}}
 

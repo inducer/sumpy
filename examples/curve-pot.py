@@ -229,6 +229,7 @@ def draw_pot_figure(aspect_ratio,
     else:
         # {{{ 3D plots
 
+
         plotval_vol = vol_pot.real
         plotval_c = curve_pot.real
 
@@ -264,7 +265,8 @@ def draw_pot_figure(aspect_ratio,
 if __name__ == "__main__":
     draw_pot_figure(aspect_ratio=1, nsrc=100, novsmp=100, helmholtz_k=(15+4j)*0.3,
             what_operator="D", what_operator_lpot="D", force_center_side=1)
-    pt.savefig("eigvals-ext-nsrc100-novsmp100.pdf")
+
+#    pt.savefig("eigvals-ext-nsrc100-novsmp100.pdf")
     #pt.clf()
     #draw_pot_figure(aspect_ratio=1, nsrc=100, novsmp=100, helmholtz_k=0,
     #        what_operator="D", what_operator_lpot="D", force_center_side=-1)
