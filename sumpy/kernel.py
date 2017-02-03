@@ -545,7 +545,7 @@ class StressletKernel(ExpressionKernel):
         key_hash.update(type(self).__name__.encode())
         key_builder.rec(key_hash, (
             self.dim, self.icomp, self.jcomp, self.kcomp, self.viscosity_mu_name,
-            self.stresslet_vector_name))
+            self.viscosity_mu_name))
 
     def __repr__(self):
         return "StressletKnl%dD_%d%d%d" % (self.dim, self.icomp, self.jcomp,
