@@ -253,7 +253,7 @@ def test_issue_4499():
         sqrt(z))*G(b)*G(2*a - b + 1), 1, 0, S(1)/2, z/2, -b + 1, -2*a + b,
         -2*a))  # noqa
     c = cse(t)
-    assert len(c[0]) == 13
+    assert len(c[0]) == 11
 
 
 def test_issue_6169():
@@ -343,6 +343,21 @@ def test_issue_7840():
     assert new_eqn[0] == expr
     # there should not be any replacements
     assert len(substitutions) < 1
+
+
+def test_recursive_matching():
+    assert cse([x+y, 2+x+y, x+y+z, 3+x+y+z]) == \
+        ([(x0, x + y), (x1, x0 + z)], [x0, x0 + 2, x1, x1 + 3])
+    assert cse(reversed([x+y, 2+x+y, x+y+z, 3+x+y+z])) == \
+        ([(x0, x + y), (x1, x0 + z)], [x1 + 3, x1, x0 + 2, x0])
+    # sympy 1.0 gives ([(x0, x*y*z)], [5*x0, w*(x*y), 3*x0])
+    assert cse([x*y*z*5, x*y*w, x*y*z*3]) == \
+        ([(x0, x*y), (x1, x0*z)], [5*x1, w*x0, 3*x1])
+    # sympy 1.0 gives ([(x4, x*y*z)], [5*x4, w*x3*x4, 3*x*x0*x1*x2*y])
+    assert cse([x*y*z*5, x*y*z*w*x3, x*y*3*x0*x1*x2]) == \
+        ([(x4, x*y), (x5, x4*z)], [5*x5, w*x3*x5, 3*x0*x1*x2*x4])
+    assert cse([2*x*x, x*x*y, x*x*y*w, x*x*y*w*x0, x*x*y*w*x2]) == \
+        ([(x1, x**2), (x3, x1*y), (x4, w*x3)], [2*x1, x3, x4, x0*x4, x2*x4])
 
 
 if __name__ == "__main__":
