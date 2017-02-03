@@ -526,7 +526,6 @@ class StressletKernel(ExpressionKernel):
             raise RuntimeError("unsupported dimensionality")
 
         self.viscosity_mu_name = viscosity_mu_name
-        self.stresslet_vector_name = stresslet_vector_name
         self.icomp = icomp
         self.jcomp = jcomp
         self.kcomp = kcomp
