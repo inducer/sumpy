@@ -716,7 +716,7 @@ class DirectionalTargetDerivative(DirectionalDerivative):
         dim = len(bvec)
         assert dim == self.dim
 
-        from sumpy.symbolic import make_sympy_vector
+        from sumpy.symbolic import make_sym_vector as make_sympy_vector
         dir_vec = make_sympy_vector(self.dir_vec_name, dim)
 
         # bvec = tgt-center
@@ -747,7 +747,7 @@ class DirectionalSourceDerivative(DirectionalDerivative):
         dimensions = len(avec)
         assert dimensions == self.dim
 
-        from sumpy.symbolic import make_sympy_vector
+        from sumpy.symbolic import make_sym_vector as make_sympy_vector
         dir_vec = make_sympy_vector(self.dir_vec_name, dimensions)
 
         # avec = center-src -> minus sign from chain rule
