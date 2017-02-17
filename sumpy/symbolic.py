@@ -47,21 +47,23 @@ def _find_symbolic_backend():
         symengine_found = False
 
     ALLOWED_BACKENDS = ("sympy", "symengine")  # noqa
+    BACKEND_ENV_VAR = "SUMPY_FORCE_SYMBOLIC_BACKEND"  # noqa
 
     import os
-    backend = os.environ.get("SUMPY_FORCE_SYMBOLIC_BACKEND")
+    backend = os.environ.get(BACKEND_ENV_VAR)
     if backend is not None:
         if backend not in ALLOWED_BACKENDS:
             raise RuntimeError(
-                "SUMPY_FORCE_SYMBOLIC_BACKEND value is unrecognized: '%s' "
+                "%s value is unrecognized: '%s' "
                 "(allowed values are %s)" % (
+                    BACKEND_ENV_VAR,
                     backend,
                     ", ".join("'%s'" % val for val in ALLOWED_BACKENDS)))
 
         if backend == "symengine" and not symengine_found:
             from warnings import warn
-            warn("SUMPY_FORCE_SYMBOLIC_BACKEND=symengine was specified, but "
-                 "could not find symengine. Using sympy.", RuntimeWarning)
+            warn("%s=symengine was specified, but could not find symengine. "
+                 "Using sympy." % BACKEND_ENV_VAR, RuntimeWarning)
 
         USE_SYMENGINE = backend == "symengine" and symengine_found
     else:
