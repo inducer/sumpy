@@ -1,0 +1,16 @@
+name: py2
+channels:
+- inducer
+- symengine/label/dev
+- conda-forge
+- defaults
+dependencies:
+- git
+- conda-forge::numpy
+- conda-forge::sympy
+- pocl
+- islpy
+- pyopencl
+- python=2.7
+- python-symengine=0.2.0.53.g83912b7=py35_1
+# things not in here: loopy boxtree pymbolic pyfmmlib
