@@ -264,10 +264,11 @@ class ExpressionKernel(Kernel):
         if self.dim != len(dist_vec):
             raise ValueError("dist_vec length does not match expected dimension")
 
-        expr = expr.subs([
-            ("d%d" % i, dist_vec_i)
+        from sumpy.symbolic import Symbol
+        expr = expr.subs(dict(
+            (Symbol("d%d" % i), dist_vec_i)
             for i, dist_vec_i in enumerate(dist_vec)
-            ])
+            ))
 
         return expr
 
