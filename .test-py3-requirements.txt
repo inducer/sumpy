@@ -1,4 +1,3 @@
 git+https://github.com/inducer/boxtree
+git+https://github.com/inducer/pymbolic
 git+https://github.com/inducer/loopy
-# The pymbolic version needs SymEngine support
-git+https://github.com/inducer/pymbolic@081714baf4476b42ca75a1324377914dd6356965
