@@ -428,10 +428,11 @@ def my_syntactic_subs(expr, subst_dict):
 
     else:
         new_args = tuple(my_syntactic_subs(arg, subst_dict) for arg in expr.args)
+
         if any(new_arg != arg for arg, new_arg in zip(expr.args, new_args)):
             return expr.func(*new_args)
-        else:
-            return expr
+
+        return expr
 
 
 # vim: fdm=marker
