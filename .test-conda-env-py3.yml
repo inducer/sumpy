@@ -1,4 +1,4 @@
-name: py3
+name: test-conda-env-py3
 channels:
 - inducer
 - symengine/label/dev
