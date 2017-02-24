@@ -385,4 +385,53 @@ class KernelCacheWrapper(object):
 
         return knl
 
+
+def my_syntactic_subs(expr, subst_dict):
+    # Workaround for differing substitution semantics between sympy and symengine.
+    # FIXME: This is a hack.
+    from sumpy.symbolic import Basic, Subs, Derivative, USE_SYMENGINE
+
+    if not isinstance(expr, Basic):
+        return expr
+
+    elif expr.is_Symbol:
+        return subst_dict.get(expr, expr)
+
+    elif isinstance(expr, Subs):
+        new_point = tuple(my_syntactic_subs(p, subst_dict) for p in expr.point)
+
+        import six
+        new_subst_dict = dict(
+            (var, subs) for var, subs in six.iteritems(subst_dict)
+            if var not in expr.variables)
+
+        new_expr = my_syntactic_subs(expr.expr, new_subst_dict)
+
+        if new_point != expr.point or new_expr != expr.expr:
+            return Subs(new_expr, expr.variables, new_point)
+
+        return expr
+
+    elif isinstance(expr, Derivative):
+        new_expr = my_syntactic_subs(expr.expr, subst_dict)
+        new_variables = my_syntactic_subs(expr.variables, subst_dict)
+
+        if new_expr != expr.expr or any(new_var != var for new_var, var in
+                                          zip(new_variables, expr.variables)):
+            # FIXME in SymEngine
+            if USE_SYMENGINE:
+                return Derivative(new_expr, new_variables)
+            else:
+                return Derivative(new_expr, *new_variables)
+
+        return expr
+
+    else:
+        new_args = tuple(my_syntactic_subs(arg, subst_dict) for arg in expr.args)
+        if any(new_arg != arg for arg, new_arg in zip(expr.args, new_args)):
+            return expr.func(*new_args)
+        else:
+            return expr
+
+
 # vim: fdm=marker

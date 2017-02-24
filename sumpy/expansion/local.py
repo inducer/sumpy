@@ -61,24 +61,29 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
             raise RuntimeError("cannot use line-Taylor expansions in a setting "
                     "where the center-target vector is not known at coefficient "
                     "formation")
-        avec_line = avec + sym.Symbol("tau")*bvec
+
+        tau = sym.Symbol("tau")
+
+        avec_line = avec + tau*bvec
 
         line_kernel = self.kernel.get_expression(avec_line)
 
-        return [
-                self.kernel.postprocess_at_target(
-                    self.kernel.postprocess_at_source(
-                        line_kernel.diff("tau", i),
-                        avec),
-                    bvec)
-                .subs("tau", 0)
+        from sumpy.tools import MiDerivativeTaker, my_syntactic_subs
+        deriv_taker = MiDerivativeTaker(line_kernel, (tau,))
+
+        return [my_syntactic_subs(
+                    self.kernel.postprocess_at_target(
+                        self.kernel.postprocess_at_source(
+                            deriv_taker.diff(i),
+                            avec), bvec),
+                    {tau: 0})
                 for i in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec):
         from pytools import factorial
-        return sum(
+        return sym.Add(*(
                 coeffs[self.get_storage_index(i)] / factorial(i)
-                for i in self.get_coefficient_identifiers())
+                for i in self.get_coefficient_identifiers()))
 
 # }}}
 
