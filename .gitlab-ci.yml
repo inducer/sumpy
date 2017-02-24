@@ -78,18 +78,6 @@ Python 3.5 Conda:
   except:
   - tags
 
-Python 3.5 Apple:
-  script:
-  - export SUMPY_NO_CACHE=1
-  - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
-  - REQUIREMENTS_TXT=.test-conda-env-py3-requirements.txt
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project-within-miniconda.sh
-  - ". ./build-and-test-py-project-within-miniconda.sh"
-  tags:
-  - apple
-  except:
-  - tags
-
 Documentation:
   script:
   - EXTRA_INSTALL="numpy mako"
