@@ -27,7 +27,7 @@ from six.moves import range
 
 import numpy as np
 import loopy as lp
-import sympy as sp
+import sumpy.symbolic as sym
 from sumpy.tools import KernelCacheWrapper
 
 
@@ -74,15 +74,16 @@ class E2PBase(KernelCacheWrapper):
             assert tdr(knl) == expansion.kernel
 
     def get_loopy_insns_and_result_names(self):
-        from sumpy.symbolic import make_sympy_vector
-        bvec = make_sympy_vector("b", self.dim)
+        from sumpy.symbolic import make_sym_vector
+        bvec = make_sym_vector("b", self.dim)
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
 
-        coeff_exprs = [sp.Symbol("coeff%d" % i)
+        coeff_exprs = [sym.Symbol("coeff%d" % i)
                 for i in range(len(self.expansion.get_coefficient_identifiers()))]
         value = self.expansion.evaluate(coeff_exprs, bvec)
+
         result_names = [
             sac.assign_unique("result_%d_p" % i,
                 knl.postprocess_at_target(value, bvec))
@@ -91,23 +92,19 @@ class E2PBase(KernelCacheWrapper):
 
         sac.run_global_cse()
 
-        from sumpy.symbolic import kill_trivial_assignments
-        assignments = kill_trivial_assignments([
-                (name, expr)
-                for name, expr in six.iteritems(sac.assignments)],
-                retain_names=result_names)
-
         from sumpy.codegen import to_loopy_insns
-        loopy_insns = to_loopy_insns(assignments,
+        loopy_insns = to_loopy_insns(
+                six.iteritems(sac.assignments),
                 vector_names=set(["b"]),
                 pymbolic_expr_maps=[self.expansion.get_code_transformer()],
+                retain_names=result_names,
                 complex_dtype=np.complex128  # FIXME
                 )
 
         return loopy_insns, result_names
 
     def get_kernel_scaling_assignment(self):
-        from pymbolic.interop.sympy import SympyToPymbolicMapper
+        from sumpy.symbolic import SympyToPymbolicMapper
         sympy_conv = SympyToPymbolicMapper()
         return [lp.Assignment(id=None,
                     assignee="kernel_scaling",

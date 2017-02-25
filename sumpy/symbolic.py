@@ -27,68 +27,77 @@ import six
 from six.moves import range
 from six.moves import zip
 
-import sympy as sp
 import numpy as np
 from pymbolic.mapper import IdentityMapper as IdentityMapperBase
-from pymbolic.interop.sympy import PymbolicToSympyMapper
 import pymbolic.primitives as prim
 
 import logging
 logger = logging.getLogger(__name__)
 
 
-# {{{ trivial assignment elimination
+# {{{ symbolic backend
 
-def make_one_step_subst(assignments):
-    unwanted_vars = set(sp.Symbol(name) for name, value in assignments)
+def _find_symbolic_backend():
+    global USE_SYMENGINE
 
-    result = {}
-    for name, value in assignments:
-        while value.atoms() & unwanted_vars:
-            value = value.subs(assignments)
+    try:
+        import symengine  # noqa
+        symengine_found = True
+    except ImportError:
+        symengine_found = False
 
-        result[sp.Symbol(name)] = value
+    ALLOWED_BACKENDS = ("sympy", "symengine")  # noqa
+    BACKEND_ENV_VAR = "SUMPY_FORCE_SYMBOLIC_BACKEND"  # noqa
 
-    return result
+    import os
+    backend = os.environ.get(BACKEND_ENV_VAR)
+    if backend is not None:
+        if backend not in ALLOWED_BACKENDS:
+            raise RuntimeError(
+                "%s value is unrecognized: '%s' "
+                "(allowed values are %s)" % (
+                    BACKEND_ENV_VAR,
+                    backend,
+                    ", ".join("'%s'" % val for val in ALLOWED_BACKENDS)))
+
+        if backend == "symengine" and not symengine_found:
+            from warnings import warn
+            warn("%s=symengine was specified, but could not find symengine. "
+                 "Using sympy." % BACKEND_ENV_VAR, RuntimeWarning)
+
+        USE_SYMENGINE = backend == "symengine" and symengine_found
+    else:
+        USE_SYMENGINE = symengine_found
 
 
-def is_assignment_nontrivial(name, value):
-    if value.is_Number:
-        return False
-    elif isinstance(value, sp.Symbol):
-        return False
-    elif (isinstance(value, sp.Mul)
-            and len(value.args) == 2
-            and sum(1 for arg in value.args if arg.is_Number) == 1
-            and sum(1 for arg in value.args if isinstance(arg, sp.Symbol)) == 1):
-        # const*var: not good enough
-        return False
-
-    return True
-
-
-def kill_trivial_assignments(assignments, retain_names=set()):
-    logger.info("kill trivial assignments (plain): start")
-    approved_assignments = []
-    rejected_assignments = []
-
-    for name, value in assignments:
-        if name in retain_names or is_assignment_nontrivial(name, value):
-            approved_assignments.append((name, value))
-        else:
-            rejected_assignments.append((name, value))
-
-    # un-substitute rejected assignments
-    unsubst_rej = make_one_step_subst(rejected_assignments)
-
-    result = [(name, expr.xreplace(unsubst_rej))
-            for name, expr in approved_assignments]
-
-    logger.info("kill trivial assignments (plain): done")
-
-    return result
+_find_symbolic_backend()
 
 # }}}
+
+# Symbolic API common to SymEngine and sympy.
+# Before adding a function here, make sure it's present in both modules.
+SYMBOLIC_API = """
+Add Basic Mul Pow exp sqrt symbols sympify cos sin atan2 Function Symbol
+Derivative Integer Matrix Subs I pi functions""".split()
+
+if USE_SYMENGINE:
+    from symengine import sympy_compat as sym
+    from pymbolic.interop.symengine import (
+        PymbolicToSymEngineMapper as PymbolicToSympyMapper,
+        SymEngineToPymbolicMapper as SympyToPymbolicMapper)
+else:
+    import sympy as sym
+    from pymbolic.interop.sympy import (
+        PymbolicToSympyMapper, SympyToPymbolicMapper)
+
+for _apifunc in SYMBOLIC_API:
+    globals()[_apifunc] = getattr(sym, _apifunc)
+
+
+def _coeff_isneg(a):
+    if a.is_Mul:
+        a = a.args[0]
+    return a.is_Number and a.is_negative
 
 
 # {{{ debugging of sympy CSE via Maxima
@@ -111,7 +120,6 @@ def _get_assignments_in_maxima(assignments, prefix=""):
 
     from pymbolic.maxima import MaximaStringifyMapper
     mstr = MaximaStringifyMapper()
-    from pymbolic.interop.sympy import SympyToPymbolicMapper
     s2p = SympyToPymbolicMapper()
     dkill = _DerivativeKiller()
 
@@ -119,12 +127,12 @@ def _get_assignments_in_maxima(assignments, prefix=""):
 
     def write_assignment(name):
         symbols = [atm for atm in assignments[name].atoms()
-                if isinstance(atm, sp.Symbol)
+                if isinstance(atm, sym.Symbol)
                 and atm.name in my_variable_names]
 
-        for sym in symbols:
-            if sym.name not in written_assignments:
-                write_assignment(sym.name)
+        for symb in symbols:
+            if symb.name not in written_assignments:
+                write_assignment(symb.name)
 
         result.append("%s%s : %s;" % (
             prefix, name, mstr(dkill(s2p(
@@ -143,7 +151,7 @@ def checked_cse(exprs, symbols=None):
     if symbols is not None:
         kwargs["symbols"] = symbols
 
-    new_assignments, new_exprs = sp.cse(exprs, **kwargs)
+    new_assignments, new_exprs = sym.cse(exprs, **kwargs)
 
     max_old = _get_assignments_in_maxima(dict(
             ("old_expr%d" % i, expr)
@@ -171,8 +179,8 @@ def checked_cse(exprs, symbols=None):
 # }}}
 
 
-def sympy_real_norm_2(x):
-    return sp.sqrt((x.T*x)[0, 0])
+def sym_real_norm_2(x):
+    return sym.sqrt((x.T*x)[0, 0])
 
 
 def pymbolic_real_norm_2(x):
@@ -180,9 +188,9 @@ def pymbolic_real_norm_2(x):
     return var("sqrt")(np.dot(x, x))
 
 
-def make_sympy_vector(name, components):
-    return sp.Matrix(
-            [sp.Symbol("%s%d" % (name, i)) for i in range(components)])
+def make_sym_vector(name, components):
+    return sym.Matrix(
+            [sym.Symbol("%s%d" % (name, i)) for i in range(components)])
 
 
 def vector_subs(expr, old, new):
@@ -194,8 +202,8 @@ def vector_subs(expr, old, new):
 
 
 def find_power_of(base, prod):
-    remdr = sp.Wild("remdr")
-    power = sp.Wild("power")
+    remdr = sym.Wild("remdr")
+    power = sym.Wild("power")
     result = prod.match(remdr*base**power)
     if result is None:
         return 0
@@ -205,17 +213,16 @@ def find_power_of(base, prod):
 class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):
     def map_variable(self, expr):
         if expr.name == "I":
-            return sp.I
+            return sym.I
         elif expr.name == "pi":
-            return sp.pi
+            return sym.pi
         else:
             return PymbolicToSympyMapper.map_variable(self, expr)
 
     def map_subscript(self, expr):
         if isinstance(expr.aggregate, prim.Variable) and isinstance(expr.index, int):
-            return sp.Symbol("%s%d" % (expr.aggregate.name, expr.index))
+            return sym.Symbol("%s%d" % (expr.aggregate.name, expr.index))
         else:
-            raise RuntimeError("do not know how to translate '%s' to sympy"
-                    % expr)
+            self.raise_conversion_error(expr)
 
 # vim: fdm=marker

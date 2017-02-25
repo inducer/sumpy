@@ -29,6 +29,7 @@ import pyopencl as cl
 import pyopencl.tools  # noqa
 import loopy as lp
 
+import six
 import re
 
 from pymbolic.mapper import IdentityMapper, WalkMapper, CSECachingMapperMixin
@@ -38,8 +39,7 @@ from loopy.types import NumpyType
 
 from pytools import memoize_method
 
-from pymbolic.interop.sympy import (
-        SympyToPymbolicMapper as SympyToPymbolicMapperBase)
+from sumpy.symbolic import (SympyToPymbolicMapper as SympyToPymbolicMapperBase)
 
 import logging
 logger = logging.getLogger(__name__)
@@ -58,25 +58,138 @@ Conversion of :mod:`sympy` expressions to :mod:`loopy`
 
 # {{{ sympy -> pymbolic mapper
 
+import sumpy.symbolic as sym
+_SPECIAL_FUNCTION_NAMES = frozenset(dir(sym.functions))
+
+
 class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
-    def __init__(self, assignments):
-        self.assignments = assignments
-        self.derivative_cse_names = set()
 
-    def map_Derivative(self, expr):  # noqa
-        # Sympy has picked up the habit of picking arguments out of derivatives
-        # and pronounce them common subexpressions. Me no like. Undo it, so
-        # that the bessel substitutor further down can do its job.
+    def not_supported(self, expr):
+        if isinstance(expr, int):
+            return expr
+        elif getattr(expr, "is_Function", False):
+            func_name = SympyToPymbolicMapperBase.function_name(self, expr)
+            # SymEngine capitalizes the names of the special functions.
+            if func_name.lower() in _SPECIAL_FUNCTION_NAMES:
+                func_name = func_name.lower()
+            return prim.Variable(func_name)(
+                    *tuple(self.rec(arg) for arg in expr.args))
+        else:
+            return SympyToPymbolicMapperBase.not_supported(self, expr)
 
-        if expr.expr.is_Symbol:
-            # These will get removed, because loopy wont' be able to deal
-            # with them--they contain undefined placeholder symbols.
-            self.derivative_cse_names.add(expr.expr.name)
+# }}}
 
-        return prim.Derivative(self.rec(
-            expr.expr.subs(self.assignments)),
-            tuple(v.name for v in expr.variables))
 
+# {{{ trivial assignment elimination
+
+def make_one_step_subst(assignments):
+    assignments = dict(assignments)
+    unwanted_vars = set(six.iterkeys(assignments))
+
+    # Ensure no re-assignments.
+    assert len(unwanted_vars) == len(assignments)
+
+    from loopy.symbolic import get_dependencies
+    unwanted_deps = dict(
+        (name, get_dependencies(value) & unwanted_vars)
+        for name, value in six.iteritems(assignments))
+
+    # {{{ compute substitution order
+
+    toposort = []
+    visited = set()
+    visiting = set()
+
+    while unwanted_vars:
+        stack = [unwanted_vars.pop()]
+
+        while stack:
+            top = stack[-1]
+
+            if top in visiting:
+                visiting.remove(top)
+                toposort.append(top)
+
+            if top in visited:
+                stack.pop()
+                continue
+
+            visited.add(top)
+            visiting.add(top)
+
+            for dep in unwanted_deps[top]:
+                # Check for no cycles.
+                assert dep not in visiting
+                stack.append(dep)
+
+    # }}}
+
+    # {{{ make substitution
+
+    from pymbolic import substitute
+
+    result = {}
+    used_name_to_var = {}
+    from pymbolic import evaluate
+    from functools import partial
+    simplify = partial(evaluate, context=used_name_to_var)
+
+    for name in toposort:
+        value = assignments[name]
+        value = substitute(value, result)
+        used_name_to_var.update(
+            (used_name, prim.Variable(used_name))
+            for used_name in get_dependencies(value)
+            if used_name not in used_name_to_var)
+
+        result[name] = simplify(value)
+
+    # }}}
+
+    return result
+
+
+def is_assignment_nontrivial(name, value):
+    if prim.is_constant(value):
+        return False
+    elif isinstance(value, prim.Variable):
+        return False
+    elif (isinstance(value, prim.Product)
+            and len(value.children) == 2
+            and sum(1 for arg in value.children if prim.is_constant(arg)) == 1
+            and sum(1 for arg in value.children
+                    if isinstance(arg, prim.Variable)) == 1):
+        # const*var: not good enough
+        return False
+
+    return True
+
+
+def kill_trivial_assignments(assignments, retain_names=set()):
+    logger.info("kill trivial assignments (plain): start")
+    approved_assignments = []
+    rejected_assignments = []
+
+    for name, value in assignments:
+        if name in retain_names or is_assignment_nontrivial(name, value):
+            approved_assignments.append((name, value))
+        else:
+            rejected_assignments.append((name, value))
+
+    # un-substitute rejected assignments
+    unsubst_rej = make_one_step_subst(rejected_assignments)
+
+    result = []
+    from pymbolic import substitute
+    for name, expr in approved_assignments:
+        r = substitute(expr, unsubst_rej)
+        result.append((name, r))
+
+    logger.info(
+        "kill trivial assignments (plain): done, {nrej} assignments killed"
+        .format(nrej=len(rejected_assignments)))
+
+    return result
 
 # }}}
 
@@ -318,7 +431,7 @@ class BesselDerivativeReplacer(CSECachingMapperMixin, IdentityMapper):
             arg, = expr.values
 
             n_derivs = len(expr.child.variables)
-            import sympy as sp
+            import sympy as sym
 
             # AS (9.1.31)
             # http://dlmf.nist.gov/10.6.7
@@ -329,7 +442,7 @@ class BesselDerivativeReplacer(CSECachingMapperMixin, IdentityMapper):
             k = n_derivs
             return prim.CommonSubexpression(
                     2**(-k)*sum(
-                        (-1)**idx*int(sp.binomial(k, idx)) * function(i, arg)
+                        (-1)**idx*int(sym.binomial(k, idx)) * function(i, arg)
                         for idx, i in enumerate(range(order-k, order+k+1, 2))),
                     "d%d_%s_%s" % (n_derivs, function.name, order_str))
         else:
@@ -538,17 +651,15 @@ class MathConstantRewriter(CSECachingMapperMixin, IdentityMapper):
 
 
 def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
-        complex_dtype=None):
+                   complex_dtype=None, retain_names=set()):
     logger.info("loopy instruction generation: start")
     assignments = list(assignments)
 
     # convert from sympy
-    sympy_conv = SympyToPymbolicMapper(assignments)
+    sympy_conv = SympyToPymbolicMapper()
     assignments = [(name, sympy_conv(expr)) for name, expr in assignments]
-    assignments = [
-            (name, expr) for name, expr in assignments
-            if name not in sympy_conv.derivative_cse_names
-            ]
+
+    assignments = kill_trivial_assignments(assignments, retain_names)
 
     bdr = BesselDerivativeReplacer()
     assignments = [(name, bdr(expr)) for name, expr in assignments]

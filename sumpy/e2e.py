@@ -27,7 +27,7 @@ from six.moves import range
 
 import numpy as np
 import loopy as lp
-import sympy as sp
+import sumpy.symbolic as sym
 from sumpy.tools import KernelCacheWrapper
 
 import logging
@@ -77,10 +77,10 @@ class E2EBase(KernelCacheWrapper):
         self.dim = src_expansion.dim
 
     def get_translation_loopy_insns(self):
-        from sumpy.symbolic import make_sympy_vector
-        dvec = make_sympy_vector("d", self.dim)
+        from sumpy.symbolic import make_sym_vector
+        dvec = make_sym_vector("d", self.dim)
 
-        src_coeff_exprs = [sp.Symbol("src_coeff%d" % i)
+        src_coeff_exprs = [sym.Symbol("src_coeff%d" % i)
                 for i in range(len(self.src_expansion))]
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
@@ -93,17 +93,12 @@ class E2EBase(KernelCacheWrapper):
 
         sac.run_global_cse()
 
-        from sumpy.symbolic import kill_trivial_assignments
-        assignments = kill_trivial_assignments([
-                (name, expr)
-                for name, expr in six.iteritems(sac.assignments)],
-                retain_names=tgt_coeff_names)
-
         from sumpy.codegen import to_loopy_insns
         return to_loopy_insns(
-                assignments,
+                six.iteritems(sac.assignments),
                 vector_names=set(["d"]),
                 pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
+                retain_names=tgt_coeff_names,
                 complex_dtype=np.complex128  # FIXME
                 )
 
