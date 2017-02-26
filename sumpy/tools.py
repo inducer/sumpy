@@ -28,7 +28,6 @@ THE SOFTWARE.
 
 from pytools import memoize_method
 import numpy as np
-import sumpy.symbolic as sym
 
 import logging
 logger = logging.getLogger(__name__)
@@ -58,7 +57,6 @@ def mi_power(vector, mi):
 class MiDerivativeTaker(object):
 
     def __init__(self, expr, var_list):
-        assert isinstance(expr, sym.Basic)
         self.var_list = var_list
         empty_mi = (0,) * len(var_list)
         self.cache_by_mi = {empty_mi: expr}
@@ -109,7 +107,7 @@ class LinearRecurrenceBasedMiDerivativeTaker(MiDerivativeTaker):
             expr = self.cache_by_mi[mi]
         except KeyError:
             from six import iteritems
-            from sumpy.symbolic import Add
+            from sympy import Add
 
             closest_mi = self.get_closest_cached_mi(mi)
             expr = self.cache_by_mi[closest_mi]
@@ -266,7 +264,7 @@ class KernelComputation(object):
         self.name = name or self.default_name
 
     def get_kernel_scaling_assignments(self):
-        from sumpy.symbolic import SympyToPymbolicMapper
+        from pymbolic.interop.sympy import SympyToPymbolicMapper
         sympy_conv = SympyToPymbolicMapper()
 
         import loopy as lp
@@ -384,55 +382,5 @@ class KernelCacheWrapper(object):
             code_cache[cache_key] = knl
 
         return knl
-
-
-def my_syntactic_subs(expr, subst_dict):
-    # Workaround for differing substitution semantics between sympy and symengine.
-    # FIXME: This is a hack.
-    from sumpy.symbolic import Basic, Subs, Derivative, USE_SYMENGINE
-
-    if not isinstance(expr, Basic):
-        return expr
-
-    elif expr.is_Symbol:
-        return subst_dict.get(expr, expr)
-
-    elif isinstance(expr, Subs):
-        new_point = tuple(my_syntactic_subs(p, subst_dict) for p in expr.point)
-
-        import six
-        new_subst_dict = dict(
-            (var, subs) for var, subs in six.iteritems(subst_dict)
-            if var not in expr.variables)
-
-        new_expr = my_syntactic_subs(expr.expr, new_subst_dict)
-
-        if new_point != expr.point or new_expr != expr.expr:
-            return Subs(new_expr, expr.variables, new_point)
-
-        return expr
-
-    elif isinstance(expr, Derivative):
-        new_expr = my_syntactic_subs(expr.expr, subst_dict)
-        new_variables = my_syntactic_subs(expr.variables, subst_dict)
-
-        if new_expr != expr.expr or any(new_var != var for new_var, var in
-                                          zip(new_variables, expr.variables)):
-            # FIXME in SymEngine
-            if USE_SYMENGINE:
-                return Derivative(new_expr, new_variables)
-            else:
-                return Derivative(new_expr, *new_variables)
-
-        return expr
-
-    else:
-        new_args = tuple(my_syntactic_subs(arg, subst_dict) for arg in expr.args)
-
-        if any(new_arg != arg for arg, new_arg in zip(expr.args, new_args)):
-            return expr.func(*new_args)
-
-        return expr
-
 
 # vim: fdm=marker

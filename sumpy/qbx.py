@@ -27,7 +27,7 @@ import six
 from six.moves import range, zip
 import numpy as np
 import loopy as lp
-import sumpy.symbolic as sym
+import sympy as sp
 from pytools import memoize_method
 from pymbolic import parse, var
 
@@ -64,7 +64,7 @@ def expand(expansion_nr, sac, expansion, avec, bvec):
     coefficients = expansion.coefficients_from_source(avec, bvec)
 
     assigned_coeffs = [
-            sym.Symbol(
+            sp.Symbol(
                     sac.assign_unique("expn%dcoeff%s" % (
                         expansion_nr, stringify_expn_index(i)),
                         coefficients[expansion.get_storage_index(i)]))
@@ -117,10 +117,10 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
 
     @memoize_method
     def get_kernel(self):
-        from sumpy.symbolic import make_sym_vector
+        from sumpy.symbolic import make_sympy_vector
 
-        avec = make_sym_vector("a", self.dim)
-        bvec = make_sym_vector("b", self.dim)
+        avec = make_sympy_vector("a", self.dim)
+        bvec = make_sympy_vector("b", self.dim)
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
@@ -134,13 +134,17 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
 
         sac.run_global_cse()
 
+        from sumpy.symbolic import kill_trivial_assignments
+        assignments = kill_trivial_assignments([
+                (name, expr.subs("tau", 0))
+                for name, expr in six.iteritems(sac.assignments)],
+                retain_names=result_names)
+
         from sumpy.codegen import to_loopy_insns
-        loopy_insns = to_loopy_insns(
-                six.iteritems(sac.assignments),
+        loopy_insns = to_loopy_insns(assignments,
                 vector_names=set(["a", "b"]),
                 pymbolic_expr_maps=[
                     expn.kernel.get_code_transformer() for expn in self.expansions],
-                retain_names=result_names,
                 complex_dtype=np.complex128  # FIXME
                 )
 

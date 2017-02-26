@@ -25,9 +25,9 @@ THE SOFTWARE.
 """
 
 import numpy as np
+import sympy as sp
 import logging
 from pytools import memoize_method
-import sumpy.symbolic as sym
 from sumpy.tools import MiDerivativeTaker
 
 __doc__ = """
@@ -356,7 +356,7 @@ class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
 
                 coeffs[needed_deriv] = -1
             else:
-                k = sym.Symbol(self.helmholtz_k_name)
+                k = sp.Symbol(self.helmholtz_k_name)
                 coeffs[tuple(reduced_deriv)] = -k*k
                 return coeffs
 

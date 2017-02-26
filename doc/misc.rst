@@ -19,19 +19,6 @@ and say::
 
 In addition, you need to have :mod:`numpy` installed.
 
-Symbolic backends
-=================
-
-:mod:`sumpy` supports two symbolic backends: sympy and SymEngine. To use the
-SymEngine backend, ensure that the `SymEngine library
-<https://github.com/symengine/symengine>`_ and the `SymEngine Python bindings
-<https://github.com/symengine/symengine.py>`_ are installed.
-
-By default, :mod:`sumpy` prefers using SymEngine but falls back to sympy if it
-detects that SymEngine is not installed. To force the use of a particular
-backend, set the environment variable `SUMPY_FORCE_SYMBOLIC_BACKEND` to
-`symengine` or `sympy`.
-
 User-visible Changes
 ====================
 

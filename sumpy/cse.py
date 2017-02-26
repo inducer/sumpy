@@ -66,8 +66,8 @@ DAMAGE.
 
 # }}}
 
-from sumpy.symbolic import (
-    Basic, Mul, Add, Pow, Symbol, _coeff_isneg, Derivative, Subs)
+from sympy.core import Basic, Mul, Add, Pow
+from sympy.core.function import _coeff_isneg
 from sympy.core.compatibility import iterable
 from sympy.utilities.iterables import numbered_symbols
 
@@ -80,10 +80,6 @@ Common subexpression elimination
 .. autofunction:: cse
 
 """
-
-
-# Don't CSE child nodes of these classes.
-CSE_NO_DESCEND_CLASSES = (Derivative, Subs)
 
 
 # {{{ cse pre/postprocessing
@@ -252,19 +248,6 @@ class FuncArgTracker(object):
         self.func_to_argset[func_i].update(new_args)
 
 
-class Unevaluated(object):
-
-    def __init__(self, func, args):
-        self.func = func
-        self.args = args
-
-    def __str__(self):
-        return "Uneval<{}>({})".format(
-                self.func, ", ".join(str(a) for a in self.args))
-
-    __repr__ = __str__
-
-
 def match_common_args(func_class, funcs, opt_subs):
     """
     Recognize and extract common subexpressions of function arguments within a
@@ -322,8 +305,9 @@ def match_common_args(func_class, funcs, opt_subs):
             diff_i = arg_tracker.func_to_argset[i].difference(com_args)
             if diff_i:
                 # com_func needs to be unevaluated to allow for recursive matches.
-                com_func = Unevaluated(
-                        func_class, arg_tracker.get_args_in_value_order(com_args))
+                com_func = func_class(
+                        *arg_tracker.get_args_in_value_order(com_args),
+                        evaluate=False)
                 com_func_number = arg_tracker.get_or_add_value_number(com_func)
                 arg_tracker.update_func_argset(i, diff_i | set([com_func_number]))
                 changed.add(i)
@@ -350,8 +334,9 @@ def match_common_args(func_class, funcs, opt_subs):
                 changed.add(k)
 
         if i in changed:
-            opt_subs[funcs[i]] = Unevaluated(func_class,
-                arg_tracker.get_args_in_value_order(arg_tracker.func_to_argset[i]))
+            opt_subs[funcs[i]] = func_class(
+                *arg_tracker.get_args_in_value_order(arg_tracker.func_to_argset[i]),
+                evaluate=False)
 
         arg_tracker.stop_arg_tracking(i)
 
@@ -381,9 +366,6 @@ def opt_cse(exprs):
         if expr.is_Atom:
             return
 
-        if isinstance(expr, CSE_NO_DESCEND_CLASSES):
-            return
-
         if iterable(expr):
             for item in expr:
                 find_opts(item)
@@ -400,7 +382,7 @@ def opt_cse(exprs):
         if _coeff_isneg(expr):
             neg_expr = -expr
             if not neg_expr.is_Atom:
-                opt_subs[expr] = Unevaluated(Mul, (-1, neg_expr))
+                opt_subs[expr] = Mul(-1, neg_expr, evaluate=False)
                 seen_subexp.add(neg_expr)
                 expr = neg_expr
 
@@ -413,7 +395,7 @@ def opt_cse(exprs):
         elif isinstance(expr, Pow):
             base, exp = expr.args
             if _coeff_isneg(exp):
-                opt_subs[expr] = Unevaluated(Pow, (Pow(base, -exp), -1))
+                opt_subs[expr] = Pow(Pow(base, -exp), -1, evaluate=False)
 
     # }}}
 
@@ -454,10 +436,10 @@ def tree_cse(exprs, symbols, opt_subs=None):
     excluded_symbols = set()
 
     def find_repeated(expr):
-        if not isinstance(expr, (Basic, Unevaluated)):
+        if not isinstance(expr, Basic):
             return
 
-        if isinstance(expr, Basic) and expr.is_Atom:
+        if expr.is_Atom:
             if expr.is_Symbol:
                 excluded_symbols.add(expr)
             return
@@ -475,10 +457,7 @@ def tree_cse(exprs, symbols, opt_subs=None):
             if expr in opt_subs:
                 expr = opt_subs[expr]
 
-            if isinstance(expr, CSE_NO_DESCEND_CLASSES):
-                args = ()
-            else:
-                args = expr.args
+            args = expr.args
 
         for arg in args:
             find_repeated(arg)
@@ -499,7 +478,7 @@ def tree_cse(exprs, symbols, opt_subs=None):
     subs = dict()
 
     def rebuild(expr):
-        if not isinstance(expr, (Basic, Unevaluated)):
+        if not isinstance(expr, Basic):
             return expr
 
         if not expr.args:
@@ -516,11 +495,11 @@ def tree_cse(exprs, symbols, opt_subs=None):
         if expr in opt_subs:
             expr = opt_subs[expr]
 
-        new_expr = expr
-        if not isinstance(expr, CSE_NO_DESCEND_CLASSES):
-            new_args = tuple(rebuild(arg) for arg in expr.args)
-            if isinstance(expr, Unevaluated) or new_args != expr.args:
-                new_expr = expr.func(*new_args)
+        new_args = [rebuild(arg) for arg in expr.args]
+        if new_args != expr.args:
+            new_expr = expr.func(*new_args)
+        else:
+            new_expr = expr
 
         if orig_expr in to_eliminate:
             try:
@@ -581,7 +560,7 @@ def cse(exprs, symbols=None, optimizations=None):
     reduced_exprs = [preprocess_for_cse(e, optimizations) for e in exprs]
 
     if symbols is None:
-        symbols = numbered_symbols(cls=Symbol)
+        symbols = numbered_symbols()
     else:
         # In case we get passed an iterable with an __iter__ method instead of
         # an actual iterator.
