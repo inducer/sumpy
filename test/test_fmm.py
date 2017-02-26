@@ -63,7 +63,6 @@ else:
     (l2d_level_to_order_lookup, ()),
     ])
 def test_level_to_order_lookup(ctx_getter, lookup_func, extra_args):
-    pytest.importorskip("pyfmmlib")
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
 
