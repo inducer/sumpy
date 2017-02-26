@@ -1,0 +1,3 @@
+git+https://github.com/inducer/boxtree
+git+https://github.com/inducer/pymbolic
+git+https://github.com/inducer/loopy

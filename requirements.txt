@@ -1,5 +1,6 @@
 numpy
 sympy==1.0
+git+https://github.com/inducer/pymbolic
 git+https://github.com/inducer/islpy
 git+https://github.com/pyopencl/pyopencl
 git+https://github.com/inducer/boxtree

@@ -1,0 +1,16 @@
+name: test-conda-env-py3
+channels:
+- inducer
+- symengine/label/dev
+- conda-forge
+- defaults
+dependencies:
+- git
+- conda-forge::numpy
+- conda-forge::sympy
+- pocl
+- islpy
+- pyopencl
+- python=3.5
+- python-symengine=0.2.0.53.g83912b7=py35_1
+# things not in here: loopy boxtree pymbolic pyfmmlib
