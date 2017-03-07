@@ -518,7 +518,7 @@ class StressletKernel(ExpressionKernel):
             expr = (
                 d[icomp]*d[jcomp]*d[kcomp]/r**5
                 )
-            scaling = -3/(4*var("pi"))
+            scaling = 3/(4*var("pi"))
 
         elif dim is None:
             expr = None
