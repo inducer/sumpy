@@ -443,7 +443,7 @@ class StokesletKernel(ExpressionKernel):
                 +
                 d[icomp]*d[jcomp]/r**2
                 )
-            scaling = 1/(4*var("pi")*mu)
+            scaling = -1/(4*var("pi")*mu)
 
         elif dim == 3:
             d = make_sym_vector("d", dim)
@@ -518,7 +518,7 @@ class StressletKernel(ExpressionKernel):
             expr = (
                 d[icomp]*d[jcomp]*d[kcomp]/r**5
                 )
-            scaling = -3/(4*var("pi"))
+            scaling = 3/(4*var("pi"))
 
         elif dim is None:
             expr = None
