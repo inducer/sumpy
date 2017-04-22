@@ -221,6 +221,76 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
     pconv_verifier()
 
 
+def test_sumpy_fmm_exclude_self(ctx_getter):
+    logging.basicConfig(level=logging.INFO)
+
+    ctx = ctx_getter()
+    queue = cl.CommandQueue(ctx)
+
+    nsources = 500
+    dtype = np.float64
+
+    from boxtree.tools import (
+            make_normal_particle_array as p_normal)
+
+    knl = LaplaceKernel(2)
+    local_expn_class = VolumeTaylorLocalExpansion
+    mpole_expn_class = VolumeTaylorMultipoleExpansion
+    order = 10
+
+    sources = p_normal(queue, nsources, knl.dim, dtype, seed=15)
+
+    from boxtree import TreeBuilder
+    tb = TreeBuilder(ctx)
+
+    tree, _ = tb(queue, sources,
+            max_particles_in_box=30, debug=True)
+
+    from boxtree.traversal import FMMTraversalBuilder
+    tbuild = FMMTraversalBuilder(ctx)
+    trav, _ = tbuild(queue, tree, debug=True)
+
+    from pyopencl.clrandom import PhiloxGenerator
+    rng = PhiloxGenerator(ctx)
+    weights = rng.uniform(queue, nsources, dtype=np.float64)
+
+    source_to_target = np.arange(tree.nsources, dtype=np.int32)
+    self_extra_kwargs = {"source_to_target": source_to_target}
+
+    out_kernels = [knl]
+
+    from functools import partial
+
+    from sumpy.fmm import SumpyExpansionWranglerCodeContainer
+    wcc = SumpyExpansionWranglerCodeContainer(
+            ctx,
+            partial(mpole_expn_class, knl),
+            partial(local_expn_class, knl),
+            out_kernels,
+            exclude_self=True)
+
+    wrangler = wcc.get_wrangler(queue, tree, dtype,
+            fmm_level_to_order=lambda lev: order,
+            self_extra_kwargs=self_extra_kwargs)
+
+    from boxtree.fmm import drive_fmm
+
+    pot, = drive_fmm(trav, wrangler, weights)
+
+    from sumpy import P2P
+    p2p = P2P(ctx, out_kernels, exclude_self=True)
+    evt, (ref_pot,) = p2p(queue, sources, sources, (weights,),
+            **self_extra_kwargs)
+
+    pot = pot.get()
+    ref_pot = ref_pot.get()
+
+    rel_err = la.norm(pot - ref_pot) / la.norm(ref_pot)
+    logger.info("order %d -> relative l2 error: %g" % (order, rel_err))
+
+    assert np.isclose(rel_err, 0, atol=1e-7)
+
+
 # You can test individual routines by typing
 # $ python test_fmm.py 'test_sumpy_fmm(cl.create_some_context)'
 

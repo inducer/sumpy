@@ -55,16 +55,20 @@ class SumpyExpansionWranglerCodeContainer(object):
 
     def __init__(self, cl_context,
             multipole_expansion_factory,
-            local_expansion_factory, out_kernels):
+            local_expansion_factory,
+            out_kernels, exclude_self=False):
         """
         :arg multipole_expansion_factory: a callable of a single argument (order)
             that returns a multipole expansion.
         :arg local_expansion_factory: a callable of a single argument (order)
             that returns a local expansion.
+        :arg out_kernels: a list of output kernels
+        :arg exclude_self: whether the self contribution should be excluded
         """
         self.multipole_expansion_factory = multipole_expansion_factory
         self.local_expansion_factory = local_expansion_factory
         self.out_kernels = out_kernels
+        self.exclude_self = exclude_self
 
         self.cl_context = cl_context
 
@@ -118,14 +122,15 @@ class SumpyExpansionWranglerCodeContainer(object):
 
     @memoize_method
     def p2p(self):
-        # FIXME figure out what to do about exclude_self
-        return P2PFromCSR(self.cl_context, self.out_kernels, exclude_self=False)
+        return P2PFromCSR(self.cl_context, self.out_kernels,
+                          exclude_self=self.exclude_self)
 
     def get_wrangler(self, queue, tree, dtype, fmm_level_to_order,
             source_extra_kwargs={},
-            kernel_extra_kwargs=None):
+            kernel_extra_kwargs=None,
+            self_extra_kwargs=None):
         return SumpyExpansionWrangler(self, queue, tree, dtype, fmm_level_to_order,
-                source_extra_kwargs, kernel_extra_kwargs)
+                source_extra_kwargs, kernel_extra_kwargs, self_extra_kwargs)
 
 # }}}
 
@@ -155,11 +160,18 @@ class SumpyExpansionWrangler(object):
 
         Keyword arguments to be passed to interactions that involve
         expansions, but not source particles.
+
+    .. attribute:: self_extra_kwargs
+
+        Keyword arguments to be passed for handling
+        self interactions (source and target particles are the same),
+        provided special handling is needed
     """
 
-    def __init__(self, code_container,  queue, tree, dtype, fmm_level_to_order,
+    def __init__(self, code_container, queue, tree, dtype, fmm_level_to_order,
             source_extra_kwargs,
-            kernel_extra_kwargs=None):
+            kernel_extra_kwargs=None,
+            self_extra_kwargs=None):
         self.code = code_container
         self.queue = queue
         self.tree = tree
@@ -174,8 +186,12 @@ class SumpyExpansionWrangler(object):
         if kernel_extra_kwargs is None:
             kernel_extra_kwargs = {}
 
+        if self_extra_kwargs is None:
+            self_extra_kwargs = {}
+
         self.source_extra_kwargs = source_extra_kwargs
         self.kernel_extra_kwargs = kernel_extra_kwargs
+        self.self_extra_kwargs = self_extra_kwargs
 
         self.extra_kwargs = source_extra_kwargs.copy()
         self.extra_kwargs.update(self.kernel_extra_kwargs)
@@ -373,6 +389,7 @@ class SumpyExpansionWrangler(object):
         pot = self.potential_zeros()
 
         kwargs = self.extra_kwargs.copy()
+        kwargs.update(self.self_extra_kwargs)
         kwargs.update(self.box_source_list_kwargs())
         kwargs.update(self.box_target_list_kwargs())
 
