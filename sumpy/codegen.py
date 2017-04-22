@@ -437,14 +437,16 @@ from loopy.tools import is_integer
 
 class BigIntegerKiller(CSECachingMapperMixin, IdentityMapper):
 
-    def __init__(self, warn_on_first=True, int_type=np.int64, float_type=np.float64):
+    def __init__(self, warn_on_digit_loss=True, int_type=np.int64,
+            float_type=np.float64):
         IdentityMapper.__init__(self)
-        self.bits = 64
-        self.warn = warn_on_first
+        self.warn = warn_on_digit_loss
         self.float_type = float_type
         self.iinfo = np.iinfo(int_type)
 
     def map_constant(self, expr):
+        """Convert integer values not within the range of `self.int_type` to float.
+        """
         if not is_integer(expr):
             return IdentityMapper.map_constant(self, expr)
 
@@ -452,11 +454,15 @@ class BigIntegerKiller(CSECachingMapperMixin, IdentityMapper):
             return expr
 
         if self.warn:
-            from warnings import warn
-            warn("Converting '%d' to float: this may result in "
-                 "loss of digits." % expr)
+            expr_as_float = self.float_type(expr)
+            if int(expr_as_float) != int(expr):
+                from warnings import warn
+                warn("Converting to '%d' to '%s' loses digits"
+                        % (expr, self.float_type.__name__))
+
             # Suppress further warnings.
             self.warn = False
+            return expr_as_float
 
         return self.float_type(expr)
 
