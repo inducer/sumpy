@@ -49,7 +49,7 @@ Particle-to-particle
 # {{{ p2p base class
 
 class P2PBase(KernelComputation, KernelCacheWrapper):
-    def __init__(self, ctx, kernels,  exclude_self, strength_usage=None,
+    def __init__(self, ctx, kernels, exclude_self, strength_usage=None,
             value_dtypes=None,
             options=[], name=None, device=None):
         """
@@ -117,12 +117,8 @@ class P2P(P2PBase):
                 for i, name in enumerate(result_names)]
 
         if self.exclude_self:
-            from pymbolic.primitives import If, ComparisonOperator, Variable
-            exprs = [
-                    If(
-                        ComparisonOperator(Variable("isrc"), "!=", Variable("itgt")),
-                        expr, 0)
-                    for expr in exprs]
+            from pymbolic.primitives import If, Variable
+            exprs = [If(Variable("is_self"), 0, expr) for expr in exprs]
 
         from sumpy.tools import gather_loopy_source_arguments
         loopy_knl = lp.make_kernel(
@@ -133,8 +129,10 @@ class P2P(P2PBase):
                 for itgt
                     for isrc
                         """] + loopy_insns + ["""
-                        <> d[idim] = targets[idim,itgt] - sources[idim,isrc] \
-                        """]+[
+                        <> d[idim] = targets[idim,itgt] - sources[idim,isrc]
+                        """] + ["""
+                        <> is_self = (source_to_target[isrc] == itgt)
+                        """ if self.exclude_self else ""] + [
                         lp.Assignment(id=None,
                             assignee="pair_result_%d" % i, expression=expr,
                             temp_var_type=lp.auto)
@@ -159,7 +157,10 @@ class P2P(P2PBase):
                     lp.GlobalArg("strength", None, shape="nstrengths,nsources"),
                     lp.GlobalArg("result", None,
                         shape="nresults,ntargets", dim_tags="sep,C")
-                ] + gather_loopy_source_arguments(self.kernels),
+                ] + (
+                    [lp.GlobalArg("source_to_target", np.int32, shape=("nsources",))]
+                    if self.exclude_self else []
+                ) + gather_loopy_source_arguments(self.kernels),
                 name=self.name,
                 assumptions="nsources>=1 and ntargets>=1")
 
@@ -209,8 +210,6 @@ class P2P(P2PBase):
 class P2PFromCSR(P2PBase):
     default_name = "p2p_from_csr"
 
-    # FIXME: exclude_self ...?
-
     def get_kernel(self):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
 
@@ -219,6 +218,10 @@ class P2PFromCSR(P2PBase):
                 var(name)
                 * var("strength").index((self.strength_usage[i], var("isrc")))
                 for i, name in enumerate(result_names)]
+
+        if self.exclude_self:
+            from pymbolic.primitives import If, Variable
+            exprs = [If(Variable("is_self"), 0, expr) for expr in exprs]
 
         from sumpy.tools import gather_loopy_source_arguments
         loopy_knl = lp.make_kernel(
@@ -251,7 +254,9 @@ class P2PFromCSR(P2PBase):
                                 <> d[idim] = \
                                         targets[idim,itgt] - sources[idim,isrc] \
                                         {dup=idim}
-                                """
+                                """] + ["""
+                                <> is_self = (source_to_target[isrc] == itgt)
+                                """ if self.exclude_self else ""] + [
                                 ] + loopy_insns + [
                                 lp.Assignment(id=None,
                                     assignee="pair_result_%d" % i, expression=expr,
@@ -286,7 +291,10 @@ class P2PFromCSR(P2PBase):
                 lp.ValueArg("nsources", np.int32),
                 lp.ValueArg("ntargets", np.int32),
                 "...",
-            ] + gather_loopy_source_arguments(self.kernels),
+            ] + (
+                [lp.GlobalArg("source_to_target", np.int32, shape=("nsources",))]
+                if self.exclude_self else []
+            ) + gather_loopy_source_arguments(self.kernels),
             name=self.name, assumptions="ntgt_boxes>=1")
 
         loopy_knl = lp.fix_parameters(

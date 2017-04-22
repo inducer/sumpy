@@ -57,7 +57,8 @@ else:
     faulthandler.enable()
 
 
-def test_p2p(ctx_getter):
+@pytest.mark.parametrize("exclude_self", (True, False))
+def test_p2p(ctx_getter, exclude_self):
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
 
@@ -68,26 +69,36 @@ def test_p2p(ctx_getter):
     lknl = LaplaceKernel(dimensions)
     knl = P2P(ctx,
             [lknl, AxisTargetDerivative(0, lknl)],
-            exclude_self=False)
+            exclude_self=exclude_self)
 
     targets = np.random.rand(dimensions, n)
-    sources = np.random.rand(dimensions, n)
+    sources = targets if exclude_self else np.random.rand(dimensions, n)
 
     strengths = np.ones(n, dtype=np.float64)
 
+    extra_kwargs = {}
+
+    if exclude_self:
+        extra_kwargs["source_to_target"] = np.arange(n, dtype=np.int32)
+
     evt, (potential, x_derivative) = knl(
             queue, targets, sources, [strengths],
-            out_host=True)
+            out_host=True, **extra_kwargs)
 
     potential_ref = np.empty_like(potential)
 
     targets = targets.T
     sources = sources.T
     for itarg in range(n):
-        potential_ref[itarg] = np.sum(
-                strengths
-                /
-                np.sum((targets[itarg] - sources)**2, axis=-1)**0.5)
+
+        with np.errstate(divide="ignore"):
+            invdists = np.sum((targets[itarg] - sources) ** 2, axis=-1) ** -0.5
+
+        if exclude_self:
+            assert np.isinf(invdists[itarg])
+            invdists[itarg] = 0
+
+        potential_ref[itarg] = np.sum(strengths * invdists)
 
     potential_ref *= 1/(4*np.pi)
 
