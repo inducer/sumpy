@@ -68,16 +68,33 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
 
         line_kernel = self.kernel.get_expression(avec_line)
 
-        from sumpy.tools import MiDerivativeTaker, my_syntactic_subs
-        deriv_taker = MiDerivativeTaker(line_kernel, (tau,))
+        from sumpy.symbolic import USE_SYMENGINE
 
-        return [my_syntactic_subs(
-                    self.kernel.postprocess_at_target(
+        if USE_SYMENGINE:
+            from sumpy.tools import MiDerivativeTaker, my_syntactic_subs
+            deriv_taker = MiDerivativeTaker(line_kernel, (tau,))
+
+            return [my_syntactic_subs(
+                        self.kernel.postprocess_at_target(
+                            self.kernel.postprocess_at_source(
+                                deriv_taker.diff(i),
+                                avec), bvec),
+                        {tau: 0})
+                    for i in self.get_coefficient_identifiers()]
+        else:
+            # Workaround for sympy. The automatic distribution after
+            # single-variable diff makes the expressions very large
+            # (https://github.com/sympy/sympy/issues/4596), so avoid doing
+            # single variable diff.
+            #
+            # See also https://gitlab.tiker.net/inducer/pytential/merge_requests/12
+
+            return [self.kernel.postprocess_at_target(
                         self.kernel.postprocess_at_source(
-                            deriv_taker.diff(i),
-                            avec), bvec),
-                    {tau: 0})
-                for i in self.get_coefficient_identifiers()]
+                            line_kernel.diff("tau", i), avec),
+                        bvec)
+                    .subs("tau", 0)
+                    for i in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec):
         from pytools import factorial
