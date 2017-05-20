@@ -26,6 +26,8 @@ import numpy as np
 import sys
 
 import pyopencl as cl
+from pyopencl.tools import (  # noqa
+        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 
 import logging
 logger = logging.getLogger(__name__)
