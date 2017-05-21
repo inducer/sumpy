@@ -131,7 +131,7 @@ class P2P(P2PBase):
                         """] + loopy_insns + ["""
                         <> d[idim] = targets[idim,itgt] - sources[idim,isrc]
                         """] + ["""
-                        <> is_self = (source_to_target[isrc] == itgt)
+                        <> is_self = (isrc == target_to_source[itgt])
                         """ if self.exclude_self else ""] + [
                         lp.Assignment(id=None,
                             assignee="pair_result_%d" % i, expression=expr,
@@ -158,7 +158,7 @@ class P2P(P2PBase):
                     lp.GlobalArg("result", None,
                         shape="nresults,ntargets", dim_tags="sep,C")
                 ] + (
-                    [lp.GlobalArg("source_to_target", np.int32, shape=("nsources",))]
+                    [lp.GlobalArg("target_to_source", np.int32, shape=("ntargets",))]
                     if self.exclude_self else []
                 ) + gather_loopy_source_arguments(self.kernels),
                 name=self.name,
@@ -255,7 +255,7 @@ class P2PFromCSR(P2PBase):
                                         targets[idim,itgt] - sources[idim,isrc] \
                                         {dup=idim}
                                 """] + ["""
-                                <> is_self = (source_to_target[isrc] == itgt)
+                                <> is_self = (isrc == target_to_source[itgt])
                                 """ if self.exclude_self else ""] + [
                                 ] + loopy_insns + [
                                 lp.Assignment(id=None,
@@ -292,7 +292,7 @@ class P2PFromCSR(P2PBase):
                 lp.ValueArg("ntargets", np.int32),
                 "...",
             ] + (
-                [lp.GlobalArg("source_to_target", np.int32, shape=("nsources",))]
+                [lp.GlobalArg("target_to_source", np.int32, shape=("ntargets",))]
                 if self.exclude_self else []
             ) + gather_loopy_source_arguments(self.kernels),
             name=self.name, assumptions="ntgt_boxes>=1")
