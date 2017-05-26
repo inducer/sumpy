@@ -14,14 +14,24 @@ def main():
             np.random.rand(2, 50) - 0.5,
             np.ones(50))
 
-    fp = FieldPlotter([0, 0], extent=4)
+    fp = FieldPlotter([3, 0], extent=8)
 
     if 0:
         t.logplot(fp, pt_src, cmap="jet")
         plt.colorbar()
         plt.show()
 
-    t.local_expand(pt_src, [3, 0], 5)
+    lexp = t.multipole_expand(pt_src, [0, 0], 5)
+
+    diff = lexp - pt_src
+
+    if 1:
+        t.logplot(fp, diff, cmap="jet", vmin=-3)
+        plt.colorbar()
+        plt.show()
+
+
+
 
 
 if __name__ == "__main__":

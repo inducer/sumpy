@@ -26,6 +26,7 @@ import six  # noqa: F401
 from six.moves import range  # noqa: F401
 
 from pytools import memoize_method
+from numbers import Number
 
 import numpy as np  # noqa: F401
 import loopy as lp  # noqa: F401
@@ -79,6 +80,20 @@ class ToyContext(object):
                 self.local_expn_class(self.kernel, order),
                 [self.kernel])
 
+    @memoize_method
+    def get_m2p(self, order):
+        from sumpy import E2PFromSingleBox
+        return E2PFromSingleBox(self.cl_context,
+                self.mpole_expn_class(self.kernel, order),
+                [self.kernel])
+
+    @memoize_method
+    def get_l2p(self, order):
+        from sumpy import E2PFromSingleBox
+        return E2PFromSingleBox(self.cl_context,
+                self.local_expn_class(self.kernel, order),
+                [self.kernel])
+
 # }}}
 
 
@@ -114,24 +129,29 @@ def _p2e(psource, center, order, p2e, expn_class):
 def _e2p(psource, targets, e2p):
     ntargets = targets.shape[-1]
 
-    _boxes = np.array([0], dtype=np.int32)
+    boxes = np.array([0], dtype=np.int32)
 
     box_target_starts = np.array([0], dtype=np.int32)
     box_target_counts_nonchild = np.array([ntargets], dtype=np.int32)
 
-    coeffs = np.array([psource.coeffs])
     toy_ctx = psource.toy_ctx
+    centers = np.array(psource.center, dtype=np.float64).reshape(
+            toy_ctx.kernel.dim, 1)
+
+    coeffs = np.array([psource.coeffs])
     evt, (pot,) = e2p(
             toy_ctx.queue,
             src_expansions=coeffs,
             src_base_ibox=0,
-            target_boxes=source_boxes,
+            target_boxes=boxes,
             box_target_starts=box_target_starts,
             box_target_counts_nonchild=box_target_counts_nonchild,
             centers=centers,
             targets=targets,
             #flags="print_hl_cl",
-            out_host=True, **extra_kwargs)
+            out_host=True, **toy_ctx.extra_source_kwargs)
+
+    return pot
 
 # }}}
 
@@ -143,17 +163,56 @@ class PotentialSource(object):
     def eval(self, targets):
         raise NotImplementedError()
 
-    def __add__(self, other):
-        if not isinstance(other, PointSources):
-            raise TypeError()
+    def __neg__(self):
+        return -1*self
 
-        return LinearCombination((1, 1), (self, other))
+    def __add__(self, other):
+        if isinstance(other, (Number, np.number)):
+            other = ConstantPotential(self.toy_ctx, other)
+        elif not isinstance(other, PotentialSource):
+            return NotImplemented
+
+        return Sum((self, other))
+
+    __radd__ = __add__
 
     def __sub__(self, other):
-        if not isinstance(other, PointSources):
-            raise TypeError()
+        return self.__add__(-other)
 
-        return LinearCombination((1, -1), (self, other))
+    def __rsub__(self, other):
+        return (-self).__add__(other)
+
+    def __mul__(self, other):
+        if isinstance(other, (Number, np.number)):
+            other = ConstantPotential(self.toy_ctx, other)
+        elif not isinstance(other, PotentialSource):
+            return NotImplemented
+
+        return Product((self, other))
+
+    __rmul__ = __mul__
+
+
+class ConstantPotential(PotentialSource):
+    def __init__(self, toy_ctx, value):
+        super(ConstantPotential, self).__init__(toy_ctx)
+        self.value = np.array(value)
+
+    def eval(self, targets):
+        pot = np.empty(targets.shape[-1], dtype=self.value.dtype)
+        pot.fill(self.value)
+        return pot
+
+
+class OneOnBallPotential(PotentialSource):
+    def __init__(self, toy_ctx, center, radius):
+        super(PointSources, self).__init__(toy_ctx)
+        self.center = center
+        self.radius = radius
+
+    def eval(self, targets):
+        dist_vec = targets - self.center[:, np.newaxis]
+        return (np.sum(dist_vec**2, axis=0) < self.radius).astype(np.float64)
 
 
 class PointSources(PotentialSource):
@@ -180,15 +239,19 @@ class PointSources(PotentialSource):
 class ExpansionPotentialSource(PotentialSource):
     def __init__(self, toy_ctx, center, order, coeffs):
         super(ExpansionPotentialSource, self).__init__(toy_ctx)
+        self.center = center
+        self.order = order
+        self.coeffs = coeffs
 
 
 class MultipoleExpansion(ExpansionPotentialSource):
-    pass
+    def eval(self, targets):
+        return _e2p(self, targets, self.toy_ctx.get_m2p(self.order))
 
 
 class LocalExpansion(ExpansionPotentialSource):
     def eval(self, targets):
-        raise NotImplementedError()
+        return _e2p(self, targets, self.toy_ctx.get_l2p(self.order))
 
 
 def multipole_expand(psource, center, order):
@@ -217,19 +280,29 @@ def local_expand(psource, center, order):
                 % type(psource).__name__)
 
 
-class LinearCombination(PotentialSource):
-    def __init__(self, coeffs, psources):
+class PotentialExpressionNode(PotentialSource):
+    def __init__(self, psources):
         from pytools import single_valued
-        super(LinearCombination, self).__init__(
+        super(PotentialExpressionNode, self).__init__(
                 single_valued(psource.toy_ctx for psource in psources))
 
-        self.coeffs = coeffs
         self.psources = psources
 
+
+class Sum(PotentialExpressionNode):
     def eval(self, targets):
         result = 0
-        for coeff, psource in zip(self.coeffs, self.psources):
-            result += coeff * psource.eval(targets)
+        for psource in self.psources:
+            result = result + psource.eval(targets)
+
+        return result
+
+
+class Product(PotentialExpressionNode):
+    def eval(self, targets):
+        result = 1
+        for psource in self.psources:
+            result = result * psource.eval(targets)
 
         return result
 
