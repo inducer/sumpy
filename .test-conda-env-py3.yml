@@ -8,7 +8,7 @@ dependencies:
 - git
 - conda-forge::numpy
 - conda-forge::sympy
-- pocl
+- pocl=0.13
 - islpy
 - pyopencl
 - python=3.5
