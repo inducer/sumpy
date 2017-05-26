@@ -28,15 +28,13 @@ def main():
 
     diff = mexp - pt_src
     diff = mexp2 - pt_src
-    diff = lexp - pt_src
+    diff = lexp2 - pt_src
 
+    print(t.l_inf(diff, 1.2, center=lexp2.center))
     if 1:
-        t.logplot(fp, diff, cmap="jet", vmin=-3)
+        t.logplot(fp, diff, cmap="jet", vmin=-3, vmax=0)
         plt.colorbar()
         plt.show()
-
-
-
 
 
 if __name__ == "__main__":

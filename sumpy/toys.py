@@ -266,8 +266,8 @@ class ConstantPotential(PotentialSource):
 
 class OneOnBallPotential(PotentialSource):
     def __init__(self, toy_ctx, center, radius):
-        super(PointSources, self).__init__(toy_ctx)
-        self.center = center
+        super(OneOnBallPotential, self).__init__(toy_ctx)
+        self.center = np.asarray(center)
         self.radius = radius
 
     def eval(self, targets):
@@ -299,7 +299,7 @@ class PointSources(PotentialSource):
 class ExpansionPotentialSource(PotentialSource):
     def __init__(self, toy_ctx, center, order, coeffs):
         super(ExpansionPotentialSource, self).__init__(toy_ctx)
-        self.center = center
+        self.center = np.asarray(center)
         self.order = order
         self.coeffs = coeffs
 
@@ -396,5 +396,31 @@ def local_expand(psource, center, order=None):
 def logplot(fp, psource, **kwargs):
     fp.show_scalar_in_matplotlib(
             np.log10(np.abs(psource.eval(fp.points) + 1e-15)), **kwargs)
+
+
+def restrict_inner(psource, radius, center=None):
+    if center is None:
+        center = psource.center
+
+    return psource * OneOnBallPotential(psource.toy_ctx, center, radius)
+
+
+def restrict_outer(psource, radius, center=None):
+    if center is None:
+        center = psource.center
+
+    return psource * (1-OneOnBallPotential(psource.toy_ctx, center, radius))
+
+
+def l_inf(psource, radius, center=None, npoints=100):
+    if center is None:
+        center = psource.center
+
+    restr = psource * OneOnBallPotential(psource.toy_ctx, center, radius)
+
+    from sumpy.visualization import FieldPlotter
+    fp = FieldPlotter(center, extent=2*radius, npoints=npoints)
+    return np.max(np.abs(restr.eval(fp.points)))
+
 
 # vim: foldmethod=marker
