@@ -79,7 +79,7 @@ def test_p2p(ctx_getter, exclude_self):
     extra_kwargs = {}
 
     if exclude_self:
-        extra_kwargs["source_to_target"] = np.arange(n, dtype=np.int32)
+        extra_kwargs["target_to_source"] = np.arange(n, dtype=np.int32)
 
     evt, (potential, x_derivative) = knl(
             queue, targets, sources, [strengths],

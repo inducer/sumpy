@@ -254,8 +254,8 @@ def test_sumpy_fmm_exclude_self(ctx_getter):
     rng = PhiloxGenerator(ctx)
     weights = rng.uniform(queue, nsources, dtype=np.float64)
 
-    source_to_target = np.arange(tree.nsources, dtype=np.int32)
-    self_extra_kwargs = {"source_to_target": source_to_target}
+    target_to_source = np.arange(tree.ntargets, dtype=np.int32)
+    self_extra_kwargs = {"target_to_source": target_to_source}
 
     out_kernels = [knl]
 
