@@ -412,7 +412,7 @@ def restrict_outer(psource, radius, center=None):
     return psource * (1-OneOnBallPotential(psource.toy_ctx, center, radius))
 
 
-def l_inf(psource, radius, center=None, npoints=100):
+def l_inf(psource, radius, center=None, npoints=100, debug=False):
     if center is None:
         center = psource.center
 
@@ -420,7 +420,46 @@ def l_inf(psource, radius, center=None, npoints=100):
 
     from sumpy.visualization import FieldPlotter
     fp = FieldPlotter(center, extent=2*radius, npoints=npoints)
-    return np.max(np.abs(restr.eval(fp.points)))
+    z = restr.eval(fp.points)
 
+    if debug:
+        fp.show_scalar_in_matplotlib(
+                np.log10(np.abs(z + 1e-15)))
+        import matplotlib.pyplot as pt
+        pt.colorbar()
+        pt.show()
+
+    return np.max(np.abs(z))
+
+
+def draw_box(center, radius, **kwargs):
+    center = np.asarray(center)
+
+    el = center - radius
+    eh = center + radius
+
+    import matplotlib.pyplot as pt
+    import matplotlib.patches as mpatches
+    from matplotlib.path import Path
+
+    pathdata = [
+        (Path.MOVETO, (el[0], el[1])),
+        (Path.LINETO, (eh[0], el[1])),
+        (Path.LINETO, (eh[0], eh[1])),
+        (Path.LINETO, (el[0], eh[1])),
+        (Path.CLOSEPOLY, (el[0], el[1])),
+        ]
+
+    codes, verts = zip(*pathdata)
+    path = Path(verts, codes)
+    patch = mpatches.PathPatch(path, **kwargs)
+    pt.gca().add_patch(patch)
+
+
+def draw_circle(center, radius, **kwargs):
+    center = np.asarray(center)
+
+    import matplotlib.pyplot as plt
+    plt.gca().add_patch(plt.Circle((center[0], center[1]), radius, **kwargs))
 
 # vim: foldmethod=marker
