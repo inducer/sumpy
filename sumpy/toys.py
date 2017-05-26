@@ -272,7 +272,7 @@ class OneOnBallPotential(PotentialSource):
 
     def eval(self, targets):
         dist_vec = targets - self.center[:, np.newaxis]
-        return (np.sum(dist_vec**2, axis=0) < self.radius).astype(np.float64)
+        return (np.sum(dist_vec**2, axis=0) < self.radius**2).astype(np.float64)
 
 
 class PointSources(PotentialSource):
