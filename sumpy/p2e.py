@@ -70,8 +70,8 @@ class P2EBase(KernelCacheWrapper):
         self.dim = expansion.dim
 
     def get_loopy_instructions(self):
-        from sumpy.symbolic import make_sympy_vector
-        avec = make_sympy_vector("a", self.dim)
+        from sumpy.symbolic import make_sym_vector
+        avec = make_sym_vector("a", self.dim)
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
@@ -83,17 +83,12 @@ class P2EBase(KernelCacheWrapper):
 
         sac.run_global_cse()
 
-        from sumpy.symbolic import kill_trivial_assignments
-        assignments = kill_trivial_assignments([
-                (name, expr)
-                for name, expr in six.iteritems(sac.assignments)],
-                retain_names=coeff_names)
-
         from sumpy.codegen import to_loopy_insns
         return to_loopy_insns(
-                assignments,
+                six.iteritems(sac.assignments),
                 vector_names=set(["a"]),
                 pymbolic_expr_maps=[self.expansion.get_code_transformer()],
+                retain_names=coeff_names,
                 complex_dtype=np.complex128  # FIXME
                 )
 

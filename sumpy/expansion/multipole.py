@@ -23,7 +23,7 @@ THE SOFTWARE.
 """
 
 from six.moves import range, zip
-import sympy as sp  # noqa
+import sumpy.symbolic as sym  # noqa
 
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
@@ -63,8 +63,8 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                 raise NotImplementedError("more than one source derivative "
                         "not supported at present")
 
-            from sumpy.symbolic import make_sympy_vector
-            dir_vec = make_sympy_vector(kernel.dir_vec_name, kernel.dim)
+            from sumpy.symbolic import make_sym_vector
+            dir_vec = make_sym_vector(kernel.dir_vec_name, kernel.dim)
 
             coeff_identifiers = self.get_full_coefficient_identifiers()
             result = [0] * len(coeff_identifiers)
@@ -91,9 +91,9 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
     def evaluate(self, coeffs, bvec):
         taker = self.get_kernel_derivative_taker(bvec)
-        result = sum(
+        result = sym.Add(*tuple(
                 coeff * taker.diff(mi)
-                for coeff, mi in zip(coeffs, self.get_coefficient_identifiers()))
+                for coeff, mi in zip(coeffs, self.get_coefficient_identifiers())))
         return result
 
     def get_kernel_derivative_taker(self, bvec):
@@ -143,7 +143,8 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                     n = tgt_mi[idim]
                     k = src_mi[idim]
                     assert n >= k
-                    contrib *= (sp.binomial(n, k)
+                    from sympy import binomial
+                    contrib *= (binomial(n, k)
                             * dvec[idim]**(n-k))
 
                 result[i] += contrib
@@ -201,31 +202,31 @@ class H2DMultipoleExpansion(MultipoleExpansionBase):
         return list(range(-self.order, self.order+1))
 
     def coefficients_from_source(self, avec, bvec):
-        from sumpy.symbolic import sympy_real_norm_2
-        bessel_j = sp.Function("bessel_j")
-        avec_len = sympy_real_norm_2(avec)
+        from sumpy.symbolic import sym_real_norm_2
+        bessel_j = sym.Function("bessel_j")
+        avec_len = sym_real_norm_2(avec)
 
-        k = sp.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
+        k = sym.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
 
         # The coordinates are negated since avec points from source to center.
-        source_angle_rel_center = sp.atan2(-avec[1], -avec[0])
+        source_angle_rel_center = sym.atan2(-avec[1], -avec[0])
         return [self.kernel.postprocess_at_source(
                     bessel_j(l, k * avec_len) *
-                    sp.exp(sp.I * l * -source_angle_rel_center), avec)
+                    sym.exp(sym.I * l * -source_angle_rel_center), avec)
                 for l in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec):
-        from sumpy.symbolic import sympy_real_norm_2
-        hankel_1 = sp.Function("hankel_1")
-        bvec_len = sympy_real_norm_2(bvec)
-        target_angle_rel_center = sp.atan2(bvec[1], bvec[0])
+        from sumpy.symbolic import sym_real_norm_2
+        hankel_1 = sym.Function("hankel_1")
+        bvec_len = sym_real_norm_2(bvec)
+        target_angle_rel_center = sym.atan2(bvec[1], bvec[0])
 
-        k = sp.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
+        k = sym.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
 
         return sum(coeffs[self.get_storage_index(l)]
                    * self.kernel.postprocess_at_target(
                        hankel_1(l, k * bvec_len)
-                       * sp.exp(sp.I * l * target_angle_rel_center), bvec)
+                       * sym.exp(sym.I * l * target_angle_rel_center), bvec)
                 for l in self.get_coefficient_identifiers())
 
     def translate_from(self, src_expansion, src_coeff_exprs, dvec):
@@ -233,19 +234,19 @@ class H2DMultipoleExpansion(MultipoleExpansionBase):
             raise RuntimeError("do not know how to translate %s to "
                                "multipole 2D Helmholtz Bessel expansion"
                                % type(src_expansion).__name__)
-        from sumpy.symbolic import sympy_real_norm_2
-        dvec_len = sympy_real_norm_2(dvec)
-        bessel_j = sp.Function("bessel_j")
-        new_center_angle_rel_old_center = sp.atan2(dvec[1], dvec[0])
+        from sumpy.symbolic import sym_real_norm_2
+        dvec_len = sym_real_norm_2(dvec)
+        bessel_j = sym.Function("bessel_j")
+        new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
 
-        k = sp.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
+        k = sym.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
 
         translated_coeffs = []
         for l in self.get_coefficient_identifiers():
             translated_coeffs.append(
                 sum(src_coeff_exprs[src_expansion.get_storage_index(m)]
                     * bessel_j(m - l, k * dvec_len)
-                    * sp.exp(sp.I * (m - l) * new_center_angle_rel_old_center)
+                    * sym.exp(sym.I * (m - l) * new_center_angle_rel_old_center)
                 for m in src_expansion.get_coefficient_identifiers()))
         return translated_coeffs
 

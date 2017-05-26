@@ -29,6 +29,38 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def test_kill_trivial_assignments():
+    from pymbolic import var
+    x, y, t0, t1, t2 = [var(s) for s in "x y t0 t1 t2".split()]
+
+    assignments = (
+        ("t0", 6),
+        ("t1", -t0),
+        ("t2", 6*x),
+        ("nt", x**y),
+        # users of trivial assignments
+        ("u0", t0 + 1),
+        ("u1", t1 + 1),
+        ("u2", t2 + 1),
+    )
+
+    from sumpy.codegen import kill_trivial_assignments
+    result = kill_trivial_assignments(
+        assignments,
+        retain_names=("u0", "u1", "u2"))
+
+    from pymbolic.primitives import Sum
+
+    def _s(*vals):
+        return Sum(vals)
+
+    assert result == [
+        ('nt', x**y),
+        ('u0', _s(6, 1)),
+        ('u1', _s(-6, 1)),
+        ('u2', _s(6*x, 1))]
+
+
 def test_symbolic_assignment_name_uniqueness():
     # https://gitlab.tiker.net/inducer/sumpy/issues/13
     from sumpy.assignment_collection import SymbolicAssignmentCollection
@@ -44,6 +76,33 @@ def test_symbolic_assignment_name_uniqueness():
     sac.assign_unique("s_", 1)
 
     assert len(sac.assignments) == 3
+
+
+def test_line_taylor_coeff_growth():
+    # Regression test for LineTaylorLocalExpansion.
+    # See https://gitlab.tiker.net/inducer/pytential/merge_requests/12
+    from sumpy.kernel import LaplaceKernel
+    from sumpy.expansion.local import LineTaylorLocalExpansion
+    from sumpy.symbolic import make_sym_vector, SympyToPymbolicMapper
+
+    import numpy as np
+
+    order = 10
+    expn = LineTaylorLocalExpansion(LaplaceKernel(2), order)
+    avec = make_sym_vector("a", 2)
+    bvec = make_sym_vector("b", 2)
+    coeffs = expn.coefficients_from_source(avec, bvec)
+
+    sym2pymbolic = SympyToPymbolicMapper()
+    coeffs_pymbolic = [sym2pymbolic(c) for c in coeffs]
+
+    from pymbolic.mapper.flop_counter import FlopCounter
+    flop_counter = FlopCounter()
+    counts = [flop_counter(c) for c in coeffs_pymbolic]
+
+    indices = np.arange(1, order + 2)
+    max_order = 2
+    assert np.polyfit(np.log(indices), np.log(counts), deg=1)[0] < max_order
 
 
 # You can test individual routines by typing
