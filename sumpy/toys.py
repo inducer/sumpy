@@ -94,6 +94,27 @@ class ToyContext(object):
                 self.local_expn_class(self.kernel, order),
                 [self.kernel])
 
+    @memoize_method
+    def get_m2m(self, from_order, to_order):
+        from sumpy import E2EFromCSR
+        return E2EFromCSR(self.cl_context,
+                self.mpole_expn_class(self.kernel, from_order),
+                self.mpole_expn_class(self.kernel, to_order))
+
+    @memoize_method
+    def get_m2l(self, from_order, to_order):
+        from sumpy import E2EFromCSR
+        return E2EFromCSR(self.cl_context,
+                self.mpole_expn_class(self.kernel, from_order),
+                self.local_expn_class(self.kernel, to_order))
+
+    @memoize_method
+    def get_l2l(self, from_order, to_order):
+        from sumpy import E2EFromCSR
+        return E2EFromCSR(self.cl_context,
+                self.local_expn_class(self.kernel, from_order),
+                self.local_expn_class(self.kernel, to_order))
+
 # }}}
 
 
@@ -153,8 +174,47 @@ def _e2p(psource, targets, e2p):
 
     return pot
 
+
+def _e2e(psource, to_center, to_order, e2e, expn_class):
+    toy_ctx = psource.toy_ctx
+
+    target_boxes = np.array([1], dtype=np.int32)
+    src_box_starts = np.array([0, 1], dtype=np.int32)
+    src_box_lists = np.array([0], dtype=np.int32)
+
+    centers = (np.array(
+            [
+                # box 0: source
+                psource.center,
+
+                # box 1: target
+                to_center,
+                ],
+            dtype=np.float64)).T.copy()
+
+    coeffs = np.array([psource.coeffs])
+
+    evt, (to_coeffs,) = e2e(
+            toy_ctx.queue,
+            src_expansions=coeffs,
+            src_base_ibox=0,
+            tgt_base_ibox=0,
+            ntgt_level_boxes=2,
+
+            target_boxes=target_boxes,
+
+            src_box_starts=src_box_starts,
+            src_box_lists=src_box_lists,
+            centers=centers,
+            #flags="print_hl_cl",
+            out_host=True, **toy_ctx.extra_source_kwargs)
+
+    return expn_class(toy_ctx, to_center, to_order, to_coeffs[1])
+
 # }}}
 
+
+# {{{ potential source classes
 
 class PotentialSource(object):
     def __init__(self, toy_ctx):
@@ -254,32 +314,6 @@ class LocalExpansion(ExpansionPotentialSource):
         return _e2p(self, targets, self.toy_ctx.get_l2p(self.order))
 
 
-def multipole_expand(psource, center, order):
-    if isinstance(psource, PointSources):
-        return _p2e(psource, center, order, psource.toy_ctx.get_p2m(order),
-                MultipoleExpansion)
-
-    elif isinstance(psource, MultipoleExpansion):
-        raise NotImplementedError()
-    else:
-        raise TypeError("do not know how to expand '%s'"
-                % type(psource).__name__)
-
-
-def local_expand(psource, center, order):
-    if isinstance(psource, PointSources):
-        return _p2e(psource, center, order, psource.toy_ctx.get_p2l(order),
-                LocalExpansion)
-
-    elif isinstance(psource, MultipoleExpansion):
-        raise NotImplementedError()
-    elif isinstance(psource, LocalExpansion):
-        raise NotImplementedError()
-    else:
-        raise TypeError("do not know how to expand '%s'"
-                % type(psource).__name__)
-
-
 class PotentialExpressionNode(PotentialSource):
     def __init__(self, psources):
         from pytools import single_valued
@@ -305,6 +339,58 @@ class Product(PotentialExpressionNode):
             result = result * psource.eval(targets)
 
         return result
+
+# }}}
+
+
+def multipole_expand(psource, center, order=None):
+    if isinstance(psource, PointSources):
+        if order is None:
+            raise ValueError("order may not be None")
+
+        return _p2e(psource, center, order, psource.toy_ctx.get_p2m(order),
+                MultipoleExpansion)
+
+    elif isinstance(psource, MultipoleExpansion):
+        if order is None:
+            order = psource.order
+
+        return _e2e(psource, center, order,
+                psource.toy_ctx.get_m2m(psource.order, order),
+                MultipoleExpansion)
+
+    else:
+        raise TypeError("do not know how to expand '%s'"
+                % type(psource).__name__)
+
+
+def local_expand(psource, center, order=None):
+    if isinstance(psource, PointSources):
+        if order is None:
+            raise ValueError("order may not be None")
+
+        return _p2e(psource, center, order, psource.toy_ctx.get_p2l(order),
+                LocalExpansion)
+
+    elif isinstance(psource, MultipoleExpansion):
+        if order is None:
+            order = psource.order
+
+        return _e2e(psource, center, order,
+                psource.toy_ctx.get_m2l(psource.order, order),
+                LocalExpansion)
+
+    elif isinstance(psource, LocalExpansion):
+        if order is None:
+            order = psource.order
+
+        return _e2e(psource, center, order,
+                psource.toy_ctx.get_l2l(psource.order, order),
+                LocalExpansion)
+
+    else:
+        raise TypeError("do not know how to expand '%s'"
+                % type(psource).__name__)
 
 
 def logplot(fp, psource, **kwargs):

@@ -21,8 +21,13 @@ def main():
         plt.colorbar()
         plt.show()
 
-    lexp = t.multipole_expand(pt_src, [0, 0], 5)
+    mexp = t.multipole_expand(pt_src, [0, 0], 9)
+    mexp2 = t.multipole_expand(mexp, [0, 0.25])
+    lexp = t.local_expand(mexp, [3, 0])
+    lexp2 = t.local_expand(lexp, [3, 1])
 
+    diff = mexp - pt_src
+    diff = mexp2 - pt_src
     diff = lexp - pt_src
 
     if 1:
