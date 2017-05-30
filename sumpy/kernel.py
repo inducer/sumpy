@@ -348,6 +348,39 @@ class LaplaceKernel(ExpressionKernel):
     mapper_method = "map_laplace_kernel"
 
 
+class BiharmonicKernel(ExpressionKernel):
+    init_arg_names = ("dim",)
+
+    def __init__(self, dim=None):
+        r = pymbolic_real_norm_2(make_sym_vector("d", dim))
+        if dim == 2:
+            expr = r**2 * var("log")(r)
+            scaling = 1/(8*var("pi"))
+        elif dim == 3:
+            expr = r
+            scaling = 1  # FIXME: Unknown
+        else:
+            raise RuntimeError("unsupported dimensionality")
+
+        ExpressionKernel.__init__(
+                self,
+                dim,
+                expression=expr,
+                scaling=scaling,
+                is_complex_valued=False)
+
+    def __getinitargs__(self):
+        return (self._dim,)
+
+    def __repr__(self):
+        if self._dim is not None:
+            return "BiharmKnl%dD" % self.dim
+        else:
+            return "BiharmKnl"
+
+    mapper_method = "map_biharmonic_kernel"
+
+
 class HelmholtzKernel(ExpressionKernel):
     init_arg_names = ("dim", "helmholtz_k_name", "allow_evanescent")
 
@@ -792,6 +825,7 @@ class KernelIdentityMapper(KernelMapper):
         return kernel
 
     map_laplace_kernel = map_expression_kernel
+    map_biharmonic_kernel = map_expression_kernel
     map_helmholtz_kernel = map_expression_kernel
     map_stokeslet_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
@@ -825,6 +859,7 @@ class DerivativeCounter(KernelCombineMapper):
         return 0
 
     map_laplace_kernel = map_expression_kernel
+    map_biharmonic_kernel = map_expression_kernel
     map_helmholtz_kernel = map_expression_kernel
     map_stokeslet_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
@@ -837,6 +872,9 @@ class DerivativeCounter(KernelCombineMapper):
 
 
 class KernelDimensionSetter(KernelIdentityMapper):
+    """Deprecated: This is no longer used and will be removed in 2018.
+    """
+
     def __init__(self, dim):
         self.dim = dim
 

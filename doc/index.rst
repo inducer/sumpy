@@ -17,6 +17,7 @@ Contents
     expansion
     interactions
     codegen
+    eval
     misc
 
 
