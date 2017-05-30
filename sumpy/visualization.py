@@ -23,6 +23,10 @@ THE SOFTWARE.
 """
 
 
+___doc___ = """
+.. autoclass:: FieldPlotter
+"""
+
 import numpy as np
 from six.moves import range
 
@@ -59,6 +63,12 @@ def separate_by_real_and_imag(data, real_only):
 
 
 class FieldPlotter:
+    """
+    .. automethod:: set_matplotlib_limits
+    .. automethod:: show_scalar_in_matplotlib
+    .. automethod:: show_scalar_in_mayavi
+    .. automethod:: write_vtk_file
+    """
     def __init__(self, center, extent=1, npoints=1000):
         center = np.asarray(center)
         self.dimensions, = dim, = center.shape
