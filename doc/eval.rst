@@ -4,9 +4,9 @@ Differentiation and Evaluation
 Visualization of Potentials
 ---------------------------
 
-.. automodule:: sympy.visualization
+.. automodule:: sumpy.visualization
 
 Differentiation of Potentials
 -----------------------------
 
-.. automodule:: sympy.pde_check
+.. automodule:: sumpy.pde_check
