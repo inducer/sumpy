@@ -23,7 +23,7 @@ THE SOFTWARE.
 """
 
 
-___doc___ = """
+__doc__ = """
 .. autoclass:: FieldPlotter
 """
 
@@ -62,7 +62,7 @@ def separate_by_real_and_imag(data, real_only):
                 yield (name, field)
 
 
-class FieldPlotter:
+class FieldPlotter(object):
     """
     .. automethod:: set_matplotlib_limits
     .. automethod:: show_scalar_in_matplotlib

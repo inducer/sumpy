@@ -9,4 +9,4 @@ Visualization of Potentials
 Differentiation of Potentials
 -----------------------------
 
-.. automodule:: sumpy.pde_check
+.. automodule:: sumpy.point_calculus

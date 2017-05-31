@@ -26,7 +26,7 @@ import numpy as np
 import numpy.linalg as la
 from pytools import memoize_method
 
-___doc___ = """
+__doc__ = """
 .. autoclass:: CalculusPatch
 """
 
