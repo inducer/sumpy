@@ -41,12 +41,12 @@ class CalculusPatch(object):
 
         shape: ``(dim, npoints_total)``
 
-    .. autofunction:: diff
-    .. autofunction:: dx
-    .. autofunction:: dy
-    .. autofunction:: dy
-    .. autofunction:: laplace
-    .. autofunction:: eval_at_0
+    .. automethod:: diff
+    .. automethod:: dx
+    .. automethod:: dy
+    .. automethod:: dy
+    .. automethod:: laplace
+    .. automethod:: eval_at_0
     .. autoattribute:: x
     .. autoattribute:: y
     .. autoattribute:: z
