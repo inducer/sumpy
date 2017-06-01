@@ -298,7 +298,7 @@ class PointSources(PotentialSource):
     def eval(self, targets):
         evt, (potential,) = self.toy_ctx.get_p2p()(
                 self.toy_ctx.queue, targets, self.points, [self.weights],
-                out_host=True)
+                out_host=True, **self.toy_ctx.extra_source_kwargs)
 
         return potential
 
