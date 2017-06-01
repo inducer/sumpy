@@ -32,6 +32,13 @@ from sumpy.tools import MiDerivativeTaker
 
 __doc__ = """
 .. autoclass:: ExpansionBase
+
+Expansion Factories
+^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: ExpansionFactoryBase
+.. autoclass:: DefaultExpansionFactory
+.. autoclass:: VolumeTaylorExpansionFactory
 """
 
 logger = logging.getLogger(__name__)
@@ -430,6 +437,91 @@ class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
     def __init__(self, kernel, order):
         helmholtz_k_name = kernel.get_base_kernel().helmholtz_k_name
         self.derivative_wrangler_key = (order, kernel.dim, helmholtz_k_name)
+
+# }}}
+
+
+# {{{ expansion factory
+
+class ExpansionFactoryBase(object):
+    """An interface
+    .. automethod:: get_local_expansion_class
+    .. automethod:: get_multipole_expansion_class
+    """
+
+    def get_local_expansion_class(self, base_kernel):
+        """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
+        """
+        raise NotImplementedError()
+
+    def get_multipole_expansion_class(self, base_kernel):
+        """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
+        """
+        raise NotImplementedError()
+
+
+class VolumeTaylorExpansionFactory(ExpansionFactoryBase):
+    """An implementation of :class:`ExpansionFactoryBase` that uses Volume Taylor
+    expansions for each kernel.
+    """
+
+    def get_local_expansion_class(self, base_kernel):
+        """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
+        """
+        from sumpy.expansion.local import VolumeTaylorLocalExpansion
+        return VolumeTaylorLocalExpansion
+
+    def get_multipole_expansion_class(self, base_kernel):
+        """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
+        """
+        from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansion
+        return VolumeTaylorMultipoleExpansion
+
+
+class DefaultExpansionFactory(ExpansionFactoryBase):
+    """An implementation of :class:`ExpansionFactoryBase` that gives the 'best known'
+    expansion for each kernel.
+    """
+
+    def get_local_expansion_class(self, base_kernel):
+        """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
+        """
+        from sumpy.kernel import HelmholtzKernel, LaplaceKernel, YukawaKernel
+        if (isinstance(base_kernel.get_base_kernel(), HelmholtzKernel)
+                and base_kernel.dim == 2):
+            from sumpy.expansion.local import H2DLocalExpansion
+            return H2DLocalExpansion
+        elif (isinstance(base_kernel.get_base_kernel(), YukawaKernel)
+                and base_kernel.dim == 2):
+            from sumpy.expansion.local import Y2DLocalExpansion
+            return Y2DLocalExpansion
+        elif isinstance(base_kernel.get_base_kernel(), LaplaceKernel):
+            from sumpy.expansion.local import \
+                    LaplaceConformingVolumeTaylorLocalExpansion
+            return LaplaceConformingVolumeTaylorLocalExpansion
+        else:
+            from sumpy.expansion.local import VolumeTaylorLocalExpansion
+            return VolumeTaylorLocalExpansion
+
+    def get_multipole_expansion_class(self, base_kernel):
+        """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
+        """
+        from sumpy.kernel import HelmholtzKernel, LaplaceKernel, YukawaKernel
+        if (isinstance(base_kernel.get_base_kernel(), HelmholtzKernel)
+                and base_kernel.dim == 2):
+            from sumpy.expansion.multipole import H2DMultipoleExpansion
+            return H2DMultipoleExpansion
+        elif (isinstance(base_kernel.get_base_kernel(), YukawaKernel)
+                and base_kernel.dim == 2):
+            from sumpy.expansion.multipole import Y2DMultipoleExpansion
+            return Y2DMultipoleExpansion
+        elif isinstance(base_kernel.get_base_kernel(), LaplaceKernel):
+            from sumpy.expansion.multipole import (
+                    LaplaceConformingVolumeTaylorMultipoleExpansion)
+            return LaplaceConformingVolumeTaylorMultipoleExpansion
+        else:
+            from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansion
+            return VolumeTaylorMultipoleExpansion
 
 # }}}
 
