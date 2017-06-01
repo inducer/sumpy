@@ -30,13 +30,15 @@ import numpy.linalg as la
 import pyopencl as cl
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
-from sumpy.kernel import LaplaceKernel, HelmholtzKernel
+from sumpy.kernel import LaplaceKernel, HelmholtzKernel, YukawaKernel
 from sumpy.expansion.multipole import (
-    VolumeTaylorMultipoleExpansion, H2DMultipoleExpansion,
+    VolumeTaylorMultipoleExpansion,
+    H2DMultipoleExpansion, Y2DMultipoleExpansion,
     LaplaceConformingVolumeTaylorMultipoleExpansion,
     HelmholtzConformingVolumeTaylorMultipoleExpansion)
 from sumpy.expansion.local import (
-    VolumeTaylorLocalExpansion, H2DLocalExpansion,
+    VolumeTaylorLocalExpansion,
+    H2DLocalExpansion, Y2DLocalExpansion,
     LaplaceConformingVolumeTaylorLocalExpansion,
     HelmholtzConformingVolumeTaylorLocalExpansion)
 
@@ -101,6 +103,7 @@ def test_level_to_order_lookup(ctx_getter, lookup_func, extra_args):
     (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(3), HelmholtzConformingVolumeTaylorLocalExpansion,
                          HelmholtzConformingVolumeTaylorMultipoleExpansion),
+    (YukawaKernel(2), Y2DLocalExpansion, Y2DMultipoleExpansion),
     ])
 def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
     logging.basicConfig(level=logging.INFO)
@@ -185,6 +188,15 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
         if knl.dim == 3:
             order_values = [1, 2]
         elif knl.dim == 2 and issubclass(local_expn_class, H2DLocalExpansion):
+            order_values = [10, 12]
+
+    elif isinstance(knl, YukawaKernel):
+        extra_kwargs["lam"] = 2
+        dtype = np.complex128
+
+        if knl.dim == 3:
+            order_values = [1, 2]
+        elif knl.dim == 2 and issubclass(local_expn_class, Y2DLocalExpansion):
             order_values = [10, 12]
 
     from functools import partial

@@ -6,8 +6,14 @@ import matplotlib.pyplot as plt
 
 
 def main():
-    from sumpy.kernel import LaplaceKernel
-    tctx = t.ToyContext(cl.create_some_context(), LaplaceKernel(2))
+    from sumpy.kernel import (  # noqa: F401
+            YukawaKernel, HelmholtzKernel, LaplaceKernel)
+    tctx = t.ToyContext(
+            cl.create_some_context(),
+            #LaplaceKernel(2),
+            YukawaKernel(2), extra_source_kwargs={"lam": 5},
+            #HelmholtzKernel(2), extra_source_kwargs={"k": 0.3},
+            )
 
     pt_src = t.PointSources(
             tctx,
@@ -21,13 +27,13 @@ def main():
         plt.colorbar()
         plt.show()
 
-    mexp = t.multipole_expand(pt_src, [0, 0], 9)
+    mexp = t.multipole_expand(pt_src, [0, 0], 5)
     mexp2 = t.multipole_expand(mexp, [0, 0.25])
     lexp = t.local_expand(mexp, [3, 0])
-    lexp2 = t.local_expand(lexp, [3, 1])
+    lexp2 = t.local_expand(lexp, [3, 1], 3)
 
-    diff = mexp - pt_src
-    diff = mexp2 - pt_src
+    #diff = mexp - pt_src
+    #diff = mexp2 - pt_src
     diff = lexp2 - pt_src
 
     print(t.l_inf(diff, 1.2, center=lexp2.center))
