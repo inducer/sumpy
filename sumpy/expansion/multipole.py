@@ -37,6 +37,7 @@ __doc__ = """
 
 .. autoclass:: VolumeTaylorMultipoleExpansion
 .. autoclass:: H2DMultipoleExpansion
+.. autoclass:: Y2DMultipoleExpansion
 
 """
 
@@ -185,16 +186,9 @@ class HelmholtzConformingVolumeTaylorMultipoleExpansion(
 # }}}
 
 
-# {{{ 2D H-expansion
+# {{{ 2D Hankel-based expansions
 
-class H2DMultipoleExpansion(MultipoleExpansionBase):
-    def __init__(self, kernel, order):
-        from sumpy.kernel import HelmholtzKernel
-        assert (isinstance(kernel.get_base_kernel(), HelmholtzKernel)
-                and kernel.dim == 2)
-
-        MultipoleExpansionBase.__init__(self, kernel, order)
-
+class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
     def get_storage_index(self, k):
         return self.order+k
 
@@ -206,12 +200,12 @@ class H2DMultipoleExpansion(MultipoleExpansionBase):
         bessel_j = sym.Function("bessel_j")
         avec_len = sym_real_norm_2(avec)
 
-        k = sym.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
+        arg_scale = self.get_bessel_arg_scaling()
 
         # The coordinates are negated since avec points from source to center.
         source_angle_rel_center = sym.atan2(-avec[1], -avec[0])
         return [self.kernel.postprocess_at_source(
-                    bessel_j(l, k * avec_len) *
+                    bessel_j(l, arg_scale * avec_len) *
                     sym.exp(sym.I * l * -source_angle_rel_center), avec)
                 for l in self.get_coefficient_identifiers()]
 
@@ -221,34 +215,58 @@ class H2DMultipoleExpansion(MultipoleExpansionBase):
         bvec_len = sym_real_norm_2(bvec)
         target_angle_rel_center = sym.atan2(bvec[1], bvec[0])
 
-        k = sym.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
+        arg_scale = self.get_bessel_arg_scaling()
 
         return sum(coeffs[self.get_storage_index(l)]
                    * self.kernel.postprocess_at_target(
-                       hankel_1(l, k * bvec_len)
+                       hankel_1(l, arg_scale * bvec_len)
                        * sym.exp(sym.I * l * target_angle_rel_center), bvec)
                 for l in self.get_coefficient_identifiers())
 
     def translate_from(self, src_expansion, src_coeff_exprs, dvec):
         if not isinstance(src_expansion, type(self)):
-            raise RuntimeError("do not know how to translate %s to "
-                               "multipole 2D Helmholtz Bessel expansion"
-                               % type(src_expansion).__name__)
+            raise RuntimeError("do not know how to translate %s to %s"
+                               % (type(src_expansion).__name__,
+                                   type(self).__name__))
         from sumpy.symbolic import sym_real_norm_2
         dvec_len = sym_real_norm_2(dvec)
         bessel_j = sym.Function("bessel_j")
         new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
 
-        k = sym.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
+        arg_scale = self.get_bessel_arg_scaling()
 
         translated_coeffs = []
         for l in self.get_coefficient_identifiers():
             translated_coeffs.append(
                 sum(src_coeff_exprs[src_expansion.get_storage_index(m)]
-                    * bessel_j(m - l, k * dvec_len)
+                    * bessel_j(m - l, arg_scale * dvec_len)
                     * sym.exp(sym.I * (m - l) * new_center_angle_rel_old_center)
                 for m in src_expansion.get_coefficient_identifiers()))
         return translated_coeffs
+
+
+class H2DMultipoleExpansion(_HankelBased2DMultipoleExpansion):
+    def __init__(self, kernel, order):
+        from sumpy.kernel import HelmholtzKernel
+        assert (isinstance(kernel.get_base_kernel(), HelmholtzKernel)
+                and kernel.dim == 2)
+
+        super(H2DMultipoleExpansion, self).__init__(kernel, order)
+
+    def get_bessel_arg_scaling(self):
+        return sym.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
+
+
+class Y2DMultipoleExpansion(_HankelBased2DMultipoleExpansion):
+    def __init__(self, kernel, order):
+        from sumpy.kernel import YukawaKernel
+        assert (isinstance(kernel.get_base_kernel(), YukawaKernel)
+                and kernel.dim == 2)
+
+        super(Y2DMultipoleExpansion, self).__init__(kernel, order)
+
+    def get_bessel_arg_scaling(self):
+        return sym.I * sym.Symbol(self.kernel.get_base_kernel().yukawa_lambda_name)
 
 # }}}
 

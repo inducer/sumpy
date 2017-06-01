@@ -49,6 +49,7 @@ PDE kernels
 
 .. autoclass:: LaplaceKernel
 .. autoclass:: HelmholtzKernel
+.. autoclass:: YukawaKernel
 .. autoclass:: StokesletKernel
 .. autoclass:: StressletKernel
 
@@ -72,7 +73,6 @@ Transforming kernels
 .. autoclass:: AxisTargetDerivativeRemover
 .. autoclass:: TargetDerivativeRemover
 .. autoclass:: DerivativeCounter
-.. autoclass:: KernelDimensionSetter
 """
 
 
@@ -323,9 +323,6 @@ class LaplaceKernel(ExpressionKernel):
             r = pymbolic_real_norm_2(make_sym_vector("d", dim))
             expr = 1/r
             scaling = 1/(4*var("pi"))
-        elif dim is None:
-            expr = None
-            scaling = None
         else:
             raise RuntimeError("unsupported dimensionality")
 
@@ -403,9 +400,6 @@ class HelmholtzKernel(ExpressionKernel):
             r = pymbolic_real_norm_2(make_sym_vector("d", dim))
             expr = var("exp")(var("I")*k*r)/r
             scaling = 1/(4*var("pi"))
-        elif dim is None:
-            expr = None
-            scaling = None
         else:
             raise RuntimeError("unsupported dimensionality")
 
@@ -429,11 +423,8 @@ class HelmholtzKernel(ExpressionKernel):
             self.allow_evanescent))
 
     def __repr__(self):
-        if self._dim is not None:
-            return "HelmKnl%dD(%s)" % (
-                    self.dim, self.helmholtz_k_name)
-        else:
-            return "HelmKnl(%s)" % (self.helmholtz_k_name)
+        return "HelmKnl%dD(%s)" % (
+                self.dim, self.helmholtz_k_name)
 
     def prepare_loopy_kernel(self, loopy_knl):
         from sumpy.codegen import (bessel_preamble_generator, bessel_mangler)
@@ -456,6 +447,65 @@ class HelmholtzKernel(ExpressionKernel):
                     )]
 
     mapper_method = "map_helmholtz_kernel"
+
+
+class YukawaKernel(ExpressionKernel):
+    init_arg_names = ("dim", "yukawa_lambda_name")
+
+    def __init__(self, dim=None, yukawa_lambda_name="lam"):
+        """
+        :arg yukawa_lambda_name: The argument name to use for the Yukawa
+            parameter when generating functions to evaluate this kernel.
+        """
+        lam = var(yukawa_lambda_name)
+
+        if dim == 2:
+            r = pymbolic_real_norm_2(make_sym_vector("d", dim))
+
+            # http://dlmf.nist.gov/10.27#E8
+            expr = var("hankel_1")(0, var("I")*lam*r)
+            scaling_for_K0 = 1/2*var("pi")  # noqa: N806
+
+            scaling = -1/(2*var("pi")) * scaling_for_K0
+        else:
+            raise RuntimeError("unsupported dimensionality")
+
+        ExpressionKernel.__init__(
+                self,
+                dim,
+                expression=expr,
+                scaling=scaling,
+                is_complex_valued=True)
+
+        self.yukawa_lambda_name = yukawa_lambda_name
+
+    def __getinitargs__(self):
+        return (self._dim, self.yukawa_lambda_name)
+
+    def update_persistent_hash(self, key_hash, key_builder):
+        key_hash.update(type(self).__name__.encode("utf8"))
+        key_builder.rec(key_hash, (self.dim, self.yukawa_lambda_name))
+
+    def __repr__(self):
+        return "YukKnl%dD(%s)" % (
+                self.dim, self.yukawa_lambda_name)
+
+    def prepare_loopy_kernel(self, loopy_knl):
+        from sumpy.codegen import (bessel_preamble_generator, bessel_mangler)
+        loopy_knl = lp.register_function_manglers(loopy_knl,
+                [bessel_mangler])
+        loopy_knl = lp.register_preamble_generators(loopy_knl,
+                [bessel_preamble_generator])
+
+        return loopy_knl
+
+    def get_args(self):
+        return [
+                KernelArgument(
+                    loopy_arg=lp.ValueArg(self.yukawa_lambda_name, np.float64),
+                    )]
+
+    mapper_method = "map_yukawa_kernel"
 
 
 class StokesletKernel(ExpressionKernel):
@@ -827,6 +877,7 @@ class KernelIdentityMapper(KernelMapper):
     map_laplace_kernel = map_expression_kernel
     map_biharmonic_kernel = map_expression_kernel
     map_helmholtz_kernel = map_expression_kernel
+    map_yukawa_kernel = map_expression_kernel
     map_stokeslet_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
 
@@ -861,6 +912,7 @@ class DerivativeCounter(KernelCombineMapper):
     map_laplace_kernel = map_expression_kernel
     map_biharmonic_kernel = map_expression_kernel
     map_helmholtz_kernel = map_expression_kernel
+    map_yukawa_kernel = map_expression_kernel
     map_stokeslet_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
 
@@ -869,63 +921,6 @@ class DerivativeCounter(KernelCombineMapper):
 
     map_directional_target_derivative = map_axis_target_derivative
     map_directional_source_derivative = map_axis_target_derivative
-
-
-class KernelDimensionSetter(KernelIdentityMapper):
-    """Deprecated: This is no longer used and will be removed in 2018.
-    """
-
-    def __init__(self, dim):
-        self.dim = dim
-
-    def map_expression_kernel(self, kernel):
-        if kernel._dim is not None and self.dim != kernel.dim:
-            raise RuntimeError("cannot set kernel dimension to new value (%d)"
-                    "different from existing one (%d)"
-                    % (self.dim, kernel.dim))
-
-        return kernel
-
-    def map_laplace_kernel(self, kernel):
-        if kernel._dim is not None and self.dim != kernel.dim:
-            raise RuntimeError("cannot set kernel dimension to new value (%d)"
-                    "different from existing one (%d)"
-                    % (self.dim, kernel.dim))
-
-        return LaplaceKernel(self.dim)
-
-    def map_helmholtz_kernel(self, kernel):
-        if kernel._dim is not None and self.dim != kernel.dim:
-            raise RuntimeError("cannot set kernel dimension to new value (%d)"
-                    "different from existing one (%d)"
-                    % (self.dim, kernel.dim))
-
-        return HelmholtzKernel(self.dim,
-                helmholtz_k_name=kernel.helmholtz_k_name,
-                allow_evanescent=kernel.allow_evanescent)
-
-    def map_stokeslet_kernel(self, kernel):
-        if kernel._dim is not None and self.dim != kernel.dim:
-            raise RuntimeError("cannot set kernel dimension to new value (%d)"
-                    "different from existing one (%d)"
-                    % (self.dim, kernel.dim))
-
-        return StokesletKernel(self.dim,
-                kernel.icomp,
-                kernel.jcomp,
-                viscosity_mu_name=kernel.viscosity_mu_name)
-
-    def map_stresslet_kernel(self, kernel):
-        if kernel._dim is not None and self.dim != kernel.dim:
-            raise RuntimeError("cannot set kernel dimension to new value (%d)"
-                    "different from existing one (%d)"
-                    % (self.dim, kernel.dim))
-
-        return StressletKernel(self.dim,
-                kernel.icomp,
-                kernel.jcomp,
-                kernel.kcomp,
-                viscosity_mu_name=kernel.viscosity_mu_name)
 
 # }}}
 

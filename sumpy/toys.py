@@ -42,17 +42,21 @@ class ToyContext(object):
     def __init__(self, cl_context, kernel,
             mpole_expn_class=None,
             local_expn_class=None,
+            expansion_factory=None,
             extra_source_kwargs=None):
         self.cl_context = cl_context
         self.queue = cl.CommandQueue(self.cl_context)
         self.kernel = kernel
 
+        if expansion_factory is None:
+            from sumpy.expansion import DefaultExpansionFactory
+            expansion_factory = DefaultExpansionFactory()
         if mpole_expn_class is None:
-            from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansion
-            mpole_expn_class = VolumeTaylorMultipoleExpansion
+            mpole_expn_class = \
+                    expansion_factory.get_multipole_expansion_class(kernel)
         if local_expn_class is None:
-            from sumpy.expansion.local import VolumeTaylorLocalExpansion
-            local_expn_class = VolumeTaylorLocalExpansion
+            local_expn_class = \
+                    expansion_factory.get_local_expansion_class(kernel)
 
         if extra_source_kwargs is None:
             extra_source_kwargs = {}
@@ -294,7 +298,7 @@ class PointSources(PotentialSource):
     def eval(self, targets):
         evt, (potential,) = self.toy_ctx.get_p2p()(
                 self.toy_ctx.queue, targets, self.points, [self.weights],
-                out_host=True)
+                out_host=True, **self.toy_ctx.extra_source_kwargs)
 
         return potential
 

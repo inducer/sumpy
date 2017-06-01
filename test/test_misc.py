@@ -32,11 +32,44 @@ import pyopencl as cl  # noqa: F401
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 
+from sumpy.kernel import BiharmonicKernel, YukawaKernel
 
-@pytest.mark.parametrize("dim", [2, 3])
-def test_pde_check_biharmonic(ctx_factory, dim, order=5):
-    from sumpy.kernel import BiharmonicKernel
-    tctx = t.ToyContext(ctx_factory(), BiharmonicKernel(dim))
+
+# {{{ pde check for kernels
+
+class BiharmonicKernelInfo:
+    def __init__(self, dim):
+        self.kernel = BiharmonicKernel(dim)
+        self.extra_kwargs = {}
+
+    @staticmethod
+    def pde_func(cp, pot):
+        return cp.laplace(cp.laplace(pot))
+
+    nderivs = 4
+
+
+class YukawaKernelInfo:
+    def __init__(self, dim, lam):
+        self.kernel = YukawaKernel(dim)
+        self.lam = lam
+        self.extra_kwargs = {"lam": lam}
+
+    def pde_func(self, cp, pot):
+        return cp.laplace(pot) - self.lam**2*pot
+
+    nderivs = 2
+
+
+@pytest.mark.parametrize("knl_info", [
+    BiharmonicKernelInfo(2),
+    BiharmonicKernelInfo(3),
+    YukawaKernelInfo(2, 5),
+    ])
+def test_pde_check_kernels(ctx_factory, knl_info, order=5):
+    dim = knl_info.kernel.dim
+    tctx = t.ToyContext(ctx_factory(), knl_info.kernel,
+            extra_source_kwargs=knl_info.extra_kwargs)
 
     pt_src = t.PointSources(
             tctx,
@@ -51,13 +84,15 @@ def test_pde_check_biharmonic(ctx_factory, dim, order=5):
         cp = CalculusPatch(np.array([1, 0, 0])[:dim], h=h, order=order)
         pot = pt_src.eval(cp.points)
 
-        deriv = cp.laplace(cp.laplace(pot))
+        pde = knl_info.pde_func(cp, pot)
 
-        err = la.norm(deriv)
+        err = la.norm(pde)
         eoc_rec.add_data_point(h, err)
 
     print(eoc_rec)
-    assert eoc_rec.order_estimate() > order-3-0.1
+    assert eoc_rec.order_estimate() > order - knl_info.nderivs + 1 - 0.1
+
+# }}}
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
