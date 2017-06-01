@@ -464,7 +464,7 @@ class YukawaKernel(ExpressionKernel):
 
             # http://dlmf.nist.gov/10.27#E8
             expr = var("hankel_1")(0, var("I")*lam*r)
-            scaling_for_K0 = 1/2*var("pi")  # noqa: N806
+            scaling_for_K0 = 1/2*var("pi")*var("I")  # noqa: N806
 
             scaling = -1/(2*var("pi")) * scaling_for_K0
         else:
