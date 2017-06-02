@@ -51,11 +51,20 @@ class CalculusPatch(object):
     .. autoattribute:: y
     .. autoattribute:: z
     """
-    def __init__(self, center, h=1e-3, order=4):
+    def __init__(self, center, h=1e-1, order=4, nodes="chebyshev"):
         self.center = center
 
         npoints = order + 1
-        points_1d = np.linspace(-h/2, h/2, npoints)
+        if nodes == "equispaced":
+            points_1d = np.linspace(-h/2, h/2, npoints)
+
+        elif nodes == "chebyshev":
+            a = np.arange(npoints, dtype=np.float64)
+            points_1d = (h/2)*np.cos((2*(a+1)-1)/(2*npoints)*np.pi)
+
+        else:
+            raise ValueError("invalid node set: %s" % nodes)
+
         self._points_1d = points_1d
 
         self.dim = dim = len(self.center)
