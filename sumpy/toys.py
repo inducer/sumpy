@@ -540,8 +540,11 @@ class SchematicVisitor(object):
                 verticalalignment='center', horizontalalignment='center')
 
         if psource.derived_from is not None:
+            xmin, xmax = plt.xlim()
+            plt_width = xmax - xmin
             draw_arrow(psource.derived_from.center, psource.center, shorten=0.1,
-                    facecolor="black", length_includes_head=True, width=0.02)
+                       facecolor="black", length_includes_head=True,
+                       width=0.0005 * plt_width)
             self.rec(psource.derived_from)
 
     visit_localexpansion = visit_multipoleexpansion
