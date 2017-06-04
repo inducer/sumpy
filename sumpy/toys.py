@@ -494,6 +494,11 @@ def draw_circle(center, radius, **kwargs):
     plt.gca().add_patch(plt.Circle((center[0], center[1]), radius, **kwargs))
 
 
+def draw_point(loc, **kwargs):
+    import matplotlib.pyplot as plt
+    plt.plot(*loc, marker="o", **kwargs)
+
+
 def draw_arrow(from_pt, to_pt, shorten=0, **kwargs):
     import matplotlib.pyplot as plt
     dist = to_pt - from_pt
@@ -501,6 +506,15 @@ def draw_arrow(from_pt, to_pt, shorten=0, **kwargs):
     from_pt = from_pt + shorten*dist
     dist = dist - 2*shorten*dist
     plt.arrow(from_pt[0], from_pt[1], dist[0], dist[1], **kwargs)
+
+
+def draw_annotation(from_pt, to_pt, label, **kwargs):
+    import matplotlib.pyplot as plt
+
+    plt.gca().annotate(label, xy=from_pt, xytext=to_pt,
+        arrowprops=dict(
+            facecolor="white", edgecolor="white", shrink=0.05,
+            width=1, headwidth=5), color="white", **kwargs)
 
 
 class SchematicVisitor(object):
@@ -512,7 +526,7 @@ class SchematicVisitor(object):
 
     def visit_pointsources(self, psource):
         import matplotlib.pyplot as plt
-        plt.plot(psource.points[0], psource.points[1], "o")
+        plt.plot(psource.points[0], psource.points[1], "o", label="source")
 
     def visit_sum(self, psource):
         for ps in psource.psources:
@@ -540,8 +554,11 @@ class SchematicVisitor(object):
                 verticalalignment='center', horizontalalignment='center')
 
         if psource.derived_from is not None:
+            xmin, xmax = plt.xlim()
+            plt_width = xmax - xmin
             draw_arrow(psource.derived_from.center, psource.center, shorten=0.1,
-                    facecolor="black", length_includes_head=True, width=0.02)
+                       facecolor="black", length_includes_head=True,
+                       width=0.0005 * plt_width)
             self.rec(psource.derived_from)
 
     visit_localexpansion = visit_multipoleexpansion
