@@ -224,7 +224,7 @@ class SumpyExpansionWrangler(object):
     @memoize_method
     def local_expansions_level_starts(self):
         return self._expansions_level_starts(
-                lambda order: len(self.code.multipole_expansion_factory(order)))
+                lambda order: len(self.code.local_expansion_factory(order)))
 
     def multipole_expansion_zeros(self):
         return cl.array.zeros(
