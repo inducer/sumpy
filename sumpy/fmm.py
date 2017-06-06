@@ -254,7 +254,7 @@ class SumpyExpansionWrangler(object):
         return (box_start,
                 local_exps[expn_start:expn_stop].reshape(box_stop-box_start, -1))
 
-    def potential_zeros(self):
+    def output_zeros(self):
         from pytools.obj_array import make_obj_array
         return make_obj_array([
                 cl.array.zeros(
@@ -386,7 +386,7 @@ class SumpyExpansionWrangler(object):
 
     def eval_direct(self, target_boxes, source_box_starts,
             source_box_lists, src_weights):
-        pot = self.potential_zeros()
+        pot = self.output_zeros()
 
         kwargs = self.extra_kwargs.copy()
         kwargs.update(self.self_extra_kwargs)
@@ -456,7 +456,7 @@ class SumpyExpansionWrangler(object):
     def eval_multipoles(self,
             level_start_target_box_nrs,
             target_boxes, source_boxes_by_level, mpole_exps):
-        pot = self.potential_zeros()
+        pot = self.output_zeros()
 
         kwargs = self.kernel_extra_kwargs.copy()
         kwargs.update(self.box_target_list_kwargs())
@@ -581,7 +581,7 @@ class SumpyExpansionWrangler(object):
         return local_exps
 
     def eval_locals(self, level_start_target_box_nrs, target_boxes, local_exps):
-        pot = self.potential_zeros()
+        pot = self.output_zeros()
 
         kwargs = self.kernel_extra_kwargs.copy()
         kwargs.update(self.box_target_list_kwargs())
