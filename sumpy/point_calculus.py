@@ -147,6 +147,20 @@ class CalculusPatch(object):
 
         return sum(self.diff(iaxis, f_values, 2) for iaxis in range(self.dim))
 
+    def curl(self, arg):
+        """Take the curl of the vector quantity *arg*.
+
+        :arg arg: an object array of shape ``(3,)`` containing
+            :class:`numpy.ndarrays` with shape ``(npoints_total,)``.
+        """
+        from pytools import levi_civita
+        from pytools.obj_array import make_obj_array
+        return make_obj_array([
+            sum(
+                levi_civita((l, m, n)) * self.diff(m, arg[n])
+                for m in range(3) for n in range(3))
+            for l in range(3)])
+
     def eval_at_center(self, f_values):
         """Interpolate *f_values* to the center point.
 
