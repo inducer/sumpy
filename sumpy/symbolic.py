@@ -81,7 +81,7 @@ Add Basic Mul Pow exp sqrt symbols sympify cos sin atan2 Function Symbol
 Derivative Integer Matrix Subs I pi functions""".split()
 
 if USE_SYMENGINE:
-    from symengine import sympy_compat as sym
+    import symengine as sym
     from pymbolic.interop.symengine import (
         PymbolicToSymEngineMapper as PymbolicToSympyMapper,
         SymEngineToPymbolicMapper as SympyToPymbolicMapper)
