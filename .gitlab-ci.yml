@@ -10,6 +10,7 @@ Python 3.5 Titan X:
   - nvidia-titan-x
   except:
   - tags
+  allow_failure: True
 
 # Sumpy thus far is poorly parallelized (no workgroup-level parallelism), and
 # the Kepler has a tendency to hang as a result.
