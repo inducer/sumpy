@@ -387,7 +387,7 @@ class KernelCacheWrapper(object):
 def my_syntactic_subs(expr, subst_dict):
     # Workaround for differing substitution semantics between sympy and symengine.
     # FIXME: This is a hack.
-    from sumpy.symbolic import Basic, Subs, Derivative, USE_SYMENGINE
+    from sumpy.symbolic import Basic, Subs, Derivative
 
     if not isinstance(expr, Basic):
         return expr
@@ -416,11 +416,7 @@ def my_syntactic_subs(expr, subst_dict):
 
         if new_expr != expr.expr or any(new_var != var for new_var, var in
                                           zip(new_variables, expr.variables)):
-            # FIXME in SymEngine
-            if USE_SYMENGINE:
-                return Derivative(new_expr, new_variables)
-            else:
-                return Derivative(new_expr, *new_variables)
+            return Derivative(new_expr, *new_variables)
 
         return expr
 
