@@ -510,11 +510,17 @@ def draw_arrow(from_pt, to_pt, shorten=0, **kwargs):
 
 def draw_annotation(from_pt, to_pt, label, **kwargs):
     import matplotlib.pyplot as plt
+    color = kwargs.setdefault("color", "white")
+
+    arrowprops = dict(
+            facecolor=color,
+            edgecolor=color,
+            shrink=0.05,
+            width=1,
+            headwidth=5)
 
     plt.gca().annotate(label, xy=from_pt, xytext=to_pt,
-        arrowprops=dict(
-            facecolor="white", edgecolor="white", shrink=0.05,
-            width=1, headwidth=5), color="white", **kwargs)
+            arrowprops=arrowprops, **kwargs)
 
 
 class SchematicVisitor(object):
