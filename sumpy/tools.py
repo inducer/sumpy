@@ -376,7 +376,9 @@ class KernelCacheWrapper(object):
             logger.info("%s: kernel cache miss [key=%s]" % (
                 self.name, cache_key))
 
-        knl = self.get_optimized_kernel(**kwargs)
+        from pytools import MinRecursionLimit
+        with MinRecursionLimit(3000):
+            knl = self.get_optimized_kernel(**kwargs)
 
         if CACHING_ENABLED:
             code_cache[cache_key] = knl

@@ -703,11 +703,13 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
         return expr
 
     import loopy as lp
-    result = [
-            lp.Assignment(id=None,
-                assignee=name, expression=convert_expr(name, expr),
-                temp_var_type=lp.auto)
-            for name, expr in assignments]
+    from pytools import MinRecursionLimit
+    with MinRecursionLimit(3000):
+        result = [
+                lp.Assignment(id=None,
+                    assignee=name, expression=convert_expr(name, expr),
+                    temp_var_type=lp.auto)
+                for name, expr in assignments]
 
     logger.info("loopy instruction generation: done")
     return result
