@@ -69,9 +69,6 @@ class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
             return expr
         elif getattr(expr, "is_Function", False):
             func_name = SympyToPymbolicMapperBase.function_name(self, expr)
-            # SymEngine capitalizes the names of the special functions.
-            if func_name.lower() in _SPECIAL_FUNCTION_NAMES:
-                func_name = func_name.lower()
             return prim.Variable(func_name)(
                     *tuple(self.rec(arg) for arg in expr.args))
         else:

@@ -220,8 +220,7 @@ def test_dont_cse_derivative():
     from sumpy.symbolic import Derivative
     f = Function("f")
 
-    # FIXME
-    deriv = Derivative(f(x+y), (x,)) if USE_SYMENGINE else Derivative(f(x+y), x)
+    deriv = Derivative(f(x+y), x)
 
     name_val, (expr,) = cse(x + y + deriv)
 
