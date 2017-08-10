@@ -225,7 +225,7 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
         pot = pot.get()
         ref_pot = ref_pot.get()
 
-        rel_err = la.norm(pot - ref_pot) / la.norm(ref_pot)
+        rel_err = la.norm(pot - ref_pot, np.inf) / la.norm(ref_pot, np.inf)
         logger.info("order %d -> relative l2 error: %g" % (order, rel_err))
 
         pconv_verifier.add_data_point(order, rel_err)
