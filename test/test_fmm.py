@@ -111,8 +111,8 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
 
-    nsources = 500
-    ntargets = 50
+    nsources = 1000
+    ntargets = 300
     dtype = np.float64
 
     from boxtree.tools import (
