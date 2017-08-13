@@ -621,6 +621,9 @@ class SumpyExpansionWrangler(object):
 
         return pot
 
+    def finalize_potentials(self, potentials):
+        return potentials
+
 # }}}
 
 # vim: foldmethod=marker
