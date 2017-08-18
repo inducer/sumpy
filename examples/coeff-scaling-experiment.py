@@ -9,16 +9,17 @@ import matplotlib.pyplot as plt
 
 def main():
     dim = 2
+    order = 7
 
     from sumpy.kernel import (  # noqa: F401
             YukawaKernel, HelmholtzKernel, LaplaceKernel,
             AxisTargetDerivative)
     tctx = t.ToyContext(
             cl.create_some_context(),
-            #LaplaceKernel(dim),
+            LaplaceKernel(dim),
             #AxisTargetDerivative(0, LaplaceKernel(dim)),
             #YukawaKernel(dim), extra_source_kwargs={"lam": 5},
-            HelmholtzKernel(dim), extra_source_kwargs={"k": 0.3},
+            #HelmholtzKernel(dim), extra_source_kwargs={"k": 0.3},
             )
 
     np.random.seed(12)
@@ -31,14 +32,14 @@ def main():
             np.ones(50))
 
     mctr = scale*np.array([0., 0, 0])[:dim]
-    mexp = t.multipole_expand(pt_src, mctr, order=4, rscale=scale)
+    #mexp = t.multipole_expand(pt_src, mctr, order=order, rscale=scale)
 
     lctr = scale*np.array([2.5, 0, 0])[:dim]
-    #lexp = t.local_expand(mexp, lctr)
-    print(mexp.coeffs)
+    lexp = t.local_expand(pt_src, lctr, order=order, rscale=scale)
+    print(lexp.coeffs)
     #print(lexp.coeffs)
 
-    diff = mexp - pt_src
+    diff = lexp - pt_src
 
     diag = np.sqrt(dim)
     print(t.l_inf(diff, scale*0.5*diag, center=lctr)

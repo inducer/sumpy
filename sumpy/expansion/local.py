@@ -113,21 +113,25 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
     Coefficients represent derivative values of the kernel.
     """
 
-    def coefficients_from_source(self, avec, bvec):
+    def coefficients_from_source(self, avec, bvec, rscale):
         from sumpy.tools import MiDerivativeTaker
         ppkernel = self.kernel.postprocess_at_source(
-                self.kernel.get_expression(avec), avec)
+                self.kernel.get_proxy_expression(avec), avec)
 
         taker = MiDerivativeTaker(ppkernel, avec)
-        return [taker.diff(mi) for mi in self.get_coefficient_identifiers()]
+        return [
+                self.kernel.adjust_proxy_expression(taker.diff(mi), 1, 0)
+                * rscale**sum(mi)
+                for mi in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec):
+    def evaluate(self, coeffs, bvec, rscale):
         from sumpy.tools import mi_power, mi_factorial
         evaluated_coeffs = (
             self.derivative_wrangler.get_full_kernel_derivatives_from_stored(coeffs))
+        bvec = bvec / rscale
         result = sum(
                 coeff
-                * self.kernel.postprocess_at_target(mi_power(bvec, mi), bvec)
+                * mi_power(bvec, mi)
                 / mi_factorial(mi)
                 for coeff, mi in zip(
                         evaluated_coeffs, self.get_full_coefficient_identifiers()))
