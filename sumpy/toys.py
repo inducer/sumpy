@@ -27,6 +27,7 @@ from six.moves import range  # noqa: F401
 
 from pytools import memoize_method
 from numbers import Number
+from sumpy.kernel import TargetDerivativeRemover
 
 import numpy as np  # noqa: F401
 import loopy as lp  # noqa: F401
@@ -74,7 +75,8 @@ class ToyContext(object):
     def get_p2m(self, order):
         from sumpy import P2EFromSingleBox
         return P2EFromSingleBox(self.cl_context,
-                self.mpole_expn_class(self.kernel, order),
+                self.mpole_expn_class(
+                    TargetDerivativeRemover()(self.kernel), order),
                 [self.kernel])
 
     @memoize_method
@@ -88,7 +90,8 @@ class ToyContext(object):
     def get_m2p(self, order):
         from sumpy import E2PFromSingleBox
         return E2PFromSingleBox(self.cl_context,
-                self.mpole_expn_class(self.kernel, order),
+                self.mpole_expn_class(
+                    TargetDerivativeRemover()(self.kernel), order),
                 [self.kernel])
 
     @memoize_method
