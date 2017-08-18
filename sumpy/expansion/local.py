@@ -217,6 +217,9 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         return list(range(-self.order, self.order+1))
 
     def coefficients_from_source(self, avec, bvec, rscale):
+        if not self.kernel.supports_rscale:
+            rscale = 1
+
         from sumpy.symbolic import sym_real_norm_2
         hankel_1 = sym.Function("hankel_1")
 
@@ -232,6 +235,9 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                     for l in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec, rscale):
+        if not self.kernel.supports_rscale:
+            rscale = 1
+
         from sumpy.symbolic import sym_real_norm_2
         bessel_j = sym.Function("bessel_j")
         bvec_len = sym_real_norm_2(bvec)

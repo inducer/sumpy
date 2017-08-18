@@ -13,13 +13,17 @@ def main():
 
     from sumpy.kernel import (  # noqa: F401
             YukawaKernel, HelmholtzKernel, LaplaceKernel,
+            BiharmonicKernel, StokesletKernel, StressletKernel,
             AxisTargetDerivative)
     tctx = t.ToyContext(
             cl.create_some_context(),
-            #LaplaceKernel(dim),
+            LaplaceKernel(dim),
             #AxisTargetDerivative(0, LaplaceKernel(dim)),
             #YukawaKernel(dim), extra_source_kwargs={"lam": 5},
-            HelmholtzKernel(dim), extra_source_kwargs={"k": 0.3},
+            #HelmholtzKernel(dim), extra_source_kwargs={"k": 0.3},
+            #BiharmonicKernel(dim),
+            #StokesletKernel(dim, 1, 1), extra_source_kwargs={"mu": 0.3},
+            #StressletKernel(dim, 1, 1, 0), extra_source_kwargs={"mu": 0.3},
             )
 
     np.random.seed(12)

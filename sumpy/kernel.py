@@ -32,8 +32,6 @@ from pymbolic.primitives import make_sym_vector
 from pymbolic import var
 
 
-# FIXME: Rename ProxyExpressionKernel back to ExpressionKernel once we're done.
-
 __doc__ = """
 Kernel interface
 ----------------
@@ -102,6 +100,7 @@ class Kernel(object):
     """Basic kernel interface.
 
     .. attribute:: is_complex_valued
+    .. attribute:: supports_rscale
     .. attribute:: dim
 
     .. automethod:: get_base_kernel
@@ -115,6 +114,8 @@ class Kernel(object):
     .. automethod:: get_args
     .. automethod:: get_source_args
     """
+
+    supports_rscale = False
 
     def __init__(self, dim=None):
         self.dim = dim
@@ -276,11 +277,6 @@ class Kernel(object):
 
 
 class ExpressionKernel(Kernel):
-    def get_expression(self, dist_vec):
-        raise NotImplementedError
-
-
-class ProxyExpressionKernel(Kernel):
     is_complex_valued = False
 
     init_arg_names = ("dim", "expression", "kernel_scaling", "is_complex_valued")
@@ -352,12 +348,12 @@ class ProxyExpressionKernel(Kernel):
     mapper_method = "map_expression_kernel"
 
 
-one_kernel_2d = ProxyExpressionKernel(
+one_kernel_2d = ExpressionKernel(
         dim=2,
         proxy_expression=1,
         global_scaling_const=1,
         is_complex_valued=False)
-one_kernel_3d = ProxyExpressionKernel(
+one_kernel_3d = ExpressionKernel(
         dim=3,
         proxy_expression=1,
         global_scaling_const=1,
@@ -366,8 +362,9 @@ one_kernel_3d = ProxyExpressionKernel(
 
 # {{{ PDE kernels
 
-class LaplaceKernel(ProxyExpressionKernel):
+class LaplaceKernel(ExpressionKernel):
     init_arg_names = ("dim",)
+    supports_rscale = True
 
     def __init__(self, dim=None):
         # See (Kress LIE, Thm 6.2) for scaling
@@ -413,6 +410,7 @@ class LaplaceKernel(ProxyExpressionKernel):
 
 class BiharmonicKernel(ExpressionKernel):
     init_arg_names = ("dim",)
+    supports_rscale = False
 
     def __init__(self, dim=None):
         r = pymbolic_real_norm_2(make_sym_vector("d", dim))
@@ -426,12 +424,15 @@ class BiharmonicKernel(ExpressionKernel):
         else:
             raise RuntimeError("unsupported dimensionality")
 
-        ExpressionKernel.__init__(
-                self,
+        super(BiharmonicKernel, self).__init__(
                 dim,
-                expression=expr,
-                scaling=scaling,
+                proxy_expression=expr,
+                global_scaling_const=scaling,
                 is_complex_valued=False)
+
+    def adjust_proxy_expression(self, expr, rscale, nderivatives):
+        assert rscale == 1
+        return expr
 
     def __getinitargs__(self):
         return (self.dim,)
@@ -442,8 +443,9 @@ class BiharmonicKernel(ExpressionKernel):
     mapper_method = "map_biharmonic_kernel"
 
 
-class HelmholtzKernel(ProxyExpressionKernel):
+class HelmholtzKernel(ExpressionKernel):
     init_arg_names = ("dim", "helmholtz_k_name", "allow_evanescent")
+    supports_rscale = True
 
     def __init__(self, dim=None, helmholtz_k_name="k",
             allow_evanescent=False):
@@ -484,8 +486,10 @@ class HelmholtzKernel(ProxyExpressionKernel):
 
         if self.dim == 2:
             return result
-        else:
+        elif self.dim == 3:
             return result / rscale**(nderivatives+1)
+        else:
+            raise RuntimeError("unsupported dimensionality")
 
     def __getinitargs__(self):
         return (self.dim, self.helmholtz_k_name,
@@ -525,6 +529,7 @@ class HelmholtzKernel(ProxyExpressionKernel):
 
 class YukawaKernel(ExpressionKernel):
     init_arg_names = ("dim", "yukawa_lambda_name")
+    supports_rscale = True
 
     def __init__(self, dim=None, yukawa_lambda_name="lam"):
         """
@@ -544,14 +549,26 @@ class YukawaKernel(ExpressionKernel):
         else:
             raise RuntimeError("unsupported dimensionality")
 
-        ExpressionKernel.__init__(
-                self,
+        super(YukawaKernel, self).__init__(
                 dim,
-                expression=expr,
-                scaling=scaling,
+                proxy_expression=expr,
+                global_scaling_const=scaling,
                 is_complex_valued=True)
 
         self.yukawa_lambda_name = yukawa_lambda_name
+
+    def adjust_proxy_expression(self, expr, rscale, nderivatives):
+        import sympy as sp
+        result = expr.subs(
+            sp.Symbol(self.yukawa_lambda_name),
+            sp.Symbol(self.yukawa_lambda_name) * rscale)
+
+        if self.dim == 2:
+            return result
+        elif self.dim == 3:
+            return result / rscale**(nderivatives+1)
+        else:
+            raise RuntimeError("unsupported dimensionality")
 
     def __getinitargs__(self):
         return (self.dim, self.yukawa_lambda_name)
@@ -584,6 +601,7 @@ class YukawaKernel(ExpressionKernel):
 
 class StokesletKernel(ExpressionKernel):
     init_arg_names = ("dim", "icomp", "jcomp", "viscosity_mu_name")
+    supports_rscale = False
 
     def __init__(self, dim, icomp, jcomp, viscosity_mu_name="mu"):
         r"""
@@ -623,12 +641,15 @@ class StokesletKernel(ExpressionKernel):
         self.icomp = icomp
         self.jcomp = jcomp
 
-        ExpressionKernel.__init__(
-                self,
+        super(StokesletKernel, self).__init__(
                 dim,
-                expression=expr,
-                scaling=scaling,
+                proxy_expression=expr,
+                global_scaling_const=scaling,
                 is_complex_valued=False)
+
+    def adjust_proxy_expression(self, expr, rscale, nderivatives):
+        assert rscale == 1
+        return expr
 
     def __getinitargs__(self):
         return (self.dim, self.icomp, self.jcomp, self.viscosity_mu_name)
@@ -652,6 +673,7 @@ class StokesletKernel(ExpressionKernel):
 
 class StressletKernel(ExpressionKernel):
     init_arg_names = ("dim", "icomp", "jcomp", "kcomp", "viscosity_mu_name")
+    supports_rscale = False
 
     def __init__(self, dim=None, icomp=None, jcomp=None, kcomp=None,
                         viscosity_mu_name="mu"):
@@ -689,12 +711,15 @@ class StressletKernel(ExpressionKernel):
         self.jcomp = jcomp
         self.kcomp = kcomp
 
-        ExpressionKernel.__init__(
-                self,
+        super(StressletKernel, self).__init__(
                 dim,
-                expression=expr,
-                scaling=scaling,
+                proxy_expression=expr,
+                global_scaling_const=scaling,
                 is_complex_valued=False)
+
+    def adjust_proxy_expression(self, expr, rscale, nderivatives):
+        assert rscale == 1
+        return expr
 
     def __getinitargs__(self):
         return (self.dim, self.icomp, self.jcomp, self.kcomp,

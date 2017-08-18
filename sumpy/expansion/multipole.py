@@ -60,6 +60,9 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
         from sumpy.tools import mi_power, mi_factorial
 
+        if not self.kernel.supports_rscale:
+            rscale = 1
+
         avec = avec/rscale
 
         if isinstance(kernel, DirectionalSourceDerivative):
@@ -94,6 +97,9 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             self.derivative_wrangler.get_stored_mpole_coefficients_from_full(result))
 
     def evaluate(self, coeffs, bvec, rscale):
+        if not self.kernel.supports_rscale:
+            rscale = 1
+
         taker = self.get_kernel_derivative_taker(bvec, rscale)
         result = sym.Add(*tuple(
                 coeff
