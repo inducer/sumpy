@@ -311,14 +311,11 @@ class ProxyExpressionKernel(Kernel):
         self.is_complex_valued = is_complex_valued
 
     def __getinitargs__(self):
-        return (self._dim, self.expression, self.global_scaling_const,
+        return (self.dim, self.expression, self.global_scaling_const,
                 self.is_complex_valued)
 
     def __repr__(self):
-        if self._dim is not None:
-            return "ExprKnl%dD" % self.dim
-        else:
-            return "ExprKnl"
+        return "ExprKnl%dD" % self.dim
 
     def get_proxy_expression(self, scaled_dist_vec):
         from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
@@ -406,13 +403,10 @@ class LaplaceKernel(ProxyExpressionKernel):
             raise NotImplementedError("unsupported dimensionality")
 
     def __getinitargs__(self):
-        return (self._dim,)
+        return (self.dim,)
 
     def __repr__(self):
-        if self._dim is not None:
-            return "LapKnl%dD" % self.dim
-        else:
-            return "LapKnl"
+        return "LapKnl%dD" % self.dim
 
     mapper_method = "map_laplace_kernel"
 
@@ -440,13 +434,10 @@ class BiharmonicKernel(ExpressionKernel):
                 is_complex_valued=False)
 
     def __getinitargs__(self):
-        return (self._dim,)
+        return (self.dim,)
 
     def __repr__(self):
-        if self._dim is not None:
-            return "BiharmKnl%dD" % self.dim
-        else:
-            return "BiharmKnl"
+        return "BiharmKnl%dD" % self.dim
 
     mapper_method = "map_biharmonic_kernel"
 
@@ -497,7 +488,7 @@ class HelmholtzKernel(ProxyExpressionKernel):
             return result / rscale**(nderivatives+1)
 
     def __getinitargs__(self):
-        return (self._dim, self.helmholtz_k_name,
+        return (self.dim, self.helmholtz_k_name,
                 self.allow_evanescent)
 
     def update_persistent_hash(self, key_hash, key_builder):
@@ -563,7 +554,7 @@ class YukawaKernel(ExpressionKernel):
         self.yukawa_lambda_name = yukawa_lambda_name
 
     def __getinitargs__(self):
-        return (self._dim, self.yukawa_lambda_name)
+        return (self.dim, self.yukawa_lambda_name)
 
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode("utf8"))
@@ -640,7 +631,7 @@ class StokesletKernel(ExpressionKernel):
                 is_complex_valued=False)
 
     def __getinitargs__(self):
-        return (self._dim, self.icomp, self.jcomp, self.viscosity_mu_name)
+        return (self.dim, self.icomp, self.jcomp, self.viscosity_mu_name)
 
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode())
@@ -706,7 +697,7 @@ class StressletKernel(ExpressionKernel):
                 is_complex_valued=False)
 
     def __getinitargs__(self):
-        return (self._dim, self.icomp, self.jcomp, self.kcomp,
+        return (self.dim, self.icomp, self.jcomp, self.kcomp,
                       self.viscosity_mu_name)
 
     def update_persistent_hash(self, key_hash, key_builder):
