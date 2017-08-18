@@ -127,7 +127,7 @@ class ToyContext(object):
 
 # {{{ helpers
 
-def _p2e(psource, center, order, p2e, expn_class, expn_kwargs):
+def _p2e(psource, center, rscale, order, p2e, expn_class, expn_kwargs):
     source_boxes = np.array([0], dtype=np.int32)
     box_source_starts = np.array([0], dtype=np.int32)
     box_source_counts_nonchild = np.array(
@@ -145,14 +145,15 @@ def _p2e(psource, center, order, p2e, expn_class, expn_kwargs):
             centers=centers,
             sources=psource.points,
             strengths=psource.weights,
+            rscale=rscale,
             nboxes=1,
             tgt_base_ibox=0,
 
             #flags="print_hl_cl",
             out_host=True, **toy_ctx.extra_source_kwargs)
 
-    return expn_class(toy_ctx, center, order, coeffs[0], derived_from=psource,
-            **expn_kwargs)
+    return expn_class(toy_ctx, center, rscale, order, coeffs[0],
+            derived_from=psource, **expn_kwargs)
 
 
 def _e2p(psource, targets, e2p):
@@ -176,6 +177,7 @@ def _e2p(psource, targets, e2p):
             box_target_starts=box_target_starts,
             box_target_counts_nonchild=box_target_counts_nonchild,
             centers=centers,
+            rscale=psource.rscale,
             targets=targets,
             #flags="print_hl_cl",
             out_host=True, **toy_ctx.extra_source_kwargs)
@@ -183,7 +185,7 @@ def _e2p(psource, targets, e2p):
     return pot
 
 
-def _e2e(psource, to_center, to_order, e2e, expn_class, expn_kwargs):
+def _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs):
     toy_ctx = psource.toy_ctx
 
     target_boxes = np.array([1], dtype=np.int32)
@@ -217,7 +219,7 @@ def _e2e(psource, to_center, to_order, e2e, expn_class, expn_kwargs):
             #flags="print_hl_cl",
             out_host=True, **toy_ctx.extra_source_kwargs)
 
-    return expn_class(toy_ctx, to_center, to_order, to_coeffs[1],
+    return expn_class(toy_ctx, to_center, to_rscale, to_order, to_coeffs[1],
             derived_from=psource, **expn_kwargs)
 
 # }}}
@@ -319,10 +321,11 @@ class ExpansionPotentialSource(PotentialSource):
 
         Not used mathematically. Just for visualization, purely advisory.
     """
-    def __init__(self, toy_ctx, center, order, coeffs, derived_from,
+    def __init__(self, toy_ctx, center, rscale, order, coeffs, derived_from,
             radius=None, expn_style=None):
         super(ExpansionPotentialSource, self).__init__(toy_ctx)
         self.center = np.asarray(center)
+        self.rscale = rscale
         self.order = order
         self.coeffs = coeffs
 
@@ -380,12 +383,12 @@ class Product(PotentialExpressionNode):
 # }}}
 
 
-def multipole_expand(psource, center, order=None, **expn_kwargs):
+def multipole_expand(psource, center, order=None, rscale=1, **expn_kwargs):
     if isinstance(psource, PointSources):
         if order is None:
             raise ValueError("order may not be None")
 
-        return _p2e(psource, center, order, psource.toy_ctx.get_p2m(order),
+        return _p2e(psource, center, rscale, order, psource.toy_ctx.get_p2m(order),
                 MultipoleExpansion, expn_kwargs)
 
     elif isinstance(psource, MultipoleExpansion):
@@ -401,12 +404,12 @@ def multipole_expand(psource, center, order=None, **expn_kwargs):
                 % type(psource).__name__)
 
 
-def local_expand(psource, center, order=None, **expn_kwargs):
+def local_expand(psource, center, order=None, rscale=1, **expn_kwargs):
     if isinstance(psource, PointSources):
         if order is None:
             raise ValueError("order may not be None")
 
-        return _p2e(psource, center, order, psource.toy_ctx.get_p2l(order),
+        return _p2e(psource, center, rscale, order, psource.toy_ctx.get_p2l(order),
                 LocalExpansion, expn_kwargs)
 
     elif isinstance(psource, MultipoleExpansion):

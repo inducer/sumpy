@@ -494,8 +494,7 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
                 and base_kernel.dim == 2):
             from sumpy.expansion.local import Y2DLocalExpansion
             return Y2DLocalExpansion
-        elif (isinstance(base_kernel.get_base_kernel(), HelmholtzKernel)
-                and base_kernel.dim == 3):
+        elif isinstance(base_kernel.get_base_kernel(), HelmholtzKernel):
             from sumpy.expansion.local import \
                     HelmholtzConformingVolumeTaylorLocalExpansion
             return HelmholtzConformingVolumeTaylorLocalExpansion
@@ -523,8 +522,7 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
             from sumpy.expansion.multipole import (
                     LaplaceConformingVolumeTaylorMultipoleExpansion)
             return LaplaceConformingVolumeTaylorMultipoleExpansion
-        elif (isinstance(base_kernel.get_base_kernel(), HelmholtzKernel)
-                and base_kernel.dim == 3):
+        elif isinstance(base_kernel.get_base_kernel(), HelmholtzKernel):
             from sumpy.expansion.multipole import (
                     HelmholtzConformingVolumeTaylorMultipoleExpansion)
             return HelmholtzConformingVolumeTaylorMultipoleExpansion

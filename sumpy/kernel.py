@@ -31,8 +31,10 @@ from sumpy.symbolic import pymbolic_real_norm_2
 from pymbolic.primitives import make_sym_vector
 from pymbolic import var
 
-__doc__ = """
 
+# FIXME: Rename ProxyExpressionKernel back to ExpressionKernel once we're done.
+
+__doc__ = """
 Kernel interface
 ----------------
 
@@ -48,6 +50,7 @@ PDE kernels
 -----------
 
 .. autoclass:: LaplaceKernel
+.. autoclass:: BiharmonicKernel
 .. autoclass:: HelmholtzKernel
 .. autoclass:: YukawaKernel
 .. autoclass:: StokesletKernel
@@ -101,12 +104,20 @@ class Kernel(object):
     .. attribute:: is_complex_valued
     .. attribute:: dim
 
-        *dim* is allowed to be *None* if the dimensionality is not yet
-        known.
+    .. automethod:: get_base_kernel
+    .. automethod:: prepare_loopy_kernel
+    .. automethod:: get_code_transformer
+    .. automethod:: get_proxy_expression
+    .. automethod:: adjust_proxy_expression
+    .. automethod:: postprocess_at_source
+    .. automethod:: postprocess_at_target
+    .. automethod:: get_global_scaling_const
+    .. automethod:: get_args
+    .. automethod:: get_source_args
     """
 
     def __init__(self, dim=None):
-        self._dim = dim
+        self.dim = dim
 
     # {{{ hashing/pickling/equality
 
@@ -140,20 +151,9 @@ class Kernel(object):
         # Can't use trivial pickling: hash_value cache must stay unset
         assert len(self.init_arg_names) == len(state)
         for name, value in zip(self.init_arg_names, state):
-            if name == "dim":
-                name = "_dim"
-
             setattr(self, name, value)
 
     # }}}
-
-    @property
-    def dim(self):
-        if self._dim is None:
-            raise RuntimeError("the number of dimensions for this kernel "
-                    "has not yet been set")
-
-        return self._dim
 
     def get_base_kernel(self):
         """Return the kernel being wrapped by this one, or else
@@ -170,16 +170,62 @@ class Kernel(object):
     def get_code_transformer(self):
         """Return a function to postprocess the :mod:`pymbolic`
         expression generated from the result of
-        :meth:`get_expression` on the way to code generation.
+        :meth:`get_proxy_expression` on the way to code generation.
         """
         return lambda expr: expr
 
-    def get_expression(self, dist_vec):
-        """Return a :mod:`sympy` expression for the kernel.
+    def get_proxy_expression(self, scaled_dist_vec):
+        r"""Return a proxy expression :math:`\tilde G(\vec \rho)` where
+        :math:`\vec \rho` is *scaled_dist_vec*. Here,
+        :math:`\vec \rho =\vec x/\alpha`,
+        where :math:`\alpha` is a scaling factor (often written as *rscale*)
+        used to ensure that :math:`\rho` has roughly unit magnitude and
+        :math:`\vec x=\text{target} - \text{source}`.  (In
+        an FMM, :math:`\alpha` would be chosen proportional to the
+        box size.) :math:`\tilde G` should be chosen so that (a)
+        no powers of :math:`\alpha` appear when symbolic derivatives
+        of it are taken with respect to :math:`\vec \rho` and
+        (b) the correct partial derivatives (with input scaling by :math:`\alpha`
+        can nonetheless be recovered) by :meth:`adjust_proxy_expression`.
 
-        :arg dist_vec: target - source
+        Let :math:`\hat G` be the result of calling
+        :meth:`adjust_proxy_expression` with
+        :math:`\partial_{\vec \rho}^\mu \tilde G` and with
+        *nderivatives* set equal to :math:`|\mu|=\sum_i \mu_i`,
+        where :math:`\mu` is a multi-index indicating
+        how many derivatives are being taken along each input axis.
 
-        (Assumes translation invariance of the kernel.)
+        Then the following equality is required to hold:
+
+        .. math::
+
+            \hat G(\vec \rho) \alpha^{|\mu|}
+            = \partial_{\vec \rho}^\mu \tilde G(\vec \rho) \alpha^{|\mu|}
+            = \partial_{\vec x}^\mu G(\vec x).
+
+        In other words, :meth:`adjust_proxy_expression` is *not*
+        responsible for applying the scaling :math:`\alpha^{|\mu|}`
+        resulting from the chain rule (this is managed separately within
+        :mod:`sumpy` in an effort to control expansion coefficient scaling),
+        but it should compensate for any other effects of the
+        scaling of the input variable.
+
+        As a worked example, consider a kernel of :math:`\log(x)`. The
+        proxy expression would be :math:`\log(\rho)`.
+
+        For ``nderivatives == 0``, :meth:`adjust_proxy_expression`
+        would return :math:`\tilde G + \log(\alpha)`.
+
+        For ``nderivatives > 0``, :meth:`adjust_proxy_expression`
+        would return :math:`\tilde G/\alpha^{\text{nderivatives}}`.
+
+        In each case, the added terms merely compensate for the missing
+        input scaling.
+        """
+        raise NotImplementedError
+
+    def adjust_proxy_expression(self, expr, rscale, nderivatives):
+        r"""See :meth:`get_proxy_expression`.
         """
         raise NotImplementedError
 
@@ -187,6 +233,9 @@ class Kernel(object):
         """Transform a kernel evaluation or expansion expression in a place
         where the vector a (something - source) is known. ("something" may be
         an expansion center or a target.)
+
+        The typical use of this function is to apply source-variable
+        derivatives to the kernel.
         """
         return expr
 
@@ -194,11 +243,20 @@ class Kernel(object):
         """Transform a kernel evaluation or expansion expression in a place
         where the vector b (target - something) is known. ("something" may be
         an expansion center or a target.)
+
+        The typical use of this function is to apply target-variable
+        derivatives to the kernel.
         """
         return expr
 
-    def get_scaling(self):
-        """Return a global scaling of the kernel."""
+    def get_global_scaling_const(self):
+        """Return a global scaling constant of the kernel.
+         Typically, this ensures that the kernel is scaled so that
+         :math:`\mathcal L(G)(x)=C\delta(x)` with a constant of 1, where
+         :math:`\mathcal L` is the PDE operator associated with the kernel.
+         Not to be confused with *rscale*, which keeps expansion
+         coefficients benignly scaled.
+        """
         raise NotImplementedError
 
     def get_args(self):
@@ -218,32 +276,42 @@ class Kernel(object):
 
 
 class ExpressionKernel(Kernel):
+    def get_expression(self, dist_vec):
+        raise NotImplementedError
+
+
+class ProxyExpressionKernel(Kernel):
     is_complex_valued = False
 
-    init_arg_names = ("dim", "expression", "scaling", "is_complex_valued")
+    init_arg_names = ("dim", "expression", "kernel_scaling", "is_complex_valued")
 
-    def __init__(self, dim, expression, scaling, is_complex_valued):
+    def __init__(self, dim, proxy_expression, global_scaling_const,
+            is_complex_valued):
         """
         :arg expression: A :mod:`pymbolic` expression depending on
             variables *d_1* through *d_N* where *N* equals *dim*.
             (These variables match what is returned from
             :func:`pymbolic.primitives.make_sym_vector` with
             argument `"d"`.)
-        :arg scaling: A :mod:`pymbolic` expression for the scaling
-            of the kernel.
+        :arg global_scaling_const: A constant :mod:`pymbolic` expression for the
+            global scaling of the kernel. Typically, this ensures that
+            the kernel is scaled so that :math:`\mathcal L(G)(x)=C\delta(x)`
+            with a constant of 1, where :math:`\mathcal L` is the PDE
+            operator associated with the kernel. Not to be confused with
+            *rscale*, which keeps expansion coefficients benignly scaled.
         """
 
-        # expression and scaling are pymbolic objects because those pickle
-        # cleanly. D'oh, sympy!
+        # expression and global_scaling_const are pymbolic objects because
+        # those pickle cleanly. D'oh, sympy!
 
         Kernel.__init__(self, dim)
 
-        self.expression = expression
-        self.scaling = scaling
+        self.proxy_expression = proxy_expression
+        self.global_scaling_const = global_scaling_const
         self.is_complex_valued = is_complex_valued
 
     def __getinitargs__(self):
-        return (self._dim, self.expression, self.scaling,
+        return (self._dim, self.expression, self.global_scaling_const,
                 self.is_complex_valued)
 
     def __repr__(self):
@@ -252,36 +320,27 @@ class ExpressionKernel(Kernel):
         else:
             return "ExprKnl"
 
-    def get_expression(self, dist_vec):
-        if self.expression is None:
-            raise RuntimeError("expression in ExpressionKernel has not "
-                    "been determined yet (this could be due to a PDE kernel "
-                    "not having learned its dimensionality yet)")
-
+    def get_proxy_expression(self, scaled_dist_vec):
         from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
-        expr = PymbolicToSympyMapperWithSymbols()(self.expression)
+        expr = PymbolicToSympyMapperWithSymbols()(self.proxy_expression)
 
-        if self.dim != len(dist_vec):
+        if self.dim != len(scaled_dist_vec):
             raise ValueError("dist_vec length does not match expected dimension")
 
         from sumpy.symbolic import Symbol
         expr = expr.subs(dict(
             (Symbol("d%d" % i), dist_vec_i)
-            for i, dist_vec_i in enumerate(dist_vec)
+            for i, dist_vec_i in enumerate(scaled_dist_vec)
             ))
 
         return expr
 
-    def get_scaling(self):
+    def get_global_scaling_const(self):
         """Return a global scaling of the kernel."""
 
-        if self.scaling is None:
-            raise RuntimeError("scaling in ExpressionKernel has not "
-                    "been determined yet (this could be due to a PDE kernel "
-                    "not having learned its dimensionality yet)")
-
         from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
-        return PymbolicToSympyMapperWithSymbols()(self.scaling)
+        return PymbolicToSympyMapperWithSymbols()(
+                self.global_scaling_const)
 
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode("utf8"))
@@ -296,21 +355,21 @@ class ExpressionKernel(Kernel):
     mapper_method = "map_expression_kernel"
 
 
-one_kernel_2d = ExpressionKernel(
+one_kernel_2d = ProxyExpressionKernel(
         dim=2,
-        expression=1,
-        scaling=1,
+        proxy_expression=1,
+        global_scaling_const=1,
         is_complex_valued=False)
-one_kernel_3d = ExpressionKernel(
+one_kernel_3d = ProxyExpressionKernel(
         dim=3,
-        expression=1,
-        scaling=1,
+        proxy_expression=1,
+        global_scaling_const=1,
         is_complex_valued=False)
 
 
 # {{{ PDE kernels
 
-class LaplaceKernel(ExpressionKernel):
+class LaplaceKernel(ProxyExpressionKernel):
     init_arg_names = ("dim",)
 
     def __init__(self, dim=None):
@@ -324,14 +383,27 @@ class LaplaceKernel(ExpressionKernel):
             expr = 1/r
             scaling = 1/(4*var("pi"))
         else:
-            raise RuntimeError("unsupported dimensionality")
+            raise NotImplementedError("unsupported dimensionality")
 
-        ExpressionKernel.__init__(
-                self,
+        super(LaplaceKernel, self).__init__(
                 dim,
-                expression=expr,
-                scaling=scaling,
+                proxy_expression=expr,
+                global_scaling_const=scaling,
                 is_complex_valued=False)
+
+    def adjust_proxy_expression(self, expr, rscale, nderivatives):
+        if self.dim == 2:
+            if nderivatives == 0:
+                import sympy as sp
+                return expr + sp.log(rscale)
+            else:
+                return expr / rscale**nderivatives
+
+        elif self.dim == 3:
+            return expr / rscale**(nderivatives+1)
+
+        else:
+            raise NotImplementedError("unsupported dimensionality")
 
     def __getinitargs__(self):
         return (self._dim,)
@@ -354,6 +426,7 @@ class BiharmonicKernel(ExpressionKernel):
             expr = r**2 * var("log")(r)
             scaling = 1/(8*var("pi"))
         elif dim == 3:
+            raise RuntimeError("unsupported dimensionality")
             expr = r
             scaling = 1  # FIXME: Unknown
         else:
@@ -378,7 +451,7 @@ class BiharmonicKernel(ExpressionKernel):
     mapper_method = "map_biharmonic_kernel"
 
 
-class HelmholtzKernel(ExpressionKernel):
+class HelmholtzKernel(ProxyExpressionKernel):
     init_arg_names = ("dim", "helmholtz_k_name", "allow_evanescent")
 
     def __init__(self, dim=None, helmholtz_k_name="k",
@@ -403,15 +476,25 @@ class HelmholtzKernel(ExpressionKernel):
         else:
             raise RuntimeError("unsupported dimensionality")
 
-        ExpressionKernel.__init__(
-                self,
+        super(HelmholtzKernel, self).__init__(
                 dim,
-                expression=expr,
-                scaling=scaling,
+                proxy_expression=expr,
+                global_scaling_const=scaling,
                 is_complex_valued=True)
 
         self.helmholtz_k_name = helmholtz_k_name
         self.allow_evanescent = allow_evanescent
+
+    def adjust_proxy_expression(self, expr, rscale, nderivatives):
+        import sympy as sp
+        result = expr.subs(
+            sp.Symbol(self.helmholtz_k_name),
+            sp.Symbol(self.helmholtz_k_name) * rscale)
+
+        if self.dim == 2:
+            return result
+        else:
+            return result / rscale**(nderivatives+1)
 
     def __getinitargs__(self):
         return (self._dim, self.helmholtz_k_name,
@@ -665,8 +748,11 @@ class KernelWrapper(Kernel):
     def is_complex_valued(self):
         return self.inner_kernel.is_complex_valued
 
-    def get_expression(self, dist_vec):
-        return self.inner_kernel.get_expression(dist_vec)
+    def get_proxy_expression(self, scaled_dist_vec):
+        return self.inner_kernel.get_proxy_expression(scaled_dist_vec)
+
+    def adjust_proxy_expression(self, expr, rscale, nderivatives):
+        return self.inner_kernel.adjust_proxy_expression(expr, rscale, nderivatives)
 
     def postprocess_at_source(self, expr, avec):
         return self.inner_kernel.postprocess_at_source(expr, avec)
@@ -674,8 +760,8 @@ class KernelWrapper(Kernel):
     def postprocess_at_target(self, expr, avec):
         return self.inner_kernel.postprocess_at_target(expr, avec)
 
-    def get_scaling(self):
-        return self.inner_kernel.get_scaling()
+    def get_global_scaling_const(self):
+        return self.inner_kernel.get_global_scaling_const()
 
     def get_code_transformer(self):
         return self.inner_kernel.get_code_transformer()

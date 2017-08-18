@@ -271,7 +271,7 @@ class KernelComputation(object):
         return [
                 lp.Assignment(id=None,
                     assignee="knl_%d_scaling" % i,
-                    expression=sympy_conv(kernel.get_scaling()),
+                    expression=sympy_conv(kernel.get_global_scaling_const()),
                     temp_var_type=dtype)
                 for i, (kernel, dtype) in enumerate(
                     zip(self.kernels, self.value_dtypes))]
@@ -429,6 +429,16 @@ def my_syntactic_subs(expr, subst_dict):
             return expr.func(*new_args)
 
         return expr
+
+
+def sympy_vec_subs(from_vec, to_vec, expr):
+    subs_pairs = []
+    assert (from_vec.rows, from_vec.cols) == (to_vec.rows, to_vec.cols)
+    for irow in range(from_vec.rows):
+        for icol in range(from_vec.cols):
+            subs_pairs.append((from_vec[irow, icol], to_vec[irow, icol]))
+
+    return expr.subs(subs_pairs)
 
 
 # vim: fdm=marker

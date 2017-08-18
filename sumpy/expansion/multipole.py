@@ -25,6 +25,7 @@ THE SOFTWARE.
 from six.moves import range, zip
 import sumpy.symbolic as sym  # noqa
 
+from sumpy.tools import sympy_vec_subs
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
     HelmholtzConformingVolumeTaylorExpansion)
@@ -53,11 +54,13 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
     Coefficients represent the terms in front of the kernel derivatives.
     """
 
-    def coefficients_from_source(self, avec, bvec):
+    def coefficients_from_source(self, avec, bvec, rscale):
         from sumpy.kernel import DirectionalSourceDerivative
         kernel = self.kernel
 
         from sumpy.tools import mi_power, mi_factorial
+
+        avec = avec/rscale
 
         if isinstance(kernel, DirectionalSourceDerivative):
             if kernel.get_base_kernel() is not kernel.inner_kernel:
@@ -90,18 +93,24 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         return (
             self.derivative_wrangler.get_stored_mpole_coefficients_from_full(result))
 
-    def evaluate(self, coeffs, bvec):
-        taker = self.get_kernel_derivative_taker(bvec)
+    def evaluate(self, coeffs, bvec, rscale):
+        taker = self.get_kernel_derivative_taker(bvec, rscale)
         result = sym.Add(*tuple(
-                coeff * taker.diff(mi)
+                coeff
+                * self.kernel.adjust_proxy_expression(
+                    sympy_vec_subs(
+                        bvec, bvec/rscale,
+                        taker.diff(mi)),
+                    rscale,
+                    sum(mi))
+                * rscale**sum(mi)
                 for coeff, mi in zip(coeffs, self.get_coefficient_identifiers())))
+
         return result
 
-    def get_kernel_derivative_taker(self, bvec):
-        ppkernel = self.kernel.postprocess_at_target(
-                self.kernel.get_expression(bvec), bvec)
-
-        return self.derivative_wrangler.get_derivative_taker(ppkernel, bvec)
+    def get_kernel_derivative_taker(self, bvec, rscale):
+        return (self.derivative_wrangler.get_derivative_taker(
+            self.kernel.get_proxy_expression(bvec), bvec))
 
     def translate_from(self, src_expansion, src_coeff_exprs, dvec):
         if not isinstance(src_expansion, type(self)):

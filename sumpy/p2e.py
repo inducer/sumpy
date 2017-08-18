@@ -73,13 +73,16 @@ class P2EBase(KernelCacheWrapper):
         from sumpy.symbolic import make_sym_vector
         avec = make_sym_vector("a", self.dim)
 
+        import sympy as sp
+        rscale = sp.Symbol("rscale")
+
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
 
         coeff_names = [
                 sac.assign_unique("coeff%d" % i, coeff_i)
                 for i, coeff_i in enumerate(
-                    self.expansion.coefficients_from_source(avec, None))]
+                    self.expansion.coefficients_from_source(avec, None, rscale))]
 
         sac.run_global_cse()
 
@@ -93,7 +96,7 @@ class P2EBase(KernelCacheWrapper):
                 )
 
     def get_cache_key(self):
-        return (type(self).__name__, self.expansion)
+        return (type(self).__name__, self.name, self.expansion)
 
 # }}}
 
@@ -140,6 +143,7 @@ class P2EFromSingleBox(P2EBase):
                     lp.GlobalArg("box_source_starts,box_source_counts_nonchild",
                         None, shape=None),
                     lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
+                    lp.ValueArg("rscale", None),
                     lp.GlobalArg("tgt_expansions", None,
                         shape=("nboxes", ncoeffs), offset=lp.auto),
                     lp.ValueArg("nboxes,aligned_nboxes,tgt_base_ibox", np.int32),
@@ -174,10 +178,16 @@ class P2EFromSingleBox(P2EBase):
         :arg centers:
         :arg sources:
         :arg strengths:
+        :arg rscale:
         """
+        centers = kwargs.pop("centers")
+        # "1" may be passed for rscale, which won't have its type
+        # meaningfully inferred. Make the type of rscale explicit.
+        rscale = centers.dtype.type(kwargs.pop("rscale"))
+
         knl = self.get_cached_optimized_kernel()
 
-        return knl(queue, **kwargs)
+        return knl(queue, centers=centers, rscale=rscale, **kwargs)
 
 # }}}
 
