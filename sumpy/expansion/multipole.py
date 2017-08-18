@@ -204,7 +204,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
     def get_coefficient_identifiers(self):
         return list(range(-self.order, self.order+1))
 
-    def coefficients_from_source(self, avec, bvec):
+    def coefficients_from_source(self, avec, bvec, rscale):
         from sumpy.symbolic import sym_real_norm_2
         bessel_j = sym.Function("bessel_j")
         avec_len = sym_real_norm_2(avec)
@@ -213,12 +213,15 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
 
         # The coordinates are negated since avec points from source to center.
         source_angle_rel_center = sym.atan2(-avec[1], -avec[0])
-        return [self.kernel.postprocess_at_source(
-                    bessel_j(l, arg_scale * avec_len) *
-                    sym.exp(sym.I * l * -source_angle_rel_center), avec)
+        return [
+                self.kernel.postprocess_at_source(
+                    bessel_j(l, arg_scale * avec_len)
+                    / rscale ** abs(l)
+                    * sym.exp(sym.I * l * -source_angle_rel_center),
+                    avec)
                 for l in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec):
+    def evaluate(self, coeffs, bvec, rscale):
         from sumpy.symbolic import sym_real_norm_2
         hankel_1 = sym.Function("hankel_1")
         bvec_len = sym_real_norm_2(bvec)
@@ -229,6 +232,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
         return sum(coeffs[self.get_storage_index(l)]
                    * self.kernel.postprocess_at_target(
                        hankel_1(l, arg_scale * bvec_len)
+                       * rscale ** abs(l)
                        * sym.exp(sym.I * l * target_angle_rel_center), bvec)
                 for l in self.get_coefficient_identifiers())
 
