@@ -1,5 +1,4 @@
 from __future__ import division, absolute_import
-from six.moves import range, zip
 
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
@@ -23,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from six.moves import range, zip
 import sumpy.symbolic as sym
 
 from sumpy.expansion import (
