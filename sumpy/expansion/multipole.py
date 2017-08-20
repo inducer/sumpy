@@ -100,21 +100,20 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         if not self.kernel.supports_rscale:
             rscale = 1
 
-        taker = self.get_kernel_derivative_taker(bvec, rscale)
+        taker = self.get_kernel_derivative_taker(bvec)
         result = sym.Add(*tuple(
                 coeff
                 * self.kernel.adjust_proxy_expression(
                     sympy_vec_subs(
                         bvec, bvec/rscale,
                         taker.diff(mi)),
-                    rscale,
-                    sum(mi))
+                    rscale, sum(mi))
                 * rscale**sum(mi)
                 for coeff, mi in zip(coeffs, self.get_coefficient_identifiers())))
 
         return result
 
-    def get_kernel_derivative_taker(self, bvec, rscale):
+    def get_kernel_derivative_taker(self, bvec):
         return (self.derivative_wrangler.get_derivative_taker(
             self.kernel.get_proxy_expression(bvec), bvec))
 
