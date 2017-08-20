@@ -36,10 +36,10 @@ def main():
             np.ones(50))
 
     mctr = scale*np.array([0., 0, 0])[:dim]
-    mexp = t.multipole_expand(pt_src, mctr, order=order, rscale=1)
+    mexp = t.multipole_expand(pt_src, mctr, order=order, rscale=scale)
 
     lctr = scale*np.array([2.5, 0, 0])[:dim]
-    lexp = t.local_expand(mexp, lctr, order=order, rscale=1)
+    lexp = t.local_expand(mexp, lctr, order=order, rscale=scale)
 
     print(mexp.coeffs)
     print(lexp.coeffs)

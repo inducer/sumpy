@@ -121,7 +121,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         taker = MiDerivativeTaker(ppkernel, avec)
         return [
-                self.kernel.adjust_proxy_expression(taker.diff(mi), 1, 0)
+                self.kernel.adjust_proxy_expression(taker.diff(mi), 1, 0, factor=1)
                 * rscale**sum(mi)
                 for mi in self.get_coefficient_identifiers()]
 
@@ -178,12 +178,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                                 dvec, dvec/src_rscale,
                                 taker.diff(add_mi(deriv, term)),
                                 ),
-                            src_rscale, sum(deriv) + sum(term))
+                            src_rscale, sum(deriv) + sum(term),
+                            factor=src_rscale**sum(term))
 
                     local_result.append(
-                            coeff * kernel_deriv
-                            * src_rscale**sum(term)
-                            * tgt_rscale**sum(deriv))
+                            coeff * kernel_deriv * tgt_rscale**sum(deriv))
                 result.append(sym.Add(*local_result))
         else:
             from sumpy.tools import MiDerivativeTaker

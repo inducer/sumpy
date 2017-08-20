@@ -225,8 +225,15 @@ class Kernel(object):
         """
         raise NotImplementedError
 
-    def adjust_proxy_expression(self, expr, rscale, nderivatives):
+    def adjust_proxy_expression(self, expr, rscale, nderivatives, factor):
         r"""See :meth:`get_proxy_expression`.
+
+        :arg factor: a factor by which the result is to be mutliplied.
+            The idea here is that :meth:`adjust_proxy_expression` will
+            often result in the application of a scale factor. Supplying
+            an additional scale factors gives :mod:`sympy` the opportunity
+            to first simplify the scale factor before applying it to the
+            result.
         """
         raise NotImplementedError
 
@@ -385,13 +392,13 @@ class LaplaceKernel(ExpressionKernel):
                 global_scaling_const=scaling,
                 is_complex_valued=False)
 
-    def adjust_proxy_expression(self, expr, rscale, nderivatives):
+    def adjust_proxy_expression(self, expr, rscale, nderivatives, factor):
         if self.dim == 2:
             if nderivatives == 0:
                 import sympy as sp
-                return expr + sp.log(rscale)
+                return (expr + sp.log(rscale)) * factor
             else:
-                return expr / rscale**nderivatives
+                return expr * (factor / rscale**nderivatives)
 
         elif self.dim == 3:
             return expr / rscale**(nderivatives+1)
@@ -430,9 +437,9 @@ class BiharmonicKernel(ExpressionKernel):
                 global_scaling_const=scaling,
                 is_complex_valued=False)
 
-    def adjust_proxy_expression(self, expr, rscale, nderivatives):
+    def adjust_proxy_expression(self, expr, rscale, nderivatives, factor):
         assert rscale == 1
-        return expr
+        return expr * factor
 
     def __getinitargs__(self):
         return (self.dim,)
@@ -478,16 +485,16 @@ class HelmholtzKernel(ExpressionKernel):
         self.helmholtz_k_name = helmholtz_k_name
         self.allow_evanescent = allow_evanescent
 
-    def adjust_proxy_expression(self, expr, rscale, nderivatives):
+    def adjust_proxy_expression(self, expr, rscale, nderivatives, factor):
         import sympy as sp
         result = expr.subs(
             sp.Symbol(self.helmholtz_k_name),
             sp.Symbol(self.helmholtz_k_name) * rscale)
 
         if self.dim == 2:
-            return result
+            return result * factor
         elif self.dim == 3:
-            return result / rscale**(nderivatives+1)
+            return result * (factor / rscale**(nderivatives+1))
         else:
             raise RuntimeError("unsupported dimensionality")
 
@@ -557,16 +564,16 @@ class YukawaKernel(ExpressionKernel):
 
         self.yukawa_lambda_name = yukawa_lambda_name
 
-    def adjust_proxy_expression(self, expr, rscale, nderivatives):
+    def adjust_proxy_expression(self, expr, rscale, nderivatives, factor):
         import sympy as sp
         result = expr.subs(
             sp.Symbol(self.yukawa_lambda_name),
             sp.Symbol(self.yukawa_lambda_name) * rscale)
 
         if self.dim == 2:
-            return result
+            return result * factor
         elif self.dim == 3:
-            return result / rscale**(nderivatives+1)
+            return result * (factor / rscale**(nderivatives+1))
         else:
             raise RuntimeError("unsupported dimensionality")
 
@@ -647,9 +654,9 @@ class StokesletKernel(ExpressionKernel):
                 global_scaling_const=scaling,
                 is_complex_valued=False)
 
-    def adjust_proxy_expression(self, expr, rscale, nderivatives):
+    def adjust_proxy_expression(self, expr, rscale, nderivatives, factor):
         assert rscale == 1
-        return expr
+        return expr * factor
 
     def __getinitargs__(self):
         return (self.dim, self.icomp, self.jcomp, self.viscosity_mu_name)
@@ -717,9 +724,9 @@ class StressletKernel(ExpressionKernel):
                 global_scaling_const=scaling,
                 is_complex_valued=False)
 
-    def adjust_proxy_expression(self, expr, rscale, nderivatives):
+    def adjust_proxy_expression(self, expr, rscale, nderivatives, factor):
         assert rscale == 1
-        return expr
+        return expr * factor
 
     def __getinitargs__(self):
         return (self.dim, self.icomp, self.jcomp, self.kcomp,
@@ -767,8 +774,9 @@ class KernelWrapper(Kernel):
     def get_proxy_expression(self, scaled_dist_vec):
         return self.inner_kernel.get_proxy_expression(scaled_dist_vec)
 
-    def adjust_proxy_expression(self, expr, rscale, nderivatives):
-        return self.inner_kernel.adjust_proxy_expression(expr, rscale, nderivatives)
+    def adjust_proxy_expression(self, expr, rscale, nderivatives, factor):
+        return self.inner_kernel.adjust_proxy_expression(
+                expr, rscale, nderivatives, factor)
 
     def postprocess_at_source(self, expr, avec):
         return self.inner_kernel.postprocess_at_source(expr, avec)

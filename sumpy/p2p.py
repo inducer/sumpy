@@ -81,7 +81,7 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
                         knl.postprocess_at_source(
                             knl.adjust_proxy_expression(
                                 knl.get_proxy_expression(dvec),
-                                rscale=1, nderivatives=0),
+                                rscale=1, nderivatives=0, factor=1),
                             dvec),
                         dvec)
                     )

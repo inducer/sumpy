@@ -107,8 +107,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                     sympy_vec_subs(
                         bvec, bvec/rscale,
                         taker.diff(mi)),
-                    rscale, sum(mi))
-                * rscale**sum(mi)
+                    rscale, sum(mi), factor=rscale**sum(mi))
                 for coeff, mi in zip(coeffs, self.get_coefficient_identifiers())))
 
         return result
