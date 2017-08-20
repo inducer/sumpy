@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 def main():
     dim = 2
-    order = 20
+    order = 10
 
     from sumpy.kernel import (  # noqa: F401
             YukawaKernel, HelmholtzKernel, LaplaceKernel,
@@ -35,16 +35,18 @@ def main():
             scale * pts,
             np.ones(50))
 
-    mctr = scale*np.array([0., 0, 0])[:dim]
-    mexp = t.multipole_expand(pt_src, mctr, order=order, rscale=scale)
+    #mctr = scale*np.array([0., 0, 0])[:dim]
+    #mexp = t.multipole_expand(pt_src, mctr, order=order, rscale=scale)
 
+    lctr1 = scale*np.array([2.8, 0, 0])[:dim]
     lctr = scale*np.array([2.5, 0, 0])[:dim]
-    lexp = t.local_expand(mexp, lctr, order=order, rscale=scale)
+    lexp1 = t.local_expand(pt_src, lctr1, order=order, rscale=scale)
+    lexp = t.local_expand(lexp1, lctr, order=order, rscale=scale)
 
-    print(mexp.coeffs)
+    #print(mexp.coeffs)
     print(lexp.coeffs)
 
-    diff = lexp - pt_src
+    diff = lexp1 - pt_src
 
     diag = np.sqrt(dim)
     print(t.l_inf(diff, scale*0.5*diag, center=lctr)
