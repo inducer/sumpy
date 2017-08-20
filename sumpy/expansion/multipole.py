@@ -116,11 +116,16 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         return (self.derivative_wrangler.get_derivative_taker(
             self.kernel.get_proxy_expression(bvec), bvec))
 
-    def translate_from(self, src_expansion, src_coeff_exprs, dvec):
+    def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
+            dvec, tgt_rscale):
         if not isinstance(src_expansion, type(self)):
             raise RuntimeError("do not know how to translate %s to "
                     "Taylor multipole expansion"
                                % type(src_expansion).__name__)
+
+        if not self.kernel.supports_rscale:
+            src_rscale = 1
+            tgt_rscale = 1
 
         logger.info("building translation operator: %s(%d) -> %s(%d): start"
                 % (type(src_expansion).__name__,
@@ -161,7 +166,10 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                     contrib *= (binomial(n, k)
                             * dvec[idim]**(n-k))
 
-                result[i] += contrib
+                result[i] += (
+                        contrib
+                        * src_rscale**sum(src_mi)
+                        / tgt_rscale**sum(tgt_mi))
 
             result[i] /= mi_factorial(tgt_mi)
 

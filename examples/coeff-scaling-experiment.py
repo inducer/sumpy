@@ -35,20 +35,20 @@ def main():
             scale * pts,
             np.ones(50))
 
-    #mctr = scale*np.array([0., 0, 0])[:dim]
-    #mctr1 = scale*np.array([0., 0.2, 0])[:dim]
-    #mexp1 = t.multipole_expand(pt_src, mctr1, order=order, rscale=scale)
-    #mexp = t.multipole_expand(mexp1, mctr, order=order, rscale=scale)
+    mctr = scale*np.array([0., 0, 0])[:dim]
+    mctr1 = scale*np.array([0.2, 0, 0])[:dim]
+    mexp1 = t.multipole_expand(pt_src, mctr1, order=order, rscale=scale)
+    mexp = t.multipole_expand(mexp1, mctr, order=order, rscale=scale)
 
-    lctr1 = scale*np.array([2.8, 0, 0])[:dim]
+    #lctr1 = scale*np.array([2.8, 0, 0])[:dim]
     lctr = scale*np.array([2.5, 0, 0])[:dim]
-    lexp1 = t.local_expand(pt_src, lctr1, order=order, rscale=scale)
-    lexp = t.local_expand(lexp1, lctr, order=order, rscale=scale)
+    #lexp1 = t.local_expand(pt_src, lctr1, order=order, rscale=scale)
+    #lexp = t.local_expand(lexp1, lctr, order=order, rscale=scale)
 
-    #print(mexp.coeffs)
-    print(lexp.coeffs)
+    print(mexp.coeffs)
+    #print(lexp.coeffs)
 
-    diff = lexp - pt_src
+    diff = mexp - pt_src
 
     diag = np.sqrt(dim)
     print(t.l_inf(diff, scale*0.5*diag, center=lctr)
