@@ -176,22 +176,22 @@ class Kernel(object):
         return lambda expr: expr
 
     def get_proxy_expression(self, scaled_dist_vec):
-        r"""Return a proxy expression :math:`\tilde G(\vec \rho)` where
-        :math:`\vec \rho` is *scaled_dist_vec*. Here,
-        :math:`\vec \rho =\vec x/\alpha`,
+        r"""Return a proxy expression :math:`\tilde G(\vec \delta)` where
+        :math:`\vec \delta` is *scaled_dist_vec*. Here,
+        :math:`\vec \delta =\vec d/\alpha`,
         where :math:`\alpha` is a scaling factor (often written as *rscale*)
-        used to ensure that :math:`\rho` has roughly unit magnitude and
-        :math:`\vec x=\text{target} - \text{source}`.  (In
+        used to ensure that :math:`\delta` has roughly unit magnitude and
+        :math:`\vec d=\text{target} - \text{source}`.  (In
         an FMM, :math:`\alpha` would be chosen proportional to the
         box size.) :math:`\tilde G` should be chosen so that (a)
         no powers of :math:`\alpha` appear when symbolic derivatives
-        of it are taken with respect to :math:`\vec \rho` and
+        of it are taken with respect to :math:`\vec \delta` and
         (b) the correct partial derivatives (with input scaling by :math:`\alpha`
         can nonetheless be recovered) by :meth:`adjust_proxy_expression`.
 
         Let :math:`\hat G` be the result of calling
         :meth:`adjust_proxy_expression` with
-        :math:`\partial_{\vec \rho}^\mu \tilde G` and with
+        :math:`\partial_{\vec \delta}^\mu \tilde G` and with
         *nderivatives* set equal to :math:`|\mu|=\sum_i \mu_i`,
         where :math:`\mu` is a multi-index indicating
         how many derivatives are being taken along each input axis.
@@ -200,9 +200,9 @@ class Kernel(object):
 
         .. math::
 
-            \hat G(\vec \rho) \alpha^{|\mu|}
-            = \partial_{\vec \rho}^\mu \tilde G(\vec \rho) \alpha^{|\mu|}
-            = \partial_{\vec x}^\mu G(\vec x).
+            \hat G(\vec \delta) \alpha^{|\mu|}
+            = \partial_{\vec \delta}^\mu \tilde G(\vec \delta) \alpha^{|\mu|}
+            = \partial_{\vec d}^\mu G(\vec d).
 
         In other words, :meth:`adjust_proxy_expression` is *not*
         responsible for applying the scaling :math:`\alpha^{|\mu|}`
@@ -212,7 +212,7 @@ class Kernel(object):
         scaling of the input variable.
 
         As a worked example, consider a kernel of :math:`\log(x)`. The
-        proxy expression would be :math:`\log(\rho)`.
+        proxy expression would be :math:`\log(\delta)`.
 
         For ``nderivatives == 0``, :meth:`adjust_proxy_expression`
         would return :math:`\tilde G + \log(\alpha)`.
