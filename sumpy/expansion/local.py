@@ -186,11 +186,10 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 result.append(sym.Add(*local_result))
         else:
             from sumpy.tools import MiDerivativeTaker
-            expr = src_expansion.evaluate(src_coeff_exprs, dvec, rscale=1)
+            expr = src_expansion.evaluate(src_coeff_exprs, dvec, rscale=src_rscale)
             taker = MiDerivativeTaker(expr, dvec)
-            rscale = tgt_rscale/src_rscale
             result = [
-                    taker.diff(mi) * rscale**sum(mi)
+                    (taker.diff(mi) * tgt_rscale**sum(mi)).expand()
                     for mi in self.get_coefficient_identifiers()]
 
         logger.info("building translation operator: done")
