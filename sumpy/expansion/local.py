@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 from six.moves import range, zip
 import sumpy.symbolic as sym
+from sumpy.tools import sympy_vec_subs
 
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
@@ -137,12 +138,17 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                         evaluated_coeffs, self.get_full_coefficient_identifiers()))
         return result
 
-    def translate_from(self, src_expansion, src_coeff_exprs, dvec):
+    def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
+            dvec, tgt_rscale):
         logger.info("building translation operator: %s(%d) -> %s(%d): start"
                 % (type(src_expansion).__name__,
                     src_expansion.order,
                     type(self).__name__,
                     self.order))
+
+        if not self.kernel.supports_rscale:
+            src_rscale = 1
+            tgt_rscale = 1
 
         from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansionBase
         if isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
@@ -155,6 +161,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             #
             # This code speeds up derivative taking by caching all kernel
             # derivatives.
+
             taker = src_expansion.get_kernel_derivative_taker(dvec)
 
             from sumpy.tools import add_mi
@@ -165,8 +172,18 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 for coeff, term in zip(
                         src_coeff_exprs,
                         src_expansion.get_coefficient_identifiers()):
-                    kernel_deriv = taker.diff(add_mi(deriv, term))
-                    local_result.append(coeff * kernel_deriv)
+
+                    kernel_deriv = self.kernel.adjust_proxy_expression(
+                            sympy_vec_subs(
+                                dvec, dvec/src_rscale,
+                                taker.diff(add_mi(deriv, term)),
+                                ),
+                            src_rscale, sum(deriv) + sum(term))
+
+                    local_result.append(
+                            coeff * kernel_deriv
+                            * src_rscale**sum(term)
+                            * tgt_rscale**sum(deriv))
                 result.append(sym.Add(*local_result))
         else:
             from sumpy.tools import MiDerivativeTaker
