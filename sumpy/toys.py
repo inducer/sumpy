@@ -216,6 +216,10 @@ def _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs):
             src_box_starts=src_box_starts,
             src_box_lists=src_box_lists,
             centers=centers,
+
+            src_rscale=psource.rscale,
+            tgt_rscale=to_rscale,
+
             #flags="print_hl_cl",
             out_host=True, **toy_ctx.extra_source_kwargs)
 
@@ -395,7 +399,7 @@ def multipole_expand(psource, center, order=None, rscale=1, **expn_kwargs):
         if order is None:
             order = psource.order
 
-        return _e2e(psource, center, order,
+        return _e2e(psource, center, rscale, order,
                 psource.toy_ctx.get_m2m(psource.order, order),
                 MultipoleExpansion, expn_kwargs)
 
@@ -416,7 +420,7 @@ def local_expand(psource, center, order=None, rscale=1, **expn_kwargs):
         if order is None:
             order = psource.order
 
-        return _e2e(psource, center, order,
+        return _e2e(psource, center, rscale, order,
                 psource.toy_ctx.get_m2l(psource.order, order),
                 LocalExpansion, expn_kwargs)
 
@@ -424,7 +428,7 @@ def local_expand(psource, center, order=None, rscale=1, **expn_kwargs):
         if order is None:
             order = psource.order
 
-        return _e2e(psource, center, order,
+        return _e2e(psource, center, rscale, order,
                 psource.toy_ctx.get_l2l(psource.order, order),
                 LocalExpansion, expn_kwargs)
 
