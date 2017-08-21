@@ -275,7 +275,8 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                        * sym.exp(sym.I * l * -target_angle_rel_center), bvec)
                 for l in self.get_coefficient_identifiers())
 
-    def translate_from(self, src_expansion, src_coeff_exprs, dvec):
+    def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
+            dvec, tgt_rscale):
         from sumpy.symbolic import sym_real_norm_2
 
         arg_scale = self.get_bessel_arg_scaling()
@@ -289,6 +290,8 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                 translated_coeffs.append(
                     sum(src_coeff_exprs[src_expansion.get_storage_index(m)]
                         * bessel_j(m - l, arg_scale * dvec_len)
+                        / src_rscale ** abs(m)
+                        * tgt_rscale ** abs(l)
                         * sym.exp(sym.I * (m - l) * -new_center_angle_rel_old_center)
                     for m in src_expansion.get_coefficient_identifiers()))
             return translated_coeffs
@@ -300,7 +303,11 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             translated_coeffs = []
             for l in self.get_coefficient_identifiers():
                 translated_coeffs.append(
-                    sum((-1) ** l * hankel_1(m + l, arg_scale * dvec_len)
+                    sum(
+                        (-1) ** l
+                        * hankel_1(m + l, arg_scale * dvec_len)
+                        * src_rscale ** abs(m)
+                        * tgt_rscale ** abs(l)
                         * sym.exp(sym.I * (m + l) * new_center_angle_rel_old_center)
                         * src_coeff_exprs[src_expansion.get_storage_index(m)]
                     for m in src_expansion.get_coefficient_identifiers()))
