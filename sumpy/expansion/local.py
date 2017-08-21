@@ -310,7 +310,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                         * tgt_rscale ** abs(l)
                         * sym.exp(sym.I * (m + l) * new_center_angle_rel_old_center)
                         * src_coeff_exprs[src_expansion.get_storage_index(m)]
-                    for m in src_expansion.get_coefficient_identifiers()))
+                        for m in src_expansion.get_coefficient_identifiers()))
             return translated_coeffs
 
         raise RuntimeError("do not know how to translate %s to %s"
