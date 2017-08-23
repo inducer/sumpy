@@ -44,7 +44,8 @@ class ToyContext(object):
             mpole_expn_class=None,
             local_expn_class=None,
             expansion_factory=None,
-            extra_source_kwargs=None):
+            extra_source_kwargs=None,
+            extra_kernel_kwargs=None):
         self.cl_context = cl_context
         self.queue = cl.CommandQueue(self.cl_context)
         self.kernel = kernel
@@ -61,12 +62,20 @@ class ToyContext(object):
             local_expn_class = \
                     expansion_factory.get_local_expansion_class(kernel)
 
-        if extra_source_kwargs is None:
-            extra_source_kwargs = {}
-
         self.mpole_expn_class = mpole_expn_class
         self.local_expn_class = local_expn_class
+
+        if extra_source_kwargs is None:
+            extra_source_kwargs = {}
+        if extra_kernel_kwargs is None:
+            extra_kernel_kwargs = {}
+
         self.extra_source_kwargs = extra_source_kwargs
+        self.extra_kernel_kwargs = extra_kernel_kwargs
+
+        extra_source_and_kernel_kwargs = extra_source_kwargs.copy()
+        extra_source_and_kernel_kwargs.update(extra_kernel_kwargs)
+        self.extra_source_and_kernel_kwargs = extra_source_and_kernel_kwargs
 
     @memoize_method
     def get_p2p(self):
@@ -150,7 +159,8 @@ def _p2e(psource, center, rscale, order, p2e, expn_class, expn_kwargs):
             tgt_base_ibox=0,
 
             #flags="print_hl_cl",
-            out_host=True, **toy_ctx.extra_source_kwargs)
+            out_host=True,
+            **toy_ctx.extra_source_and_kernel_kwargs)
 
     return expn_class(toy_ctx, center, rscale, order, coeffs[0],
             derived_from=psource, **expn_kwargs)
@@ -180,7 +190,7 @@ def _e2p(psource, targets, e2p):
             rscale=psource.rscale,
             targets=targets,
             #flags="print_hl_cl",
-            out_host=True, **toy_ctx.extra_source_kwargs)
+            out_host=True, **toy_ctx.extra_kernel_kwargs)
 
     return pot
 
@@ -221,7 +231,7 @@ def _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs):
             tgt_rscale=to_rscale,
 
             #flags="print_hl_cl",
-            out_host=True, **toy_ctx.extra_source_kwargs)
+            out_host=True, **toy_ctx.extra_kernel_kwargs)
 
     return expn_class(toy_ctx, to_center, to_rscale, to_order, to_coeffs[1],
             derived_from=psource, **expn_kwargs)
@@ -307,7 +317,9 @@ class PointSources(PotentialSource):
     def eval(self, targets):
         evt, (potential,) = self.toy_ctx.get_p2p()(
                 self.toy_ctx.queue, targets, self.points, [self.weights],
-                out_host=True, **self.toy_ctx.extra_source_kwargs)
+                out_host=True,
+                **self.toy_ctx.extra_source_and_kernel_kwargs,
+                )
 
         return potential
 
