@@ -214,6 +214,8 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
 
         targets = fp.points
 
+        rscale = 0.5  # pick something non-1
+
         # {{{ apply p2e
 
         evt, (mpoles,) = p2e(queue,
@@ -225,6 +227,7 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
                 strengths=strengths,
                 nboxes=1,
                 tgt_base_ibox=0,
+                rscale=rscale,
 
                 #flags="print_hl_cl",
                 out_host=True, **extra_source_kwargs)
@@ -247,6 +250,8 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
                 box_target_counts_nonchild=box_target_counts_nonchild,
                 centers=centers,
                 targets=targets,
+                rscale=rscale,
+
                 #flags="print_hl_cl",
                 out_host=True, **extra_kwargs)
 
@@ -402,7 +407,7 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
         orders = [2, 3, 4]
     nboxes = centers.shape[-1]
 
-    def eval_at(e2p, source_box_nr):
+    def eval_at(e2p, source_box_nr, rscale):
         e2p_target_boxes = np.array([source_box_nr], dtype=np.int32)
 
         # These are indexed by global box numbers.
@@ -422,6 +427,9 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
                 box_target_counts_nonchild=e2p_box_target_counts_nonchild,
                 centers=centers,
                 targets=targets,
+
+                rscale=rscale,
+
                 out_host=True, **extra_kwargs
                 )
 
@@ -452,6 +460,11 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
 
         # }}}
 
+        m1_rscale = 0.5
+        m2_rscale = 0.25
+        l1_rscale = 0.5
+        l2_rscale = 0.25
+
         # {{{ apply P2M
 
         p2m_source_boxes = np.array([0], dtype=np.int32)
@@ -469,6 +482,7 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
                 sources=sources,
                 strengths=strengths,
                 nboxes=nboxes,
+                rscale=m1_rscale,
 
                 tgt_base_ibox=0,
 
@@ -479,7 +493,7 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
 
         ntargets = targets.shape[-1]
 
-        pot = eval_at(m2p, 0)
+        pot = eval_at(m2p, 0, m1_rscale)
 
         err = la.norm((pot - pot_direct)/res**2)
         err = err / (la.norm(pot_direct) / res**2)
@@ -503,12 +517,16 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
                 src_box_starts=m2m_src_box_starts,
                 src_box_lists=m2m_src_box_lists,
                 centers=centers,
+
+                src_rscale=m1_rscale,
+                tgt_rscale=m2_rscale,
+
                 #flags="print_hl_cl",
                 out_host=True, **extra_kwargs)
 
         # }}}
 
-        pot = eval_at(m2p, 1)
+        pot = eval_at(m2p, 1, m2_rscale)
 
         err = la.norm((pot - pot_direct)/res**2)
         err = err / (la.norm(pot_direct) / res**2)
@@ -531,12 +549,16 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
                 src_box_starts=m2l_src_box_starts,
                 src_box_lists=m2l_src_box_lists,
                 centers=centers,
+
+                src_rscale=m2_rscale,
+                tgt_rscale=l1_rscale,
+
                 #flags="print_hl_cl",
                 out_host=True, **extra_kwargs)
 
         # }}}
 
-        pot = eval_at(l2p, 2)
+        pot = eval_at(l2p, 2, l1_rscale)
 
         err = la.norm((pot - pot_direct)/res**2)
         err = err / (la.norm(pot_direct) / res**2)
@@ -559,12 +581,16 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
                 src_box_starts=l2l_src_box_starts,
                 src_box_lists=l2l_src_box_lists,
                 centers=centers,
+
+                src_rscale=l1_rscale,
+                tgt_rscale=l2_rscale,
+
                 #flags="print_hl_wrapper",
                 out_host=True, **extra_kwargs)
 
         # }}}
 
-        pot = eval_at(l2p, 3)
+        pot = eval_at(l2p, 3, l2_rscale)
 
         err = la.norm((pot - pot_direct)/res**2)
         err = err / (la.norm(pot_direct) / res**2)
