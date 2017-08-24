@@ -175,6 +175,44 @@ class Kernel(object):
         """
         return lambda expr: expr
 
+    # How does rscaling work for symbolic expressions?
+    # ------------------------------------------------
+    #
+    # The thing is that all this is just a big no-op. We are trying to
+    # differentiate
+    #
+    # $G(\frac{d}\alpha \alpha)$
+    #
+    # while shuffling around powers of $\alpha$ to keep all terms as close as
+    # possible to unit-scale.
+    #
+    # We call $\delta = d/\alpha$ the unit-scaled geometry variable.
+    #
+    # We could just differentiate
+    #
+    # $ \delta \mapsto G( \delta \alpha),$
+    #
+    # which would in principle tell us everything we need to know about the
+    # scaling behavior of the kernel. In this iteration I chose not to do that
+    # because I felt the extra $\alpha$ would put an unnecessary "clutter"
+    # burden on the symbolic machinery, making it scale even less well than it
+    # already does. I don't know whether that's true and/or conceptually
+    # mistaken.
+    #
+    # Instead, I decided that we'll differentiate "just $G$" and have a
+    # fix-up routine that provides the result of substituting $\alpha \delta$
+    # into $\partial^\mu G$ after the fact by modifying the expression "from
+    # the outside". We then supply $\delta$ as input. The thought behind this
+    # is that any arithmetic in $\partial^\mu G$ is carried out on (close-to)
+    # unit-scale quantities.
+    #
+    # But since we've differentiated a $G$ "with the wrong scaling", there is
+    # also a chain-rule term $\alpha^{|\mu|}$ that needs to be multiplied in.
+    # This is deferred until the evaluation of the expansion.
+    #
+    # See also the MR that introduced this:
+    # https://gitlab.tiker.net/inducer/sumpy/merge_requests/46
+
     def get_proxy_expression(self, scaled_dist_vec):
         r"""Return a proxy expression :math:`\tilde G(\vec \delta)` where
         :math:`\vec \delta` is *scaled_dist_vec*. Here,
