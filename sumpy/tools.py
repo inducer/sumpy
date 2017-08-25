@@ -145,7 +145,7 @@ class LinearRecurrenceBasedMiDerivativeTaker(MiDerivativeTaker):
 
                 self.cache_by_mi[next_mi] = expr
 
-        expr = expr.subs(self.wrangler._rscale_symbol, rscale)
+        expr = expr.subs(self.wrangler._rscale_symbol, 1)
 
         return expr
 
