@@ -283,10 +283,16 @@ class P2EFromCSR(P2EBase):
         :arg centers:
         :arg sources:
         :arg strengths:
+        :arg rscale:
         """
         knl = self.get_cached_optimized_kernel()
 
-        return knl(queue, **kwargs)
+        centers = kwargs.pop("centers")
+        # "1" may be passed for rscale, which won't have its type
+        # meaningfully inferred. Make the type of rscale explicit.
+        rscale = centers.dtype.type(kwargs.pop("rscale"))
+
+        return knl(queue, centers=centers, rscale=rscale, **kwargs)
 
 # }}}
 
