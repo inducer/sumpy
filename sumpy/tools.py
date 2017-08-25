@@ -64,11 +64,7 @@ class MiDerivativeTaker(object):
     def mi_dist(self, a, b):
         return np.array(a, dtype=int) - np.array(b, dtype=int)
 
-    def diff(self, mi, rscale):
-        """
-        :arg rscale: Only used if needed for recurrences. All actual coefficient
-            radius-scaling is handled outside of this routine.
-        """
+    def diff(self, mi):
         try:
             expr = self.cache_by_mi[mi]
         except KeyError:
@@ -109,14 +105,10 @@ class LinearRecurrenceBasedMiDerivativeTaker(MiDerivativeTaker):
         self.wrangler = wrangler
 
     @memoize_method
-    def diff(self, mi, rscale):
+    def diff(self, mi):
         """
         :arg mi: a multi-index (tuple) indicating how many x/y derivatives are
             to be taken.
-        :arg rscales: *rscale* is used if the derivative taking uses
-            recurrences across different derivative orders (which may have
-            different scaling).  All actual coefficient radius-scaling is handled
-            outside of this routine.
         """
         try:
             expr = self.cache_by_mi[mi]

@@ -122,7 +122,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         taker = MiDerivativeTaker(ppkernel, avec)
         return [
                 self.kernel.adjust_proxy_expression(
-                    taker.diff(mi, rscale),
+                    taker.diff(mi),
                     1, 0, factor=1)
                 * rscale**sum(mi)
                 for mi in self.get_coefficient_identifiers()]
@@ -179,7 +179,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                     kernel_deriv = self.kernel.adjust_proxy_expression(
                             sympy_vec_subs(
                                 dvec, dvec/src_rscale,
-                                taker.diff(add_mi(deriv, term), src_rscale),
+                                taker.diff(add_mi(deriv, term)),
                                 ),
                             src_rscale, sum(deriv) + sum(term),
                             factor=src_rscale**sum(term))
@@ -198,7 +198,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # canceling "rscales" closer to each other in the hope of helping
             # with that.
             result = [
-                    (taker.diff(mi, src_rscale) * tgt_rscale**sum(mi)).expand()
+                    (taker.diff(mi) * tgt_rscale**sum(mi)).expand()
                     for mi in self.get_coefficient_identifiers()]
 
         logger.info("building translation operator: done")
