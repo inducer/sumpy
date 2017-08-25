@@ -530,7 +530,7 @@ class HelmholtzKernel(ExpressionKernel):
             sp.Symbol(self.helmholtz_k_name) * rscale)
 
         if self.dim == 2:
-            return result * factor
+            return result * (factor / rscale**nderivatives)
         elif self.dim == 3:
             return result * (factor / rscale**(nderivatives+1))
         else:
