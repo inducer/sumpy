@@ -43,6 +43,14 @@ from sumpy import (
         E2EFromCSR, E2EFromChildren, E2EFromParent)
 
 
+def mpole_level_to_rscale(tree, level):
+    return 1  # tree.root_extent * (2**-level)
+
+
+def local_level_to_rscale(tree, level):
+    return tree.root_extent * (2**-level)
+
+
 # {{{ expansion wrangler code container
 
 class SumpyExpansionWranglerCodeContainer(object):
@@ -56,7 +64,7 @@ class SumpyExpansionWranglerCodeContainer(object):
     def __init__(self, cl_context,
             multipole_expansion_factory,
             local_expansion_factory,
-            out_kernels, exclude_self=False):
+            out_kernels, exclude_self=False, use_rscale=None):
         """
         :arg multipole_expansion_factory: a callable of a single argument (order)
             that returns a multipole expansion.
@@ -69,16 +77,17 @@ class SumpyExpansionWranglerCodeContainer(object):
         self.local_expansion_factory = local_expansion_factory
         self.out_kernels = out_kernels
         self.exclude_self = exclude_self
+        self.use_rscale = use_rscale
 
         self.cl_context = cl_context
 
     @memoize_method
     def multipole_expansion(self, order):
-        return self.multipole_expansion_factory(order)
+        return self.multipole_expansion_factory(order, self.use_rscale)
 
     @memoize_method
     def local_expansion(self, order):
-        return self.local_expansion_factory(order)
+        return self.local_expansion_factory(order, self.use_rscale)
 
     @memoize_method
     def p2m(self, tgt_order):
@@ -324,6 +333,7 @@ class SumpyExpansionWrangler(object):
                     tgt_base_ibox=level_start_ibox,
 
                     wait_for=src_weights.events,
+                    rscale=mpole_level_to_rscale(self.tree, lev),
 
                     **kwargs)
 
@@ -374,6 +384,9 @@ class SumpyExpansionWrangler(object):
                     target_boxes=source_parent_boxes[start:stop],
                     box_child_ids=self.tree.box_child_ids,
                     centers=self.tree.box_centers,
+
+                    src_rscale=mpole_level_to_rscale(self.tree, source_level),
+                    tgt_rscale=mpole_level_to_rscale(self.tree, target_level),
 
                     **self.kernel_extra_kwargs)
 
@@ -441,6 +454,9 @@ class SumpyExpansionWrangler(object):
                     src_box_lists=src_box_lists,
                     centers=self.tree.box_centers,
 
+                    src_rscale=mpole_level_to_rscale(self.tree, lev),
+                    tgt_rscale=local_level_to_rscale(self.tree, lev),
+
                     wait_for=mpole_exps.events,
 
                     **self.kernel_extra_kwargs)
@@ -483,6 +499,8 @@ class SumpyExpansionWrangler(object):
                     source_box_lists=ssn.lists,
                     centers=self.tree.box_centers,
                     result=pot,
+
+                    rscale=mpole_level_to_rscale(self.tree, isrc_level),
 
                     wait_for=wait_for,
 
@@ -530,6 +548,8 @@ class SumpyExpansionWrangler(object):
                     tgt_expansions=target_local_exps_view,
                     tgt_base_ibox=target_level_start_ibox,
 
+                    rscale=local_level_to_rscale(self.tree, lev),
+
                     wait_for=src_weights.events,
 
                     **kwargs)
@@ -572,6 +592,9 @@ class SumpyExpansionWrangler(object):
                     box_parent_ids=self.tree.box_parent_ids,
                     centers=self.tree.box_centers,
 
+                    src_rscale=local_level_to_rscale(self.tree, source_lev),
+                    tgt_rscale=local_level_to_rscale(self.tree, target_lev),
+
                     **self.kernel_extra_kwargs)
 
             assert local_exps_res is target_local_exps_view
@@ -606,6 +629,8 @@ class SumpyExpansionWrangler(object):
                     target_boxes=target_boxes[start:stop],
                     centers=self.tree.box_centers,
                     result=pot,
+
+                    rscale=local_level_to_rscale(self.tree, lev),
 
                     wait_for=local_exps.events,
 
