@@ -121,14 +121,17 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         taker = MiDerivativeTaker(ppkernel, avec)
         return [
-                self.kernel.adjust_proxy_expression(taker.diff(mi), 1, 0, factor=1)
+                self.kernel.adjust_proxy_expression(
+                    taker.diff(mi, rscale),
+                    1, 0, factor=1)
                 * rscale**sum(mi)
                 for mi in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec, rscale):
         from sumpy.tools import mi_power, mi_factorial
         evaluated_coeffs = (
-            self.derivative_wrangler.get_full_kernel_derivatives_from_stored(coeffs))
+            self.derivative_wrangler.get_full_kernel_derivatives_from_stored(
+                coeffs, rscale))
         bvec = bvec / rscale
         result = sum(
                 coeff
@@ -176,7 +179,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                     kernel_deriv = self.kernel.adjust_proxy_expression(
                             sympy_vec_subs(
                                 dvec, dvec/src_rscale,
-                                taker.diff(add_mi(deriv, term)),
+                                taker.diff(add_mi(deriv, term), src_rscale),
                                 ),
                             src_rscale, sum(deriv) + sum(term),
                             factor=src_rscale**sum(term))
@@ -191,10 +194,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
             # Rscale/operand magnitude is fairly sensitive to the order of
             # operations--which is something we don't have fantastic control
-            # over at the symbolic level. This expand moves the two canceling
-            # "rscales" closer to each other in the hope of helping with that.
+            # over at the symbolic level. The '.expand()' below moves the two
+            # canceling "rscales" closer to each other in the hope of helping
+            # with that.
             result = [
-                    (taker.diff(mi) * tgt_rscale**sum(mi)).expand()
+                    (taker.diff(mi, src_rscale) * tgt_rscale**sum(mi)).expand()
                     for mi in self.get_coefficient_identifiers()]
 
         logger.info("building translation operator: done")

@@ -64,7 +64,11 @@ class MiDerivativeTaker(object):
     def mi_dist(self, a, b):
         return np.array(a, dtype=int) - np.array(b, dtype=int)
 
-    def diff(self, mi):
+    def diff(self, mi, rscale):
+        """
+        :arg rscale: Only used if needed for recurrences. All actual coefficient
+            radius-scaling is handled outside of this routine.
+        """
         try:
             expr = self.cache_by_mi[mi]
         except KeyError:
@@ -95,14 +99,25 @@ class MiDerivativeTaker(object):
 
 class LinearRecurrenceBasedMiDerivativeTaker(MiDerivativeTaker):
     """
-    See :class:`sumpy.expansion.LinearRecurrenceBasedDerivativeWrangler`
+    The derivative taker for expansions that use
+    :class:`sumpy.expansion.LinearRecurrenceBasedDerivativeWrangler`
     """
 
     def __init__(self, expr, var_list, wrangler):
-        MiDerivativeTaker.__init__(self, expr, var_list)
+        super(LinearRecurrenceBasedMiDerivativeTaker, self).__init__(
+                expr, var_list)
         self.wrangler = wrangler
 
-    def diff(self, mi):
+    @memoize_method
+    def diff(self, mi, rscale):
+        """
+        :arg mi: a multi-index (tuple) indicating how many x/y derivatives are
+            to be taken.
+        :arg rscales: *rscale* is used if the derivative taking uses
+            recurrences across different derivative orders (which may have
+            different scaling).  All actual coefficient radius-scaling is handled
+            outside of this routine.
+        """
         try:
             expr = self.cache_by_mi[mi]
         except KeyError:
@@ -129,6 +144,9 @@ class LinearRecurrenceBasedMiDerivativeTaker(MiDerivativeTaker):
                     expr = expr.diff(next_deriv)
 
                 self.cache_by_mi[next_mi] = expr
+
+        expr = expr.subs(self.wrangler._rscale_symbol, rscale)
+
         return expr
 
 # }}}

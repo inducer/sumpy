@@ -94,7 +94,8 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                     mi_power(avec, mi) / mi_factorial(mi)
                     for mi in self.get_full_coefficient_identifiers()]
         return (
-            self.derivative_wrangler.get_stored_mpole_coefficients_from_full(result))
+            self.derivative_wrangler.get_stored_mpole_coefficients_from_full(
+                result, rscale))
 
     def evaluate(self, coeffs, bvec, rscale):
         if not self.kernel.supports_rscale:
@@ -106,7 +107,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                 * self.kernel.adjust_proxy_expression(
                     sympy_vec_subs(
                         bvec, bvec/rscale,
-                        taker.diff(mi)),
+                        taker.diff(mi, rscale)),
                     rscale, sum(mi), factor=rscale**sum(mi))
                 for coeff, mi in zip(coeffs, self.get_coefficient_identifiers())))
 
@@ -175,7 +176,8 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
         logger.info("building translation operator: done")
         return (
-            self.derivative_wrangler.get_stored_mpole_coefficients_from_full(result))
+            self.derivative_wrangler.get_stored_mpole_coefficients_from_full(
+                result, tgt_rscale))
 
 
 class VolumeTaylorMultipoleExpansion(
