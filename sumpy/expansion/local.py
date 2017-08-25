@@ -326,12 +326,12 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
 
 class H2DLocalExpansion(_FourierBesselLocalExpansion):
-    def __init__(self, kernel, order):
+    def __init__(self, kernel, order, use_rscale=None):
         from sumpy.kernel import HelmholtzKernel
         assert (isinstance(kernel.get_base_kernel(), HelmholtzKernel)
                 and kernel.dim == 2)
 
-        super(H2DLocalExpansion, self).__init__(kernel, order)
+        super(H2DLocalExpansion, self).__init__(kernel, order, use_rscale)
 
         from sumpy.expansion.multipole import H2DMultipoleExpansion
         self.mpole_expn_class = H2DMultipoleExpansion
@@ -341,12 +341,12 @@ class H2DLocalExpansion(_FourierBesselLocalExpansion):
 
 
 class Y2DLocalExpansion(_FourierBesselLocalExpansion):
-    def __init__(self, kernel, order):
+    def __init__(self, kernel, order, use_rscale=None):
         from sumpy.kernel import YukawaKernel
         assert (isinstance(kernel.get_base_kernel(), YukawaKernel)
                 and kernel.dim == 2)
 
-        super(Y2DLocalExpansion, self).__init__(kernel, order)
+        super(Y2DLocalExpansion, self).__init__(kernel, order, use_rscale)
 
         from sumpy.expansion.multipole import Y2DMultipoleExpansion
         self.mpole_expn_class = Y2DMultipoleExpansion
