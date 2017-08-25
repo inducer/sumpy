@@ -117,14 +117,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
     def coefficients_from_source(self, avec, bvec, rscale):
         from sumpy.tools import MiDerivativeTaker
         ppkernel = self.kernel.postprocess_at_source(
-                self.kernel.get_proxy_expression(avec), avec)
+                self.kernel.get_expression(avec), avec)
 
         taker = MiDerivativeTaker(ppkernel, avec)
         return [
-                self.kernel.adjust_proxy_expression(
-                    taker.diff(mi),
-                    1, 0, factor=1)
-                * rscale**sum(mi)
+                taker.diff(mi) * rscale ** sum(mi)
                 for mi in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec, rscale):
@@ -149,7 +146,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                     type(self).__name__,
                     self.order))
 
-        if not self.kernel.supports_rscale:
+        if not self.use_rscale:
             src_rscale = 1
             tgt_rscale = 1
 
@@ -181,8 +178,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                                 dvec, dvec/src_rscale,
                                 taker.diff(add_mi(deriv, term)),
                                 ),
-                            src_rscale, sum(deriv) + sum(term),
-                            factor=src_rscale**sum(term))
+                            src_rscale, sum(deriv) + sum(term)
+                            ) / src_rscale**sum(deriv)
 
                     local_result.append(
                             coeff * kernel_deriv * tgt_rscale**sum(deriv))
@@ -244,7 +241,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         return list(range(-self.order, self.order+1))
 
     def coefficients_from_source(self, avec, bvec, rscale):
-        if not self.kernel.supports_rscale:
+        if not self.use_rscale:
             rscale = 1
 
         from sumpy.symbolic import sym_real_norm_2
@@ -262,7 +259,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                     for l in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec, rscale):
-        if not self.kernel.supports_rscale:
+        if not self.use_rscale:
             rscale = 1
 
         from sumpy.symbolic import sym_real_norm_2
@@ -282,6 +279,10 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale):
         from sumpy.symbolic import sym_real_norm_2
+
+        if not self.use_rscale:
+            src_rscale = 1
+            tgt_rscale = 1
 
         arg_scale = self.get_bessel_arg_scaling()
 

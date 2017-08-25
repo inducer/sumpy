@@ -51,13 +51,18 @@ logger = logging.getLogger(__name__)
 
 class ExpansionBase(object):
 
-    def __init__(self, kernel, order):
+    def __init__(self, kernel, order, use_rscale=None):
         # Don't be tempted to remove target derivatives here.
         # Line Taylor QBX can't do without them, because it can't
         # apply those derivatives to the expanded quantity.
 
         self.kernel = kernel
         self.order = order
+
+        if use_rscale is None:
+            use_rscale = True
+
+        self.use_rscale = use_rscale
 
     # {{{ propagate kernel interface
 
@@ -287,7 +292,7 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
         from six import iteritems
         for i, identifier in enumerate(self.get_full_coefficient_identifiers()):
             expr = self.try_get_recurrence_for_derivative(
-                    identifier, identifiers_so_far)
+                    identifier, identifiers_so_far, rscale=self._rscale_symbol)
 
             if expr is None:
                 # Identifier should be stored
@@ -319,7 +324,7 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
 
         return stored_identifiers, coeff_matrix
 
-    def try_get_recurrence_for_derivative(self, deriv, in_terms_of):
+    def try_get_recurrence_for_derivative(self, deriv, in_terms_of, rscale):
         """
         :arg deriv: a tuple of integers identifying a derivative for which
             a recurrence is sought
@@ -336,7 +341,7 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
 
 class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
 
-    def try_get_recurrence_for_derivative(self, deriv, in_terms_of):
+    def try_get_recurrence_for_derivative(self, deriv, in_terms_of, rscale):
         deriv = np.array(deriv, dtype=int)
 
         for dim in np.where(2 <= deriv)[0]:
@@ -368,10 +373,8 @@ class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
         super(HelmholtzDerivativeWrangler, self).__init__(order, dim)
         self.helmholtz_k_name = helmholtz_k_name
 
-    def try_get_recurrence_for_derivative(self, deriv, in_terms_of):
+    def try_get_recurrence_for_derivative(self, deriv, in_terms_of, rscale):
         deriv = np.array(deriv, dtype=int)
-
-        rscale = self._rscale_symbol
 
         for dim in np.where(2 <= deriv)[0]:
             # Check if we can reduce this dimension in terms of the other

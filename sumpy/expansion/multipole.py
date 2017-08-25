@@ -60,10 +60,8 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
         from sumpy.tools import mi_power, mi_factorial
 
-        if not self.kernel.supports_rscale:
+        if not self.use_rscale:
             rscale = 1
-
-        avec = avec/rscale
 
         if isinstance(kernel, DirectionalSourceDerivative):
             if kernel.get_base_kernel() is not kernel.inner_kernel:
@@ -88,8 +86,10 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                         - mi_power(avec, derivative_mi) * mi[idim]
                         * dir_vec[idim])
             for i, mi in enumerate(coeff_identifiers):
-                result[i] /= mi_factorial(mi)
+                result[i] /= (mi_factorial(mi) * rscale ** sum(mi))
         else:
+            avec = avec/rscale
+
             result = [
                     mi_power(avec, mi) / mi_factorial(mi)
                     for mi in self.get_full_coefficient_identifiers()]
@@ -98,7 +98,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                 result, rscale))
 
     def evaluate(self, coeffs, bvec, rscale):
-        if not self.kernel.supports_rscale:
+        if not self.use_rscale:
             rscale = 1
 
         taker = self.get_kernel_derivative_taker(bvec)
@@ -108,14 +108,14 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                     sympy_vec_subs(
                         bvec, bvec/rscale,
                         taker.diff(mi)),
-                    rscale, sum(mi), factor=rscale**sum(mi))
+                    rscale, sum(mi))
                 for coeff, mi in zip(coeffs, self.get_coefficient_identifiers())))
 
         return result
 
     def get_kernel_derivative_taker(self, bvec):
         return (self.derivative_wrangler.get_derivative_taker(
-            self.kernel.get_proxy_expression(bvec), bvec))
+            self.kernel.get_expression(bvec), bvec))
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale):
@@ -124,7 +124,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                     "Taylor multipole expansion"
                                % type(src_expansion).__name__)
 
-        if not self.kernel.supports_rscale:
+        if not self.use_rscale:
             src_rscale = 1
             tgt_rscale = 1
 
@@ -169,8 +169,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
                 result[i] += (
                         contrib
-                        * src_rscale**sum(src_mi)
-                        / tgt_rscale**sum(tgt_mi))
+                        * (src_rscale**sum(src_mi) / tgt_rscale**sum(tgt_mi)))
 
             result[i] /= mi_factorial(tgt_mi)
 
@@ -219,6 +218,9 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
         return list(range(-self.order, self.order+1))
 
     def coefficients_from_source(self, avec, bvec, rscale):
+        if not self.use_rscale:
+            rscale = 1
+
         from sumpy.symbolic import sym_real_norm_2
         bessel_j = sym.Function("bessel_j")
         avec_len = sym_real_norm_2(avec)
@@ -236,6 +238,9 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
                 for l in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec, rscale):
+        if not self.use_rscale:
+            rscale = 1
+
         from sumpy.symbolic import sym_real_norm_2
         hankel_1 = sym.Function("hankel_1")
         bvec_len = sym_real_norm_2(bvec)
@@ -256,6 +261,11 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
             raise RuntimeError("do not know how to translate %s to %s"
                                % (type(src_expansion).__name__,
                                    type(self).__name__))
+
+        if not self.use_rscale:
+            src_rscale = 1
+            tgt_rscale = 1
+
         from sumpy.symbolic import sym_real_norm_2
         dvec_len = sym_real_norm_2(dvec)
         bessel_j = sym.Function("bessel_j")
@@ -276,24 +286,26 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
 
 
 class H2DMultipoleExpansion(_HankelBased2DMultipoleExpansion):
-    def __init__(self, kernel, order):
+    def __init__(self, kernel, order, use_rscale=None):
         from sumpy.kernel import HelmholtzKernel
         assert (isinstance(kernel.get_base_kernel(), HelmholtzKernel)
                 and kernel.dim == 2)
 
-        super(H2DMultipoleExpansion, self).__init__(kernel, order)
+        super(H2DMultipoleExpansion, self).__init__(
+                kernel, order, use_rscale=use_rscale)
 
     def get_bessel_arg_scaling(self):
         return sym.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
 
 
 class Y2DMultipoleExpansion(_HankelBased2DMultipoleExpansion):
-    def __init__(self, kernel, order):
+    def __init__(self, kernel, order, use_rscale=None):
         from sumpy.kernel import YukawaKernel
         assert (isinstance(kernel.get_base_kernel(), YukawaKernel)
                 and kernel.dim == 2)
 
-        super(Y2DMultipoleExpansion, self).__init__(kernel, order)
+        super(Y2DMultipoleExpansion, self).__init__(
+                kernel, order, use_rscale=use_rscale)
 
     def get_bessel_arg_scaling(self):
         return sym.I * sym.Symbol(self.kernel.get_base_kernel().yukawa_lambda_name)
