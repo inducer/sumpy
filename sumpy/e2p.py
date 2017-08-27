@@ -59,14 +59,14 @@ class E2PBase(KernelCacheWrapper):
         if device is None:
             device = ctx.devices[0]
 
-        from sumpy.kernel import SourceDerivativeRemover
-        expansion = expansion.with_kernel(
-                SourceDerivativeRemover()(expansion.kernel))
-
-        from sumpy.kernel import TargetDerivativeRemover
+        from sumpy.kernel import SourceDerivativeRemover, TargetDerivativeRemover
+        sdr = SourceDerivativeRemover()
         tdr = TargetDerivativeRemover()
+        expansion = expansion.with_kernel(
+                sdr(expansion.kernel))
+
         for knl in kernels:
-            assert tdr(knl) == expansion.kernel
+            assert sdr(tdr(knl)) == expansion.kernel
 
         self.ctx = ctx
         self.expansion = expansion
