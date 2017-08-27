@@ -119,12 +119,14 @@ class ExpansionBase(object):
         key_hash.update(type(self).__name__.encode("utf8"))
         key_builder.rec(key_hash, self.kernel)
         key_builder.rec(key_hash, self.order)
+        key_builder.rec(key_hash, self.use_rscale)
 
     def __eq__(self, other):
         return (
                 type(self) == type(other)
                 and self.kernel == other.kernel
-                and self.order == other.order)
+                and self.order == other.order
+                and self.use_rscale == other.use_rscale)
 
     def __ne__(self, other):
         return not self.__eq__(other)
