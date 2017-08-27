@@ -66,6 +66,9 @@ class ExpansionBase(object):
 
     # {{{ propagate kernel interface
 
+    # This is here to conform this to enough of the kernel interface
+    # to make it fit into sumpy.qbx.LayerPotential.
+
     @property
     def dim(self):
         return self.kernel.dim
@@ -80,8 +83,8 @@ class ExpansionBase(object):
     def get_code_transformer(self):
         return self.kernel.get_code_transformer()
 
-    def get_scaling(self):
-        return self.kernel.get_scaling()
+    def get_global_scaling_const(self):
+        return self.kernel.get_global_scaling_const()
 
     def get_args(self):
         return self.kernel.get_args()

@@ -52,11 +52,6 @@ __doc__ = """
 
 class LineTaylorLocalExpansion(LocalExpansionBase):
 
-    # This is here to conform this to enough of the kernel interface
-    # to make it fit into sumpy.qbx.LayerPotential.
-    def get_global_scaling_const(self):
-        return self.kernel.get_global_scaling_const()
-
     def get_storage_index(self, k):
         return k
 
