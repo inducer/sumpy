@@ -97,18 +97,31 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             self.derivative_wrangler.get_stored_mpole_coefficients_from_full(
                 result, rscale))
 
+    def get_scaled_multipole(self, expr, bvec, rscale, nderivatives,
+            nderivatives_for_scaling=None):
+        if nderivatives_for_scaling is None:
+            nderivatives_for_scaling = nderivatives
+
+        if self.kernel.has_efficient_scale_adjustment:
+            return (
+                    self.kernel.adjust_for_kernel_scaling(
+                        sympy_vec_subs(
+                            bvec, bvec/rscale,
+                            expr),
+                        rscale, nderivatives)
+                    / rscale ** (nderivatives - nderivatives_for_scaling))
+        else:
+            return (rscale**nderivatives_for_scaling * expr)
+
     def evaluate(self, coeffs, bvec, rscale):
         if not self.use_rscale:
             rscale = 1
 
         taker = self.get_kernel_derivative_taker(bvec)
+
         result = sym.Add(*tuple(
                 coeff
-                * self.kernel.adjust_proxy_expression(
-                    sympy_vec_subs(
-                        bvec, bvec/rscale,
-                        taker.diff(mi)),
-                    rscale, sum(mi))
+                * self.get_scaled_multipole(taker.diff(mi), bvec, rscale, sum(mi))
                 for coeff, mi in zip(coeffs, self.get_coefficient_identifiers())))
 
         return result

@@ -24,7 +24,6 @@ THE SOFTWARE.
 
 from six.moves import range, zip
 import sumpy.symbolic as sym
-from sumpy.tools import sympy_vec_subs
 
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
@@ -173,13 +172,12 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                         src_coeff_exprs,
                         src_expansion.get_coefficient_identifiers()):
 
-                    kernel_deriv = self.kernel.adjust_proxy_expression(
-                            sympy_vec_subs(
-                                dvec, dvec/src_rscale,
+                    kernel_deriv = (
+                            src_expansion.get_scaled_multipole(
                                 taker.diff(add_mi(deriv, term)),
-                                ),
-                            src_rscale, sum(deriv) + sum(term)
-                            ) / src_rscale**sum(deriv)
+                                dvec, src_rscale,
+                                nderivatives=sum(deriv) + sum(term),
+                                nderivatives_for_scaling=sum(term)))
 
                     local_result.append(
                             coeff * kernel_deriv * tgt_rscale**sum(deriv))
@@ -195,7 +193,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # canceling "rscales" closer to each other in the hope of helping
             # with that.
             result = [
-                    (taker.diff(mi) * tgt_rscale**sum(mi)).expand()
+                    (taker.diff(mi) * tgt_rscale**sum(mi)).expand(deep=False)
                     for mi in self.get_coefficient_identifiers()]
 
         logger.info("building translation operator: done")

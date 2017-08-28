@@ -106,7 +106,8 @@ class Kernel(object):
     .. automethod:: prepare_loopy_kernel
     .. automethod:: get_code_transformer
     .. automethod:: get_expression
-    .. automethod:: adjust_proxy_expression
+    .. attribute:: has_efficient_scale_adjustment
+    .. automethod:: adjust_for_kernel_scaling
     .. automethod:: postprocess_at_source
     .. automethod:: postprocess_at_target
     .. automethod:: get_global_scaling_const
@@ -172,96 +173,75 @@ class Kernel(object):
         """
         return lambda expr: expr
 
-    # How does rscaling work for symbolic expressions?
-    # ------------------------------------------------
-    #
-    # The thing is that all this is just a big no-op. We are trying to
-    # differentiate
-    #
-    # $G(\frac{d}\alpha \alpha)$
-    #
-    # while shuffling around powers of $\alpha$ to keep all terms as close as
-    # possible to unit-scale.
-    #
-    # We call $\delta = d/\alpha$ the unit-scaled geometry variable.
-    #
-    # We could just differentiate
-    #
-    # $ \delta \mapsto G( \delta \alpha),$
-    #
-    # which would in principle tell us everything we need to know about the
-    # scaling behavior of the kernel. In this iteration I chose not to do that
-    # because I felt the extra $\alpha$ would put an unnecessary "clutter"
-    # burden on the symbolic machinery, making it scale even less well than it
-    # already does. I don't know whether that's true and/or conceptually
-    # mistaken.
-    #
-    # Instead, I decided that we'll differentiate "just $G$" and have a
-    # fix-up routine that provides the result of substituting $\alpha \delta$
-    # into $\partial^\mu G$ after the fact by modifying the expression "from
-    # the outside". We then supply $\delta$ as input. The thought behind this
-    # is that any arithmetic in $\partial^\mu G$ is carried out on (close-to)
-    # unit-scale quantities.
-    #
-    # But since we've differentiated a $G$ "with the wrong scaling", there is
-    # also a chain-rule term $\alpha^{|\mu|}$ that needs to be multiplied in.
-    # This is deferred until the evaluation of the expansion.
-    #
-    # See also the MR that introduced this:
-    # https://gitlab.tiker.net/inducer/sumpy/merge_requests/46
+    def get_expression(self, dist_vec):
+        r"""Return a :mod:`sympy` expression for the kernel."""
+        raise NotImplementedError
 
-    def get_expression(self, scaled_dist_vec):
-        r"""Return a proxy expression :math:`\tilde G(\vec \delta)` where
-        :math:`\vec \delta` is *scaled_dist_vec*. Here,
-        :math:`\vec \delta =\vec d/\alpha`,
-        where :math:`\alpha` is a scaling factor (often written as *rscale*)
-        used to ensure that :math:`\delta` has roughly unit magnitude and
-        :math:`\vec d=\text{target} - \text{source}`.  (In
-        an FMM, :math:`\alpha` would be chosen proportional to the
-        box size.) :math:`\tilde G` should be chosen so that (a)
-        no powers of :math:`\alpha` appear when symbolic derivatives
-        of it are taken with respect to :math:`\vec \delta` and
-        (b) the correct partial derivatives (with input scaling by :math:`\alpha`
-        can nonetheless be recovered) by :meth:`adjust_proxy_expression`.
+    has_efficient_scale_adjustment = False
 
-        Let :math:`\hat G` be the result of calling
-        :meth:`adjust_proxy_expression` with
-        :math:`\partial_{\vec \delta}^\mu \tilde G` and with
-        *nderivatives* set equal to :math:`|\mu|=\sum_i \mu_i`,
-        where :math:`\mu` is a multi-index indicating
-        how many derivatives are being taken along each input axis.
-
-        Then the following equality is required to hold:
+    def adjust_for_kernel_scaling(self, expr, rscale, nderivatives):
+        r"""
+        Consider a Taylor multipole expansion:
 
         .. math::
 
-            \hat G(\vec \delta) \alpha^{|\mu|}
-            = \partial_{\vec \delta}^\mu \tilde G(\vec \delta) \alpha^{|\mu|}
-            = \partial_{\vec d}^\mu G(\vec d).
+            f (x - y) = \sum_{i = 0}^{\infty} (\partial_y^i f) (x - y) \big|_{y = c}
+           \frac{(y - c)^i}{i!} .
 
-        In other words, :meth:`adjust_proxy_expression` is *not*
-        responsible for applying the scaling :math:`\alpha^{|\mu|}`
-        resulting from the chain rule (this is managed separately within
-        :mod:`sumpy` in an effort to control expansion coefficient scaling),
-        but it should compensate for any other effects of the
-        scaling of the input variable.
+        Now suppose we would like to use a scaled version :math:`g` of the
+        kernel :math:`f`:
 
-        As a worked example, consider a kernel of :math:`\log(x)`. The
-        proxy expression would be :math:`\log(\delta)`.
+        .. math::
 
-        For ``nderivatives == 0``, :meth:`adjust_proxy_expression`
-        would return :math:`\tilde G + \log(\alpha)`.
+            \begin{eqnarray*}
+              f (x) & = & g (x / \alpha),\\
+              f^{(i)} (x) & = & \frac{1}{\alpha^i} g^{(i)} (x / \alpha) .
+            \end{eqnarray*}
 
-        For ``nderivatives > 0``, :meth:`adjust_proxy_expression`
-        would return :math:`\tilde G/\alpha^{\text{nderivatives}}`.
+        where :math:`\alpha` is chosen to be on a length scale similar to
+        :math:`x` (for example by choosing :math:`\alpha` proporitional to the
+        size of the box for which the expansion is intended) so that :math:`x /
+        \alpha` is roughly of unit magnitude, to avoid arithmetic issues with
+        small arguments. This yields
 
-        In each case, the added terms merely compensate for the missing
-        input scaling.
-        """
-        raise NotImplementedError
+        .. math::
 
-    def adjust_proxy_expression(self, expr, rscale, nderivatives):
-        r"""See :meth:`get_expression`.
+            f (x - y) = \sum_{i = 0}^{\infty} (\partial_y^i g)
+            \left( \frac{x - y}{\alpha} \right) \Bigg|_{y = c}
+            \cdot
+            \frac{(y - c)^i}{\alpha^i \cdot i!}.
+
+        Observe that the :math:`(y - c)` term is now scaled to unit magnitude,
+        as is the argument of :math:`g`.
+
+        With :math:`\xi = x / \alpha`, we find
+
+        .. math::
+
+            \begin{eqnarray*}
+              g (\xi) & = & f (\alpha \xi),\\
+              g^{(i)} (\xi) & = & \alpha^i f^{(i)} (\alpha \xi) .
+            \end{eqnarray*}
+
+        Generically for all kernels, :math:`f^{(i)} (\alpha \xi)` is computable
+        by taking a sufficient number of symbolic derivatives of :math:`f` and
+        providing :math:`\alpha \xi = x` as the argument.
+
+        Now, for some kernels, like :math:`f (x) = \log x`, the powers of
+        :math:`\alpha^i` from the chain rule cancel with the ones from the
+        argument substituted into the kernel derivative:
+
+        .. math::
+
+            g^{(i)} (\xi) = \alpha^i f^{(i)} (\alpha \xi) = C \cdot \alpha^i \cdot
+            \frac{1}{(\alpha x)^i} \quad (i > 0),
+
+        making them what you might call *scale-invariant*. In this case, one
+        may set :attr:`has_efficient_scale_adjustment`. For these kernels only,
+        :meth:`adjust_for_kernel_scaling` provides a shortcut for scaled kernel
+        derivative computation. Given :math:`f^{(i)}` as *expr*, it directly
+        returns an expression for :math:`g^{(i)}`, where :math:`i` is given
+        as *nderivatives*.
         """
 
         raise NotImplementedError
@@ -421,7 +401,9 @@ class LaplaceKernel(ExpressionKernel):
                 global_scaling_const=scaling,
                 is_complex_valued=False)
 
-    def adjust_proxy_expression(self, expr, rscale, nderivatives):
+    has_efficient_scale_adjustment = True
+
+    def adjust_for_kernel_scaling(self, expr, rscale, nderivatives):
         if self.dim == 2:
             if nderivatives == 0:
                 import sympy as sp
@@ -463,10 +445,6 @@ class BiharmonicKernel(ExpressionKernel):
                 expression=expr,
                 global_scaling_const=scaling,
                 is_complex_valued=False)
-
-    def adjust_proxy_expression(self, expr, rscale, nderivatives):
-        assert rscale == 1
-        return expr
 
     def __getinitargs__(self):
         return (self.dim,)
@@ -510,19 +488,6 @@ class HelmholtzKernel(ExpressionKernel):
 
         self.helmholtz_k_name = helmholtz_k_name
         self.allow_evanescent = allow_evanescent
-
-    def adjust_proxy_expression(self, expr, rscale, nderivatives):
-        import sympy as sp
-        result = expr.subs(
-            sp.Symbol(self.helmholtz_k_name),
-            sp.Symbol(self.helmholtz_k_name) * rscale)
-
-        if self.dim == 2:
-            return result
-        elif self.dim == 3:
-            return result / rscale
-        else:
-            raise RuntimeError("unsupported dimensionality")
 
     def __getinitargs__(self):
         return (self.dim, self.helmholtz_k_name,
@@ -588,19 +553,6 @@ class YukawaKernel(ExpressionKernel):
                 is_complex_valued=True)
 
         self.yukawa_lambda_name = yukawa_lambda_name
-
-    def adjust_proxy_expression(self, expr, rscale, nderivatives):
-        import sympy as sp
-        result = expr.subs(
-            sp.Symbol(self.helmholtz_k_name),
-            sp.Symbol(self.helmholtz_k_name) * rscale)
-
-        if self.dim == 2:
-            return result
-        elif self.dim == 3:
-            return result / rscale
-        else:
-            raise RuntimeError("unsupported dimensionality")
 
     def __getinitargs__(self):
         return (self.dim, self.yukawa_lambda_name)
@@ -678,10 +630,6 @@ class StokesletKernel(ExpressionKernel):
                 global_scaling_const=scaling,
                 is_complex_valued=False)
 
-    def adjust_proxy_expression(self, expr, rscale, nderivatives):
-        assert rscale == 1
-        return expr
-
     def __getinitargs__(self):
         return (self.dim, self.icomp, self.jcomp, self.viscosity_mu_name)
 
@@ -747,10 +695,6 @@ class StressletKernel(ExpressionKernel):
                 global_scaling_const=scaling,
                 is_complex_valued=False)
 
-    def adjust_proxy_expression(self, expr, rscale, nderivatives):
-        assert rscale == 1
-        return expr
-
     def __getinitargs__(self):
         return (self.dim, self.icomp, self.jcomp, self.kcomp,
                       self.viscosity_mu_name)
@@ -797,8 +741,12 @@ class KernelWrapper(Kernel):
     def get_expression(self, scaled_dist_vec):
         return self.inner_kernel.get_expression(scaled_dist_vec)
 
-    def adjust_proxy_expression(self, expr, rscale, nderivatives):
-        return self.inner_kernel.adjust_proxy_expression(
+    @property
+    def has_efficient_scale_adjustment(self):
+        return self.inner_kernel.has_efficient_scale_adjustment
+
+    def adjust_for_kernel_scaling(self, expr, rscale, nderivatives):
+        return self.inner_kernel.adjust_for_kernel_scaling(
                 expr, rscale, nderivatives)
 
     def postprocess_at_source(self, expr, avec):
