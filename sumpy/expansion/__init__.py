@@ -95,8 +95,7 @@ class ExpansionBase(object):
     # }}}
 
     def with_kernel(self, kernel):
-        return type(self)(kernel, self.order)
-        # FIXME: add self.use_rscale once the rscale MR is in
+        return type(self)(kernel, self.order, self.use_rscale)
 
     def __len__(self):
         return len(self.get_coefficient_identifiers())
