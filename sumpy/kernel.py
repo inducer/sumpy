@@ -983,6 +983,11 @@ class TargetDerivativeRemover(AxisTargetDerivativeRemover):
         return self.rec(kernel.inner_kernel)
 
 
+class SourceDerivativeRemover(KernelIdentityMapper):
+    def map_directional_source_derivative(self, kernel):
+        return self.rec(kernel.inner_kernel)
+
+
 class DerivativeCounter(KernelCombineMapper):
     def combine(self, values):
         return max(values)

@@ -61,6 +61,10 @@ class P2EBase(KernelCacheWrapper):
         if device is None:
             device = ctx.devices[0]
 
+        from sumpy.kernel import TargetDerivativeRemover
+        expansion = expansion.with_kernel(
+                TargetDerivativeRemover()(expansion.kernel))
+
         self.ctx = ctx
         self.expansion = expansion
         self.options = options

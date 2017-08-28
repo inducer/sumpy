@@ -537,7 +537,7 @@ class SumpyExpansionWrangler(object):
             p2l = self.code.p2l(self.level_orders[lev])
 
             target_level_start_ibox, target_local_exps_view = \
-                    self.multipole_expansions_view(local_exps, lev)
+                    self.local_expansions_view(local_exps, lev)
 
             evt, (result,) = p2l(
                     self.level_queues[lev],
