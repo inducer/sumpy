@@ -63,6 +63,22 @@ class E2EBase(KernelCacheWrapper):
         if device is None:
             device = ctx.devices[0]
 
+        if src_expansion is tgt_expansion:
+            from sumpy.kernel import TargetDerivativeRemover, SourceDerivativeRemover
+            tgt_expansion = src_expansion = src_expansion.with_kernel(
+                    SourceDerivativeRemover()(
+                        TargetDerivativeRemover()(src_expansion.kernel)))
+
+        else:
+
+            from sumpy.kernel import TargetDerivativeRemover, SourceDerivativeRemover
+            src_expansion = src_expansion.with_kernel(
+                    SourceDerivativeRemover()(
+                        TargetDerivativeRemover()(src_expansion.kernel)))
+            tgt_expansion = tgt_expansion.with_kernel(
+                    SourceDerivativeRemover()(
+                        TargetDerivativeRemover()(tgt_expansion.kernel)))
+
         self.ctx = ctx
         self.src_expansion = src_expansion
         self.tgt_expansion = tgt_expansion

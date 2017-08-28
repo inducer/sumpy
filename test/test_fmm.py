@@ -169,7 +169,7 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
     # }}}
 
     from pyopencl.clrandom import PhiloxGenerator
-    rng = PhiloxGenerator(ctx)
+    rng = PhiloxGenerator(ctx, seed=44)
     weights = rng.uniform(queue, nsources, dtype=np.float64)
 
     logger.info("computing direct (reference) result")
