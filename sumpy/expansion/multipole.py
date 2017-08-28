@@ -193,8 +193,8 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
 
 class VolumeTaylorMultipoleExpansion(
-        VolumeTaylorMultipoleExpansionBase,
-        VolumeTaylorExpansion):
+        VolumeTaylorExpansion,
+        VolumeTaylorMultipoleExpansionBase):
 
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
@@ -202,8 +202,8 @@ class VolumeTaylorMultipoleExpansion(
 
 
 class LaplaceConformingVolumeTaylorMultipoleExpansion(
-        VolumeTaylorMultipoleExpansionBase,
-        LaplaceConformingVolumeTaylorExpansion):
+        LaplaceConformingVolumeTaylorExpansion,
+        VolumeTaylorMultipoleExpansionBase):
 
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
@@ -212,8 +212,8 @@ class LaplaceConformingVolumeTaylorMultipoleExpansion(
 
 
 class HelmholtzConformingVolumeTaylorMultipoleExpansion(
-        VolumeTaylorMultipoleExpansionBase,
-        HelmholtzConformingVolumeTaylorExpansion):
+        HelmholtzConformingVolumeTaylorExpansion,
+        VolumeTaylorMultipoleExpansionBase):
 
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)

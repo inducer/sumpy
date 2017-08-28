@@ -201,8 +201,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
 
 class VolumeTaylorLocalExpansion(
-        VolumeTaylorLocalExpansionBase,
-        VolumeTaylorExpansion):
+        VolumeTaylorExpansion,
+        VolumeTaylorLocalExpansionBase):
 
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale)
@@ -210,8 +210,8 @@ class VolumeTaylorLocalExpansion(
 
 
 class LaplaceConformingVolumeTaylorLocalExpansion(
-        VolumeTaylorLocalExpansionBase,
-        LaplaceConformingVolumeTaylorExpansion):
+        LaplaceConformingVolumeTaylorExpansion,
+        VolumeTaylorLocalExpansionBase):
 
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale)
@@ -220,8 +220,8 @@ class LaplaceConformingVolumeTaylorLocalExpansion(
 
 
 class HelmholtzConformingVolumeTaylorLocalExpansion(
-        VolumeTaylorLocalExpansionBase,
-        HelmholtzConformingVolumeTaylorExpansion):
+        HelmholtzConformingVolumeTaylorExpansion,
+        VolumeTaylorLocalExpansionBase):
 
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale)

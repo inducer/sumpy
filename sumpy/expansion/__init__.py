@@ -50,6 +50,15 @@ logger = logging.getLogger(__name__)
 # {{{ base class
 
 class ExpansionBase(object):
+    """
+    .. automethod:: with_kernel
+    .. automethod:: __len__
+    .. automethod:: get_coefficient_identifiers
+    .. automethod:: coefficients_from_source
+    .. automethod:: translate_from
+    .. automethod:: __eq__
+    .. automethod:: __ne__
+    """
 
     def __init__(self, kernel, order, use_rscale=None):
         # Don't be tempted to remove target derivatives here.
@@ -100,7 +109,13 @@ class ExpansionBase(object):
     def __len__(self):
         return len(self.get_coefficient_identifiers())
 
-    def coefficients_from_source(self, avec, bvec):
+    def get_coefficient_identifiers(self):
+        """
+        Returns the identifiers of the coefficients that actually get stored.
+        """
+        raise NotImplementedError
+
+    def coefficients_from_source(self, avec, bvec, rscale):
         """Form an expansion from a source point.
 
         :arg avec: vector from source to center.
@@ -112,13 +127,17 @@ class ExpansionBase(object):
         """
         raise NotImplementedError
 
-    def evaluate(self, coeffs, bvec):
+    def evaluate(self, coeffs, bvec, rscale):
         """
         :return: a :mod:`sympy` expression corresponding
             to the evaluated expansion with the coefficients
             in *coeffs*.
         """
 
+        raise NotImplementedError
+
+    def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
+            dvec, tgt_rscale):
         raise NotImplementedError
 
     def update_persistent_hash(self, key_hash, key_builder):
