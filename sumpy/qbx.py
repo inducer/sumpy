@@ -61,7 +61,9 @@ def stringify_expn_index(i):
 
 
 def expand(expansion_nr, sac, expansion, avec, bvec):
-    coefficients = expansion.coefficients_from_source(avec, bvec)
+    rscale = sym.Symbol("rscale")
+
+    coefficients = expansion.coefficients_from_source(avec, bvec, rscale)
 
     assigned_coeffs = [
             sym.Symbol(
@@ -71,7 +73,7 @@ def expand(expansion_nr, sac, expansion, avec, bvec):
             for i in expansion.get_coefficient_identifiers()]
 
     return sac.assign_unique("expn%d_result" % expansion_nr,
-            expansion.evaluate(assigned_coeffs, bvec))
+            expansion.evaluate(assigned_coeffs, bvec, rscale))
 
 
 # {{{ layer potential computation
@@ -101,6 +103,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
         return """
             <> a[idim] = center[idim,itgt] - src[idim,isrc] {dup=idim}
             <> b[idim] = tgt[idim,itgt] - center[idim,itgt] {dup=idim}
+            <> rscale = expansion_radii[itgt]
             """
 
     def get_src_tgt_arguments(self):
@@ -111,6 +114,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                     shape=(self.dim, "ntargets"), order="C"),
                 lp.GlobalArg("center", None,
                     shape=(self.dim, "ntargets"), order="C"),
+                lp.GlobalArg("expansion_radii", None, shape="ntargets"),
                 lp.ValueArg("nsources", None),
                 lp.ValueArg("ntargets", None),
                 ]
@@ -242,7 +246,8 @@ class LayerPotential(LayerPotentialBase):
                 for iknl in range(len(self.expansions))
                 ]
 
-    def __call__(self, queue, targets, sources, centers, strengths, **kwargs):
+    def __call__(self, queue, targets, sources, centers, strengths, expansion_radii,
+            **kwargs):
         """
         :arg strengths: are required to have area elements and quadrature weights
             already multiplied in.
@@ -253,7 +258,8 @@ class LayerPotential(LayerPotentialBase):
         for i, dens in enumerate(strengths):
             kwargs["strength_%d" % i] = dens
 
-        return knl(queue, src=sources, tgt=targets, center=centers, **kwargs)
+        return knl(queue, src=sources, tgt=targets, center=centers,
+                expansion_radii=expansion_radii, **kwargs)
 
 # }}}
 
@@ -283,7 +289,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
                 for iknl in range(len(self.expansions))
                 ]
 
-    def __call__(self, queue, targets, sources, centers, **kwargs):
+    def __call__(self, queue, targets, sources, centers, expansion_radii, **kwargs):
         knl = self.get_optimized_kernel()
 
         return knl(queue, src=sources, tgt=targets, center=centers,
