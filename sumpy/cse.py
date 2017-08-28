@@ -375,7 +375,6 @@ def opt_cse(exprs):
     # {{{ look for optimization opportunities, clean up minus signs
 
     def find_opts(expr):
-        print("EXPR IS", expr)
         if not isinstance(expr, Basic):
             return
 
