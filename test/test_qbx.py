@@ -82,8 +82,11 @@ def test_direct(ctx_getter):
         radius = 7 * h
         centers = unit_circle * (1 - radius)
 
+        expansion_radii = np.ones(n) * radius
+
         strengths = (sigma * h,)
-        evt, (result_qbx,) = lpot(queue, targets, sources, centers, strengths)
+        evt, (result_qbx,) = lpot(queue, targets, sources, centers, strengths,
+                expansion_radii=expansion_radii)
 
         eocrec.add_data_point(h, np.max(np.abs(result_ref - result_qbx)))
 

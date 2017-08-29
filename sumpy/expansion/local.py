@@ -57,7 +57,8 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
     def get_coefficient_identifiers(self):
         return list(range(self.order+1))
 
-    def coefficients_from_source(self, avec, bvec):
+    def coefficients_from_source(self, avec, bvec, rscale):
+        # no point in heeding rscale here--just ignore it
         if bvec is None:
             raise RuntimeError("cannot use line-Taylor expansions in a setting "
                     "where the center-target vector is not known at coefficient "
@@ -97,7 +98,8 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
                     .subs("tau", 0)
                     for i in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec):
+    def evaluate(self, coeffs, bvec, rscale):
+        # no point in heeding rscale here--just ignore it
         from pytools import factorial
         return sym.Add(*(
                 coeffs[self.get_storage_index(i)] / factorial(i)
