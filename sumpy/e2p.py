@@ -81,7 +81,7 @@ class E2PBase(KernelCacheWrapper):
         from sumpy.symbolic import make_sym_vector
         bvec = make_sym_vector("b", self.dim)
 
-        import sympy as sp
+        import sumpy.symbolic as sp
         rscale = sp.Symbol("rscale")
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection

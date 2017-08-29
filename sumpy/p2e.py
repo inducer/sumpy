@@ -77,7 +77,7 @@ class P2EBase(KernelCacheWrapper):
         from sumpy.symbolic import make_sym_vector
         avec = make_sym_vector("a", self.dim)
 
-        import sympy as sp
+        import sumpy.symbolic as sp
         rscale = sp.Symbol("rscale")
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection

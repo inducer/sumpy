@@ -406,7 +406,7 @@ class LaplaceKernel(ExpressionKernel):
     def adjust_for_kernel_scaling(self, expr, rscale, nderivatives):
         if self.dim == 2:
             if nderivatives == 0:
-                import sympy as sp
+                import sumpy.symbolic as sp
                 return (expr + sp.log(rscale))
             else:
                 return expr
