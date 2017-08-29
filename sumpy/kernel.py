@@ -242,6 +242,8 @@ class Kernel(object):
         derivative computation. Given :math:`f^{(i)}` as *expr*, it directly
         returns an expression for :math:`g^{(i)}`, where :math:`i` is given
         as *nderivatives*.
+
+        :arg rscale: The scaling parameter :math:`\alpha` above.
         """
 
         raise NotImplementedError
