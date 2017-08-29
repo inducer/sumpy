@@ -476,7 +476,8 @@ class VolumeTaylorExpansion(VolumeTaylorExpansionBase):
     derivative_wrangler_class = FullDerivativeWrangler
     derivative_wrangler_cache = {}
 
-    def __init__(self, kernel, order, use_rscale=None):
+    # not user-facing, be strict about having to pass use_rscale
+    def __init__(self, kernel, order, use_rscale):
         self.derivative_wrangler_key = (order, kernel.dim)
 
 
@@ -485,6 +486,7 @@ class LaplaceConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
     derivative_wrangler_class = LaplaceDerivativeWrangler
     derivative_wrangler_cache = {}
 
+    # not user-facing, be strict about having to pass use_rscale
     def __init__(self, kernel, order, use_rscale):
         self.derivative_wrangler_key = (order, kernel.dim)
 
@@ -494,7 +496,8 @@ class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
     derivative_wrangler_class = HelmholtzDerivativeWrangler
     derivative_wrangler_cache = {}
 
-    def __init__(self, kernel, order, use_rscale=None):
+    # not user-facing, be strict about having to pass use_rscale
+    def __init__(self, kernel, order, use_rscale):
         helmholtz_k_name = kernel.get_base_kernel().helmholtz_k_name
         self.derivative_wrangler_key = (order, kernel.dim, helmholtz_k_name)
 
