@@ -227,13 +227,13 @@ class Kernel(object):
         by taking a sufficient number of symbolic derivatives of :math:`f` and
         providing :math:`\alpha \xi = x` as the argument.
 
-        Now, for some kernels, like :math:`f (x) = \log x`, the powers of
+        Now, for some kernels, like :math:`f (x) = C \log x`, the powers of
         :math:`\alpha^i` from the chain rule cancel with the ones from the
         argument substituted into the kernel derivative:
 
         .. math::
 
-            g^{(i)} (\xi) = \alpha^i f^{(i)} (\alpha \xi) = C \cdot \alpha^i \cdot
+            g^{(i)} (\xi) = \alpha^i f^{(i)} (\alpha \xi) = C' \cdot \alpha^i \cdot
             \frac{1}{(\alpha x)^i} \quad (i > 0),
 
         making them what you might call *scale-invariant*. In this case, one
