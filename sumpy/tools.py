@@ -439,14 +439,4 @@ def my_syntactic_subs(expr, subst_dict):
         return expr
 
 
-def sympy_vec_subs(from_vec, to_vec, expr):
-    subs_pairs = []
-    assert (from_vec.rows, from_vec.cols) == (to_vec.rows, to_vec.cols)
-    for irow in range(from_vec.rows):
-        for icol in range(from_vec.cols):
-            subs_pairs.append((from_vec[irow, icol], to_vec[irow, icol]))
-
-    return expr.subs(subs_pairs)
-
-
 # vim: fdm=marker

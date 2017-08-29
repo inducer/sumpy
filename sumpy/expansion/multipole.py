@@ -25,7 +25,7 @@ THE SOFTWARE.
 from six.moves import range, zip
 import sumpy.symbolic as sym  # noqa
 
-from sumpy.tools import sympy_vec_subs
+from sumpy.symbolic import vector_subs
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
     HelmholtzConformingVolumeTaylorExpansion)
@@ -105,9 +105,9 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         if self.kernel.has_efficient_scale_adjustment:
             return (
                     self.kernel.adjust_for_kernel_scaling(
-                        sympy_vec_subs(
-                            bvec, bvec/rscale,
-                            expr),
+                        vector_subs(
+                            expr,
+                            bvec, bvec/rscale),
                         rscale, nderivatives)
                     / rscale ** (nderivatives - nderivatives_for_scaling))
         else:
