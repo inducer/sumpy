@@ -76,7 +76,7 @@ _find_symbolic_backend()
 # Symbolic API common to SymEngine and sympy.
 # Before adding a function here, make sure it's present in both modules.
 SYMBOLIC_API = """
-Add Basic Mul Pow exp sqrt symbols sympify cos sin atan2 Function Symbol
+Add Basic Mul Pow exp sqrt log symbols sympify cos sin atan2 Function Symbol
 Derivative Integer Matrix Subs I pi functions""".split()
 
 if USE_SYMENGINE:
@@ -176,9 +176,6 @@ def checked_cse(exprs, symbols=None):
     return new_assignments, new_exprs
 
 # }}}
-
-
-log = sym.log
 
 
 def sym_real_norm_2(x):
