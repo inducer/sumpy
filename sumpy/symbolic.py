@@ -178,6 +178,9 @@ def checked_cse(exprs, symbols=None):
 # }}}
 
 
+log = sym.log
+
+
 def sym_real_norm_2(x):
     return sym.sqrt((x.T*x)[0, 0])
 
