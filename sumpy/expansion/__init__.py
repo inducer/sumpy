@@ -170,10 +170,12 @@ class DerivativeWrangler(object):
     def get_coefficient_identifiers(self):
         raise NotImplementedError
 
-    def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives):
+    def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
+            rscale):
         raise NotImplementedError
 
-    def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients):
+    def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients,
+            rscale):
         raise NotImplementedError
 
     def get_derivative_taker(self, expr, var_list):
