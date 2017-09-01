@@ -81,12 +81,15 @@ class E2PBase(KernelCacheWrapper):
         from sumpy.symbolic import make_sym_vector
         bvec = make_sym_vector("b", self.dim)
 
+        import sumpy.symbolic as sp
+        rscale = sp.Symbol("rscale")
+
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
 
         coeff_exprs = [sym.Symbol("coeff%d" % i)
                 for i in range(len(self.expansion.get_coefficient_identifiers()))]
-        value = self.expansion.evaluate(coeff_exprs, bvec)
+        value = self.expansion.evaluate(coeff_exprs, bvec, rscale)
 
         result_names = [
             sac.assign_unique("result_%d_p" % i,
@@ -112,7 +115,8 @@ class E2PBase(KernelCacheWrapper):
         sympy_conv = SympyToPymbolicMapper()
         return [lp.Assignment(id=None,
                     assignee="kernel_scaling",
-                    expression=sympy_conv(self.expansion.kernel.get_scaling()),
+                    expression=sympy_conv(
+                        self.expansion.kernel.get_global_scaling_const()),
                     temp_var_type=lp.auto)]
 
     def get_cache_key(self):
@@ -169,6 +173,7 @@ class E2PFromSingleBox(E2PBase):
                     lp.GlobalArg("box_target_starts,box_target_counts_nonchild",
                         None, shape=None),
                     lp.GlobalArg("centers", None, shape="dim, naligned_boxes"),
+                    lp.ValueArg("rscale", None),
                     lp.GlobalArg("result", None, shape="nresults, ntargets",
                         dim_tags="sep,C"),
                     lp.GlobalArg("src_expansions", None,
@@ -209,7 +214,12 @@ class E2PFromSingleBox(E2PBase):
         """
         knl = self.get_cached_optimized_kernel()
 
-        return knl(queue, **kwargs)
+        centers = kwargs.pop("centers")
+        # "1" may be passed for rscale, which won't have its type
+        # meaningfully inferred. Make the type of rscale explicit.
+        rscale = centers.dtype.type(kwargs.pop("rscale"))
+
+        return knl(queue, centers=centers, rscale=rscale, **kwargs)
 
 # }}}
 
@@ -304,7 +314,13 @@ class E2PFromCSR(E2PBase):
 
     def __call__(self, queue, **kwargs):
         knl = self.get_cached_optimized_kernel()
-        return knl(queue, **kwargs)
+
+        centers = kwargs.pop("centers")
+        # "1" may be passed for rscale, which won't have its type
+        # meaningfully inferred. Make the type of rscale explicit.
+        rscale = centers.dtype.type(kwargs.pop("rscale"))
+
+        return knl(queue, centers=centers, rscale=rscale, **kwargs)
 
 # }}}
 

@@ -79,8 +79,10 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
                 sac.assign_unique("knl%d" % i,
                     knl.postprocess_at_target(
                         knl.postprocess_at_source(
-                            knl.get_expression(dvec), dvec),
-                        dvec))
+                            knl.get_expression(dvec),
+                            dvec),
+                        dvec)
+                    )
                 for i, knl in enumerate(self.kernels)]
 
         sac.run_global_cse()

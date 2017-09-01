@@ -1,6 +1,4 @@
-from __future__ import division
-from __future__ import absolute_import
-from six.moves import range
+from __future__ import division, absolute_import
 
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
@@ -24,11 +22,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from six.moves import range
+import six
 import numpy as np
 import logging
 from pytools import memoize_method
 import sumpy.symbolic as sym
 from sumpy.tools import MiDerivativeTaker
+import sumpy.symbolic as sp
+from collections import defaultdict
+
 
 __doc__ = """
 .. autoclass:: ExpansionBase
@@ -47,8 +50,17 @@ logger = logging.getLogger(__name__)
 # {{{ base class
 
 class ExpansionBase(object):
+    """
+    .. automethod:: with_kernel
+    .. automethod:: __len__
+    .. automethod:: get_coefficient_identifiers
+    .. automethod:: coefficients_from_source
+    .. automethod:: translate_from
+    .. automethod:: __eq__
+    .. automethod:: __ne__
+    """
 
-    def __init__(self, kernel, order):
+    def __init__(self, kernel, order, use_rscale=None):
         # Don't be tempted to remove target derivatives here.
         # Line Taylor QBX can't do without them, because it can't
         # apply those derivatives to the expanded quantity.
@@ -56,7 +68,15 @@ class ExpansionBase(object):
         self.kernel = kernel
         self.order = order
 
+        if use_rscale is None:
+            use_rscale = True
+
+        self.use_rscale = use_rscale
+
     # {{{ propagate kernel interface
+
+    # This is here to conform this to enough of the kernel interface
+    # to make it fit into sumpy.qbx.LayerPotential.
 
     @property
     def dim(self):
@@ -72,8 +92,8 @@ class ExpansionBase(object):
     def get_code_transformer(self):
         return self.kernel.get_code_transformer()
 
-    def get_scaling(self):
-        return self.kernel.get_scaling()
+    def get_global_scaling_const(self):
+        return self.kernel.get_global_scaling_const()
 
     def get_args(self):
         return self.kernel.get_args()
@@ -84,13 +104,18 @@ class ExpansionBase(object):
     # }}}
 
     def with_kernel(self, kernel):
-        return type(self)(kernel, self.order)
-        # FIXME: add self.use_rscale once the rscale MR is in
+        return type(self)(kernel, self.order, self.use_rscale)
 
     def __len__(self):
         return len(self.get_coefficient_identifiers())
 
-    def coefficients_from_source(self, avec, bvec):
+    def get_coefficient_identifiers(self):
+        """
+        Returns the identifiers of the coefficients that actually get stored.
+        """
+        raise NotImplementedError
+
+    def coefficients_from_source(self, avec, bvec, rscale):
         """Form an expansion from a source point.
 
         :arg avec: vector from source to center.
@@ -102,7 +127,7 @@ class ExpansionBase(object):
         """
         raise NotImplementedError
 
-    def evaluate(self, coeffs, bvec):
+    def evaluate(self, coeffs, bvec, rscale):
         """
         :return: a :mod:`sympy` expression corresponding
             to the evaluated expansion with the coefficients
@@ -111,16 +136,22 @@ class ExpansionBase(object):
 
         raise NotImplementedError
 
+    def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
+            dvec, tgt_rscale):
+        raise NotImplementedError
+
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode("utf8"))
         key_builder.rec(key_hash, self.kernel)
         key_builder.rec(key_hash, self.order)
+        key_builder.rec(key_hash, self.use_rscale)
 
     def __eq__(self, other):
         return (
                 type(self) == type(other)
                 and self.kernel == other.kernel
-                and self.order == other.order)
+                and self.order == other.order
+                and self.use_rscale == other.use_rscale)
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -139,10 +170,12 @@ class DerivativeWrangler(object):
     def get_coefficient_identifiers(self):
         raise NotImplementedError
 
-    def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives):
+    def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
+            rscale):
         raise NotImplementedError
 
-    def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients):
+    def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients,
+            rscale):
         raise NotImplementedError
 
     def get_derivative_taker(self, expr, var_list):
@@ -169,7 +202,8 @@ class FullDerivativeWrangler(DerivativeWrangler):
     get_coefficient_identifiers = (
             DerivativeWrangler.get_full_coefficient_identifiers)
 
-    def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives):
+    def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
+            rscale):
         return stored_kernel_derivatives
 
     get_stored_mpole_coefficients_from_full = (
@@ -212,28 +246,37 @@ def _spmv(spmat, x, sparse_vectors):
 
 
 class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
-
-    def __init__(self, order, dim):
-        DerivativeWrangler.__init__(self, order, dim)
+    _rscale_symbol = sp.Symbol("_sumpy_rscale_placeholder")
 
     def get_coefficient_identifiers(self):
         return self.stored_identifiers
 
-    def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives):
-        return _spmv(self.coeff_matrix, stored_kernel_derivatives,
+    def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
+            rscale):
+        coeff_matrix = self.get_coefficient_matrix(rscale)
+        return _spmv(coeff_matrix, stored_kernel_derivatives,
                      sparse_vectors=False)
 
-    def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients):
+    def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients,
+            rscale):
         # = M^T x, where M = coeff matrix
+
+        coeff_matrix = self.get_coefficient_matrix(rscale)
         result = [0] * len(self.stored_identifiers)
         for row, coeff in enumerate(full_mpole_coefficients):
-            for col, val in self.coeff_matrix[row]:
+            for col, val in coeff_matrix[row]:
                 result[col] += coeff * val
         return result
 
-    def precompute_recurrences(self):
+    @property
+    def stored_identifiers(self):
+        stored_identifiers, coeff_matrix = self._get_stored_ids_and_coeff_mat()
+        return stored_identifiers
+
+    @memoize_method
+    def get_coefficient_matrix(self, rscale):
         """
-        Build up a matrix that expresses every derivative in terms of a
+        Return a matrix that expresses every derivative in terms of a
         set of "stored" derivatives.
 
         For example, for the recurrence
@@ -250,6 +293,20 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
 
            ^ rows = one for every derivative
         """
+        stored_identifiers, coeff_matrix = self._get_stored_ids_and_coeff_mat()
+
+        # substitute actual rscale for internal placeholder
+        return defaultdict(lambda: [],
+                ((irow, [
+                    (icol,
+                        coeff.subs(self._rscale_symbol, rscale)
+                        if isinstance(coeff, sp.Basic)
+                        else coeff)
+                    for icol, coeff in row])
+                for irow, row in six.iteritems(coeff_matrix)))
+
+    @memoize_method
+    def _get_stored_ids_and_coeff_mat(self):
         stored_identifiers = []
         identifiers_so_far = {}
 
@@ -258,14 +315,13 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
         logger.debug("computing recurrence for Taylor coefficients: start")
 
         # Sparse matrix, indexed by row
-        from collections import defaultdict
         coeff_matrix_transpose = defaultdict(lambda: [])
 
         # Build up the matrix transpose by row.
         from six import iteritems
         for i, identifier in enumerate(self.get_full_coefficient_identifiers()):
             expr = self.try_get_recurrence_for_derivative(
-                    identifier, identifiers_so_far)
+                    identifier, identifiers_so_far, rscale=self._rscale_symbol)
 
             if expr is None:
                 # Identifier should be stored
@@ -280,7 +336,7 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
 
             identifiers_so_far[identifier] = i
 
-        self.stored_identifiers = stored_identifiers
+        stored_identifiers = stored_identifiers
 
         coeff_matrix = defaultdict(lambda: [])
         for i, row in iteritems(coeff_matrix_transpose):
@@ -293,11 +349,18 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
 
         logger.debug("number of Taylor coefficients was reduced from {orig} to {red}"
                      .format(orig=len(self.get_full_coefficient_identifiers()),
-                             red=len(self.stored_identifiers)))
+                             red=len(stored_identifiers)))
 
-        self.coeff_matrix = coeff_matrix
+        return stored_identifiers, coeff_matrix
 
-    def try_get_recurrence_for_derivative(self, deriv, in_terms_of):
+    def try_get_recurrence_for_derivative(self, deriv, in_terms_of, rscale):
+        """
+        :arg deriv: a tuple of integers identifying a derivative for which
+            a recurrence is sought
+        :arg in_terms_of: a container supporting efficient containment testing
+            indicating availability of derivatives for use in recurrences
+        """
+
         raise NotImplementedError
 
     def get_derivative_taker(self, expr, var_list):
@@ -307,14 +370,10 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
 
 class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
 
-    def __init__(self, order, dim):
-        LinearRecurrenceBasedDerivativeWrangler.__init__(self, order, dim)
-        self.precompute_recurrences()
-
-    def try_get_recurrence_for_derivative(self, deriv, in_terms_of):
+    def try_get_recurrence_for_derivative(self, deriv, in_terms_of, rscale):
         deriv = np.array(deriv, dtype=int)
 
-        for dim in np.nonzero(2 <= deriv)[0]:
+        for dim in np.where(2 <= deriv)[0]:
             # Check if we can reduce this dimension in terms of the other
             # dimensions.
 
@@ -340,14 +399,13 @@ class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
 class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
 
     def __init__(self, order, dim, helmholtz_k_name):
-        LinearRecurrenceBasedDerivativeWrangler.__init__(self, order, dim)
+        super(HelmholtzDerivativeWrangler, self).__init__(order, dim)
         self.helmholtz_k_name = helmholtz_k_name
-        self.precompute_recurrences()
 
-    def try_get_recurrence_for_derivative(self, deriv, in_terms_of):
+    def try_get_recurrence_for_derivative(self, deriv, in_terms_of, rscale):
         deriv = np.array(deriv, dtype=int)
 
-        for dim in np.nonzero(2 <= deriv)[0]:
+        for dim in np.where(2 <= deriv)[0]:
             # Check if we can reduce this dimension in terms of the other
             # dimensions.
 
@@ -368,7 +426,7 @@ class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
                 coeffs[needed_deriv] = -1
             else:
                 k = sym.Symbol(self.helmholtz_k_name)
-                coeffs[tuple(reduced_deriv)] = -k*k
+                coeffs[tuple(reduced_deriv)] = -k*k*rscale*rscale
                 return coeffs
 
 # }}}
@@ -420,7 +478,8 @@ class VolumeTaylorExpansion(VolumeTaylorExpansionBase):
     derivative_wrangler_class = FullDerivativeWrangler
     derivative_wrangler_cache = {}
 
-    def __init__(self, kernel, order):
+    # not user-facing, be strict about having to pass use_rscale
+    def __init__(self, kernel, order, use_rscale):
         self.derivative_wrangler_key = (order, kernel.dim)
 
 
@@ -429,7 +488,8 @@ class LaplaceConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
     derivative_wrangler_class = LaplaceDerivativeWrangler
     derivative_wrangler_cache = {}
 
-    def __init__(self, kernel, order):
+    # not user-facing, be strict about having to pass use_rscale
+    def __init__(self, kernel, order, use_rscale):
         self.derivative_wrangler_key = (order, kernel.dim)
 
 
@@ -438,7 +498,8 @@ class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
     derivative_wrangler_class = HelmholtzDerivativeWrangler
     derivative_wrangler_cache = {}
 
-    def __init__(self, kernel, order):
+    # not user-facing, be strict about having to pass use_rscale
+    def __init__(self, kernel, order, use_rscale):
         helmholtz_k_name = kernel.get_base_kernel().helmholtz_k_name
         self.derivative_wrangler_key = (order, kernel.dim, helmholtz_k_name)
 
@@ -499,8 +560,7 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
                 and base_kernel.dim == 2):
             from sumpy.expansion.local import Y2DLocalExpansion
             return Y2DLocalExpansion
-        elif (isinstance(base_kernel.get_base_kernel(), HelmholtzKernel)
-                and base_kernel.dim == 3):
+        elif isinstance(base_kernel.get_base_kernel(), HelmholtzKernel):
             from sumpy.expansion.local import \
                     HelmholtzConformingVolumeTaylorLocalExpansion
             return HelmholtzConformingVolumeTaylorLocalExpansion
@@ -528,8 +588,7 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
             from sumpy.expansion.multipole import (
                     LaplaceConformingVolumeTaylorMultipoleExpansion)
             return LaplaceConformingVolumeTaylorMultipoleExpansion
-        elif (isinstance(base_kernel.get_base_kernel(), HelmholtzKernel)
-                and base_kernel.dim == 3):
+        elif isinstance(base_kernel.get_base_kernel(), HelmholtzKernel):
             from sumpy.expansion.multipole import (
                     HelmholtzConformingVolumeTaylorMultipoleExpansion)
             return HelmholtzConformingVolumeTaylorMultipoleExpansion

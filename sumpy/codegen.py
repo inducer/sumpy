@@ -477,7 +477,7 @@ class PowerRewriter(CSECachingMapperMixin, IdentityMapper):
             if exp > 1 and exp % 2 == 0:
                 square = prim.wrap_in_cse(new_base*new_base)
                 return self.rec(prim.wrap_in_cse(square**(exp//2)))
-            if exp > 1 and exp % 2 == 1:
+            elif exp > 1 and exp % 2 == 1:
                 square = prim.wrap_in_cse(new_base*new_base)
                 return self.rec(prim.wrap_in_cse(square**((exp-1)//2))*new_base)
             elif exp == 1:

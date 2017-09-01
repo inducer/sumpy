@@ -98,6 +98,9 @@ class E2EBase(KernelCacheWrapper):
 
         src_coeff_exprs = [sym.Symbol("src_coeff%d" % i)
                 for i in range(len(self.src_expansion))]
+        src_rscale = sym.Symbol("src_rscale")
+
+        tgt_rscale = sym.Symbol("tgt_rscale")
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
@@ -105,7 +108,8 @@ class E2EBase(KernelCacheWrapper):
                 sac.assign_unique("coeff%d" % i, coeff_i)
                 for i, coeff_i in enumerate(
                     self.tgt_expansion.translate_from(
-                        self.src_expansion, src_coeff_exprs, dvec))]
+                        self.src_expansion, src_coeff_exprs, src_rscale,
+                        dvec, tgt_rscale))]
 
         sac.run_global_cse()
 
@@ -196,6 +200,7 @@ class E2EFromCSR(E2EBase):
                 """],
                 [
                     lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
+                    lp.ValueArg("src_rscale,tgt_rscale", None),
                     lp.GlobalArg("src_box_starts, src_box_lists",
                         None, shape=None, strides=(1,), offset=lp.auto),
                     lp.ValueArg("aligned_nboxes,tgt_base_ibox,src_base_ibox",
@@ -228,11 +233,22 @@ class E2EFromCSR(E2EBase):
         :arg src_expansions:
         :arg src_box_starts:
         :arg src_box_lists:
+        :arg src_rscale:
+        :arg tgt_rscale:
         :arg centers:
         """
         knl = self.get_cached_optimized_kernel()
 
-        return knl(queue, **kwargs)
+        centers = kwargs.pop("centers")
+        # "1" may be passed for rscale, which won't have its type
+        # meaningfully inferred. Make the type of rscale explicit.
+        src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
+        tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
+
+        return knl(queue,
+                centers=centers,
+                src_rscale=src_rscale, tgt_rscale=tgt_rscale,
+                **kwargs)
 
 # }}}
 
@@ -306,6 +322,7 @@ class E2EFromChildren(E2EBase):
                     lp.GlobalArg("target_boxes", None, shape=lp.auto,
                         offset=lp.auto),
                     lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
+                    lp.ValueArg("src_rscale,tgt_rscale", None),
                     lp.GlobalArg("box_child_ids", None,
                         shape="nchildren, aligned_nboxes"),
                     lp.GlobalArg("tgt_expansions", None,
@@ -337,11 +354,22 @@ class E2EFromChildren(E2EBase):
         :arg src_expansions:
         :arg src_box_starts:
         :arg src_box_lists:
+        :arg src_rscale:
+        :arg tgt_rscale:
         :arg centers:
         """
         knl = self.get_cached_optimized_kernel()
 
-        return knl(queue, **kwargs)
+        centers = kwargs.pop("centers")
+        # "1" may be passed for rscale, which won't have its type
+        # meaningfully inferred. Make the type of rscale explicit.
+        src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
+        tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
+
+        return knl(queue,
+                centers=centers,
+                src_rscale=src_rscale, tgt_rscale=tgt_rscale,
+                **kwargs)
 
 # }}}
 
@@ -402,6 +430,7 @@ class E2EFromParent(E2EBase):
                     lp.GlobalArg("target_boxes", None, shape=lp.auto,
                         offset=lp.auto),
                     lp.GlobalArg("centers", None, shape="dim, naligned_boxes"),
+                    lp.ValueArg("src_rscale,tgt_rscale", None),
                     lp.ValueArg("naligned_boxes,nboxes", np.int32),
                     lp.ValueArg("tgt_base_ibox,src_base_ibox", np.int32),
                     lp.ValueArg("ntgt_level_boxes,nsrc_level_boxes", np.int32),
@@ -430,11 +459,22 @@ class E2EFromParent(E2EBase):
         :arg src_expansions:
         :arg src_box_starts:
         :arg src_box_lists:
+        :arg src_rscale:
+        :arg tgt_rscale:
         :arg centers:
         """
         knl = self.get_cached_optimized_kernel()
 
-        return knl(queue, **kwargs)
+        centers = kwargs.pop("centers")
+        # "1" may be passed for rscale, which won't have its type
+        # meaningfully inferred. Make the type of rscale explicit.
+        src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
+        tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
+
+        return knl(queue,
+                centers=centers,
+                src_rscale=src_rscale, tgt_rscale=tgt_rscale,
+                **kwargs)
 
 # }}}
 

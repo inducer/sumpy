@@ -46,7 +46,7 @@ class CalculusPatch(object):
     .. automethod:: dy
     .. automethod:: dy
     .. automethod:: laplace
-    .. automethod:: eval_at_0
+    .. automethod:: eval_at_center
     .. autoattribute:: x
     .. autoattribute:: y
     .. autoattribute:: z

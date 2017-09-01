@@ -25,7 +25,6 @@ THE SOFTWARE.
 
 import six
 from six.moves import range
-from six.moves import zip
 
 import numpy as np
 from pymbolic.mapper import IdentityMapper as IdentityMapperBase
@@ -77,7 +76,7 @@ _find_symbolic_backend()
 # Symbolic API common to SymEngine and sympy.
 # Before adding a function here, make sure it's present in both modules.
 SYMBOLIC_API = """
-Add Basic Mul Pow exp sqrt symbols sympify cos sin atan2 Function Symbol
+Add Basic Mul Pow exp sqrt log symbols sympify cos sin atan2 Function Symbol
 Derivative Integer Matrix Subs I pi functions""".split()
 
 if USE_SYMENGINE:
@@ -193,12 +192,14 @@ def make_sym_vector(name, components):
             [sym.Symbol("%s%d" % (name, i)) for i in range(components)])
 
 
-def vector_subs(expr, old, new):
-    result = expr
-    for old_i, new_i in zip(old, new):
-        result = result.subs(old_i, new_i)
+def vector_subs(expr, from_vec, to_vec):
+    subs_pairs = []
+    assert (from_vec.rows, from_vec.cols) == (to_vec.rows, to_vec.cols)
+    for irow in range(from_vec.rows):
+        for icol in range(from_vec.cols):
+            subs_pairs.append((from_vec[irow, icol], to_vec[irow, icol]))
 
-    return result
+    return expr.subs(subs_pairs)
 
 
 def find_power_of(base, prod):

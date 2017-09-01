@@ -95,14 +95,21 @@ class MiDerivativeTaker(object):
 
 class LinearRecurrenceBasedMiDerivativeTaker(MiDerivativeTaker):
     """
-    See :class:`sumpy.expansion.LinearRecurrenceBasedDerivativeWrangler`
+    The derivative taker for expansions that use
+    :class:`sumpy.expansion.LinearRecurrenceBasedDerivativeWrangler`
     """
 
     def __init__(self, expr, var_list, wrangler):
-        MiDerivativeTaker.__init__(self, expr, var_list)
+        super(LinearRecurrenceBasedMiDerivativeTaker, self).__init__(
+                expr, var_list)
         self.wrangler = wrangler
 
+    @memoize_method
     def diff(self, mi):
+        """
+        :arg mi: a multi-index (tuple) indicating how many x/y derivatives are
+            to be taken.
+        """
         try:
             expr = self.cache_by_mi[mi]
         except KeyError:
@@ -119,7 +126,7 @@ class LinearRecurrenceBasedMiDerivativeTaker(MiDerivativeTaker):
 
                 recurrence = (
                         self.wrangler.try_get_recurrence_for_derivative(
-                            next_mi, self.cache_by_mi))
+                            next_mi, self.cache_by_mi, rscale=1))
 
                 if recurrence is not None:
                     expr = Add(*tuple(
@@ -129,6 +136,7 @@ class LinearRecurrenceBasedMiDerivativeTaker(MiDerivativeTaker):
                     expr = expr.diff(next_deriv)
 
                 self.cache_by_mi[next_mi] = expr
+
         return expr
 
 # }}}
@@ -271,7 +279,7 @@ class KernelComputation(object):
         return [
                 lp.Assignment(id=None,
                     assignee="knl_%d_scaling" % i,
-                    expression=sympy_conv(kernel.get_scaling()),
+                    expression=sympy_conv(kernel.get_global_scaling_const()),
                     temp_var_type=dtype)
                 for i, (kernel, dtype) in enumerate(
                     zip(self.kernels, self.value_dtypes))]
