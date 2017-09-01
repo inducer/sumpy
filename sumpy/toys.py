@@ -315,9 +315,14 @@ class ExpansionPotentialSource(PotentialSource):
     .. attribute:: radius
 
         Not used mathematically. Just for visualization, purely advisory.
+
+    .. attribute:: text_kwargs
+
+       Passed to matplotlib.text(). Used for customizing the expansion
+       label. Just for visualization, purely advisory.
     """
     def __init__(self, toy_ctx, center, order, coeffs, derived_from,
-            radius=None, expn_style=None):
+            radius=None, expn_style=None, text_kwargs=None):
         super(ExpansionPotentialSource, self).__init__(toy_ctx)
         self.center = np.asarray(center)
         self.order = order
@@ -326,6 +331,7 @@ class ExpansionPotentialSource(PotentialSource):
         self.derived_from = derived_from
         self.radius = radius
         self.expn_style = expn_style
+        self.text_kwargs = text_kwargs
 
 
 class MultipoleExpansion(ExpansionPotentialSource):
@@ -554,10 +560,18 @@ class SchematicVisitor(object):
             else:
                 raise ValueError("unknown expn_style: %s" % self.expn_style)
 
+        text_kwargs = dict(
+                x=psource.center[0],
+                y=psource.center[1],
+                text=type(psource).__name__[0],
+                verticalalignment="center",
+                horizontalalignment="center")
+
+        if psource.text_kwargs is not None:
+            text_kwargs.update(psource.text_kwargs)
+
         import matplotlib.pyplot as plt
-        plt.gca().text(psource.center[0], psource.center[1],
-                type(psource).__name__[0],
-                verticalalignment='center', horizontalalignment='center')
+        plt.gca().text(**text_kwargs)
 
         if psource.derived_from is not None:
             xmin, xmax = plt.xlim()
