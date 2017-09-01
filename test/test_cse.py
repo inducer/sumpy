@@ -203,17 +203,12 @@ def test_issue_4203():
 
 
 def test_dont_cse_subs():
-    from sumpy.symbolic import Subs
     f = Function("f")
     g = Function("g")
 
-    name_val, (expr,) = cse(
-        Subs(f(x, y), (x, y), (0, x + y))
-        + Subs(g(x, y), (x, y), (0, x + y)))
+    name_val, (expr,) = cse(f(x+y).diff(x) + g(x+y).diff(x))
 
     assert name_val == []
-    assert expr == Subs(f(x, y), (x, y), (0, x + y)) + \
-        Subs(g(x, y), (x, y), (0, x + y))
 
 
 def test_dont_cse_derivative():
