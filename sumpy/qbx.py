@@ -175,10 +175,8 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                 name=self.name,
                 assumptions="nsources>=1 and ntargets>=1",
                 default_offset=lp.auto,
-                silenced_warnings="write_race(write_lpot*)"
-                )
-
-        loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
+                silenced_warnings="write_race(write_lpot*)",
+                fixed_parameters=dict(dim=self.dim))
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
