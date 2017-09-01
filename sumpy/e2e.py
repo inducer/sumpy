@@ -211,9 +211,8 @@ class E2EFromCSR(E2EBase):
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
-                default_offset=lp.auto)
-
-        loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
+                default_offset=lp.auto,
+                fixed_parameters=dict(dim=self.dim))
 
         for expn in [self.src_expansion, self.tgt_expansion]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
@@ -319,11 +318,8 @@ class E2EFromChildren(E2EBase):
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
-                silenced_warnings="write_race(write_expn*)")
-
-        loopy_knl = lp.fix_parameters(loopy_knl,
-                dim=self.dim,
-                nchildren=2**self.dim)
+                silenced_warnings="write_race(write_expn*)",
+                fixed_parameters=dict(dim=self.dim, nchildren=2**self.dim))
 
         for expn in [self.src_expansion, self.tgt_expansion]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
@@ -413,11 +409,9 @@ class E2EFromParent(E2EBase):
                     "..."
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name, assumptions="ntgt_boxes>=1",
-                silenced_warnings="write_race(write_expn*)")
+                silenced_warnings="write_race(write_expn*)",
+                fixed_parameters=dict(dim=self.dim, nchildren=2**self.dim))
 
-        loopy_knl = lp.fix_parameters(loopy_knl,
-                dim=self.dim,
-                nchildren=2**self.dim)
         for expn in [self.src_expansion, self.tgt_expansion]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
