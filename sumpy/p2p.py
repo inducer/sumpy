@@ -165,13 +165,11 @@ class P2P(P2PBase):
                     if self.exclude_self else []
                 ) + gather_loopy_source_arguments(self.kernels),
                 name=self.name,
-                assumptions="nsources>=1 and ntargets>=1")
-
-        loopy_knl = lp.fix_parameters(
-                loopy_knl,
-                dim=self.dim,
-                nstrengths=self.strength_count,
-                nresults=len(self.kernels))
+                assumptions="nsources>=1 and ntargets>=1",
+                fixed_parameters=dict(
+                    dim=self.dim,
+                    nstrengths=self.strength_count,
+                    nresults=len(self.kernels)))
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
@@ -298,13 +296,11 @@ class P2PFromCSR(P2PBase):
                 [lp.GlobalArg("target_to_source", np.int32, shape=("ntargets",))]
                 if self.exclude_self else []
             ) + gather_loopy_source_arguments(self.kernels),
-            name=self.name, assumptions="ntgt_boxes>=1")
-
-        loopy_knl = lp.fix_parameters(
-                loopy_knl,
+            name=self.name, assumptions="ntgt_boxes>=1",
+            fixed_parameters=dict(
                 dim=self.dim,
                 nstrengths=self.strength_count,
-                nkernels=len(self.kernels))
+                nkernels=len(self.kernels)))
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_array_axes(loopy_knl, "strength", "sep,C")

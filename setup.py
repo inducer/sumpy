@@ -40,7 +40,7 @@ setup(name="sumpy",
       packages=["sumpy", "sumpy.expansion"],
 
       install_requires=[
-          "loo.py>=2013.1beta",
+          "loo.py>=2017.2",
           "pytools>=2013.5.6",
           "boxtree>=2013.1",
           "pytest>=2.3",

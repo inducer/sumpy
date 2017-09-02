@@ -157,9 +157,8 @@ class P2EFromSingleBox(P2EBase):
                 name=self.name,
                 assumptions="nsrc_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
-                default_offset=lp.auto)
-
-        loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
+                default_offset=lp.auto,
+                fixed_parameters=dict(dim=self.dim))
 
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
@@ -263,9 +262,8 @@ class P2EFromCSR(P2EBase):
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
-                default_offset=lp.auto)
-
-        loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
+                default_offset=lp.auto,
+                fixed_parameters=dict(dim=self.dim))
 
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
