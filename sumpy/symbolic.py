@@ -192,14 +192,14 @@ def make_sym_vector(name, components):
             [sym.Symbol("%s%d" % (name, i)) for i in range(components)])
 
 
-def vector_subs(expr, from_vec, to_vec):
-    subs_pairs = []
+def vector_xreplace(expr, from_vec, to_vec):
+    substs = {}
     assert (from_vec.rows, from_vec.cols) == (to_vec.rows, to_vec.cols)
     for irow in range(from_vec.rows):
         for icol in range(from_vec.cols):
-            subs_pairs.append((from_vec[irow, icol], to_vec[irow, icol]))
+            substs[from_vec[irow, icol]] = to_vec[irow, icol]
 
-    return expr.subs(subs_pairs)
+    return expr.xreplace(substs)
 
 
 def find_power_of(base, prod):

@@ -340,7 +340,7 @@ class ExpressionKernel(Kernel):
             raise ValueError("dist_vec length does not match expected dimension")
 
         from sumpy.symbolic import Symbol
-        expr = expr.subs(dict(
+        expr = expr.xreplace(dict(
             (Symbol("d%d" % i), dist_vec_i)
             for i, dist_vec_i in enumerate(scaled_dist_vec)
             ))
