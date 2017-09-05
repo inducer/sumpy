@@ -46,10 +46,13 @@ class CalculusPatch(object):
     .. automethod:: dy
     .. automethod:: dy
     .. automethod:: laplace
+    .. automethod:: div
+    .. automethod:: curl
     .. automethod:: eval_at_center
     .. autoattribute:: x
     .. autoattribute:: y
     .. autoattribute:: z
+    .. automethod:: norm
     """
     def __init__(self, center, h=1e-1, order=4, nodes="chebyshev"):
         self.center = center
@@ -147,6 +150,17 @@ class CalculusPatch(object):
 
         return sum(self.diff(iaxis, f_values, 2) for iaxis in range(self.dim))
 
+    def div(self, arg):
+        """
+        :arg arg: an object array containing
+            :class:`numpy.ndarrays` with shape ``(npoints_total,)``.
+        """
+        result = 0
+        for i, arg_i in enumerate(arg):
+            result = result + self.diff(i, arg_i)
+
+        return result
+
     def curl(self, arg):
         """Take the curl of the vector quantity *arg*.
 
@@ -184,3 +198,37 @@ class CalculusPatch(object):
     @property
     def z(self):
         return self.points[2]
+
+    def norm(self, arg, p):
+        if p == np.inf:
+            if arg.dtype == np.object:
+                return max(
+                        la.norm(x_i, p)
+                        for x_i in arg)
+            else:
+                return la.norm(arg, p)
+        else:
+            raise ValueError("unsupported norm")
+
+
+def frequency_domain_maxwell(cpatch, e, h, k):
+    mu = 1
+    epsilon = 1
+    c = 1/np.sqrt(mu*epsilon)
+    omega = k*c
+
+    b = mu*h
+    d = epsilon*e
+
+    # https://en.wikipedia.org/w/index.php?title=Maxwell%27s_equations&oldid=798940325#Macroscopic_formulation
+    resid_faraday = cpatch.curl(e) + 1j * omega/c * b
+    resid_ampere = cpatch.curl(h) - 1j * omega/c * d
+
+    resid_div_e = cpatch.div(e)
+    resid_div_h = cpatch.div(h)
+
+    return (
+            resid_faraday,
+            resid_ampere,
+            resid_div_e,
+            resid_div_h)
