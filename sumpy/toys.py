@@ -338,8 +338,8 @@ class ExpansionPotentialSource(PotentialSource):
 
     .. attribute:: text_kwargs
 
-       Passed to matplotlib.text(). Used for customizing the expansion
-       label. Just for visualization, purely advisory.
+       Passed to :method:`matplotlib.axes.Axes.text`. Used for customizing the
+       expansion label. Just for visualization, purely advisory.
     """
     def __init__(self, toy_ctx, center, rscale, order, coeffs, derived_from,
             radius=None, expn_style=None, text_kwargs=None):
@@ -584,7 +584,7 @@ class SchematicVisitor(object):
         text_kwargs = dict(
                 x=psource.center[0],
                 y=psource.center[1],
-                text=type(psource).__name__[0],
+                s=type(psource).__name__[0],
                 verticalalignment="center",
                 horizontalalignment="center")
 
