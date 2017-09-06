@@ -141,9 +141,6 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
     from sympy.core.cache import clear_cache
     clear_cache()
 
-    from sumpy import set_caching_enabled
-    set_caching_enabled(False)
-
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
 
@@ -334,8 +331,6 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
             slack += 0.3
             grad_slack += 0.3
 
-    set_caching_enabled(True)
-
     assert eoc_rec_pot.order_estimate() > tgt_order - slack
     assert eoc_rec_grad_x.order_estimate() > tgt_order_grad - grad_slack
 
@@ -354,9 +349,6 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
 
     from sympy.core.cache import clear_cache
     clear_cache()
-
-    from sumpy import set_caching_enabled
-    set_caching_enabled(False)
 
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
@@ -604,8 +596,6 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
         err = err / (la.norm(pot_direct) / res**2)
 
         pconv_verifier_full.add_data_point(order, err)
-
-    set_caching_enabled(True)
 
     for name, verifier in [
             ("p2m2p", pconv_verifier_p2m2p),
