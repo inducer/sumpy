@@ -199,7 +199,7 @@ def vector_subs(expr, from_vec, to_vec):
         for icol in range(from_vec.cols):
             subs_pairs.append((from_vec[irow, icol], to_vec[irow, icol]))
 
-    return expr.subs(subs_pairs)
+    return expr.subs(dict(subs_pairs))
 
 
 def find_power_of(base, prod):
