@@ -69,6 +69,7 @@ Python 3.6 POCL:
 
 Python 3.5 Conda:
   script:
+  # Disable caching to ensure SymEngine code generation is exercised.
   - export SUMPY_NO_CACHE=1
   - export SUMPY_FORCE_SYMBOLIC_BACKEND=symengine
   - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
