@@ -299,7 +299,7 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
         return defaultdict(lambda: [],
                 ((irow, [
                     (icol,
-                        coeff.subs(self._rscale_symbol, rscale)
+                        coeff.xreplace({self._rscale_symbol: rscale})
                         if isinstance(coeff, sp.Basic)
                         else coeff)
                     for icol, coeff in row])
