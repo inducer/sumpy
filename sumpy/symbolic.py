@@ -63,7 +63,7 @@ def _find_symbolic_backend():
         if backend == "symengine" and not symengine_found:
             raise RuntimeError("could not find SymEngine: %s" % symengine_error)
 
-        USE_SYMENGINE = True
+        USE_SYMENGINE = (backend == "symengine")
     else:
         USE_SYMENGINE = symengine_found
 
