@@ -88,7 +88,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             for i, mi in enumerate(coeff_identifiers):
                 result[i] /= (mi_factorial(mi) * rscale ** sum(mi))
         else:
-            avec = avec/rscale
+            avec = avec * rscale**-1
 
             result = [
                     mi_power(avec, mi) / mi_factorial(mi)
@@ -107,7 +107,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                     self.kernel.adjust_for_kernel_scaling(
                         vector_xreplace(
                             expr,
-                            bvec, bvec/rscale),
+                            bvec, bvec * rscale**-1),
                         rscale, nderivatives)
                     / rscale ** (nderivatives - nderivatives_for_scaling))
         else:
