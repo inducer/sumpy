@@ -130,7 +130,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         evaluated_coeffs = (
             self.derivative_wrangler.get_full_kernel_derivatives_from_stored(
                 coeffs, rscale))
-        bvec = bvec / rscale
+        bvec = bvec * rscale**-1
         result = sum(
                 coeff
                 * mi_power(bvec, mi)
@@ -195,7 +195,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # canceling "rscales" closer to each other in the hope of helping
             # with that.
             result = [
-                    (taker.diff(mi) * tgt_rscale**sum(mi)).expand(deep=False)
+                    (taker.diff(mi) * tgt_rscale**sum(mi)).expand()
                     for mi in self.get_coefficient_identifiers()]
 
         logger.info("building translation operator: done")

@@ -42,8 +42,9 @@ def _find_symbolic_backend():
     try:
         import symengine  # noqa
         symengine_found = True
-    except ImportError:
+    except ImportError as import_error:
         symengine_found = False
+        symengine_error = import_error
 
     ALLOWED_BACKENDS = ("sympy", "symengine")  # noqa
     BACKEND_ENV_VAR = "SUMPY_FORCE_SYMBOLIC_BACKEND"  # noqa
@@ -60,11 +61,9 @@ def _find_symbolic_backend():
                     ", ".join("'%s'" % val for val in ALLOWED_BACKENDS)))
 
         if backend == "symengine" and not symengine_found:
-            from warnings import warn
-            warn("%s=symengine was specified, but could not find symengine. "
-                 "Using sympy." % BACKEND_ENV_VAR, RuntimeWarning)
+            raise RuntimeError("could not find SymEngine: %s" % symengine_error)
 
-        USE_SYMENGINE = backend == "symengine" and symengine_found
+        USE_SYMENGINE = True
     else:
         USE_SYMENGINE = symengine_found
 
@@ -199,7 +198,7 @@ def vector_subs(expr, from_vec, to_vec):
         for icol in range(from_vec.cols):
             subs_pairs.append((from_vec[irow, icol], to_vec[irow, icol]))
 
-    return expr.subs(subs_pairs)
+    return expr.subs(dict(subs_pairs))
 
 
 def find_power_of(base, prod):
