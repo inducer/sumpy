@@ -11,8 +11,8 @@ def main():
     tctx = t.ToyContext(
             cl.create_some_context(),
             #LaplaceKernel(2),
-            YukawaKernel(2), extra_source_kwargs={"lam": 5},
-            #HelmholtzKernel(2), extra_source_kwargs={"k": 0.3},
+            YukawaKernel(2), extra_kernel_kwargs={"lam": 5},
+            #HelmholtzKernel(2), extra_kernel_kwargs={"k": 0.3},
             )
 
     pt_src = t.PointSources(
