@@ -545,8 +545,6 @@ def draw_annotation(from_pt, to_pt, label, arrowprops={}, **kwargs):
 
     my_arrowprops.update(arrowprops)
 
-    print("KWARGS", kwargs)
-
     plt.gca().annotate(label, xy=from_pt, xytext=to_pt,
             arrowprops=my_arrowprops, **kwargs)
 
