@@ -604,7 +604,7 @@ class SchematicVisitor(object):
             # are present at the tail.
             import matplotlib as mpl
             font_size = mpl.rcParams['font.size']
-            shrinkA = 2/3 * font_size
+            shrinkA = 2/3 * font_size  # noqa
 
         arrowprops = dict(shrinkA=shrinkA, arrowstyle="<|-")  # noqa
 
