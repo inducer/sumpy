@@ -598,17 +598,17 @@ class SchematicVisitor(object):
             label = psource_text_kwargs_copy.pop('s', label)
             text_kwargs.update(psource_text_kwargs_copy)
 
-        shrinkA = 0  # noqa
+        shrinkB = 0  # noqa
         if isinstance(psource.derived_from, ExpansionPotentialSource):
             # Avoid overlapping the tail of the arrow with any expansion labels that
             # are present at the tail.
             import matplotlib as mpl
             font_size = mpl.rcParams['font.size']
-            shrinkA = 2/3 * font_size  # noqa
+            shrinkB = 2/3 * font_size  # noqa
 
-        arrowprops = dict(shrinkA=shrinkA, arrowstyle="<|-")  # noqa
+        arrowprops = dict(shrinkB=shrinkB, arrowstyle="<|-")
 
-        draw_annotation(psource.center, psource.derived_from.center, label,
+        draw_annotation(psource.derived_from.center, psource.center, label,
                         arrowprops, **text_kwargs)
         self.rec(psource.derived_from)
 
