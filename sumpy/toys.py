@@ -527,10 +527,10 @@ def draw_point(loc, **kwargs):
     plt.plot(*loc, marker="o", **kwargs)
 
 
-def draw_annotation(from_pt, to_pt, label, arrowprops={}, **kwargs):
+def draw_annotation(to_pt, from_pt, label, arrowprops={}, **kwargs):
     """
-    :arg from_pt: Tail of arrow
     :arg to_pt: Head of arrow
+    :arg from_pt: Tail of arrow
     :arg label: Annotation label
     :arg arrowprops: Passed to arrowprops
     :arg kwargs: Passed to annotate
@@ -545,7 +545,7 @@ def draw_annotation(from_pt, to_pt, label, arrowprops={}, **kwargs):
 
     my_arrowprops.update(arrowprops)
 
-    plt.gca().annotate(label, xy=from_pt, xytext=to_pt,
+    plt.gca().annotate(label, xy=to_pt, xytext=from_pt,
             arrowprops=my_arrowprops, **kwargs)
 
 
