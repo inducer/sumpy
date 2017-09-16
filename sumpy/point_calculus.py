@@ -221,8 +221,10 @@ def frequency_domain_maxwell(cpatch, e, h, k):
     d = epsilon*e
 
     # https://en.wikipedia.org/w/index.php?title=Maxwell%27s_equations&oldid=798940325#Macroscopic_formulation
-    resid_faraday = cpatch.curl(e) + 1j * omega/c * b
-    resid_ampere = cpatch.curl(h) - 1j * omega/c * d
+    # assumed time dependence exp(-1j*omega*t)
+    # Agrees with Jackson, Third Ed., (8.16)
+    resid_faraday = cpatch.curl(e) - 1j * omega * b
+    resid_ampere = cpatch.curl(h) + 1j * omega * d
 
     resid_div_e = cpatch.div(e)
     resid_div_h = cpatch.div(h)
