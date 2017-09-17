@@ -181,6 +181,11 @@ def vector_from_device(queue, vec):
     from pytools.obj_array import with_object_array_or_scalar
 
     def from_dev(ary):
+        from numbers import Number
+        if isinstance(ary, (np.number, Number)):
+            # zero, most likely
+            return ary
+
         return ary.get(queue=queue)
 
     return with_object_array_or_scalar(from_dev, vec)
