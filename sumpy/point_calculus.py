@@ -119,6 +119,11 @@ class CalculusPatch(object):
         :returns: an array of shape ``(dim, npoints_total)``
         """
 
+        from numbers import Number
+        if isinstance(f_values, (np.number, Number)):
+            # constants differentiate to 0
+            return 0
+
         dim = len(self.center)
 
         assert axis < dim
