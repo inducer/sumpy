@@ -28,6 +28,8 @@ from pytools import memoize_method
 
 __doc__ = """
 .. autoclass:: CalculusPatch
+
+.. autofunction:: frequency_domain_maxwell
 """
 
 
