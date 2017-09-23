@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 
 __doc__ = """
+.. autofunction:: make_field_plotter_from_bbox
 .. autoclass:: FieldPlotter
 """
 
@@ -62,6 +63,38 @@ def separate_by_real_and_imag(data, real_only):
                 yield (name, field)
 
 
+def make_field_plotter_from_bbox(bbox, h, extend_factor=0):
+        """
+        :arg bbox: a tuple (low, high) of points represented as 1D numpy arrays
+            indicating the low and high ends of the extent of a bounding box.
+        :arg h: Either a number or a sequence of numbers indicating the desired
+            (approximate) grid spacing in all or each of the dimensions. If a
+            sequence, the length must match the number of dimensions.
+        :arg extend_factor: A floating point number indicating by what percentage
+            the plot area should be grown compared to *bbox*.
+        """
+        low, high = bbox
+
+        extent = (high-low) * (1 + extend_factor)
+        center = 0.5*(high+low)
+
+        dimensions = len(center)
+        from numbers import Number
+        if isinstance(h, Number):
+            h = (h,)*dimensions
+        else:
+            if len(h) != dimensions:
+                raise ValueError("length of 'h' must match number of dimensions")
+
+        from math import ceil
+
+        npoints = tuple(
+                int(ceil(extent[i] / h[i]))
+                for i in range(dimensions))
+
+        return FieldPlotter(center, extent, npoints)
+
+
 class FieldPlotter(object):
     """
     .. automethod:: set_matplotlib_limits
@@ -75,7 +108,8 @@ class FieldPlotter(object):
         self.a = a = center-extent*0.5
         self.b = b = center+extent*0.5
 
-        if not isinstance(npoints, tuple):
+        from numbers import Number
+        if isinstance(npoints, Number):
             npoints = dim*(npoints,)
         else:
             if len(npoints) != dim:
