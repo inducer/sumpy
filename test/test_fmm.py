@@ -210,7 +210,7 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
                 partial(local_expn_class, knl),
                 out_kernels)
         wrangler = wcc.get_wrangler(queue, tree, dtype,
-                fmm_level_to_order=lambda lev: order,
+                fmm_level_to_order=lambda tree, lev: order,
                 kernel_extra_kwargs=extra_kwargs)
 
         from boxtree.fmm import drive_fmm
@@ -283,7 +283,7 @@ def test_sumpy_fmm_exclude_self(ctx_getter):
             exclude_self=True)
 
     wrangler = wcc.get_wrangler(queue, tree, dtype,
-            fmm_level_to_order=lambda lev: order,
+            fmm_level_to_order=lambda tree, lev: order,
             self_extra_kwargs=self_extra_kwargs)
 
     from boxtree.fmm import drive_fmm
