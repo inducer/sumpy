@@ -29,6 +29,7 @@ import numpy as np
 import loopy as lp
 import sumpy.symbolic as sym
 from sumpy.tools import KernelCacheWrapper
+import itertools
 
 
 __doc__ = """
@@ -91,10 +92,9 @@ class E2PBase(KernelCacheWrapper):
                 for i in range(len(self.expansion.get_coefficient_identifiers()))]
         value = self.expansion.evaluate(coeff_exprs, bvec, rscale)
 
-        result_names = [
-            sac.assign_unique("result_%d_p" % i,
-                knl.postprocess_at_target(value, bvec))
-            for i, knl in enumerate(self.kernels)
+        result_names = [[sac.assign_unique("result_{}_{}_p".format(i, j),
+                knl.postprocess_at_target(v, bvec))
+                for i, knl in enumerate(self.kernels)] for j, v in enumerate(value)
             ]
 
         sac.run_global_cse()
@@ -104,7 +104,7 @@ class E2PBase(KernelCacheWrapper):
                 six.iteritems(sac.assignments),
                 vector_names=set(["b"]),
                 pymbolic_expr_maps=[self.expansion.get_code_transformer()],
-                retain_names=result_names,
+                retain_names=list(itertools.chain.from_iterable(result_names)),
                 complex_dtype=np.complex128  # FIXME
                 )
 
@@ -114,10 +114,10 @@ class E2PBase(KernelCacheWrapper):
         from sumpy.symbolic import SympyToPymbolicMapper
         sympy_conv = SympyToPymbolicMapper()
         return [lp.Assignment(id=None,
-                    assignee="kernel_scaling",
-                    expression=sympy_conv(
-                        self.expansion.kernel.get_global_scaling_const()),
-                    temp_var_type=lp.auto)]
+                    assignee="kernel_scaling_{}".format(i),
+                    expression=sympy_conv(scaling_const),
+                    temp_var_type=lp.auto) for i, scaling_const in
+                    enumerate(self.expansion.kernel.get_global_scaling_const())]
 
     def get_cache_key(self):
         return (type(self).__name__, self.expansion, tuple(self.kernels))
@@ -134,6 +134,7 @@ class E2PFromSingleBox(E2PBase):
         ncoeffs = len(self.expansion)
 
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
+        num_exprs = len(self.expansion.kernel.expressions)
 
         loopy_knl = lp.make_kernel(
                 [
@@ -157,13 +158,14 @@ class E2PFromSingleBox(E2PBase):
                     for itgt
                         <> b[idim] = targets[idim, itgt] - center[idim] {dup=idim}
 
-                        """] + loopy_insns + ["""
+                        """] + loopy_insns + list(itertools.chain.from_iterable(["""
 
-                        result[{resultidx},itgt] = \
-                                kernel_scaling * result_{resultidx}_p \
+                        result[{vidx},{resultidx},itgt] = \
+                                kernel_scaling_{vidx} * result_{resultidx}_{vidx}_p \
                                 {{id_prefix=write_result}}
-                        """.format(resultidx=i) for i in range(len(result_names))
-                        ] + ["""
+                        """.format(idx=j + i*(num_exprs), resultidx=i,
+                                   vidx=j) for i in range(len(result_names))
+                        ] for j in range(num_exprs))) + ["""
                     end
                 end
                 """],
@@ -174,8 +176,9 @@ class E2PFromSingleBox(E2PBase):
                         None, shape=None),
                     lp.GlobalArg("centers", None, shape="dim, naligned_boxes"),
                     lp.ValueArg("rscale", None),
-                    lp.GlobalArg("result", None, shape="nresults, ntargets",
-                        dim_tags="sep,C"),
+                    lp.GlobalArg("result", None,
+                        shape="{}, nresults, ntargets".format(num_exprs),
+                        dim_tags="C,sep,C"),
                     lp.GlobalArg("src_expansions", None,
                         shape=("nsrc_level_boxes", ncoeffs), offset=lp.auto),
                     lp.ValueArg("nsrc_level_boxes,naligned_boxes", np.int32),
@@ -191,7 +194,6 @@ class E2PFromSingleBox(E2PBase):
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
-
         return loopy_knl
 
     def get_optimized_kernel(self):
@@ -215,8 +217,8 @@ class E2PFromSingleBox(E2PBase):
         # "1" may be passed for rscale, which won't have its type
         # meaningfully inferred. Make the type of rscale explicit.
         rscale = centers.dtype.type(kwargs.pop("rscale"))
-
-        return knl(queue, centers=centers, rscale=rscale, **kwargs)
+        a = knl(queue, centers=centers, rscale=rscale, **kwargs)
+        return a
 
 # }}}
 
@@ -266,7 +268,7 @@ class E2PFromCSR(E2PBase):
                         """] + ["""
                         result[{resultidx}, itgt] = result[{resultidx}, itgt] + \
                                 kernel_scaling * simul_reduce(sum, isrc_box,
-                                result_{resultidx}_p) {{id_prefix=write_result}}
+                                result_{resultidx}_p_0) {{id_prefix=write_result}}
                         """.format(resultidx=i) for i in range(len(result_names))] + ["""
                     end
                 end

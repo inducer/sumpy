@@ -124,7 +124,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                 * self.get_scaled_multipole(taker.diff(mi), bvec, rscale, sum(mi))
                 for coeff, mi in zip(coeffs, self.get_coefficient_identifiers())))
 
-        return result
+        return [result]
 
     def get_kernel_derivative_taker(self, bvec):
         return (self.derivative_wrangler.get_derivative_taker(
@@ -263,12 +263,12 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
 
         arg_scale = self.get_bessel_arg_scaling()
 
-        return sum(coeffs[self.get_storage_index(l)]
+        return [sum(coeffs[self.get_storage_index(l)]
                    * self.kernel.postprocess_at_target(
                        hankel_1(l, arg_scale * bvec_len)
                        * rscale ** abs(l)
                        * sym.exp(sym.I * l * target_angle_rel_center), bvec)
-                for l in self.get_coefficient_identifiers())
+                for l in self.get_coefficient_identifiers())]
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale):

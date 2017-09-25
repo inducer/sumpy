@@ -457,7 +457,7 @@ def local_expand(psource, center, order=None, rscale=1, **expn_kwargs):
 
 def logplot(fp, psource, **kwargs):
     fp.show_scalar_in_matplotlib(
-            np.log10(np.abs(psource.eval(fp.points) + 1e-15)), **kwargs)
+            np.log10(np.abs(psource.eval(fp.points)[0] + 1e-15)), **kwargs)
 
 
 def restrict_inner(psource, radius, center=None):

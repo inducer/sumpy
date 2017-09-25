@@ -101,9 +101,9 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
     def evaluate(self, coeffs, bvec, rscale):
         # no point in heeding rscale here--just ignore it
         from pytools import factorial
-        return sym.Add(*(
+        return [sym.Add(*(
                 coeffs[self.get_storage_index(i)] / factorial(i)
-                for i in self.get_coefficient_identifiers()))
+                for i in self.get_coefficient_identifiers()))]
 
 # }}}
 
@@ -137,7 +137,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 / mi_factorial(mi)
                 for coeff, mi in zip(
                         evaluated_coeffs, self.get_full_coefficient_identifiers()))
-        return result
+        return [result]
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale):
@@ -271,12 +271,12 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
         arg_scale = self.get_bessel_arg_scaling()
 
-        return sum(coeffs[self.get_storage_index(l)]
+        return [sum(coeffs[self.get_storage_index(l)]
                    * self.kernel.postprocess_at_target(
                        bessel_j(l, arg_scale * bvec_len)
                        / rscale ** abs(l)
                        * sym.exp(sym.I * l * -target_angle_rel_center), bvec)
-                for l in self.get_coefficient_identifiers())
+                for l in self.get_coefficient_identifiers())]
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale):

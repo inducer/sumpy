@@ -27,6 +27,7 @@ from six.moves import range
 
 import numpy as np
 import loopy as lp
+import itertools
 
 from sumpy.tools import KernelComputation, KernelCacheWrapper
 
@@ -75,15 +76,16 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
 
-        result_names = [
-                sac.assign_unique("knl%d" % i,
+        result_names = list(itertools.chain.from_iterable(
+                (sac.assign_unique("knl{}_{}".format(i, j),
                     knl.postprocess_at_target(
                         knl.postprocess_at_source(
-                            knl.get_expression(dvec),
+                            expr,
                             dvec),
                         dvec)
-                    )
-                for i, knl in enumerate(self.kernels)]
+                ) for j, expr in enumerate(knl.get_expressions(dvec)))
+                for i, knl in enumerate(self.kernels))
+                )
 
         sac.run_global_cse()
 
@@ -95,7 +97,7 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
                 retain_names=result_names,
                 complex_dtype=np.complex128  # FIXME
                 )
-
+        print(loopy_insns)
         return loopy_insns, result_names
 
     def get_cache_key(self):
@@ -116,7 +118,8 @@ class P2P(P2PBase):
         from pymbolic import var
         exprs = [
                 var(name)
-                * var("strength").index((self.strength_usage[i], var("isrc")))
+                * var("strength").index(
+                    (self.strength_usage[self.exprs_to_kernel[i]], var("isrc")))
                 for i, name in enumerate(result_names)]
 
         if self.exclude_self:
@@ -143,9 +146,9 @@ class P2P(P2PBase):
                         ] + ["""
                     end
                     """] + ["""
-                    result[KNLIDX, itgt] = knl_KNLIDX_scaling \
-                            * simul_reduce(sum, isrc, pair_result_KNLIDX)
-                    """.replace("KNLIDX", str(iknl))
+                    result[EXPRIDX, itgt] = knl_EXPRIDX_scaling \
+                            * simul_reduce(sum, isrc, pair_result_EXPRIDX)
+                    """.replace("EXPRIDX", str(iknl))
                     for iknl in range(len(exprs))] + [
                     ] + ["""
                 end
@@ -172,6 +175,7 @@ class P2P(P2PBase):
                     nresults=len(self.kernels)))
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+        print(loopy_knl)
 
         for knl in self.kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
@@ -217,7 +221,8 @@ class P2PFromCSR(P2PBase):
         from pymbolic import var
         exprs = [
                 var(name)
-                * var("strength").index((self.strength_usage[i], var("isrc")))
+                * var("strength").index(
+                    (self.strength_usage[self.exprs_to_kernel[i]], var("isrc")))
                 for i, name in enumerate(result_names)]
 
         if self.exclude_self:
@@ -267,10 +272,10 @@ class P2PFromCSR(P2PBase):
                                 """
                             end
                             """] + ["""
-                            result[KNLIDX, itgt] = result[KNLIDX, itgt] + \
-                                knl_KNLIDX_scaling \
-                                * simul_reduce(sum, isrc, pair_result_KNLIDX)
-                            """.replace("KNLIDX", str(iknl))
+                            result[EXPRIDX, itgt] = result[EXPRIDX, itgt] + \
+                                knl_EXPRIDX_scaling \
+                                * simul_reduce(sum, isrc, pair_result_EXPRIDX)
+                            """.replace("EXPRIDX", str(iknl))
                             for iknl in range(len(exprs))] + ["""
                         end
                     end

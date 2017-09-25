@@ -27,6 +27,7 @@ from six.moves import range, zip
 from pytools import memoize_method
 import numpy as np
 import sumpy.symbolic as sym
+import itertools
 
 import logging
 logger = logging.getLogger(__name__)
@@ -258,7 +259,7 @@ class KernelComputation(object):
             strength_usage = [0] * len(kernels)
 
         if len(kernels) != len(strength_usage):
-            raise ValueError("exprs and strength_usage must have the same length")
+            raise ValueError("kernels and strength_usage must have the same length")
         strength_count = max(strength_usage)+1
 
         # }}}
@@ -273,6 +274,9 @@ class KernelComputation(object):
         self.value_dtypes = value_dtypes
         self.strength_usage = strength_usage
         self.strength_count = strength_count
+        self.exprs_to_kernel = list(itertools.chain.from_iterable(
+                [i]*len(knl.expressions) for i, knl in enumerate(self.kernels)
+                ))
 
         self.name = name or self.default_name
 
@@ -281,14 +285,18 @@ class KernelComputation(object):
         sympy_conv = SympyToPymbolicMapper()
 
         import loopy as lp
-        return [
-                lp.Assignment(id=None,
-                    assignee="knl_%d_scaling" % i,
-                    expression=sympy_conv(kernel.get_global_scaling_const()),
-                    temp_var_type=dtype)
+        l = itertools.chain.from_iterable(
+                ((kernel, dtype, scaling_const)
+                for scaling_const in kernel.get_global_scaling_const())
                 for i, (kernel, dtype) in enumerate(
-                    zip(self.kernels, self.value_dtypes))]
-
+                    zip(self.kernels, self.value_dtypes))
+                )
+        return [lp.Assignment(id=None,
+                              assignee="knl_%d_scaling" % i,
+                              expression=sympy_conv(scaling_const),
+                              temp_var_type=dtype,
+                              )
+                for i, (kernel, dtype, scaling_const) in enumerate(l)]
 # }}}
 
 

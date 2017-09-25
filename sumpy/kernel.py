@@ -31,7 +31,6 @@ from sumpy.symbolic import pymbolic_real_norm_2
 from pymbolic.primitives import make_sym_vector
 from pymbolic import var
 
-
 __doc__ = """
 Kernel interface
 ----------------
@@ -303,7 +302,7 @@ class ExpressionKernel(Kernel):
     def __init__(self, dim, expression, global_scaling_const,
             is_complex_valued):
         """
-        :arg expression: A :mod:`pymbolic` expression depending on
+        :arg expression: :mod:`pymbolic` expressions depending on
             variables *d_1* through *d_N* where *N* equals *dim*.
             (These variables match what is returned from
             :func:`pymbolic.primitives.make_sym_vector` with
@@ -320,39 +319,49 @@ class ExpressionKernel(Kernel):
         # those pickle cleanly. D'oh, sympy!
 
         Kernel.__init__(self, dim)
-
-        self.expression = expression
-        self.global_scaling_const = global_scaling_const
+        try:
+            self.expressions = list(expression)
+        except TypeError:
+            self.expressions = [expression]
+        try:
+            self.global_scaling_consts = list(global_scaling_const)
+        except TypeError:
+            self.global_scaling_consts = [global_scaling_const]
         self.is_complex_valued = is_complex_valued
 
     def __getinitargs__(self):
-        return (self.dim, self.expression, self.global_scaling_const,
+        return (self.dim, self.expressions, self.global_scaling_consts,
                 self.is_complex_valued)
 
     def __repr__(self):
         return "ExprKnl%dD" % self.dim
 
+    # TODO: Remove this
     def get_expression(self, scaled_dist_vec):
+        return self.get_expressions(scaled_dist_vec)[0]
+
+    def get_expressions(self, scaled_dist_vec):
         from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
-        expr = PymbolicToSympyMapperWithSymbols()(self.expression)
+        exprs = [PymbolicToSympyMapperWithSymbols()(expr) for
+                    expr in self.expressions]
 
         if self.dim != len(scaled_dist_vec):
             raise ValueError("dist_vec length does not match expected dimension")
 
         from sumpy.symbolic import Symbol
-        expr = expr.xreplace(dict(
+        exprs = [expr.xreplace(dict(
             (Symbol("d%d" % i), dist_vec_i)
             for i, dist_vec_i in enumerate(scaled_dist_vec)
-            ))
+            )) for expr in exprs]
 
-        return expr
+        return exprs
 
     def get_global_scaling_const(self):
         """Return a global scaling of the kernel."""
 
         from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
-        return PymbolicToSympyMapperWithSymbols()(
-                self.global_scaling_const)
+        return [PymbolicToSympyMapperWithSymbols()(scaling_const)
+                for scaling_const in self.global_scaling_consts]
 
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode("utf8"))
@@ -399,7 +408,7 @@ class LaplaceKernel(ExpressionKernel):
 
         super(LaplaceKernel, self).__init__(
                 dim,
-                expression=expr,
+                expression=[expr],
                 global_scaling_const=scaling,
                 is_complex_valued=False)
 
