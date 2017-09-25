@@ -186,7 +186,7 @@ class SumpyExpansionWrangler(object):
         if not callable(fmm_level_to_order):
             raise TypeError("fmm_level_to_order not passed")
         self.level_orders = [
-                fmm_level_to_order(lev) for lev in range(tree.nlevels)]
+                fmm_level_to_order(tree, lev) for lev in range(tree.nlevels)]
 
         if kernel_extra_kwargs is None:
             kernel_extra_kwargs = {}
