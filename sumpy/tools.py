@@ -393,8 +393,12 @@ class KernelCacheWrapper(object):
         with MinRecursionLimit(3000):
             knl = self.get_optimized_kernel(**kwargs)
 
+        from pytools.persistent_dict import ReadOnlyEntryError
         if CACHING_ENABLED:
-            code_cache[cache_key] = knl
+            try:
+                code_cache[cache_key] = knl
+            except ReadOnlyEntryError:
+                pass
 
         return knl
 
