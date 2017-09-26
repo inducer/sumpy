@@ -394,7 +394,7 @@ class KernelCacheWrapper(object):
             knl = self.get_optimized_kernel(**kwargs)
 
         if CACHING_ENABLED:
-            code_cache[cache_key] = knl
+            code_cache.store_if_not_present(cache_key, knl)
 
         return knl
 
