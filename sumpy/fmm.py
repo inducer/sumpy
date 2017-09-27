@@ -395,8 +395,6 @@ class SumpyExpansionWrangler(object):
         if evt is not None:
             mpoles.add_event(evt)
 
-        # }}}
-
         return mpoles
 
     def eval_direct(self, target_boxes, source_box_starts,
