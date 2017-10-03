@@ -117,8 +117,8 @@ class CalculusPatch(object):
     def diff(self, axis, f_values, nderivs=1):
         """Return the derivative along *axis* of *f_values*.
 
-        :arg f_values: an array of shape ``(dim, npoints_total)``
-        :returns: an array of shape ``(dim, npoints_total)``
+        :arg f_values: an array of shape ``(npoints_total,)``
+        :returns: an array of shape ``(npoints_total,)``
         """
 
         from numbers import Number
@@ -151,8 +151,8 @@ class CalculusPatch(object):
     def laplace(self, f_values):
         """Return the Laplacian of *f_values*.
 
-        :arg f_values: an array of shape ``(dim, npoints_total)``
-        :returns: an array of shape ``(dim, npoints_total)``
+        :arg f_values: an array of shape ``(npoints_total,)``
+        :returns: an array of shape ``(npoints_total,)``
         """
 
         return sum(self.diff(iaxis, f_values, 2) for iaxis in range(self.dim))
@@ -185,7 +185,7 @@ class CalculusPatch(object):
     def eval_at_center(self, f_values):
         """Interpolate *f_values* to the center point.
 
-        :arg f_values: an array of shape ``(dim, npoints_total)``
+        :arg f_values: an array of shape ``(npoints_total,)``
         :returns: a scalar.
         """
         f_values = f_values.reshape(*self._pshape)
