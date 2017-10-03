@@ -178,11 +178,11 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                     assert n >= k
                     from sympy import binomial
                     contrib *= (binomial(n, k)
-                            * dvec[idim]**(n-k))
+                            * sym.UnevaluatedExpr(dvec[idim]/tgt_rscale)**(n-k))
 
                 result[i] += (
                         contrib
-                        * (src_rscale**sum(src_mi) / tgt_rscale**sum(tgt_mi)))
+                        * sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(src_mi))
 
             result[i] /= mi_factorial(tgt_mi)
 

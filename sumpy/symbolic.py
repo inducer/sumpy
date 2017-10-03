@@ -98,6 +98,19 @@ def _coeff_isneg(a):
     return a.is_Number and a.is_negative
 
 
+have_unevaluated_expr = False
+if not USE_SYMENGINE:
+    try:
+        from sympy import UnevaluatedExpr
+        have_unevaluated_expr = True
+    except ImportError:
+        pass
+
+if not have_unevaluated_expr:
+    def UnevaluatedExpr(x):  # noqa
+        return x
+
+
 # {{{ debugging of sympy CSE via Maxima
 
 class _DerivativeKiller(IdentityMapperBase):
