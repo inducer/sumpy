@@ -78,6 +78,11 @@ class SumpyExpansionWranglerCodeContainer(object):
         self.cl_context = cl_context
 
     @memoize_method
+    def get_base_kernel(self):
+        from pytools import single_valued
+        return single_valued(k.get_base_kernel() for k in self.out_kernels)
+
+    @memoize_method
     def multipole_expansion(self, order):
         return self.multipole_expansion_factory(order, self.use_rscale)
 
@@ -183,16 +188,20 @@ class SumpyExpansionWrangler(object):
 
         self.dtype = dtype
 
-        if not callable(fmm_level_to_order):
-            raise TypeError("fmm_level_to_order not passed")
-        self.level_orders = [
-                fmm_level_to_order(tree, lev) for lev in range(tree.nlevels)]
-
         if kernel_extra_kwargs is None:
             kernel_extra_kwargs = {}
 
         if self_extra_kwargs is None:
             self_extra_kwargs = {}
+
+        if not callable(fmm_level_to_order):
+            raise TypeError("fmm_level_to_order not passed")
+
+        base_kernel = code_container.get_base_kernel()
+        kernel_arg_set = frozenset(kernel_extra_kwargs.items())
+        self.level_orders = [
+                fmm_level_to_order(base_kernel, kernel_arg_set, tree, lev)
+                for lev in range(tree.nlevels)]
 
         self.source_extra_kwargs = source_extra_kwargs
         self.kernel_extra_kwargs = kernel_extra_kwargs
