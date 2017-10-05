@@ -154,7 +154,6 @@ class SimpleExpansionOrderFinder(object):
                             1/factorial(helm_order+1)
                             * self.err_const_helmholtz
                             * factor**(helm_order+1))
-                    print(helm_error, helm_error_direct)
                     assert (abs(helm_error - helm_error_direct)
                             < 1e-13 * abs(helm_error_direct))
 
