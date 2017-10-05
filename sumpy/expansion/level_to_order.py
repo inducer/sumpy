@@ -25,6 +25,8 @@ THE SOFTWARE.
 __doc__ = """
 .. autofunction:: h2d_level_to_order_lookup
 .. autofunction:: l2d_level_to_order_lookup
+
+.. autoclass:: SimpleExpansionOrderFinder
 """
 
 import numpy as np
@@ -88,6 +90,75 @@ def l2d_level_to_order_lookup(tree, epsilon):
     orders.fill(nterms)
 
     return orders
+
+
+class SimpleExpansionOrderFinder(object):
+    r"""
+    This models the Laplace truncation error as:
+
+        C_{\text{lap}} \left(\frac{\sqrt{d}}{3}\right)^{p+1}.
+
+    For the Helmholtz kernel, an additional term is added:
+
+    .. math::
+
+        C_{\text{helm}} \frac 1{p!} (hk)^{p+1},
+
+    where :math:`d` is the number of dimensions, :math:`p` is the expansion order,
+    :math:`h` is the box size, and :math:`k` is the wave number.
+    """
+
+    def __init__(self, tol, err_const_laplace=0.01, err_const_helmholtz=100,
+            extra_order=1):
+        """
+        :arg extra_order: order increase to accommodate, say, the taking of
+            oderivatives f the FMM expansions.
+        """
+        self.tol = tol
+
+        self.err_const_laplace = err_const_laplace
+        self.err_const_helmholtz = err_const_helmholtz
+
+        self.extra_order = extra_order
+
+    def __call__(self, kernel, kernel_args, tree, level):
+        from sumpy.kernel import LaplaceKernel, HelmholtzKernel
+
+        assert isinstance(kernel, (LaplaceKernel, HelmholtzKernel))
+
+        laplace_order = int(np.ceil(
+                (np.log(self.tol) - np.log(self.err_const_laplace))
+                /
+                np.log(
+                    np.sqrt(tree.dimensions)/3
+                    ) - 1))
+
+        if isinstance(kernel, HelmholtzKernel):
+            helmholtz_k = dict(kernel_args)[kernel.helmholtz_k_name]
+
+            box_lengthscale = (
+                tree.stick_out_factor
+                * tree.root_extent / (1 << level))
+
+            from math import factorial
+            helm_order = 1
+            while True:
+                helm_error = (
+                        1/factorial(helm_order+1)
+                        * self.err_const_helmholtz
+                        * (box_lengthscale * helmholtz_k)**(helm_order+1))
+                if helm_error < self.tol:
+                    break
+
+                helm_order += 1
+
+                if helm_order > 500:
+                    raise ValueError("unable to find suitable order estimate "
+                            "for Helmholtz expansion")
+        else:
+            helm_order = 0
+
+        return max(laplace_order, helm_order) + self.extra_order
 
 
 # vim: fdm=marker
