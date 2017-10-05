@@ -32,7 +32,8 @@ import pyopencl as cl  # noqa: F401
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 
-from sumpy.kernel import BiharmonicKernel, YukawaKernel
+from sumpy.kernel import (LaplaceKernel, HelmholtzKernel,
+        BiharmonicKernel, YukawaKernel)
 
 
 # {{{ pde check for kernels
@@ -112,6 +113,26 @@ def test_pde_check(dim, order=4):
 
         print(eoc_rec)
         assert eoc_rec.order_estimate() > order-2-0.1
+
+
+class FakeTree:
+    def __init__(self, dimensions, root_extent, stick_out_factor):
+        self.dimensions = dimensions
+        self.root_extent = root_extent
+        self.stick_out_factor = stick_out_factor
+
+
+@pytest.mark.parametrize("knl", [LaplaceKernel(2), HelmholtzKernel(2)])
+def test_order_finder(knl):
+    from sumpy.expansion.level_to_order import SimpleExpansionOrderFinder
+
+    ofind = SimpleExpansionOrderFinder(1e-5)
+
+    tree = FakeTree(knl.dim, 200, 0.5)
+    orders = [
+        ofind(knl, frozenset([("k", 5)]), tree, level)
+        for level in range(30)]
+    print(orders)
 
 
 # You can test individual routines by typing

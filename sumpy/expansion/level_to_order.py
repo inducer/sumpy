@@ -140,13 +140,24 @@ class SimpleExpansionOrderFinder(object):
                 tree.stick_out_factor
                 * tree.root_extent / (1 << level))
 
+            factor = box_lengthscale * helmholtz_k / (2*float(np.pi))
+
             from math import factorial
             helm_order = 1
+            helm_error = self.err_const_helmholtz * factor
             while True:
-                helm_error = (
-                        1/factorial(helm_order+1)
-                        * self.err_const_helmholtz
-                        * (box_lengthscale * helmholtz_k)**(helm_order+1))
+                helm_error = helm_error * factor / (helm_order+1)
+
+                if helm_order < 4:
+                    # this may overflow for large orders
+                    helm_error_direct = (
+                            1/factorial(helm_order+1)
+                            * self.err_const_helmholtz
+                            * factor**(helm_order+1))
+                    print(helm_error, helm_error_direct)
+                    assert (abs(helm_error - helm_error_direct)
+                            < 1e-13 * abs(helm_error_direct))
+
                 if helm_error < self.tol:
                     break
 
