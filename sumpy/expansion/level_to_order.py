@@ -169,7 +169,7 @@ class SimpleExpansionOrderFinder(object):
 
                 helm_order += 1
 
-                if helm_order > 500:
+                if helm_order > 10000:
                     raise ValueError("unable to find suitable order estimate "
                             "for Helmholtz expansion")
         else:
