@@ -102,13 +102,15 @@ class SimpleExpansionOrderFinder(object):
 
     .. math::
 
-        C_{\text{helm}} \frac 1{p!} (hk)^{p+1},
+        C_{\text{helm}} \frac 1{p!}
+        \left(C_{\text{helm\_scale}} \cdot \frac{hk}{2\pi}\right)^{p+1},
 
     where :math:`d` is the number of dimensions, :math:`p` is the expansion order,
     :math:`h` is the box size, and :math:`k` is the wave number.
     """
 
     def __init__(self, tol, err_const_laplace=0.01, err_const_helmholtz=100,
+            scaling_const_helmholtz=4,
             extra_order=1):
         """
         :arg extra_order: order increase to accommodate, say, the taking of
@@ -118,6 +120,7 @@ class SimpleExpansionOrderFinder(object):
 
         self.err_const_laplace = err_const_laplace
         self.err_const_helmholtz = err_const_helmholtz
+        self.scaling_const_helmholtz = scaling_const_helmholtz
 
         self.extra_order = extra_order
 
@@ -140,13 +143,17 @@ class SimpleExpansionOrderFinder(object):
                 tree.stick_out_factor
                 * tree.root_extent / (1 << level))
 
-            factor = box_lengthscale * helmholtz_k / (2*float(np.pi))
+            factor = (
+                    self.scaling_const_helmholtz
+                    * box_lengthscale
+                    * helmholtz_k
+                    / (2*float(np.pi)))
 
             from math import factorial
             helm_order = 1
-            helm_error = self.err_const_helmholtz * factor
+            helm_rec_error = self.err_const_helmholtz * factor
             while True:
-                helm_error = helm_error * factor / (helm_order+1)
+                helm_rec_error = helm_rec_error * factor / (helm_order+1)
 
                 if helm_order < 4:
                     # this may overflow for large orders
@@ -154,10 +161,10 @@ class SimpleExpansionOrderFinder(object):
                             1/factorial(helm_order+1)
                             * self.err_const_helmholtz
                             * factor**(helm_order+1))
-                    assert (abs(helm_error - helm_error_direct)
+                    assert (abs(helm_rec_error - helm_error_direct)
                             < 1e-13 * abs(helm_error_direct))
 
-                if helm_error < self.tol:
+                if helm_rec_error * helm_order**(tree.dimensions-1) < self.tol:
                     break
 
                 helm_order += 1
