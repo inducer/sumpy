@@ -186,8 +186,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 result.append(sym.Add(*local_result))
         else:
             from sumpy.tools import MiDerivativeTaker
-            expr = src_expansion.evaluate(src_coeff_exprs, dvec, rscale=src_rscale)
-            taker = MiDerivativeTaker(expr, dvec)
+            exprs = src_expansion.evaluate(src_coeff_exprs, dvec, rscale=src_rscale)
+            takers = [MiDerivativeTaker(expr, dvec) for expr in exprs]
 
             # Rscale/operand magnitude is fairly sensitive to the order of
             # operations--which is something we don't have fantastic control
@@ -195,7 +195,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # canceling "rscales" closer to each other in the hope of helping
             # with that.
             result = [
-                    (taker.diff(mi) * tgt_rscale**sum(mi)).expand()
+                    [(taker.diff(mi) * tgt_rscale**sum(mi)).expand() for taker in takers]
                     for mi in self.get_coefficient_identifiers()]
 
         logger.info("building translation operator: done")

@@ -177,7 +177,7 @@ class E2PFromSingleBox(E2PBase):
                     lp.GlobalArg("centers", None, shape="dim, naligned_boxes"),
                     lp.ValueArg("rscale", None),
                     lp.GlobalArg("result", None,
-                        shape="{}, nresults, ntargets".format(num_exprs),
+                        shape=(num_exprs, "nresults", "ntargets"),
                         dim_tags="C,sep,C"),
                     lp.GlobalArg("src_expansions", None,
                         shape=("nsrc_level_boxes", ncoeffs), offset=lp.auto),
@@ -232,6 +232,7 @@ class E2PFromCSR(E2PBase):
         ncoeffs = len(self.expansion)
 
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
+        num_exprs = len(self.expansion.kernel.expressions)
 
         loopy_knl = lp.make_kernel(
                 [
@@ -265,11 +266,15 @@ class E2PFromCSR(E2PBase):
 
                             """] + loopy_insns + ["""
                         end
-                        """] + ["""
-                        result[{resultidx}, itgt] = result[{resultidx}, itgt] + \
-                                kernel_scaling * simul_reduce(sum, isrc_box,
-                                result_{resultidx}_p_0) {{id_prefix=write_result}}
-                        """.format(resultidx=i) for i in range(len(result_names))] + ["""
+                        """] + list(itertools.chain.from_iterable(["""
+
+                        result[{vidx},{residx},itgt] = \
+                                result[{vidx},{residx},itgt] + \
+                                kernel_scaling_{vidx} * simul_reduce(sum, isrc_box,
+                                result_{residx}_{vidx}_p) {{id_prefix=write_result}}
+                        """.format(idx=j + i*(num_exprs), residx=i,
+                                   vidx=j) for i in range(len(result_names))
+                        ] for j in range(num_exprs))) + ["""
                     end
                 end
                 """],
@@ -284,8 +289,9 @@ class E2PFromCSR(E2PBase):
                     lp.ValueArg("src_base_ibox", np.int32),
                     lp.ValueArg("nsrc_level_boxes,aligned_nboxes", np.int32),
                     lp.ValueArg("ntargets", np.int32),
-                    lp.GlobalArg("result", None, shape="nresults,ntargets",
-                        dim_tags="sep,C"),
+                    lp.GlobalArg("result", None,
+                        shape=(num_exprs, "nresults", "ntargets"),
+                        dim_tags="C,sep,C"),
                     lp.GlobalArg("source_box_starts, source_box_lists,",
                         None, shape=None, offset=lp.auto),
                     "..."
