@@ -163,9 +163,10 @@ class ExpansionBase(object):
 
 class DerivativeWrangler(object):
 
-    def __init__(self, order, dim):
+    def __init__(self, order, dim, nexprs=1):
         self.order = order
         self.dim = dim
+        self.nexprs = nexprs
 
     def get_coefficient_identifiers(self):
         raise NotImplementedError
@@ -190,7 +191,10 @@ class DerivativeWrangler(object):
                 generate_nonnegative_integer_tuples_summing_to_at_most
                 as gnitstam)
 
-        res = sorted(gnitstam(self.order, self.dim), key=sum)
+        mis = sorted(gnitstam(self.order, self.dim), key=sum)
+        res = []
+        for i in range(self.nexprs):
+            res.extend([(mi, i) for mi in mis])
         return res
 
 
@@ -370,8 +374,10 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
 
 class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
 
-    def try_get_recurrence_for_derivative(self, deriv, in_terms_of, rscale):
-        deriv = np.array(deriv, dtype=int)
+    def try_get_recurrence_for_derivative(self, coeff_identifier, in_terms_of,
+            rscale):
+        assert coeff_identifier[1] == 0
+        deriv = np.array(coeff_identifier[0], dtype=int)
 
         for dim in np.where(2 <= deriv)[0]:
             # Check if we can reduce this dimension in terms of the other
@@ -391,7 +397,7 @@ class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
                 if needed_deriv not in in_terms_of:
                     break
 
-                coeffs[needed_deriv] = -1
+                coeffs[(needed_deriv, 0)] = -1
             else:
                 return coeffs
 
@@ -402,8 +408,10 @@ class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
         super(HelmholtzDerivativeWrangler, self).__init__(order, dim)
         self.helmholtz_k_name = helmholtz_k_name
 
-    def try_get_recurrence_for_derivative(self, deriv, in_terms_of, rscale):
-        deriv = np.array(deriv, dtype=int)
+    def try_get_recurrence_for_derivative(self, coeff_identifier, in_terms_of,
+            rscale):
+        assert coeff_identifier[1] == 0
+        deriv = np.array(coeff_identifier[0], dtype=int)
 
         for dim in np.where(2 <= deriv)[0]:
             # Check if we can reduce this dimension in terms of the other
@@ -423,10 +431,10 @@ class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
                 if needed_deriv not in in_terms_of:
                     break
 
-                coeffs[needed_deriv] = -1
+                coeffs[(needed_deriv, 0)] = -1
             else:
                 k = sym.Symbol(self.helmholtz_k_name)
-                coeffs[tuple(reduced_deriv)] = -k*k*rscale*rscale
+                coeffs[(tuple(reduced_deriv), 0)] = -k*k*rscale*rscale
                 return coeffs
 
 # }}}
@@ -480,7 +488,7 @@ class VolumeTaylorExpansion(VolumeTaylorExpansionBase):
 
     # not user-facing, be strict about having to pass use_rscale
     def __init__(self, kernel, order, use_rscale):
-        self.derivative_wrangler_key = (order, kernel.dim)
+        self.derivative_wrangler_key = (order, kernel.dim, len(kernel.expressions))
 
 
 class LaplaceConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
@@ -490,7 +498,7 @@ class LaplaceConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
 
     # not user-facing, be strict about having to pass use_rscale
     def __init__(self, kernel, order, use_rscale):
-        self.derivative_wrangler_key = (order, kernel.dim)
+        self.derivative_wrangler_key = (order, kernel.dim, len(kernel.expressions))
 
 
 class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
@@ -501,7 +509,8 @@ class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
     # not user-facing, be strict about having to pass use_rscale
     def __init__(self, kernel, order, use_rscale):
         helmholtz_k_name = kernel.get_base_kernel().helmholtz_k_name
-        self.derivative_wrangler_key = (order, kernel.dim, helmholtz_k_name)
+        self.derivative_wrangler_key = (order, kernel.dim, len(kernel.expressions),
+                                            helmholtz_k_name)
 
 # }}}
 
