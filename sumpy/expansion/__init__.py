@@ -376,9 +376,7 @@ class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
 
     def try_get_recurrence_for_derivative(self, coeff_identifier, in_terms_of,
             rscale):
-        assert coeff_identifier[1] == 0
         deriv = np.array(coeff_identifier[0], dtype=int)
-
         for dim in np.where(2 <= deriv)[0]:
             # Check if we can reduce this dimension in terms of the other
             # dimensions.
@@ -397,7 +395,7 @@ class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
                 if needed_deriv not in in_terms_of:
                     break
 
-                coeffs[(needed_deriv, 0)] = -1
+                coeffs[(needed_deriv, coeff_identifier[1])] = -1
             else:
                 return coeffs
 

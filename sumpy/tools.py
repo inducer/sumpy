@@ -56,14 +56,16 @@ def mi_power(vector, mi):
 
 class MiDerivativeTaker(object):
 
-    def __init__(self, expr, var_list):
-        assert isinstance(expr, sym.Basic)
+    def __init__(self, exprs, var_list):
+        for expr in exprs:
+            assert isinstance(expr, sym.Basic)
         self.var_list = var_list
         empty_mi = (0,) * len(var_list)
-        self.cache_by_mi = {empty_mi: expr}
+        self.cache_by_mi = dict(((empty_mi, nexpr), expr) for
+                                    nexpr, expr in enumerate(exprs))
 
     def mi_dist(self, a, b):
-        return np.array(a, dtype=int) - np.array(b, dtype=int)
+        return np.array(a[0], dtype=int) - np.array(b[0], dtype=int)
 
     def diff(self, mi):
         try:
@@ -80,17 +82,19 @@ class MiDerivativeTaker(object):
         return expr
 
     def get_derivative_taking_sequence(self, start_mi, end_mi):
-        current_mi = np.array(start_mi, dtype=int)
+        assert start_mi[1] == end_mi[1]
+        current_mi = np.array(start_mi[0], dtype=int)
         for idx, (mi_i, vec_i) in enumerate(
                 zip(self.mi_dist(end_mi, start_mi), self.var_list)):
             for i in range(1, 1 + mi_i):
                 current_mi[idx] += 1
-                yield vec_i, tuple(current_mi)
+                yield vec_i, (tuple(current_mi), start_mi[1])
 
     def get_closest_cached_mi(self, mi):
+        keys = [key for key in self.cache_by_mi.keys() if key[1] == mi[1]]
         return min((other_mi
-                for other_mi in self.cache_by_mi.keys()
-                if (np.array(mi) >= np.array(other_mi)).all()),
+                for other_mi in keys
+                if (np.array(mi[0]) >= np.array(other_mi[0])).all()),
             key=lambda other_mi: sum(self.mi_dist(mi, other_mi)))
 
 
@@ -100,9 +104,9 @@ class LinearRecurrenceBasedMiDerivativeTaker(MiDerivativeTaker):
     :class:`sumpy.expansion.LinearRecurrenceBasedDerivativeWrangler`
     """
 
-    def __init__(self, expr, var_list, wrangler):
+    def __init__(self, exprs, var_list, wrangler):
         super(LinearRecurrenceBasedMiDerivativeTaker, self).__init__(
-                expr, var_list)
+                exprs, var_list)
         self.wrangler = wrangler
 
     @memoize_method
@@ -124,7 +128,6 @@ class LinearRecurrenceBasedMiDerivativeTaker(MiDerivativeTaker):
             # fails fall back to derivative taking.
             for next_deriv, next_mi in (
                         self.get_derivative_taking_sequence(closest_mi, mi)):
-
                 recurrence = (
                         self.wrangler.try_get_recurrence_for_derivative(
                             next_mi, self.cache_by_mi, rscale=1))

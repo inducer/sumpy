@@ -68,7 +68,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
 
         avec_line = avec + tau*bvec
 
-        line_kernel = self.kernel.get_expression(avec_line)
+        line_kernel = self.kernel.get_expressions(avec_line)
 
         from sumpy.symbolic import USE_SYMENGINE
 
@@ -93,7 +93,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
 
             return [self.kernel.postprocess_at_target(
                         self.kernel.postprocess_at_source(
-                            line_kernel.diff("tau", i), avec),
+                            line_kernel[i[1]].diff("tau", i[0]), avec),
                         bvec)
                     .subs("tau", 0)
                     for i in self.get_coefficient_identifiers()]
@@ -123,7 +123,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         taker = MiDerivativeTaker(ppkernel, avec)
         return [
                 taker.diff(mi) * rscale ** sum(mi)
-                for mi in self.get_coefficient_identifiers()]
+                for (mi, nexpr) in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec, rscale):
         from sumpy.tools import mi_power, mi_factorial
@@ -135,7 +135,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 coeff
                 * mi_power(bvec, mi)
                 / mi_factorial(mi)
-                for coeff, mi in zip(
+                for coeff, (mi, nexpr) in zip(
                         evaluated_coeffs, self.get_full_coefficient_identifiers()))
         return [result]
 
@@ -168,15 +168,16 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             from sumpy.tools import add_mi
 
             result = []
-            for deriv in self.get_coefficient_identifiers():
+            for deriv, nexpr in self.get_coefficient_identifiers():
                 local_result = []
-                for coeff, term in zip(
+                for coeff, (term, nexpr2) in zip(
                         src_coeff_exprs,
                         src_expansion.get_coefficient_identifiers()):
-
+                    if (nexpr != nexpr2):
+                        continue
                     kernel_deriv = (
                             src_expansion.get_scaled_multipole(
-                                taker.diff(add_mi(deriv, term)),
+                                taker.diff((add_mi(deriv, term), nexpr)),
                                 dvec, src_rscale,
                                 nderivatives=sum(deriv) + sum(term),
                                 nderivatives_for_scaling=sum(term)))
@@ -187,15 +188,14 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         else:
             from sumpy.tools import MiDerivativeTaker
             exprs = src_expansion.evaluate(src_coeff_exprs, dvec, rscale=src_rscale)
-            takers = [MiDerivativeTaker(expr, dvec) for expr in exprs]
+            taker = MiDerivativeTaker(exprs, dvec)
 
             # Rscale/operand magnitude is fairly sensitive to the order of
             # operations--which is something we don't have fantastic control
             # over at the symbolic level. The '.expand()' below moves the two
             # canceling "rscales" closer to each other in the hope of helping
             # with that.
-            result = [
-                    [(taker.diff(mi) * tgt_rscale**sum(mi)).expand() for taker in takers]
+            result = [(taker.diff(mi) * tgt_rscale**sum(mi[0])).expand()
                     for mi in self.get_coefficient_identifiers()]
 
         logger.info("building translation operator: done")

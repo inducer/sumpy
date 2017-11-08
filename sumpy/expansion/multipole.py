@@ -75,7 +75,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             result = [0] * len(coeff_identifiers)
 
             for idim in range(kernel.dim):
-                for i, mi in enumerate(coeff_identifiers):
+                for i, (mi, nexpr) in enumerate(coeff_identifiers):
                     if mi[idim] == 0:
                         continue
 
@@ -92,7 +92,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
             result = [
                     mi_power(avec, mi) / mi_factorial(mi)
-                    for mi in self.get_full_coefficient_identifiers()]
+                    for (mi, nexpr) in self.get_full_coefficient_identifiers()]
         return (
             self.derivative_wrangler.get_stored_mpole_coefficients_from_full(
                 result, rscale))
@@ -128,7 +128,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
     def get_kernel_derivative_taker(self, bvec):
         return (self.derivative_wrangler.get_derivative_taker(
-            self.kernel.get_expression(bvec), bvec))
+            self.kernel.get_expressions(bvec), bvec))
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale):
@@ -149,23 +149,23 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
         from sumpy.tools import mi_factorial
 
-        src_mi_to_index = dict((mi, i) for i, mi in enumerate(
+        src_mi_to_index = dict((identifier, i) for i, identifier in enumerate(
             src_expansion.get_coefficient_identifiers()))
 
-        for i, mi in enumerate(src_expansion.get_coefficient_identifiers()):
+        for i, (mi, nexpr) in enumerate(src_expansion.get_coefficient_identifiers()):
             src_coeff_exprs[i] *= mi_factorial(mi)
 
         result = [0] * len(self.get_full_coefficient_identifiers())
         from pytools import generate_nonnegative_integer_tuples_below as gnitb
 
-        for i, tgt_mi in enumerate(
+        for i, (tgt_mi, nexpr) in enumerate(
                 self.get_full_coefficient_identifiers()):
 
             tgt_mi_plus_one = tuple(mi_i + 1 for mi_i in tgt_mi)
 
             for src_mi in gnitb(tgt_mi_plus_one):
                 try:
-                    src_index = src_mi_to_index[src_mi]
+                    src_index = src_mi_to_index[(src_mi, nexpr)]
                 except KeyError:
                     # Omitted coefficients: not life-threatening
                     continue

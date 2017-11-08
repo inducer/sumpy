@@ -104,7 +104,7 @@ class Kernel(object):
     .. automethod:: get_base_kernel
     .. automethod:: prepare_loopy_kernel
     .. automethod:: get_code_transformer
-    .. automethod:: get_expression
+    .. automethod:: get_expressions
     .. attribute:: has_efficient_scale_adjustment
     .. automethod:: adjust_for_kernel_scaling
     .. automethod:: postprocess_at_source
@@ -168,11 +168,11 @@ class Kernel(object):
     def get_code_transformer(self):
         """Return a function to postprocess the :mod:`pymbolic`
         expression generated from the result of
-        :meth:`get_expression` on the way to code generation.
+        :meth:`get_expressions` on the way to code generation.
         """
         return lambda expr: expr
 
-    def get_expression(self, dist_vec):
+    def get_expressions(self, dist_vec):
         r"""Return a :mod:`sympy` expression for the kernel."""
         raise NotImplementedError
 
@@ -335,10 +335,6 @@ class ExpressionKernel(Kernel):
 
     def __repr__(self):
         return "ExprKnl%dD" % self.dim
-
-    # TODO: Remove this
-    def get_expression(self, scaled_dist_vec):
-        return self.get_expressions(scaled_dist_vec)[0]
 
     def get_expressions(self, scaled_dist_vec):
         from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
@@ -749,8 +745,8 @@ class KernelWrapper(Kernel):
     def is_complex_valued(self):
         return self.inner_kernel.is_complex_valued
 
-    def get_expression(self, scaled_dist_vec):
-        return self.inner_kernel.get_expression(scaled_dist_vec)
+    def get_expressions(self, scaled_dist_vec):
+        return self.inner_kernel.get_expressions(scaled_dist_vec)
 
     @property
     def has_efficient_scale_adjustment(self):
