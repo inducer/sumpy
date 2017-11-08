@@ -19,8 +19,25 @@ and say::
 
 In addition, you need to have :mod:`numpy` installed.
 
+Usage
+=====
+
+Environment variables
+---------------------
+
++-----------------------------------+-----------------------------------------------------+
+| Name                              | Purpose                                             |
++===================================+=====================================================+
+| `SUMPY_FORCE_SYMBOLIC_BACKEND`    | Symbolic backend control, see `Symbolic backends`_  |
++-----------------------------------+-----------------------------------------------------+
+| `SUMPY_NO_CACHE`                  | If set, disables the on-disk cache                  |
++-----------------------------------+-----------------------------------------------------+
+| `SUMPY_NO_OPT`                    | If set, disables performance-oriented :mod:`loopy`  |
+|                                   | transformations                                     |
++-----------------------------------+-----------------------------------------------------+
+
 Symbolic backends
-=================
+-----------------
 
 :mod:`sumpy` supports two symbolic backends: sympy and SymEngine. To use the
 SymEngine backend, ensure that the `SymEngine library
