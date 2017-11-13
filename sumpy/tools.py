@@ -365,7 +365,7 @@ class OrderedSet(collections.MutableSet):
 class KernelCacheWrapper(object):
     @memoize_method
     def get_cached_optimized_kernel(self, **kwargs):
-        from sumpy import code_cache, CACHING_ENABLED
+        from sumpy import code_cache, CACHING_ENABLED, OPT_ENABLED
 
         if CACHING_ENABLED:
             import loopy.version
@@ -374,7 +374,8 @@ class KernelCacheWrapper(object):
                     self.get_cache_key()
                     + tuple(sorted(six.iteritems(kwargs)))
                     + (loopy.version.DATA_MODEL_VERSION,)
-                    + (KERNEL_VERSION,))
+                    + (KERNEL_VERSION,)
+                    + (OPT_ENABLED,))
 
             try:
                 result = code_cache[cache_key]
@@ -391,7 +392,10 @@ class KernelCacheWrapper(object):
 
         from pytools import MinRecursionLimit
         with MinRecursionLimit(3000):
-            knl = self.get_optimized_kernel(**kwargs)
+            if OPT_ENABLED:
+                knl = self.get_optimized_kernel(**kwargs)
+            else:
+                knl = self.get_kernel()
 
         if CACHING_ENABLED:
             code_cache.store_if_not_present(cache_key, knl)
