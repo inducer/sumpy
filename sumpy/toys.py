@@ -1,6 +1,9 @@
 from __future__ import division, absolute_import
 
-__copyright__ = "Copyright (C) 2017 Andreas Kloeckner"
+__copyright__ = """
+Copyright (C) 2017 Andreas Kloeckner
+Copyright (C) 2017 Matt Wala
+"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -36,10 +39,54 @@ import pyopencl as cl
 import logging
 logger = logging.getLogger(__name__)
 
+__doc__ = """
+
+This module provides a convenient interface for numerical experiments with
+local and multipole expansions.
+
+.. autoclass:: ToyContext
+.. autoclass:: PotentialSource
+.. autoclass:: ConstantPotential
+.. autoclass:: OneOnBallPotential
+.. autoclass:: PointSources
+
+These functions manipulate these pootentials:
+
+.. autofunction:: multipole_expand
+.. autofunction:: local_expand
+.. autofunction:: logplot
+.. autofunction:: restrict_inner
+.. autofunction:: restrict_outer
+
+These fucntions help with plotting:
+
+.. autofunction:: draw_box
+.. autofunction:: draw_circle
+.. autofunction:: draw_annotation
+.. autofunction:: draw_schematic
+
+These are created behind the scenes and are not typically directly instantiated
+by users:
+
+.. autoclass:: ExpansionPotentialSource
+.. autoclass:: MultipoleExpansion
+.. autoclass:: LocalExpansion
+.. autoclass:: Sum
+.. autoclass:: Product
+.. autoclass:: SchematicVisitor
+
+"""
+
 
 # {{{ context
 
 class ToyContext(object):
+    """This class functions as a container for generated code and 'behind-the-scenes'
+    information.
+
+    .. automethod:: __init__
+    """
+
     def __init__(self, cl_context, kernel,
             mpole_expn_class=None,
             local_expn_class=None,
@@ -242,6 +289,22 @@ def _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs):
 # {{{ potential source classes
 
 class PotentialSource(object):
+    """A base class for all classes representing potentials that can be
+    evaluated anywhere in space.
+
+    .. automethod:: eval
+
+    Supports (lazy) arithmetic:
+
+    .. automethod:: __neg__
+    .. automethod:: __add__
+    .. automethod:: __radd__
+    .. automethod:: __sub__
+    .. automethod:: __rsub__
+    .. automethod:: __mul__
+    .. automethod:: __rmul__
+    """
+
     def __init__(self, toy_ctx):
         self.toy_ctx = toy_ctx
 
@@ -279,6 +342,10 @@ class PotentialSource(object):
 
 
 class ConstantPotential(PotentialSource):
+    """
+    .. automethod:: __init__
+    """
+
     def __init__(self, toy_ctx, value):
         super(ConstantPotential, self).__init__(toy_ctx)
         self.value = np.array(value)
@@ -290,6 +357,9 @@ class ConstantPotential(PotentialSource):
 
 
 class OneOnBallPotential(PotentialSource):
+    """
+    .. automethod:: __init__
+    """
     def __init__(self, toy_ctx, center, radius):
         super(OneOnBallPotential, self).__init__(toy_ctx)
         self.center = np.asarray(center)
@@ -305,6 +375,8 @@ class PointSources(PotentialSource):
     .. attribute:: points
 
         ``[ndim, npoints]``
+
+    .. automethod:: __init__
     """
 
     def __init__(self, toy_ctx, points, weights, center=None):
