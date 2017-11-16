@@ -33,7 +33,7 @@ from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel,
-        BiharmonicKernel, YukawaKernel)
+        BiharmonicKernel, YukawaKernel, StokesKernel)
 
 
 # {{{ pde check for kernels
@@ -62,10 +62,31 @@ class YukawaKernelInfo:
     nderivs = 2
 
 
+class StokesKernelInfo:
+    def __init__(self, dim, f, mu):
+        self.kernel = StokesKernel(dim)
+        self.f = f
+        self.mu = mu
+        extra_kwargs = dict(("f_{}".format(i), f[i]) for i in range(dim))
+        extra_kwargs["mu"] = mu
+        self.extra_kwargs = extra_kwargs
+        self.dim = dim
+
+    def pde_func(self, cp, pot, num=0):
+        if num == self.dim:
+            return sum(cp.diff(i, pot[i]) for i in range(self.dim))
+        else:
+            return (self.mu * sum(cp.diff(i, pot[num], 2) for i in range(self.dim)) +
+                    cp.diff(num, pot[self.dim], 1))
+
+    nderivs = 2
+
+
 @pytest.mark.parametrize("knl_info", [
     BiharmonicKernelInfo(2),
     BiharmonicKernelInfo(3),
     YukawaKernelInfo(2, 5),
+    StokesKernelInfo(3, [1, 2, 3], 4),
     ])
 def test_pde_check_kernels(ctx_factory, knl_info, order=5):
     dim = knl_info.kernel.dim
