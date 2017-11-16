@@ -728,6 +728,79 @@ class StressletKernel(ExpressionKernel):
 
     mapper_method = "map_stresslet_kernel"
 
+
+class StokesKernel(ExpressionKernel):
+    init_arg_names = ("dim", "force_name", "viscosity_mu_name")
+
+    def __init__(self, dim, force_name="f", viscosity_mu_name="mu"):
+        r"""
+        :arg force_name: The argument name to use for
+                the force `f` the then generating functions to
+                evaluate this kernel.
+        """
+        mu = var(viscosity_mu_name)
+
+        if dim == 3:
+            exprs = [0]*(dim + 1)
+            scaling_consts = [0]*(dim + 1)
+            d = make_sym_vector("d", dim)
+            f = [var("{}_{}".format(force_name, i)) for i in range(dim)]
+            r = pymbolic_real_norm_2(d)
+
+            exprs[dim] = sum(f[i]*d[i] for i in range(len(d)))/r**3
+            scaling_consts[dim] = 1/(4*var("pi"))
+
+            jr = [[0 for j in range(dim)] for i in range(dim)]
+
+            for i in range(dim):
+                jr[i][i] = 1/r
+                for j in range(dim):
+                    jr[i][j] += d[i]*d[j]/r**3
+
+            for i in range(dim):
+                exprs[i] = 0
+                for j in range(dim):
+                    exprs[i] += f[j]*jr[j][i]
+                scaling_consts[i] = -1/(8*var("pi")*mu)
+
+        elif dim is None:
+            exprs = None
+            scaling_consts = None
+        else:
+            raise RuntimeError("unsupported dimensionality")
+
+        self.force_name = force_name
+        self.viscosity_mu_name = viscosity_mu_name
+
+        super(StokesKernel, self).__init__(
+                dim,
+                expression=exprs,
+                global_scaling_const=scaling_consts,
+                is_complex_valued=False)
+
+    def __getinitargs__(self):
+        return (self.dim, self.force_name, self.viscosity_mu_name)
+
+    def update_persistent_hash(self, key_hash, key_builder):
+        key_hash.update(type(self).__name__.encode())
+        key_builder.rec(key_hash,
+                (self.dim, self.force_name, self.viscosity_mu_name))
+
+    def __repr__(self):
+        return "StokesKnl%dD" % (self.dim)
+
+    def get_args(self):
+        return [
+                KernelArgument(
+                    loopy_arg=lp.ValueArg("{}_{}".format(self.force_name, i),
+                        np.float64),
+                    ) for i in range(self.dim)] + [
+                KernelArgument(
+                    loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64),
+                    )]
+
+    mapper_method = "map_expression_kernel"
+
 # }}}
 
 
