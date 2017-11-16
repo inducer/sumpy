@@ -173,25 +173,25 @@ def test_multiple_expressions():
     substs, reduced = cse([e1, e2])
     assert substs == [(x0, x + y)]
     assert reduced == [x0*z, x0*w]
-    l = [w*x*y + z, w*y]
-    substs, reduced = cse(l)
-    rsubsts, _ = cse(reversed(l))
+    exprs = [w*x*y + z, w*y]
+    substs, reduced = cse(exprs)
+    rsubsts, _ = cse(reversed(exprs))
     assert substs == rsubsts
     assert reduced == [z + x*x0, x0]
-    l = [w*x*y, w*x*y + z, w*y]
-    substs, reduced = cse(l)
-    rsubsts, _ = cse(reversed(l))
+    exprs = [w*x*y, w*x*y + z, w*y]
+    substs, reduced = cse(exprs)
+    rsubsts, _ = cse(reversed(exprs))
     assert substs == rsubsts
     assert reduced == [x1, x1 + z, x0]
     f = Function("f")
-    l = [f(x - z, y - z), x - z, y - z]
-    substs, reduced = cse(l)
-    rsubsts, _ = cse(reversed(l))
+    exprs = [f(x - z, y - z), x - z, y - z]
+    substs, reduced = cse(exprs)
+    rsubsts, _ = cse(reversed(exprs))
     assert substs == [(x0, -z), (x1, x + x0), (x2, x0 + y)]
     assert rsubsts == [(x0, -z), (x1, x0 + y), (x2, x + x0)]
     assert reduced == [f(x1, x2), x1, x2]
-    l = [w*y + w + x + y + z, w*x*y]
-    assert cse(l) == ([(x0, w*y)], [w + x + x0 + y + z, x*x0])
+    exprs = [w*y + w + x + y + z, w*x*y]
+    assert cse(exprs) == ([(x0, w*y)], [w + x + x0 + y + z, x*x0])
     assert cse([x + y, x + y + z]) == ([(x0, x + y)], [x0, z + x0])
     assert cse([x + y, x + z]) == ([], [x + y, x + z])
     assert cse([x*y, z + x*y, x*y*z + 3]) == \
@@ -302,24 +302,24 @@ def test_Piecewise():  # noqa
 def test_name_conflict():
     z1 = x0 + y
     z2 = x2 + x3
-    l = [cos(z1) + z1, cos(z2) + z2, x0 + x2]
-    substs, reduced = cse(l)
-    assert [e.subs(dict(substs)) for e in reduced] == l
+    exprs = [cos(z1) + z1, cos(z2) + z2, x0 + x2]
+    substs, reduced = cse(exprs)
+    assert [e.subs(dict(substs)) for e in reduced] == exprs
 
 
 def test_name_conflict_cust_symbols():
     z1 = x0 + y
     z2 = x2 + x3
-    l = [cos(z1) + z1, cos(z2) + z2, x0 + x2]
-    substs, reduced = cse(l, symbols("x:10"))
-    assert [e.subs(dict(substs)) for e in reduced] == l
+    exprs = [cos(z1) + z1, cos(z2) + z2, x0 + x2]
+    substs, reduced = cse(exprs, symbols("x:10"))
+    assert [e.subs(dict(substs)) for e in reduced] == exprs
 
 
 def test_symbols_exhausted_error():
-    l = cos(x+y)+x+y+cos(w+y)+sin(w+y)
+    exprs = cos(x+y)+x+y+cos(w+y)+sin(w+y)
     sym = [x, y, z]
     with pytest.raises(ValueError):
-        print(cse(l, symbols=sym))
+        print(cse(exprs, symbols=sym))
 
 
 @sympyonly
