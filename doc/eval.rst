@@ -10,3 +10,8 @@ Differentiation of Potentials
 -----------------------------
 
 .. automodule:: sumpy.point_calculus
+
+Support for Numerical Experiments with Expansions
+-------------------------------------------------
+
+.. automodule:: sumpy.toys

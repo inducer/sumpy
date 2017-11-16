@@ -40,6 +40,21 @@ __all__ = [
 code_cache = WriteOncePersistentDict("sumpy-code-cache-v6-"+VERSION_TEXT)
 
 
+# {{{ optimization control
+
+OPT_ENABLED = True
+
+OPT_ENABLED = "SUMPY_NO_OPT" not in os.environ
+
+
+def set_optimization_enabled(flag):
+    """Set whether the :mod:`loopy` kernels should be optimized."""
+    global OPT_ENABLED
+    OPT_ENABLED = flag
+
+# }}}
+
+
 # {{{ cache control
 
 CACHING_ENABLED = True

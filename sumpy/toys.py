@@ -1,6 +1,9 @@
 from __future__ import division, absolute_import
 
-__copyright__ = "Copyright (C) 2017 Andreas Kloeckner"
+__copyright__ = """
+Copyright (C) 2017 Andreas Kloeckner
+Copyright (C) 2017 Matt Wala
+"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -36,10 +39,56 @@ import pyopencl as cl
 import logging
 logger = logging.getLogger(__name__)
 
+__doc__ = """
+
+This module provides a convenient interface for numerical experiments with
+local and multipole expansions.
+
+.. autoclass:: ToyContext
+.. autoclass:: PotentialSource
+.. autoclass:: ConstantPotential
+.. autoclass:: PointSources
+
+These functions manipulate these potentials:
+
+.. autofunction:: multipole_expand
+.. autofunction:: local_expand
+.. autofunction:: logplot
+.. autofunction:: combine_inner_outer
+.. autofunction:: combine_halfspace
+.. autofunction:: combine_halfspace_and_outer
+
+These functions help with plotting:
+
+.. autofunction:: draw_box
+.. autofunction:: draw_circle
+.. autofunction:: draw_annotation
+.. autofunction:: draw_schematic
+
+These are created behind the scenes and are not typically directly instantiated
+by users:
+
+.. autoclass:: OneOnBallPotential
+.. autoclass:: HalfspaceOnePotential
+.. autoclass:: ExpansionPotentialSource
+.. autoclass:: MultipoleExpansion
+.. autoclass:: LocalExpansion
+.. autoclass:: Sum
+.. autoclass:: Product
+.. autoclass:: SchematicVisitor
+
+"""
+
 
 # {{{ context
 
 class ToyContext(object):
+    """This class functions as a container for generated code and 'behind-the-scenes'
+    information.
+
+    .. automethod:: __init__
+    """
+
     def __init__(self, cl_context, kernel,
             mpole_expn_class=None,
             local_expn_class=None,
@@ -242,6 +291,22 @@ def _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs):
 # {{{ potential source classes
 
 class PotentialSource(object):
+    """A base class for all classes representing potentials that can be
+    evaluated anywhere in space.
+
+    .. automethod:: eval
+
+    Supports (lazy) arithmetic:
+
+    .. automethod:: __neg__
+    .. automethod:: __add__
+    .. automethod:: __radd__
+    .. automethod:: __sub__
+    .. automethod:: __rsub__
+    .. automethod:: __mul__
+    .. automethod:: __rmul__
+    """
+
     def __init__(self, toy_ctx):
         self.toy_ctx = toy_ctx
 
@@ -279,6 +344,10 @@ class PotentialSource(object):
 
 
 class ConstantPotential(PotentialSource):
+    """
+    .. automethod:: __init__
+    """
+
     def __init__(self, toy_ctx, value):
         super(ConstantPotential, self).__init__(toy_ctx)
         self.value = np.array(value)
@@ -290,6 +359,9 @@ class ConstantPotential(PotentialSource):
 
 
 class OneOnBallPotential(PotentialSource):
+    """
+    .. automethod:: __init__
+    """
     def __init__(self, toy_ctx, center, radius):
         super(OneOnBallPotential, self).__init__(toy_ctx)
         self.center = np.asarray(center)
@@ -300,11 +372,29 @@ class OneOnBallPotential(PotentialSource):
         return (np.sum(dist_vec**2, axis=0) < self.radius**2).astype(np.float64)
 
 
+class HalfspaceOnePotential(PotentialSource):
+    """
+    .. automethod:: __init__
+    """
+    def __init__(self, toy_ctx, center, axis, side=1):
+        super(HalfspaceOnePotential, self).__init__(toy_ctx)
+        self.center = np.asarray(center)
+        self.axis = axis
+        self.side = side
+
+    def eval(self, targets):
+        return (
+            (self.side*(targets[self.axis] - self.center[self.axis])) >= 0
+            ).astype(np.float64)
+
+
 class PointSources(PotentialSource):
     """
     .. attribute:: points
 
         ``[ndim, npoints]``
+
+    .. automethod:: __init__
     """
 
     def __init__(self, toy_ctx, points, weights, center=None):
@@ -460,18 +550,41 @@ def logplot(fp, psource, **kwargs):
             np.log10(np.abs(psource.eval(fp.points) + 1e-15)), **kwargs)
 
 
-def restrict_inner(psource, radius, center=None):
+def combine_inner_outer(psource_inner, psource_outer, radius, center=None):
     if center is None:
-        center = psource.center
+        center = psource_inner.center
+    if radius is None:
+        radius = psource_inner.radius
 
-    return psource * OneOnBallPotential(psource.toy_ctx, center, radius)
+    ball_one = OneOnBallPotential(psource_inner.toy_ctx, center, radius)
+    return (
+            psource_inner * ball_one
+            +
+            psource_outer * (1 - ball_one))
 
 
-def restrict_outer(psource, radius, center=None):
+def combine_halfspace(psource_pos, psource_neg, axis, center=None):
     if center is None:
-        center = psource.center
+        center = psource_pos.center
 
-    return psource * (1-OneOnBallPotential(psource.toy_ctx, center, radius))
+    halfspace_one = HalfspaceOnePotential(psource_pos.toy_ctx, center, axis)
+    return (
+        psource_pos * halfspace_one
+        +
+        psource_neg * (1-halfspace_one))
+
+
+def combine_halfspace_and_outer(psource_pos, psource_neg, psource_outer,
+        axis, radius=None, center=None):
+
+    if center is None:
+        center = psource_pos.center
+    if radius is None:
+        center = psource_pos.radius
+
+    return combine_inner_outer(
+            combine_halfspace(psource_pos, psource_neg, axis, center),
+            psource_outer, radius, center)
 
 
 def l_inf(psource, radius, center=None, npoints=100, debug=False):
