@@ -190,7 +190,8 @@ class E2PFromSingleBox(E2PBase):
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_result*)",
                 default_offset=lp.auto,
-                fixed_parameters=dict(dim=self.dim, nresults=num_exprs * len(result_names)))
+                fixed_parameters=dict(dim=self.dim,
+                                    nresults=num_exprs*len(result_names)))
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)

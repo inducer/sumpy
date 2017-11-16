@@ -288,7 +288,7 @@ class KernelComputation(object):
         sympy_conv = SympyToPymbolicMapper()
 
         import loopy as lp
-        l = itertools.chain.from_iterable(
+        it = itertools.chain.from_iterable(
                 ((kernel, dtype, scaling_const)
                 for scaling_const in kernel.get_global_scaling_const())
                 for i, (kernel, dtype) in enumerate(
@@ -299,7 +299,7 @@ class KernelComputation(object):
                               expression=sympy_conv(scaling_const),
                               temp_var_type=dtype,
                               )
-                for i, (kernel, dtype, scaling_const) in enumerate(l)]
+                for i, (kernel, dtype, scaling_const) in enumerate(it)]
 # }}}
 
 
