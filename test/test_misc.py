@@ -45,7 +45,7 @@ class BiharmonicKernelInfo:
 
     @staticmethod
     def pde_func(cp, pot):
-        return cp.laplace(cp.laplace(pot))
+        return cp.laplace(cp.laplace(pot[0]))
 
     nderivs = 4
 
@@ -57,7 +57,7 @@ class YukawaKernelInfo:
         self.extra_kwargs = {"lam": lam}
 
     def pde_func(self, cp, pot):
-        return cp.laplace(pot) - self.lam**2*pot
+        return cp.laplace(pot[0]) - self.lam**2*pot[0]
 
     nderivs = 2
 
