@@ -44,10 +44,11 @@ class BiharmonicKernelInfo:
         self.extra_kwargs = {}
 
     @staticmethod
-    def pde_func(cp, pot):
+    def pde_func(cp, pot, num=0):
         return cp.laplace(cp.laplace(pot[0]))
 
     nderivs = 4
+    npdes = 1
 
 
 class YukawaKernelInfo:
@@ -56,10 +57,11 @@ class YukawaKernelInfo:
         self.lam = lam
         self.extra_kwargs = {"lam": lam}
 
-    def pde_func(self, cp, pot):
+    def pde_func(self, cp, pot, num=0):
         return cp.laplace(pot[0]) - self.lam**2*pot[0]
 
     nderivs = 2
+    npdes = 1
 
 
 class StokesKernelInfo:
@@ -80,6 +82,7 @@ class StokesKernelInfo:
                     cp.diff(num, pot[self.dim], 1))
 
     nderivs = 2
+    npdes = 4
 
 
 @pytest.mark.parametrize("knl_info", [
@@ -100,19 +103,21 @@ def test_pde_check_kernels(ctx_factory, knl_info, order=5):
 
     from pytools.convergence import EOCRecorder
     from sumpy.point_calculus import CalculusPatch
-    eoc_rec = EOCRecorder()
+    eoc_recs = [EOCRecorder() for i in range(knl_info.npdes)]
 
     for h in [0.1, 0.05, 0.025]:
         cp = CalculusPatch(np.array([1, 0, 0])[:dim], h=h, order=order)
         pot = pt_src.eval(cp.points)
 
-        pde = knl_info.pde_func(cp, pot)
+        for pde_num in range(knl_info.npdes):
+            pde = knl_info.pde_func(cp, pot, pde_num)
 
-        err = la.norm(pde)
-        eoc_rec.add_data_point(h, err)
+            err = la.norm(pde)
+            eoc_recs[pde_num].add_data_point(h, err)
 
-    print(eoc_rec)
-    assert eoc_rec.order_estimate() > order - knl_info.nderivs + 1 - 0.1
+    for eoc_rec in eoc_recs:
+        print(eoc_rec)
+        assert eoc_rec.order_estimate() > order - knl_info.nderivs + 1 - 0.1
 
 # }}}
 
