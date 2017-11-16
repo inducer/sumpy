@@ -97,7 +97,6 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
                 retain_names=result_names,
                 complex_dtype=np.complex128  # FIXME
                 )
-        print(loopy_insns)
         return loopy_insns, result_names
 
     def get_cache_key(self):
@@ -175,7 +174,6 @@ class P2P(P2PBase):
                     nresults=len(self.kernels)))
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-        print(loopy_knl)
 
         for knl in self.kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)

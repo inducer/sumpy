@@ -278,7 +278,7 @@ class KernelComputation(object):
         self.strength_usage = strength_usage
         self.strength_count = strength_count
         self.exprs_to_kernel = list(itertools.chain.from_iterable(
-                [i]*len(knl.expressions) for i, knl in enumerate(self.kernels)
+                [i]*knl.get_num_expressions() for i, knl in enumerate(self.kernels)
                 ))
 
         self.name = name or self.default_name

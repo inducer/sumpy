@@ -55,7 +55,10 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
         return k
 
     def get_coefficient_identifiers(self):
-        return list(range(self.order+1))
+        identifiers = []
+        for nexpr in range(len(self.kernel.expressions)):
+            identifiers.extend([(mi, nexpr) for mi in range(self.order+1)])
+        return identifiers
 
     def coefficients_from_source(self, avec, bvec, rscale):
         # no point in heeding rscale here--just ignore it
@@ -118,11 +121,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
     def coefficients_from_source(self, avec, bvec, rscale):
         from sumpy.tools import MiDerivativeTaker
         ppkernel = self.kernel.postprocess_at_source(
-                self.kernel.get_expression(avec), avec)
+                self.kernel.get_expressions(avec), avec)
 
         taker = MiDerivativeTaker(ppkernel, avec)
         return [
-                taker.diff(mi) * rscale ** sum(mi)
+                taker.diff((mi, nexpr)) * rscale ** sum(mi)
                 for (mi, nexpr) in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec, rscale):

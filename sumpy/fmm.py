@@ -270,10 +270,11 @@ class SumpyExpansionWrangler(object):
 
     def output_zeros(self):
         from pytools.obj_array import make_obj_array
+        nexprs = self.code.get_base_kernel().get_num_expressions()
         return make_obj_array([
                 cl.array.zeros(
                     self.queue,
-                    self.tree.ntargets,
+                    nexprs * self.tree.ntargets,
                     dtype=self.dtype)
                 for k in self.code.out_kernels])
 

@@ -352,6 +352,9 @@ class ExpressionKernel(Kernel):
 
         return exprs
 
+    def get_num_expressions(self):
+        return len(self.expressions)
+
     def get_global_scaling_const(self):
         """Return a global scaling of the kernel."""
 
@@ -747,6 +750,9 @@ class KernelWrapper(Kernel):
 
     def get_expressions(self, scaled_dist_vec):
         return self.inner_kernel.get_expressions(scaled_dist_vec)
+
+    def get_num_expressions(self):
+        return self.inner_kernel.get_num_expressions()
 
     @property
     def has_efficient_scale_adjustment(self):

@@ -160,10 +160,10 @@ class E2PFromSingleBox(E2PBase):
 
                         """] + loopy_insns + list(itertools.chain.from_iterable(["""
 
-                        result[{vidx},{resultidx},itgt] = \
+                        result[{idx},itgt] = \
                                 kernel_scaling_{vidx} * result_{resultidx}_{vidx}_p \
                                 {{id_prefix=write_result}}
-                        """.format(idx=j + i*(num_exprs), resultidx=i,
+                        """.format(idx=i + j*len(result_names), resultidx=i,
                                    vidx=j) for i in range(len(result_names))
                         ] for j in range(num_exprs))) + ["""
                     end
@@ -177,8 +177,8 @@ class E2PFromSingleBox(E2PBase):
                     lp.GlobalArg("centers", None, shape="dim, naligned_boxes"),
                     lp.ValueArg("rscale", None),
                     lp.GlobalArg("result", None,
-                        shape=(num_exprs, "nresults", "ntargets"),
-                        dim_tags="C,sep,C"),
+                        shape=("{}*nresults".format(num_exprs), "ntargets"),
+                        dim_tags="sep,C"),
                     lp.GlobalArg("src_expansions", None,
                         shape=("nsrc_level_boxes", ncoeffs), offset=lp.auto),
                     lp.ValueArg("nsrc_level_boxes,naligned_boxes", np.int32),
@@ -217,8 +217,7 @@ class E2PFromSingleBox(E2PBase):
         # "1" may be passed for rscale, which won't have its type
         # meaningfully inferred. Make the type of rscale explicit.
         rscale = centers.dtype.type(kwargs.pop("rscale"))
-        a = knl(queue, centers=centers, rscale=rscale, **kwargs)
-        return a
+        return knl(queue, centers=centers, rscale=rscale, **kwargs)
 
 # }}}
 
@@ -268,11 +267,11 @@ class E2PFromCSR(E2PBase):
                         end
                         """] + list(itertools.chain.from_iterable(["""
 
-                        result[{vidx},{residx},itgt] = \
-                                result[{vidx},{residx},itgt] + \
+                        result[{idx},itgt] = \
+                                result[{idx},itgt] + \
                                 kernel_scaling_{vidx} * simul_reduce(sum, isrc_box,
                                 result_{residx}_{vidx}_p) {{id_prefix=write_result}}
-                        """.format(idx=j + i*(num_exprs), residx=i,
+                        """.format(idx=i + j*len(result_names), residx=i,
                                    vidx=j) for i in range(len(result_names))
                         ] for j in range(num_exprs))) + ["""
                     end
@@ -290,8 +289,8 @@ class E2PFromCSR(E2PBase):
                     lp.ValueArg("nsrc_level_boxes,aligned_nboxes", np.int32),
                     lp.ValueArg("ntargets", np.int32),
                     lp.GlobalArg("result", None,
-                        shape=(num_exprs, "nresults", "ntargets"),
-                        dim_tags="C,sep,C"),
+                        shape=("{}*nresults".format(num_exprs), "ntargets"),
+                        dim_tags="sep,C"),
                     lp.GlobalArg("source_box_starts, source_box_lists,",
                         None, shape=None, offset=lp.auto),
                     "..."
@@ -323,7 +322,6 @@ class E2PFromCSR(E2PBase):
         # "1" may be passed for rscale, which won't have its type
         # meaningfully inferred. Make the type of rscale explicit.
         rscale = centers.dtype.type(kwargs.pop("rscale"))
-
         return knl(queue, centers=centers, rscale=rscale, **kwargs)
 
 # }}}
