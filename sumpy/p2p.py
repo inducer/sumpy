@@ -171,7 +171,7 @@ class P2P(P2PBase):
                 fixed_parameters=dict(
                     dim=self.dim,
                     nstrengths=self.strength_count,
-                    nresults=len(self.kernels)))
+                    nresults=len(exprs)))
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 

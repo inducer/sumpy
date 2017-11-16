@@ -405,7 +405,7 @@ class PointSources(PotentialSource):
         self._center = center
 
     def eval(self, targets):
-        evt, (potential,) = self.toy_ctx.get_p2p()(
+        evt, potential = self.toy_ctx.get_p2p()(
                 self.toy_ctx.queue, targets, self.points, [self.weights],
                 out_host=True,
                 **self.toy_ctx.extra_source_and_kernel_kwargs)
@@ -546,8 +546,9 @@ def local_expand(psource, center, order=None, rscale=1, **expn_kwargs):
 
 
 def logplot(fp, psource, **kwargs):
+    #TODO: fix me
     fp.show_scalar_in_matplotlib(
-            np.log10(np.abs(psource.eval(fp.points) + 1e-15)), **kwargs)
+            np.log10(np.abs(psource.eval(fp.points)[0] + 1e-15)), **kwargs)
 
 
 def combine_inner_outer(psource_inner, psource_outer, radius, center=None):
