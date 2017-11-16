@@ -52,11 +52,11 @@ __doc__ = """
 class LineTaylorLocalExpansion(LocalExpansionBase):
 
     def get_storage_index(self, k):
-        return k
+        return k[0] + self.kernel.get_num_expressions() * k[1]
 
     def get_coefficient_identifiers(self):
         identifiers = []
-        for nexpr in range(len(self.kernel.expressions)):
+        for nexpr in range(self.kernel.get_num_expressions()):
             identifiers.extend([(mi, nexpr) for mi in range(self.order+1)])
         return identifiers
 
@@ -104,9 +104,11 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
     def evaluate(self, coeffs, bvec, rscale):
         # no point in heeding rscale here--just ignore it
         from pytools import factorial
-        return [sym.Add(*(
-                coeffs[self.get_storage_index(i)] / factorial(i)
-                for i in self.get_coefficient_identifiers()))]
+        results = [[] for _ in range(self.kernel.get_num_expressions())]
+        for i in self.get_coefficient_identifiers():
+            results[i[1]].append(coeffs[self.get_storage_index(i)] /
+                                    factorial(i[0]))
+        return [sym.Add(*res) for res in results]
 
 # }}}
 

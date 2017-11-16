@@ -97,7 +97,7 @@ def test_direct(ctx_getter):
 
 
 # You can test individual routines by typing
-# $ python test_kernels.py 'test_p2p(cl.create_some_context)'
+# $ python test_qbx.py 'test_direct(cl.create_some_context)'
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

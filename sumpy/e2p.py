@@ -96,6 +96,7 @@ class E2PBase(KernelCacheWrapper):
                 knl.postprocess_at_target(v, bvec))
                 for i, knl in enumerate(self.kernels)] for j, v in enumerate(value)
             ]
+        result_names = list(itertools.chain.from_iterable(result_names))
 
         sac.run_global_cse()
 
@@ -104,7 +105,7 @@ class E2PBase(KernelCacheWrapper):
                 six.iteritems(sac.assignments),
                 vector_names=set(["b"]),
                 pymbolic_expr_maps=[self.expansion.get_code_transformer()],
-                retain_names=list(itertools.chain.from_iterable(result_names)),
+                retain_names=result_names,
                 complex_dtype=np.complex128  # FIXME
                 )
 
@@ -176,8 +177,7 @@ class E2PFromSingleBox(E2PBase):
                         None, shape=None),
                     lp.GlobalArg("centers", None, shape="dim, naligned_boxes"),
                     lp.ValueArg("rscale", None),
-                    lp.GlobalArg("result", None,
-                        shape=("{}*nresults".format(num_exprs), "ntargets"),
+                    lp.GlobalArg("result", None, shape="nresults,ntargets",
                         dim_tags="sep,C"),
                     lp.GlobalArg("src_expansions", None,
                         shape=("nsrc_level_boxes", ncoeffs), offset=lp.auto),
@@ -190,10 +190,11 @@ class E2PFromSingleBox(E2PBase):
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_result*)",
                 default_offset=lp.auto,
-                fixed_parameters=dict(dim=self.dim, nresults=len(result_names)))
+                fixed_parameters=dict(dim=self.dim, nresults=num_exprs * len(result_names)))
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
+
         return loopy_knl
 
     def get_optimized_kernel(self):
@@ -217,6 +218,7 @@ class E2PFromSingleBox(E2PBase):
         # "1" may be passed for rscale, which won't have its type
         # meaningfully inferred. Make the type of rscale explicit.
         rscale = centers.dtype.type(kwargs.pop("rscale"))
+
         return knl(queue, centers=centers, rscale=rscale, **kwargs)
 
 # }}}
@@ -288,8 +290,7 @@ class E2PFromCSR(E2PBase):
                     lp.ValueArg("src_base_ibox", np.int32),
                     lp.ValueArg("nsrc_level_boxes,aligned_nboxes", np.int32),
                     lp.ValueArg("ntargets", np.int32),
-                    lp.GlobalArg("result", None,
-                        shape=("{}*nresults".format(num_exprs), "ntargets"),
+                    lp.GlobalArg("result", None, shape="nresults,ntargets",
                         dim_tags="sep,C"),
                     lp.GlobalArg("source_box_starts, source_box_lists,",
                         None, shape=None, offset=lp.auto),
@@ -301,7 +302,7 @@ class E2PFromCSR(E2PBase):
                 default_offset=lp.auto,
                 fixed_parameters=dict(
                     dim=self.dim,
-                    nresults=len(result_names)))
+                    nresults=num_exprs*len(result_names)))
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.prioritize_loops(loopy_knl, "itgt_box,itgt,isrc_box")
@@ -322,6 +323,7 @@ class E2PFromCSR(E2PBase):
         # "1" may be passed for rscale, which won't have its type
         # meaningfully inferred. Make the type of rscale explicit.
         rscale = centers.dtype.type(kwargs.pop("rscale"))
+
         return knl(queue, centers=centers, rscale=rscale, **kwargs)
 
 # }}}

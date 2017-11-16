@@ -918,8 +918,8 @@ class DirectionalSourceDerivative(DirectionalDerivative):
 
         return transform
 
-    def postprocess_at_source(self, expr, avec):
-        expr = self.inner_kernel.postprocess_at_source(expr, avec)
+    def postprocess_at_source(self, exprs, avec):
+        exprs = self.inner_kernel.postprocess_at_source(exprs, avec)
 
         dimensions = len(avec)
         assert dimensions == self.dim
@@ -928,8 +928,12 @@ class DirectionalSourceDerivative(DirectionalDerivative):
         dir_vec = make_sympy_vector(self.dir_vec_name, dimensions)
 
         # avec = center-src -> minus sign from chain rule
-        return sum(-dir_vec[axis]*expr.diff(avec[axis])
-                for axis in range(dimensions))
+        if isinstance(exprs, list):
+            return [sum(-dir_vec[axis]*expr.diff(avec[axis])
+                    for axis in range(dimensions)) for expr in exprs]
+        else:
+            return sum(-dir_vec[axis]*exprs.diff(avec[axis])
+                    for axis in range(dimensions))
 
     mapper_method = "map_directional_source_derivative"
 

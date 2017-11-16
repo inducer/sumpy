@@ -85,7 +85,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                     result[i] += (
                         - mi_power(avec, derivative_mi) * mi[idim]
                         * dir_vec[idim])
-            for i, mi in enumerate(coeff_identifiers):
+            for i, (mi, nexpr) in enumerate(coeff_identifiers):
                 result[i] /= (mi_factorial(mi) * rscale ** sum(mi))
         else:
             avec = avec * rscale**-1
