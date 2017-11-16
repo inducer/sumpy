@@ -64,7 +64,6 @@ def expand(expansion_nr, sac, expansion, avec, bvec):
     rscale = sym.Symbol("rscale")
 
     coefficients = expansion.coefficients_from_source(avec, bvec, rscale)
-
     assigned_coeffs = [
             sym.Symbol(
                     sac.assign_unique("expn%dcoeff%s" % (
@@ -72,8 +71,9 @@ def expand(expansion_nr, sac, expansion, avec, bvec):
                         coefficients[expansion.get_storage_index(i)]))
             for i in expansion.get_coefficient_identifiers()]
 
+    #TODO: Fix me ([0])
     return sac.assign_unique("expn%d_result" % expansion_nr,
-            expansion.evaluate(assigned_coeffs, bvec, rscale))
+            expansion.evaluate(assigned_coeffs, bvec, rscale)[0])
 
 
 # {{{ layer potential computation
