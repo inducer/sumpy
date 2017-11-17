@@ -123,7 +123,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         for coeff, (mi, nexpr) in zip(coeffs, self.get_coefficient_identifiers()):
             results[nexpr].append(coeff
                 * self.get_scaled_multipole(taker.diff((mi, nexpr)),
-                    bvec, rscale, sum(mi[0])))
+                    bvec, rscale, sum(mi)))
 
         return [sym.Add(*res) for res in results]
 
