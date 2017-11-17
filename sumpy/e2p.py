@@ -94,9 +94,9 @@ class E2PBase(KernelCacheWrapper):
 
         result_names = [[sac.assign_unique("result_{}_{}_p".format(i, j),
                 knl.postprocess_at_target(v, bvec))
-                for i, knl in enumerate(self.kernels)] for j, v in enumerate(value)
+                for j, v in enumerate(value)] for i, knl in enumerate(self.kernels)
             ]
-        result_names = list(itertools.chain.from_iterable(result_names))
+        retain_names = list(itertools.chain.from_iterable(result_names))
 
         sac.run_global_cse()
 
@@ -105,7 +105,7 @@ class E2PBase(KernelCacheWrapper):
                 six.iteritems(sac.assignments),
                 vector_names=set(["b"]),
                 pymbolic_expr_maps=[self.expansion.get_code_transformer()],
-                retain_names=result_names,
+                retain_names=retain_names,
                 complex_dtype=np.complex128  # FIXME
                 )
 

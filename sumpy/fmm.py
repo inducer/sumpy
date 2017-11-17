@@ -274,9 +274,9 @@ class SumpyExpansionWrangler(object):
         return make_obj_array([
                 cl.array.zeros(
                     self.queue,
-                    nexprs * self.tree.ntargets,
+                    self.tree.ntargets,
                     dtype=self.dtype)
-                for k in self.code.out_kernels])
+                for k in range(len(self.code.out_kernels) * nexprs)])
 
     def reorder_sources(self, source_array):
         return source_array.with_queue(self.queue)[self.tree.user_source_ids]

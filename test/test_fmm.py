@@ -177,8 +177,6 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
 
     from pytools.convergence import PConvergenceVerifier
 
-    pconv_verifier = PConvergenceVerifier()
-
     extra_kwargs = {}
     dtype = np.float64
     order_values = [1, 2, 3]
@@ -204,6 +202,9 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
         extra_kwargs = dict(("f_{}".format(i), i) for i in range(knl.dim))
         extra_kwargs["mu"] = 1
 
+    pconv_verifiers = [PConvergenceVerifier() for i in
+                            range(knl.get_num_expressions())]
+
     from functools import partial
     for order in order_values:
         out_kernels = [knl]
@@ -220,23 +221,25 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
 
         from boxtree.fmm import drive_fmm
 
-        pot, = drive_fmm(trav, wrangler, weights)
+        pots = drive_fmm(trav, wrangler, weights)
 
         from sumpy import P2P
         p2p = P2P(ctx, out_kernels, exclude_self=False)
-        evt, (ref_pot,) = p2p(queue, targets, sources, (weights,),
+        evt, ref_pots = p2p(queue, targets, sources, (weights,),
                 **extra_kwargs)
 
-        pot = pot.get()
-        ref_pot = ref_pot.get()
+        for i, (pot, ref_pot) in enumerate(zip(pots, ref_pots)):
+            pot = pot.get()
+            ref_pot = ref_pot.get()
 
-        rel_err = la.norm(pot - ref_pot, np.inf) / la.norm(ref_pot, np.inf)
-        logger.info("order %d -> relative l2 error: %g" % (order, rel_err))
+            rel_err = la.norm(pot - ref_pot, np.inf) / la.norm(ref_pot, np.inf)
+            logger.info("order %d -> relative l2 error: %g" % (order, rel_err))
 
-        pconv_verifier.add_data_point(order, rel_err)
+            pconv_verifiers[i].add_data_point(order, rel_err)
 
-    print(pconv_verifier)
-    pconv_verifier()
+    for pconv_verifier in pconv_verifiers:
+        print(pconv_verifier)
+        pconv_verifier()
 
 
 def test_sumpy_fmm_exclude_self(ctx_getter):

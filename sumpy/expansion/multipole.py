@@ -118,13 +118,14 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             rscale = 1
 
         taker = self.get_kernel_derivative_taker(bvec)
+        results = [[] for i in range(self.get_num_expressions())]
 
-        result = sym.Add(*tuple(
-                coeff
-                * self.get_scaled_multipole(taker.diff(mi), bvec, rscale, sum(mi[0]))
-                for coeff, mi in zip(coeffs, self.get_coefficient_identifiers())))
+        for coeff, (mi, nexpr) in zip(coeffs, self.get_coefficient_identifiers()):
+            results[nexpr].append(coeff
+                * self.get_scaled_multipole(taker.diff((mi, nexpr)),
+                    bvec, rscale, sum(mi[0])))
 
-        return [result]
+        return [sym.Add(*res) for res in results]
 
     def get_kernel_derivative_taker(self, bvec):
         return (self.derivative_wrangler.get_derivative_taker(
