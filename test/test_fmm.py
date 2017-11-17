@@ -31,7 +31,7 @@ import pyopencl as cl
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, YukawaKernel,
-    StokesKernel, ExpressionKernel)
+    StokesKernel)
 from sumpy.expansion.multipole import (
     VolumeTaylorMultipoleExpansion,
     H2DMultipoleExpansion, Y2DMultipoleExpansion,
@@ -52,64 +52,12 @@ import pytest
 import logging
 logger = logging.getLogger(__name__)
 
-from sumpy.symbolic import pymbolic_real_norm_2
-from pymbolic.primitives import make_sym_vector
-from pymbolic import var
-
-
 try:
     import faulthandler
 except ImportError:
     pass
 else:
     faulthandler.enable()
-
-
-class TestKernel(ExpressionKernel):
-    init_arg_names = ("dim",)
-
-    def __init__(self, dim=None):
-        # See (Kress LIE, Thm 6.2) for scaling
-        if dim == 2:
-            r = pymbolic_real_norm_2(make_sym_vector("d", dim))
-            expr = var("log")(r)
-            scaling = 1/(-2*var("pi"))
-        elif dim == 3:
-            r = pymbolic_real_norm_2(make_sym_vector("d", dim))
-            expr = 1/r
-            scaling = 1/(4*var("pi"))
-        else:
-            raise NotImplementedError("unsupported dimensionality")
-
-        super(TestKernel, self).__init__(
-                dim,
-                expression=[expr, expr],
-                global_scaling_const=[scaling, scaling],
-                is_complex_valued=False)
-
-    has_efficient_scale_adjustment = True
-
-    def adjust_for_kernel_scaling(self, expr, rscale, nderivatives):
-        if self.dim == 2:
-            if nderivatives == 0:
-                import sumpy.symbolic as sp
-                return expr + sp.log(rscale)
-            else:
-                return expr
-
-        elif self.dim == 3:
-            return expr
-
-        else:
-            raise NotImplementedError("unsupported dimensionality")
-
-    def __getinitargs__(self):
-        return (self.dim,)
-
-    def __repr__(self):
-        return "TestKnl%dD" % self.dim
-
-    mapper_method = "map_expression_kernel"
 
 
 @pytest.mark.parametrize("lookup_func, extra_args", [
@@ -142,6 +90,7 @@ def test_level_to_order_lookup(ctx_getter, lookup_func, extra_args):
 
 
 @pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class", [
+    (StokesKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
     (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
     (LaplaceKernel(2), LaplaceConformingVolumeTaylorLocalExpansion,
                        LaplaceConformingVolumeTaylorMultipoleExpansion),
