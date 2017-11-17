@@ -303,7 +303,7 @@ class P2PFromCSR(P2PBase):
             fixed_parameters=dict(
                 dim=self.dim,
                 nstrengths=self.strength_count,
-                nkernels=len(self.kernels)))
+                nkernels=len(exprs)*len(self.kernels)))
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_array_axes(loopy_knl, "strength", "sep,C")

@@ -30,7 +30,8 @@ import numpy.linalg as la
 import pyopencl as cl
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
-from sumpy.kernel import LaplaceKernel, HelmholtzKernel, YukawaKernel
+from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, YukawaKernel,
+    StokesKernel,)
 from sumpy.expansion.multipole import (
     VolumeTaylorMultipoleExpansion,
     H2DMultipoleExpansion, Y2DMultipoleExpansion,
@@ -198,6 +199,10 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
             order_values = [1, 2]
         elif knl.dim == 2 and issubclass(local_expn_class, Y2DLocalExpansion):
             order_values = [10, 12]
+
+    elif isinstance(knl, StokesKernel):
+        extra_kwargs = dict(("f_{}".format(i), i) for i in range(knl.dim))
+        extra_kwargs["mu"] = 1
 
     from functools import partial
     for order in order_values:
