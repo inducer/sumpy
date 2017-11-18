@@ -49,7 +49,7 @@ local and multipole expansions.
 .. autoclass:: ConstantPotential
 .. autoclass:: PointSources
 
-These functions manipulate these pootentials:
+These functions manipulate these potentials:
 
 .. autofunction:: multipole_expand
 .. autofunction:: local_expand
@@ -58,7 +58,7 @@ These functions manipulate these pootentials:
 .. autofunction:: combine_halfspace
 .. autofunction:: combine_halfspace_and_outer
 
-These fucntions help with plotting:
+These functions help with plotting:
 
 .. autofunction:: draw_box
 .. autofunction:: draw_circle
