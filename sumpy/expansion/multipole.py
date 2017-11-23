@@ -28,7 +28,7 @@ import sumpy.symbolic as sym  # noqa
 from sumpy.symbolic import vector_xreplace
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
-    HelmholtzConformingVolumeTaylorExpansion)
+    HelmholtzConformingVolumeTaylorExpansion, StokesConformingVolumeTaylorExpansion)
 
 import logging
 logger = logging.getLogger(__name__)
@@ -219,6 +219,16 @@ class HelmholtzConformingVolumeTaylorMultipoleExpansion(
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
         HelmholtzConformingVolumeTaylorExpansion.__init__(
+                self, kernel, order, use_rscale)
+
+
+class StokesConformingVolumeTaylorMultipoleExpansion(
+        StokesConformingVolumeTaylorExpansion,
+        VolumeTaylorMultipoleExpansionBase):
+
+    def __init__(self, kernel, order, use_rscale=None):
+        VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
+        StokesConformingVolumeTaylorExpansion.__init__(
                 self, kernel, order, use_rscale)
 
 # }}}

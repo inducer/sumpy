@@ -438,6 +438,18 @@ class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
                 coeffs[(tuple(reduced_deriv), 0)] = -k*k*rscale*rscale
                 return coeffs
 
+
+class StokesDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
+
+    def __init__(self, order, dim, nexprs, force_name, viscosity_mu_name):
+        super(StokesDerivativeWrangler, self).__init__(order, dim, nexprs)
+        self.force_name = force_name
+        self.viscosity_mu_name = viscosity_mu_name
+
+    def try_get_recurrence_for_derivative(self, coeff_identifier, in_terms_of,
+            rscale):
+        return None
+
 # }}}
 
 
@@ -515,6 +527,19 @@ class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
         self.derivative_wrangler_key = (order, kernel.dim,
                 kernel.get_num_expressions(), helmholtz_k_name)
 
+
+class StokesConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
+
+    derivative_wrangler_class = StokesDerivativeWrangler
+    derivative_wrangler_cache = {}
+
+    # not user-facing, be strict about having to pass use_rscale
+    def __init__(self, kernel, order, use_rscale):
+        force_name = kernel.get_base_kernel().force_name
+        viscosity_mu_name = kernel.get_base_kernel().viscosity_mu_name
+        self.derivative_wrangler_key = (order, kernel.dim,
+                kernel.get_num_expressions(), force_name, viscosity_mu_name)
+
 # }}}
 
 
@@ -563,7 +588,8 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
     def get_local_expansion_class(self, base_kernel):
         """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
-        from sumpy.kernel import HelmholtzKernel, LaplaceKernel, YukawaKernel
+        from sumpy.kernel import (HelmholtzKernel, LaplaceKernel, YukawaKernel,
+            StokesKernel)
         if (isinstance(base_kernel.get_base_kernel(), HelmholtzKernel)
                 and base_kernel.dim == 2):
             from sumpy.expansion.local import H2DLocalExpansion
@@ -580,6 +606,10 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
             from sumpy.expansion.local import \
                     LaplaceConformingVolumeTaylorLocalExpansion
             return LaplaceConformingVolumeTaylorLocalExpansion
+        elif isinstance(base_kernel.get_base_kernel(), StokesKernel):
+            from sumpy.expansion.local import \
+                    StokesConformingVolumeTaylorLocalExpansion
+            return StokesConformingVolumeTaylorLocalExpansion
         else:
             from sumpy.expansion.local import VolumeTaylorLocalExpansion
             return VolumeTaylorLocalExpansion
@@ -587,7 +617,8 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
     def get_multipole_expansion_class(self, base_kernel):
         """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
-        from sumpy.kernel import HelmholtzKernel, LaplaceKernel, YukawaKernel
+        from sumpy.kernel import (HelmholtzKernel, LaplaceKernel, YukawaKernel,
+            StokesKernel)
         if (isinstance(base_kernel.get_base_kernel(), HelmholtzKernel)
                 and base_kernel.dim == 2):
             from sumpy.expansion.multipole import H2DMultipoleExpansion
@@ -604,6 +635,10 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
             from sumpy.expansion.multipole import (
                     HelmholtzConformingVolumeTaylorMultipoleExpansion)
             return HelmholtzConformingVolumeTaylorMultipoleExpansion
+        elif isinstance(base_kernel.get_base_kernel(), StokesKernel):
+            from sumpy.expansion.multipole import (
+                    StokesConformingVolumeTaylorMultipoleExpansion)
+            return StokesConformingVolumeTaylorMultipoleExpansion
         else:
             from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansion
             return VolumeTaylorMultipoleExpansion
