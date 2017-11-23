@@ -159,14 +159,14 @@ class E2PFromSingleBox(E2PBase):
                     for itgt
                         <> b[idim] = targets[idim, itgt] - center[idim] {dup=idim}
 
-                        """] + loopy_insns + list(itertools.chain.from_iterable(["""
+                        """] + loopy_insns + ["""
 
                         result[{idx},itgt] = \
                                 kernel_scaling_{vidx} * result_{resultidx}_{vidx}_p \
                                 {{id_prefix=write_result}}
                         """.format(idx=i + j*len(result_names), resultidx=i,
                                    vidx=j) for i in range(len(result_names))
-                        ] for j in range(num_exprs))) + ["""
+                                   for j in range(num_exprs)] + ["""
                     end
                 end
                 """],
@@ -268,7 +268,7 @@ class E2PFromCSR(E2PBase):
 
                             """] + loopy_insns + ["""
                         end
-                        """] + list(itertools.chain.from_iterable(["""
+                        """] + ["""
 
                         result[{idx},itgt] = \
                                 result[{idx},itgt] + \
@@ -276,7 +276,7 @@ class E2PFromCSR(E2PBase):
                                 result_{residx}_{vidx}_p) {{id_prefix=write_result}}
                         """.format(idx=i + j*len(result_names), residx=i,
                                    vidx=j) for i in range(len(result_names))
-                        ] for j in range(num_exprs))) + ["""
+                                   for j in range(num_exprs)] + ["""
                     end
                 end
                 """],
