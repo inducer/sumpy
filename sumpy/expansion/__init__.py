@@ -413,6 +413,7 @@ class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
 
     def try_get_recurrence_for_derivative(self, coeff_identifier, in_terms_of,
             rscale):
+        nexpr = coeff_identifier[1]
         deriv = np.array(coeff_identifier[0], dtype=int)
 
         for dim in np.where(2 <= deriv)[0]:
@@ -430,7 +431,7 @@ class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
                 needed_deriv[other_dim] += 2
                 needed_deriv = tuple(needed_deriv)
 
-                new_coeff = CoeffIdentifier(needed_deriv, coeff_identifier[1])
+                new_coeff = CoeffIdentifier(needed_deriv, nexpr)
 
                 if new_coeff not in in_terms_of:
                     break
@@ -438,7 +439,7 @@ class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
                 coeffs[new_coeff] = -1
             else:
                 k = sym.Symbol(self.helmholtz_k_name)
-                coeffs[CoeffIdentifier(tuple(reduced_deriv), 0)] = \
+                coeffs[CoeffIdentifier(tuple(reduced_deriv), nexpr)] = \
                     -k*k*rscale*rscale
                 return coeffs
 

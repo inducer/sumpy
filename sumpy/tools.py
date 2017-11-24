@@ -62,7 +62,7 @@ class MiDerivativeTaker(object):
             assert isinstance(expr, sym.Basic)
         self.var_list = var_list
         empty_mi = (0,) * len(var_list)
-        self.cache_by_mi = dict(((empty_mi, nexpr), expr) for
+        self.cache_by_mi = dict((CoeffIdentifier(empty_mi, nexpr), expr) for
                                     nexpr, expr in enumerate(exprs))
 
     def mi_dist(self, a, b):
@@ -89,7 +89,7 @@ class MiDerivativeTaker(object):
                 zip(self.mi_dist(end_mi, start_mi), self.var_list)):
             for i in range(1, 1 + mi_i):
                 current_mi[idx] += 1
-                yield vec_i, (tuple(current_mi), start_mi[1])
+                yield vec_i, CoeffIdentifier(tuple(current_mi), start_mi[1])
 
     def get_closest_cached_mi(self, mi):
         keys = [key for key in self.cache_by_mi.keys() if key[1] == mi[1]]

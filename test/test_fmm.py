@@ -239,6 +239,7 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
 
     for pconv_verifier in pconv_verifiers:
         print(pconv_verifier)
+    for pconv_verifier in pconv_verifiers:
         pconv_verifier()
 
 
