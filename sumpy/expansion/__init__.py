@@ -28,7 +28,7 @@ import numpy as np
 import logging
 from pytools import memoize_method
 import sumpy.symbolic as sym
-from sumpy.tools import MiDerivativeTaker
+from sumpy.tools import MiDerivativeTaker, CoeffIdentifier
 import sumpy.symbolic as sp
 from collections import defaultdict
 
@@ -197,7 +197,7 @@ class DerivativeWrangler(object):
         mis = sorted(gnitstam(self.order, self.dim), key=sum)
         res = []
         for i in range(self.nexprs):
-            res.extend([(mi, i) for mi in mis])
+            res.extend([CoeffIdentifier(mi, i) for mi in mis])
         return res
 
 
@@ -398,7 +398,7 @@ class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
                 if needed_deriv not in in_terms_of:
                     break
 
-                coeffs[(needed_deriv, coeff_identifier[1])] = -1
+                coeffs[CoeffIdentifier(needed_deriv, coeff_identifier[1])] = -1
             else:
                 return coeffs
 
@@ -432,10 +432,11 @@ class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
                 if needed_deriv not in in_terms_of:
                     break
 
-                coeffs[(needed_deriv, 0)] = -1
+                coeffs[CoeffIdentifier(needed_deriv, 0)] = -1
             else:
                 k = sym.Symbol(self.helmholtz_k_name)
-                coeffs[(tuple(reduced_deriv), 0)] = -k*k*rscale*rscale
+                coeffs[CoeffIdentifier(tuple(reduced_deriv), 0)] = \
+                    -k*k*rscale*rscale
                 return coeffs
 
 

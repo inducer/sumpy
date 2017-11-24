@@ -28,6 +28,7 @@ from pytools import memoize_method
 import numpy as np
 import sumpy.symbolic as sym
 import itertools
+from collections import namedtuple
 
 import logging
 logger = logging.getLogger(__name__)
@@ -459,4 +460,5 @@ def my_syntactic_subs(expr, subst_dict):
         return expr
 
 
+CoeffIdentifier = namedtuple('CoeffIdentifier', ['multi_index', 'expression_num'])
 # vim: fdm=marker

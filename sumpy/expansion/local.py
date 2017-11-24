@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 from six.moves import range, zip
 import sumpy.symbolic as sym
+from sumpy.tools import CoeffIdentifier
 
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
@@ -58,7 +59,8 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
     def get_coefficient_identifiers(self):
         identifiers = []
         for nexpr in range(self.kernel.get_num_expressions()):
-            identifiers.extend([(mi, nexpr) for mi in range(self.order+1)])
+            identifiers.extend([CoeffIdentifier(mi, nexpr) for mi in
+            range(self.order+1)])
         return identifiers
 
     def coefficients_from_source(self, avec, bvec, rscale):
@@ -128,7 +130,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         taker = MiDerivativeTaker(ppkernel, avec)
         return [
-                taker.diff((mi, nexpr)) * rscale ** sum(mi)
+                taker.diff(CoeffIdentifier(mi, nexpr)) * rscale ** sum(mi)
                 for (mi, nexpr) in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec, rscale):
@@ -182,7 +184,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                         continue
                     kernel_deriv = (
                             src_expansion.get_scaled_multipole(
-                                taker.diff((add_mi(deriv, term), nexpr)),
+                                taker.diff(CoeffIdentifier(add_mi(deriv, term),
+                                                nexpr)),
                                 dvec, src_rscale,
                                 nderivatives=sum(deriv) + sum(term),
                                 nderivatives_for_scaling=sum(term)))

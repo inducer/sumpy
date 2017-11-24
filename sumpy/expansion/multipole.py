@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 from six.moves import range, zip
 import sumpy.symbolic as sym  # noqa
+from sumpy.tools import CoeffIdentifier
 
 from sumpy.symbolic import vector_xreplace
 from sumpy.expansion import (
@@ -122,7 +123,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
         for coeff, (mi, nexpr) in zip(coeffs, self.get_coefficient_identifiers()):
             results[nexpr].append(coeff
-                * self.get_scaled_multipole(taker.diff((mi, nexpr)),
+                * self.get_scaled_multipole(taker.diff(CoeffIdentifier(mi, nexpr)),
                     bvec, rscale, sum(mi)))
 
         return [sym.Add(*res) for res in results]
@@ -166,7 +167,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
             for src_mi in gnitb(tgt_mi_plus_one):
                 try:
-                    src_index = src_mi_to_index[(src_mi, nexpr)]
+                    src_index = src_mi_to_index[CoeffIdentifier(src_mi, nexpr)]
                 except KeyError:
                     # Omitted coefficients: not life-threatening
                     continue
