@@ -53,11 +53,10 @@ class E2EBase(KernelCacheWrapper):
     def __init__(self, ctx, src_expansion, tgt_expansion,
             options=[], name=None, device=None):
         """
-        :arg expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
-        :arg strength_usage: A list of integers indicating which expression
-            uses which source strength indicator. This implicitly specifies the
-            number of strength arrays that need to be passed.
-            Default: all kernels use the same strength.
+        :arg src_expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
+            which is translated to tgt_expansion
+        :arg tgt_expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
+            which is translated from src_expansion
         """
 
         if device is None:
