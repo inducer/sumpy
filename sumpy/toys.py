@@ -704,7 +704,9 @@ class SchematicVisitor(object):
                 verticalalignment="center",
                 horizontalalignment="center")
 
-        label = type(psource).__name__[0]
+        label = "$%s_{%s}$" % (
+                type(psource).__name__[0].lower().replace("l", "\\ell"),
+                psource.order)
 
         if psource.text_kwargs is not None:
             psource_text_kwargs_copy = psource.text_kwargs.copy()
@@ -717,7 +719,7 @@ class SchematicVisitor(object):
             # are present at the tail.
             import matplotlib as mpl
             font_size = mpl.rcParams['font.size']
-            shrinkB = 2/3 * font_size  # noqa
+            shrinkB = 7/8 * font_size  # noqa
 
         arrowprops = dict(shrinkB=shrinkB, arrowstyle="<|-")
 
