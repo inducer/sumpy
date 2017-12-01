@@ -567,7 +567,7 @@ class BigIntegerKiller(CSECachingMapperMixin, IdentityMapper):
             expr_as_float = self.float_type(expr)
             if int(expr_as_float) != int(expr):
                 from warnings import warn
-                warn("Converting to '%d' to '%s' loses digits"
+                warn("Converting '%d' to '%s' loses digits"
                         % (expr, self.float_type.__name__))
 
             # Suppress further warnings.
