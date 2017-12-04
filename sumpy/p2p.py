@@ -76,16 +76,18 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
 
-        result_names = list(itertools.chain.from_iterable(
-                (sac.assign_unique("knl{}_{}".format(i, j),
+        result_names = [
+                [sac.assign_unique("knl{}_{}".format(i, j),
                     knl.postprocess_at_target(
                         knl.postprocess_at_source(
                             expr,
                             dvec),
                         dvec)
-                ) for j, expr in enumerate(knl.get_expressions(dvec)))
-                for i, knl in enumerate(self.kernels))
-                )
+                ) for j, expr in enumerate(knl.get_expressions(dvec))]
+                for i, knl in enumerate(self.kernels)
+                ]
+
+        retain_names = list(itertools.chain.from_iterable(result_names))
 
         sac.run_global_cse()
 
@@ -98,6 +100,16 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
                 complex_dtype=np.complex128  # FIXME
                 )
         return loopy_insns, result_names
+
+    def get_outputs(self, result_names):
+        exprs = []
+        for i, (knl, results) in enumerate(zip(self.kernels, result_names)):
+            for row in range(knl.shape[0]):
+                expr = sum(var(results[row * knl.shape[1] + col]) *
+                             var("strength").index((self.strength_usage[i][col], var("isrc")))
+                             for col in range(knl.shape[1]))
+                exprs.append(expr)
+        return exprs
 
     def get_cache_key(self):
         return (type(self).__name__, tuple(self.kernels), self.exclude_self,
@@ -115,11 +127,7 @@ class P2P(P2PBase):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
 
         from pymbolic import var
-        exprs = [
-                var(name)
-                * var("strength").index(
-                    (self.strength_usage[self.exprs_to_kernel[i]], var("isrc")))
-                for i, name in enumerate(result_names)]
+        exprs = self.get_outputs(result_names)
 
         if self.exclude_self:
             from pymbolic.primitives import If, Variable
@@ -217,11 +225,7 @@ class P2PFromCSR(P2PBase):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
 
         from pymbolic import var
-        exprs = [
-                var(name)
-                * var("strength").index(
-                    (self.strength_usage[self.exprs_to_kernel[i]], var("isrc")))
-                for i, name in enumerate(result_names)]
+        exprs = self.get_outputs(result_names)
 
         if self.exclude_self:
             from pymbolic.primitives import If, Variable

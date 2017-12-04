@@ -444,16 +444,76 @@ class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
                 return coeffs
 
 
-class StokesDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
+class StokesDerivativeWrangler(LaplaceDerivativeWrangler):
 
     def __init__(self, order, dim, nexprs, force_name, viscosity_mu_name):
         super(StokesDerivativeWrangler, self).__init__(order, dim, nexprs)
         self.force_name = force_name
         self.viscosity_mu_name = viscosity_mu_name
+        self.dim = dim
+
+    @memoize_method
+    def get_full_coefficient_identifiers(self):
+        """
+        Returns identifiers for every coefficient in the complete expansion.
+        """
+        from pytools import (
+                generate_nonnegative_integer_tuples_summing_to_at_most
+                as gnitstam)
+
+        mis = sorted(gnitstam(self.order, self.dim), key=sum)
+        res = []
+        for i in range(self.nexprs - 1, -1, -1):
+            res.extend([CoeffIdentifier(mi, i) for mi in mis])
+        return res
 
     def try_get_recurrence_for_derivative(self, coeff_identifier, in_terms_of,
             rscale):
-        return None
+        return
+        if (coeff_identifier[1] == self.dim):
+            # dim term (pressure) satisfies Laplace
+            t= LaplaceDerivativeWrangler.try_get_recurrence_for_derivative(self,
+                coeff_identifier, in_terms_of, rscale)
+            print(coeff_identifier, t)
+            return
+
+        mu = sym.Symbol(self.viscosity_mu_name)
+
+        deriv = np.array(coeff_identifier[0], dtype=int)
+
+        if sum(deriv) == 2:
+            return
+
+        for dim in np.where(2 <= deriv)[0]:
+            # Check if we can reduce this dimension in terms of the other
+            # dimensions.
+
+            reduced_deriv = deriv.copy()
+            reduced_deriv[dim] -= 2
+            coeffs = {}
+
+            for other_dim in range(self.dim):
+                if other_dim == dim:
+                    continue
+                needed_deriv = reduced_deriv.copy()
+                needed_deriv[other_dim] += 2
+                needed_deriv = tuple(needed_deriv)
+                new_coeff = CoeffIdentifier(needed_deriv, coeff_identifier[1])
+
+                if new_coeff not in in_terms_of:
+                    break
+
+                coeffs[new_coeff] = -1
+            else:
+                p_term = reduced_deriv.copy()
+                p_term[coeff_identifier[1]] += 1
+                p_term = CoeffIdentifier(tuple(p_term), self.dim)
+                if p_term in in_terms_of:
+                    coeffs[p_term] = 1/mu
+                    print(coeff_identifier, coeffs)
+                    return coeffs
+        print(coeff_identifier)
+
 
 # }}}
 

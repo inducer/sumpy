@@ -51,10 +51,6 @@ class E2PBase(KernelCacheWrapper):
             options=[], name=None, device=None):
         """
         :arg expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
-        :arg strength_usage: A list of integers indicating which expression
-          uses which source strength indicator. This implicitly specifies the
-          number of strength arrays that need to be passed.
-          Default: all kernels use the same strength.
         """
 
         if device is None:
@@ -135,7 +131,7 @@ class E2PFromSingleBox(E2PBase):
         ncoeffs = len(self.expansion)
 
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
-        num_exprs = len(self.expansion.kernel.expressions)
+        num_exprs = self.expansion.kernel.shape[0]
 
         loopy_knl = lp.make_kernel(
                 [
@@ -195,6 +191,7 @@ class E2PFromSingleBox(E2PBase):
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
+        print(loopy_knl)
 
         return loopy_knl
 
@@ -234,7 +231,7 @@ class E2PFromCSR(E2PBase):
         ncoeffs = len(self.expansion)
 
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
-        num_exprs = len(self.expansion.kernel.expressions)
+        num_exprs = self.expansion.kernel.shape[0]
 
         loopy_knl = lp.make_kernel(
                 [
@@ -308,6 +305,8 @@ class E2PFromCSR(E2PBase):
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.prioritize_loops(loopy_knl, "itgt_box,itgt,isrc_box")
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
+
+        print(loopy_knl)
 
         return loopy_knl
 

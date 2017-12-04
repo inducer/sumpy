@@ -300,7 +300,7 @@ class ExpressionKernel(Kernel):
             "is_complex_valued")
 
     def __init__(self, dim, expression, global_scaling_const,
-            is_complex_valued):
+            is_complex_valued, shape=(1,1)):
         """
         :arg expression: :mod:`pymbolic` expressions depending on
             variables *d_1* through *d_N* where *N* equals *dim*.
@@ -313,6 +313,7 @@ class ExpressionKernel(Kernel):
             with a constant of 1, where :math:`\mathcal L` is the PDE
             operator associated with the kernel. Not to be confused with
             *rscale*, which keeps expansion coefficients benignly scaled.
+        :arg shape: A tuple representing the shape of the kernel
         """
 
         # expression and global_scaling_const are pymbolic objects because
@@ -328,10 +329,11 @@ class ExpressionKernel(Kernel):
         except TypeError:
             self.global_scaling_consts = [global_scaling_const]
         self.is_complex_valued = is_complex_valued
+        self.shape = shape
 
     def __getinitargs__(self):
         return (self.dim, self.expressions, self.global_scaling_consts,
-                self.is_complex_valued)
+                self.is_complex_valued, self.shape)
 
     def __repr__(self):
         return "ExprKnl%dD" % self.dim
@@ -810,6 +812,7 @@ class KernelWrapper(Kernel):
     def __init__(self, inner_kernel):
         Kernel.__init__(self, inner_kernel.dim)
         self.inner_kernel = inner_kernel
+        self.shape = inner_kernel.shape
 
     def get_base_kernel(self):
         return self.inner_kernel.get_base_kernel()

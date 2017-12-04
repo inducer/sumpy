@@ -52,10 +52,6 @@ class P2EBase(KernelCacheWrapper):
             options=[], name=None, device=None):
         """
         :arg expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
-        :arg strength_usage: A list of integers indicating which expression
-          uses which source strength indicator. This implicitly specifies the
-          number of strength arrays that need to be passed.
-          Default: all kernels use the same strength.
         """
 
         if device is None:
@@ -101,6 +97,17 @@ class P2EBase(KernelCacheWrapper):
 
     def get_cache_key(self):
         return (type(self).__name__, self.name, self.expansion)
+
+
+    def get_outputs(self, result_names):
+        exprs = []
+        for i, (knl, results) in enumerate(zip(self.kernels, result_names)):
+            for row in range(knl.shape[0]):
+                expr = sum(var(results[row * knl.shape[1] + col]) *
+                             var("strength").index((self.strength_usage[i][col], var("isrc")))
+                             for col in range(knl.shape[1]))
+                exprs.append(expr)
+        return exprs
 
 # }}}
 
@@ -162,7 +169,8 @@ class P2EFromSingleBox(P2EBase):
 
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-
+        print(loopy_knl)
+        print(self.strength_usage)        
         return loopy_knl
 
     def get_optimized_kernel(self):
