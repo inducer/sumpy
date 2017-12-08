@@ -4,21 +4,25 @@ import numpy as np
 from sumpy.visualization import FieldPlotter
 import matplotlib.pyplot as plt
 
+#import logging
+#logging.basicConfig(level=logging.INFO)
+
 
 def main():
     from sumpy.kernel import (  # noqa: F401
-            YukawaKernel, HelmholtzKernel, LaplaceKernel)
+            YukawaKernel, HelmholtzKernel, LaplaceKernel, StokesKernel)
     tctx = t.ToyContext(
             cl.create_some_context(),
-            #LaplaceKernel(2),
-            YukawaKernel(2), extra_kernel_kwargs={"lam": 5},
+            LaplaceKernel(2),
+            #StokesKernel(2), extra_kernel_kwargs={"mu": 1.0},
+            #YukawaKernel(2), extra_kernel_kwargs={"lam": 5},
             #HelmholtzKernel(2), extra_kernel_kwargs={"k": 0.3},
             )
 
     pt_src = t.PointSources(
             tctx,
             np.random.rand(2, 50) - 0.5,
-            np.ones(50))
+            [np.ones(50)]*tctx.kernel.shape[1])
 
     fp = FieldPlotter([3, 0], extent=8)
 
@@ -29,7 +33,7 @@ def main():
 
     mexp = t.multipole_expand(pt_src, [0, 0], 5)
     mexp2 = t.multipole_expand(mexp, [0, 0.25])
-    lexp = t.local_expand(mexp, [3, 0])
+    lexp = t.local_expand(mexp2, [3, 0])
     lexp2 = t.local_expand(lexp, [3, 1], 3)
 
     #diff = mexp - pt_src

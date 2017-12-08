@@ -290,6 +290,9 @@ class Kernel(object):
         """
         return []
 
+    def get_local_kernel(self):
+        return self
+
 # }}}
 
 
@@ -300,7 +303,8 @@ class ExpressionKernel(Kernel):
             "is_complex_valued")
 
     def __init__(self, dim, expression, global_scaling_const,
-            is_complex_valued, shape=(1,1)):
+            is_complex_valued, shape=(1, 1), implicit_strength=True,
+            nstrengths=None):
         """
         :arg expression: :mod:`pymbolic` expressions depending on
             variables *d_1* through *d_N* where *N* equals *dim*.
@@ -330,6 +334,8 @@ class ExpressionKernel(Kernel):
             self.global_scaling_consts = [global_scaling_const]
         self.is_complex_valued = is_complex_valued
         self.shape = shape
+        self.implicit_strength = implicit_strength
+        self.nstrengths = nstrengths if nstrengths else shape[0]
 
     def __getinitargs__(self):
         return (self.dim, self.expressions, self.global_scaling_consts,
@@ -734,7 +740,7 @@ class StressletKernel(ExpressionKernel):
 class StokesKernel(ExpressionKernel):
     init_arg_names = ("dim", "force_name", "viscosity_mu_name")
 
-    def __init__(self, dim, force_name="f", viscosity_mu_name="mu"):
+    def __init__(self, dim, viscosity_mu_name="mu", local_kernel=False):
         r"""
         :arg force_name: The argument name to use for
                 the force `f` the then generating functions to
@@ -742,28 +748,26 @@ class StokesKernel(ExpressionKernel):
         """
         mu = var(viscosity_mu_name)
 
-        if dim == 3:
-            exprs = [0]*(dim + 1)
-            scaling_consts = [0]*(dim + 1)
+        if dim == 3 or dim == 2:
+            exprs = [0]*(dim*(dim + 1))
+            scaling_consts = [0]*(dim*(dim + 1))
             d = make_sym_vector("d", dim)
-            f = [var("{}_{}".format(force_name, i)) for i in range(dim)]
             r = pymbolic_real_norm_2(d)
 
-            exprs[dim] = sum(f[i]*d[i] for i in range(len(d)))/r**3
-            scaling_consts[dim] = 1/(4*var("pi"))
-
-            jr = [[0 for j in range(dim)] for i in range(dim)]
-
-            for i in range(dim):
-                jr[i][i] = 1/r
-                for j in range(dim):
-                    jr[i][j] += d[i]*d[j]/r**3
+            if dim == 3:
+                diag_expr = 1/r
+            elif dim == 2:
+                diag_expr = -var("log")(r)
 
             for i in range(dim):
-                exprs[i] = 0
+                exprs[i + dim**2] = d[i]/r**dim
+                scaling_consts[i + dim**2] = 1/(2**(dim-1)*var("pi"))
+
+            for i in range(dim):
+                exprs[i*dim + i] = diag_expr
                 for j in range(dim):
-                    exprs[i] += f[j]*jr[j][i]
-                scaling_consts[i] = -1/(8*var("pi")*mu)
+                    exprs[i*dim + j] += d[i]*d[j]/r**dim
+                    scaling_consts[i*dim + j] = 1/(2**dim*var("pi")*mu)
 
         elif dim is None:
             exprs = None
@@ -771,32 +775,43 @@ class StokesKernel(ExpressionKernel):
         else:
             raise RuntimeError("unsupported dimensionality")
 
-        self.force_name = force_name
         self.viscosity_mu_name = viscosity_mu_name
+        shape = (dim + 1, dim)
+
+        if local_kernel:
+            strengths = make_sym_vector("strength", dim)
+            exprs = [sum(exprs[row * dim + col]*strengths[col]
+                        for col in range(dim)) for row in range(dim+1)]
+            scaling_consts = [sum(scaling_consts[row * dim + col]
+                                for col in range(dim)) for row in range(dim+1)]
+            shape = (dim + 1, 1)
 
         super(StokesKernel, self).__init__(
                 dim,
                 expression=exprs,
                 global_scaling_const=scaling_consts,
-                is_complex_valued=False)
+                is_complex_valued=False,
+                shape=shape,
+                implicit_strength=(not local_kernel),
+                nstrengths=dim)
 
     def __getinitargs__(self):
-        return (self.dim, self.force_name, self.viscosity_mu_name)
+        return (self.dim, self.viscosity_mu_name)
+
+    def get_local_kernel(self):
+        return StokesKernel(self.dim, viscosity_mu_name=self.viscosity_mu_name,
+                            local_kernel=True)
 
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode())
         key_builder.rec(key_hash,
-                (self.dim, self.force_name, self.viscosity_mu_name))
+                (self.dim, self.viscosity_mu_name))
 
     def __repr__(self):
         return "StokesKnl%dD" % (self.dim)
 
     def get_args(self):
         return [
-                KernelArgument(
-                    loopy_arg=lp.ValueArg("{}_{}".format(self.force_name, i),
-                        np.float64),
-                    ) for i in range(self.dim)] + [
                 KernelArgument(
                     loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64),
                     )]

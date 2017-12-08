@@ -33,7 +33,9 @@ from sumpy.expansion import (
 
 
 class LocalExpansionBase(ExpansionBase):
-    pass
+    def __init__(self, kernel, order, use_rscale=None):
+        super(LocalExpansionBase, self).__init__(
+                kernel.get_local_kernel(), order, use_rscale=use_rscale)
 
 
 import logging
@@ -170,6 +172,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # This code speeds up derivative taking by caching all kernel
             # derivatives.
 
+            src_shape = src_expansion.kernel.shape
             taker = src_expansion.get_kernel_derivative_taker(dvec)
 
             from sumpy.tools import add_mi
@@ -180,12 +183,12 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 for coeff, (term, nexpr2) in zip(
                         src_coeff_exprs,
                         src_expansion.get_coefficient_identifiers()):
-                    if (nexpr != nexpr2):
+                    if (nexpr2 // src_shape[1] != nexpr):
                         continue
                     kernel_deriv = (
                             src_expansion.get_scaled_multipole(
                                 taker.diff(CoeffIdentifier(add_mi(deriv, term),
-                                                nexpr)),
+                                                nexpr2)),
                                 dvec, src_rscale,
                                 nderivatives=sum(deriv) + sum(term),
                                 nderivatives_for_scaling=sum(term)))

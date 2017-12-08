@@ -446,11 +446,11 @@ class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
 
 class StokesDerivativeWrangler(LaplaceDerivativeWrangler):
 
-    def __init__(self, order, dim, nexprs, force_name, viscosity_mu_name):
+    def __init__(self, order, dim, nexprs, viscosity_mu_name):
         super(StokesDerivativeWrangler, self).__init__(order, dim, nexprs)
-        self.force_name = force_name
         self.viscosity_mu_name = viscosity_mu_name
         self.dim = dim
+        self.nexprs = nexprs
 
     @memoize_method
     def get_full_coefficient_identifiers(self):
@@ -469,13 +469,17 @@ class StokesDerivativeWrangler(LaplaceDerivativeWrangler):
 
     def try_get_recurrence_for_derivative(self, coeff_identifier, in_terms_of,
             rscale):
-        return
-        if (coeff_identifier[1] == self.dim):
+        if self.nexprs == self.dim * (self.dim + 1):
+            p_coeff_identifier = coeff_identifier[1] % self.dim + self.dim**2
+            p_dim = coeff_identifier[1] // self.dim
+        else:
+            p_coeff_identifier = self.dim
+            p_dim = coeff_identifier[1]
+        #return
+        if (coeff_identifier[1] == p_coeff_identifier):
             # dim term (pressure) satisfies Laplace
-            t= LaplaceDerivativeWrangler.try_get_recurrence_for_derivative(self,
+            return LaplaceDerivativeWrangler.try_get_recurrence_for_derivative(self,
                 coeff_identifier, in_terms_of, rscale)
-            print(coeff_identifier, t)
-            return
 
         mu = sym.Symbol(self.viscosity_mu_name)
 
@@ -506,8 +510,8 @@ class StokesDerivativeWrangler(LaplaceDerivativeWrangler):
                 coeffs[new_coeff] = -1
             else:
                 p_term = reduced_deriv.copy()
-                p_term[coeff_identifier[1]] += 1
-                p_term = CoeffIdentifier(tuple(p_term), self.dim)
+                p_term[p_dim] += 1
+                p_term = CoeffIdentifier(tuple(p_term), p_coeff_identifier)
                 if p_term in in_terms_of:
                     coeffs[p_term] = 1/mu
                     print(coeff_identifier, coeffs)
@@ -600,10 +604,9 @@ class StokesConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
 
     # not user-facing, be strict about having to pass use_rscale
     def __init__(self, kernel, order, use_rscale):
-        force_name = kernel.get_base_kernel().force_name
         viscosity_mu_name = kernel.get_base_kernel().viscosity_mu_name
         self.derivative_wrangler_key = (order, kernel.dim,
-                kernel.get_num_expressions(), force_name, viscosity_mu_name)
+                kernel.get_num_expressions(), viscosity_mu_name)
 
 # }}}
 

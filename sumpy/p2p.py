@@ -96,24 +96,29 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
                 vector_names=set(["d"]),
                 pymbolic_expr_maps=[
                         knl.get_code_transformer() for knl in self.kernels],
-                retain_names=result_names,
+                retain_names=retain_names,
                 complex_dtype=np.complex128  # FIXME
                 )
         return loopy_insns, result_names
 
     def get_outputs(self, result_names):
+        from pymbolic import var
         exprs = []
+        scaling = []
         for i, (knl, results) in enumerate(zip(self.kernels, result_names)):
             for row in range(knl.shape[0]):
                 expr = sum(var(results[row * knl.shape[1] + col]) *
-                             var("strength").index((self.strength_usage[i][col], var("isrc")))
+                             var("strength").index((self.strength_usage[i][col],
+                                                    var("isrc")))
                              for col in range(knl.shape[1]))
                 exprs.append(expr)
-        return exprs
+                scaling.append("knl_{}_scaling".format(row * knl.shape[1]))
+        return exprs, scaling
 
     def get_cache_key(self):
         return (type(self).__name__, tuple(self.kernels), self.exclude_self,
-                tuple(self.strength_usage), tuple(self.value_dtypes))
+                tuple(tuple(s) for s in self.strength_usage),
+                tuple(self.value_dtypes))
 
 # }}}
 
@@ -126,8 +131,7 @@ class P2P(P2PBase):
     def get_kernel(self):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
 
-        from pymbolic import var
-        exprs = self.get_outputs(result_names)
+        exprs, scaling = self.get_outputs(result_names)
 
         if self.exclude_self:
             from pymbolic.primitives import If, Variable
@@ -153,10 +157,10 @@ class P2P(P2PBase):
                         ] + ["""
                     end
                     """] + ["""
-                    result[EXPRIDX, itgt] = knl_EXPRIDX_scaling \
-                            * simul_reduce(sum, isrc, pair_result_EXPRIDX)
-                    """.replace("EXPRIDX", str(iknl))
-                    for iknl in range(len(exprs))] + [
+                    result[{iknl}, itgt] = {scale} \
+                            * simul_reduce(sum, isrc, pair_result_{iknl})
+                    """.format(iknl=iknl, scale=scale)
+                    for iknl, scale in zip(range(len(exprs)), scaling)] + [
                     ] + ["""
                 end
                 """],
@@ -224,8 +228,7 @@ class P2PFromCSR(P2PBase):
     def get_kernel(self):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
 
-        from pymbolic import var
-        exprs = self.get_outputs(result_names)
+        exprs, scaling = self.get_outputs(result_names)
 
         if self.exclude_self:
             from pymbolic.primitives import If, Variable
@@ -273,12 +276,12 @@ class P2PFromCSR(P2PBase):
                                 ] + [
                                 """
                             end
-                            """] + ["""
-                            result[EXPRIDX, itgt] = result[EXPRIDX, itgt] + \
-                                knl_EXPRIDX_scaling \
-                                * simul_reduce(sum, isrc, pair_result_EXPRIDX)
-                            """.replace("EXPRIDX", str(iknl))
-                            for iknl in range(len(exprs))] + ["""
+                            """] +  + ["""
+                            result[{iknl}, itgt] = result[{iknl}, itgt] + {scale} \
+                                    * simul_reduce(sum, isrc, pair_result_{iknl})
+                            """.format(iknl=iknl, scale=scale)
+                            for iknl, scale in zip(range(len(exprs)), scaling)] + [
+                            ] + ["""
                         end
                     end
                 end

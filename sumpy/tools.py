@@ -259,17 +259,14 @@ class KernelComputation(object):
 
         # {{{ process strength_usage
 
-        num_exprs = sum(knl.get_num_expressions() for knl in kernels)
         if strength_usage is None:
-            strength_usage = []
-            for knl in kernels:
-                strength_usage.extend(list(range(knl.shape[1])))
+            strength_usage = [list(range(knl.shape[1])) for knl in kernels]
 
         if len(kernels) != len(strength_usage):
             raise ValueError("expressions and strength_usage must have"
                              "the same length")
 
-        strength_count = max(strength_usage)+1
+        strength_count = max(max(s) for s in strength_usage)+1
 
         # }}}
 
