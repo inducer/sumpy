@@ -157,10 +157,9 @@ class E2PFromSingleBox(E2PBase):
                         <> b[idim] = targets[idim, itgt] - center[idim] {dup=idim}
 
                         """] + loopy_insns + ["""
-                        result[{idx},itgt] = 0
                         """.format(idx=idx) for idx in range(len(result_names) *
                                                                 shape[0])] + ["""
-                        result[{idx},itgt] = result[{idx},itgt] + \
+                        result[{idx},itgt] = \
                             kernel_scaling_{vidx} * result_{resultidx}_{vidx}_p \
                             {{id_prefix=write_result}}
                         """.format(idx=i + (j//shape[1])*len(result_names),

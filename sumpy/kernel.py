@@ -758,7 +758,7 @@ class StokesKernel(ExpressionKernel):
                 diag_expr = 1/r
             elif dim == 2:
                 diag_expr = -var("log")(r)
-
+ 
             for i in range(dim):
                 exprs[i + dim**2] = d[i]/r**dim
                 scaling_consts[i + dim**2] = 1/(2**(dim-1)*var("pi"))
@@ -782,8 +782,7 @@ class StokesKernel(ExpressionKernel):
             strengths = make_sym_vector("strength", dim)
             exprs = [sum(exprs[row * dim + col]*strengths[col]
                         for col in range(dim)) for row in range(dim+1)]
-            scaling_consts = [sum(scaling_consts[row * dim + col]
-                                for col in range(dim)) for row in range(dim+1)]
+            scaling_consts = [scaling_consts[row*dim] for row in range(dim+1)]
             shape = (dim + 1, 1)
 
         super(StokesKernel, self).__init__(
