@@ -373,7 +373,7 @@ class ExpressionKernel(Kernel):
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode("utf8"))
         for name, value in zip(self.init_arg_names, self.__getinitargs__()):
-            if name in ["expression", "scaling"]:
+            if name in ["expression", "global_scaling_const"]:
                 from pymbolic.mapper.persistent_hash import (
                         PersistentHashWalkMapper as PersistentHashWalkMapper)
                 PersistentHashWalkMapper(key_hash)(value)

@@ -147,16 +147,6 @@ class SumpyExpansionWranglerCodeContainer(object):
 
 # {{{ expansion wrangler
 
-def _enqueue_barrier(queue, wait_for):
-    if queue.device.platform.name == "Portable Computing Language":
-        # pocl 0.13 and below crash on clEnqueueBarrierWithWaitList
-        evt = cl.enqueue_marker(queue, wait_for=wait_for)
-        queue.finish()
-        return evt
-    else:
-        return cl.enqueue_barrier(queue, wait_for=wait_for)
-
-
 class SumpyExpansionWrangler(object):
     """Implements the :class:`boxtree.fmm.ExpansionWranglerInterface`
     by using :mod:`sumpy` expansions/translations.
@@ -209,10 +199,6 @@ class SumpyExpansionWrangler(object):
 
         self.extra_kwargs = source_extra_kwargs.copy()
         self.extra_kwargs.update(self.kernel_extra_kwargs)
-
-        self.level_queues = [
-                cl.CommandQueue(self.code.cl_context)
-                for i in range(self.tree.nlevels)]
 
     # {{{ data vector utilities
 
@@ -320,7 +306,6 @@ class SumpyExpansionWrangler(object):
         kwargs = self.extra_kwargs.copy()
         kwargs.update(self.box_source_list_kwargs())
 
-        events = []
         for lev in range(self.tree.nlevels):
             p2m = self.code.p2m(self.level_orders[lev])
             start, stop = level_start_source_box_nrs[lev:lev+2]
@@ -331,24 +316,18 @@ class SumpyExpansionWrangler(object):
                     mpoles, lev)
 
             evt, (mpoles_res,) = p2m(
-                    self.level_queues[lev],
+                    self.queue,
                     source_boxes=source_boxes[start:stop],
                     centers=self.tree.box_centers,
                     strengths=src_weights,
                     tgt_expansions=mpoles_view,
                     tgt_base_ibox=level_start_ibox,
 
-                    wait_for=src_weights.events,
                     rscale=level_to_rscale(self.tree, lev),
 
                     **kwargs)
 
             assert mpoles_res is mpoles_view
-
-            events.append(evt)
-
-        evt = _enqueue_barrier(self.queue, wait_for=events)
-        mpoles.add_event(evt)
 
         return mpoles
 
@@ -437,7 +416,6 @@ class SumpyExpansionWrangler(object):
             mpole_exps):
         local_exps = self.local_expansion_zeros()
 
-        events = []
         for lev in range(self.tree.nlevels):
             start, stop = level_start_target_box_nrs[lev:lev+2]
             if start == stop:
@@ -452,7 +430,7 @@ class SumpyExpansionWrangler(object):
                     self.local_expansions_view(local_exps, lev)
 
             evt, (local_exps_res,) = m2l(
-                    self.level_queues[lev],
+                    self.queue,
 
                     src_expansions=source_mpoles_view,
                     src_base_ibox=source_level_start_ibox,
@@ -467,15 +445,7 @@ class SumpyExpansionWrangler(object):
                     src_rscale=level_to_rscale(self.tree, lev),
                     tgt_rscale=level_to_rscale(self.tree, lev),
 
-                    wait_for=mpole_exps.events,
-
                     **self.kernel_extra_kwargs)
-
-            assert local_exps_res is target_local_exps_view
-            events.append(evt)
-
-        evt = _enqueue_barrier(self.queue, wait_for=events)
-        local_exps.add_event(evt)
 
         return local_exps
 
@@ -535,7 +505,6 @@ class SumpyExpansionWrangler(object):
         kwargs = self.extra_kwargs.copy()
         kwargs.update(self.box_source_list_kwargs())
 
-        events = []
         for lev in range(self.tree.nlevels):
             start, stop = \
                     level_start_target_or_target_parent_box_nrs[lev:lev+2]
@@ -548,7 +517,7 @@ class SumpyExpansionWrangler(object):
                     self.local_expansions_view(local_exps, lev)
 
             evt, (result,) = p2l(
-                    self.level_queues[lev],
+                    self.queue,
                     target_boxes=target_or_target_parent_boxes[start:stop],
                     source_box_starts=starts[start:stop+1],
                     source_box_lists=lists,
@@ -560,15 +529,9 @@ class SumpyExpansionWrangler(object):
 
                     rscale=level_to_rscale(self.tree, lev),
 
-                    wait_for=src_weights.events,
-
                     **kwargs)
 
             assert result is target_local_exps_view
-            events.append(evt)
-
-        evt = _enqueue_barrier(self.queue, wait_for=events)
-        result.add_event(evt)
 
         return local_exps
 
@@ -619,7 +582,6 @@ class SumpyExpansionWrangler(object):
         kwargs = self.kernel_extra_kwargs.copy()
         kwargs.update(self.box_target_list_kwargs())
 
-        events = []
         for lev in range(self.tree.nlevels):
             start, stop = level_start_target_box_nrs[lev:lev+2]
             if start == stop:
@@ -631,7 +593,7 @@ class SumpyExpansionWrangler(object):
                     self.local_expansions_view(local_exps, lev)
 
             evt, pot_res = l2p(
-                    self.level_queues[lev],
+                    self.queue,
 
                     src_expansions=source_local_exps_view,
                     src_base_ibox=source_level_start_ibox,
@@ -642,17 +604,10 @@ class SumpyExpansionWrangler(object):
 
                     rscale=level_to_rscale(self.tree, lev),
 
-                    wait_for=local_exps.events,
-
                     **kwargs)
 
             for pot_i, pot_res_i in zip(pot, pot_res):
                 assert pot_i is pot_res_i
-            events.append(evt)
-
-        evt = _enqueue_barrier(self.queue, wait_for=events)
-        for pot_i in pot:
-            pot_i.add_event(evt)
 
         return pot
 
