@@ -738,7 +738,7 @@ class StressletKernel(ExpressionKernel):
 
 
 class StokesKernel(ExpressionKernel):
-    init_arg_names = ("dim", "force_name", "viscosity_mu_name")
+    init_arg_names = ("dim", "viscosity_mu_name")
 
     def __init__(self, dim, viscosity_mu_name="mu", local_kernel=False):
         r"""
@@ -782,8 +782,7 @@ class StokesKernel(ExpressionKernel):
             strengths = make_sym_vector("strength", dim)
             exprs = [sum(exprs[row * dim + col]*strengths[col]
                         for col in range(dim)) for row in range(dim+1)]
-            scaling_consts = [sum(scaling_consts[row * dim + col]
-                                for col in range(dim)) for row in range(dim+1)]
+            scaling_consts = [scaling_consts[row*dim] for row in range(dim+1)]
             shape = (dim + 1, 1)
 
         super(StokesKernel, self).__init__(

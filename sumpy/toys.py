@@ -241,7 +241,7 @@ def _e2p(psource, targets, e2p):
             #flags="print_hl_cl",
             out_host=True, **toy_ctx.extra_kernel_kwargs)
 
-    return tuple(pot)
+    return np.array(pot)
 
 
 def _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs):
@@ -477,22 +477,20 @@ class PotentialExpressionNode(PotentialSource):
 
 class Sum(PotentialExpressionNode):
     def eval(self, targets):
-        npots = self.toy_ctx.kernel.shape[0]
-        result = [0]*npots
+        result = 0
         for psource in self.psources:
-            for i in range(npots):
-                result[i] = result[i] + psource.eval(targets)[i]
-        return tuple(result)
+            result = result + psource.eval(targets)
+
+        return result
 
 
 class Product(PotentialExpressionNode):
     def eval(self, targets):
-        npots = self.toy_ctx.kernel.shape[0]
-        result = [1]*npots
+        result = 1
         for psource in self.psources:
-            for i in range(npots):
-                result[i] = result[i] * psource.eval(targets)[i]
-        return tuple(result)
+            result = result * psource.eval(targets)
+
+        return result
 
 # }}}
 

@@ -475,18 +475,13 @@ class StokesDerivativeWrangler(LaplaceDerivativeWrangler):
         else:
             p_coeff_identifier = self.dim
             p_dim = coeff_identifier[1]
-        #return
         if (coeff_identifier[1] == p_coeff_identifier):
             # dim term (pressure) satisfies Laplace
             return LaplaceDerivativeWrangler.try_get_recurrence_for_derivative(self,
                 coeff_identifier, in_terms_of, rscale)
-
         mu = sym.Symbol(self.viscosity_mu_name)
 
         deriv = np.array(coeff_identifier[0], dtype=int)
-
-        if sum(deriv) == 2:
-            return
 
         for dim in np.where(2 <= deriv)[0]:
             # Check if we can reduce this dimension in terms of the other
@@ -514,9 +509,7 @@ class StokesDerivativeWrangler(LaplaceDerivativeWrangler):
                 p_term = CoeffIdentifier(tuple(p_term), p_coeff_identifier)
                 if p_term in in_terms_of:
                     coeffs[p_term] = 1/mu
-                    print(coeff_identifier, coeffs)
                     return coeffs
-        print(coeff_identifier)
 
 
 # }}}
