@@ -157,7 +157,7 @@ class ExpansionBase(object):
         return not self.__eq__(other)
 
     def get_num_expressions(self):
-        return self.kernel.get_num_expressions()
+        raise NotImplementedError
 
 # }}}
 
@@ -562,9 +562,9 @@ class VolumeTaylorExpansion(VolumeTaylorExpansionBase):
     derivative_wrangler_cache = {}
 
     # not user-facing, be strict about having to pass use_rscale
-    def __init__(self, kernel, order, use_rscale):
+    def __init__(self, kernel, order, use_rscale, local):
         self.derivative_wrangler_key = (order, kernel.dim,
-                kernel.get_num_expressions())
+                kernel.get_num_expressions(local))
 
 
 class LaplaceConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
@@ -573,9 +573,9 @@ class LaplaceConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
     derivative_wrangler_cache = {}
 
     # not user-facing, be strict about having to pass use_rscale
-    def __init__(self, kernel, order, use_rscale):
+    def __init__(self, kernel, order, use_rscale, local):
         self.derivative_wrangler_key = (order, kernel.dim,
-                kernel.get_num_expressions())
+                kernel.get_num_expressions(local))
 
 
 class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
@@ -584,10 +584,10 @@ class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
     derivative_wrangler_cache = {}
 
     # not user-facing, be strict about having to pass use_rscale
-    def __init__(self, kernel, order, use_rscale):
+    def __init__(self, kernel, order, use_rscale, local):
         helmholtz_k_name = kernel.get_base_kernel().helmholtz_k_name
         self.derivative_wrangler_key = (order, kernel.dim,
-                kernel.get_num_expressions(), helmholtz_k_name)
+                kernel.get_num_expressions(local), helmholtz_k_name)
 
 
 class StokesConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
@@ -596,10 +596,10 @@ class StokesConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
     derivative_wrangler_cache = {}
 
     # not user-facing, be strict about having to pass use_rscale
-    def __init__(self, kernel, order, use_rscale):
+    def __init__(self, kernel, order, use_rscale, local):
         viscosity_mu_name = kernel.get_base_kernel().viscosity_mu_name
         self.derivative_wrangler_key = (order, kernel.dim,
-                kernel.get_num_expressions(), viscosity_mu_name)
+                kernel.get_num_expressions(local), viscosity_mu_name)
 
 # }}}
 

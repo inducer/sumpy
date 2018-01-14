@@ -45,7 +45,9 @@ __doc__ = """
 
 
 class MultipoleExpansionBase(ExpansionBase):
-    pass
+
+    def get_num_expressions(self):
+        return self.kernel.get_num_expressions()
 
 
 # {{{ volume taylor
@@ -126,7 +128,9 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                 * self.get_scaled_multipole(taker.diff(CoeffIdentifier(mi, nexpr)),
                     bvec, rscale, sum(mi)))
 
-        return [sym.Add(*res) for res in results]
+        results = [sym.Add(*res) for res in results]
+        return self.kernel.get_kernel_to_output_mapping(results,
+                    [1]*self.kernel.nstrengths)
 
     def get_kernel_derivative_taker(self, bvec):
         return (self.derivative_wrangler.get_derivative_taker(
@@ -200,7 +204,7 @@ class VolumeTaylorMultipoleExpansion(
 
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
-        VolumeTaylorExpansion.__init__(self, kernel, order, use_rscale)
+        VolumeTaylorExpansion.__init__(self, kernel, order, use_rscale, local=False)
 
 
 class LaplaceConformingVolumeTaylorMultipoleExpansion(
@@ -210,7 +214,7 @@ class LaplaceConformingVolumeTaylorMultipoleExpansion(
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
         LaplaceConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
+                self, kernel, order, use_rscale, local=False)
 
 
 class HelmholtzConformingVolumeTaylorMultipoleExpansion(
@@ -220,7 +224,7 @@ class HelmholtzConformingVolumeTaylorMultipoleExpansion(
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
         HelmholtzConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
+                self, kernel, order, use_rscale, local=False)
 
 
 class StokesConformingVolumeTaylorMultipoleExpansion(
@@ -230,7 +234,7 @@ class StokesConformingVolumeTaylorMultipoleExpansion(
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
         StokesConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
+                self, kernel, order, use_rscale, local=False)
 
 # }}}
 

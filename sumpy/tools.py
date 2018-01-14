@@ -260,7 +260,7 @@ class KernelComputation(object):
         # {{{ process strength_usage
 
         if strength_usage is None:
-            strength_usage = [list(range(knl.shape[1])) for knl in kernels]
+            strength_usage = [list(range(knl.nstrengths)) for knl in kernels]
 
         if len(kernels) != len(strength_usage):
             raise ValueError("expressions and strength_usage must have"

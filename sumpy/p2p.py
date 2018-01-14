@@ -106,13 +106,13 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
         exprs = []
         scaling = []
         for i, (knl, results) in enumerate(zip(self.kernels, result_names)):
-            for row in range(knl.shape[0]):
-                expr = sum(var(results[row * knl.shape[1] + col]) *
-                             var("strength").index((self.strength_usage[i][col],
-                                                    var("isrc")))
-                             for col in range(knl.shape[1]))
-                exprs.append(expr)
-                scaling.append("knl_{}_scaling".format(row * knl.shape[1]))
+            strengths = [var("strength").index((self.strength_usage[i][col],
+                            var("isrc"))) for col in range(knl.nstrengths)]
+            var_results = [var(result) for result in results]
+
+            exprs.extend(knl.get_kernel_to_output_mapping(var_results, strengths))
+            scaling.extend(["knl_{}_scaling".format(scale) for scale in
+                            range(len(knl.get_global_scaling_const()))])
         return exprs, scaling
 
     def get_cache_key(self):

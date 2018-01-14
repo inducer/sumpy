@@ -111,11 +111,10 @@ class P2EBase(KernelCacheWrapper):
         return (type(self).__name__, self.name, self.expansion)
 
     def get_strength(self, coeff_ident):
-        import sumpy.symbolic as sp
-        if not self.expansion.kernel.implicit_strength:
+        from sumpy.expansion.local import LocalExpansionBase
+        if isinstance(self.expansion, LocalExpansionBase):
             return 1
-        knl_shape = self.expansion.kernel.shape
-        return sp.Symbol("strength{}".format(coeff_ident[1] % knl_shape[1]))
+        return self.expansion.kernel.get_strength(coeff_ident[1])
 
 # }}}
 

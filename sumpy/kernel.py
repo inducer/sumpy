@@ -293,6 +293,13 @@ class Kernel(object):
     def get_local_kernel(self):
         return self
 
+    def get_kernel_to_output_mapping(self, kernel_exprs, strengths):
+        return [expr * strength for expr, strength in zip(kernel_exprs, strengths)]
+
+    def get_strength(self, coeff_ident):
+        import sumpy.symbolic as sp
+        return sp.Symbol("strength{}".format(coeff_ident))
+
 # }}}
 
 
@@ -303,8 +310,7 @@ class ExpressionKernel(Kernel):
             "is_complex_valued")
 
     def __init__(self, dim, expression, global_scaling_const,
-            is_complex_valued, shape=(1, 1), implicit_strength=True,
-            nstrengths=None):
+            is_complex_valued, shape=(1, 1), nstrengths=None):
         """
         :arg expression: :mod:`pymbolic` expressions depending on
             variables *d_1* through *d_N* where *N* equals *dim*.
@@ -334,8 +340,7 @@ class ExpressionKernel(Kernel):
             self.global_scaling_consts = [global_scaling_const]
         self.is_complex_valued = is_complex_valued
         self.shape = shape
-        self.implicit_strength = implicit_strength
-        self.nstrengths = nstrengths if nstrengths else shape[0]
+        self.nstrengths = nstrengths if nstrengths else len(self.expressions)
 
     def __getinitargs__(self):
         return (self.dim, self.expressions, self.global_scaling_consts,
@@ -344,10 +349,13 @@ class ExpressionKernel(Kernel):
     def __repr__(self):
         return "ExprKnl%dD" % self.dim
 
-    def get_expressions(self, scaled_dist_vec):
+    def get_expressions(self, scaled_dist_vec, output=False):
         from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
+        strengths = make_sym_vector("strength", self.dim)
+        exprs = self.expressions if not output else \
+                    self.get_kernel_to_output_mapping(self.expressions, strengths)
         exprs = [PymbolicToSympyMapperWithSymbols()(expr) for
-                    expr in self.expressions]
+                    expr in exprs]
 
         if self.dim != len(scaled_dist_vec):
             raise ValueError("dist_vec length does not match expected dimension")
@@ -360,7 +368,7 @@ class ExpressionKernel(Kernel):
 
         return exprs
 
-    def get_num_expressions(self):
+    def get_num_expressions(self, output=False):
         return len(self.expressions)
 
     def get_global_scaling_const(self):
@@ -750,7 +758,7 @@ class StokesKernel(ExpressionKernel):
 
         if dim == 3 or dim == 2:
             exprs = [0]*(dim*(dim + 1))
-            scaling_consts = [0]*(dim*(dim + 1))
+            scaling_consts = [0]*(dim + 1)
             d = make_sym_vector("d", dim)
             r = pymbolic_real_norm_2(d)
 
@@ -761,13 +769,14 @@ class StokesKernel(ExpressionKernel):
 
             for i in range(dim):
                 exprs[i + dim**2] = d[i]/r**dim
-                scaling_consts[i + dim**2] = 1/(2**(dim-1)*var("pi"))
+
+            scaling_consts[dim] = 1/(2**(dim-1)*var("pi"))
 
             for i in range(dim):
                 exprs[i*dim + i] = diag_expr
                 for j in range(dim):
                     exprs[i*dim + j] += d[i]*d[j]/r**dim
-                    scaling_consts[i*dim + j] = 1/(2**dim*var("pi")*mu)
+                scaling_consts[i] = 1/(2**dim*var("pi")*mu)
 
         elif dim is None:
             exprs = None
@@ -782,7 +791,6 @@ class StokesKernel(ExpressionKernel):
             strengths = make_sym_vector("strength", dim)
             exprs = [sum(exprs[row * dim + col]*strengths[col]
                         for col in range(dim)) for row in range(dim+1)]
-            scaling_consts = [scaling_consts[row*dim] for row in range(dim+1)]
             shape = (dim + 1, 1)
 
         super(StokesKernel, self).__init__(
@@ -791,7 +799,6 @@ class StokesKernel(ExpressionKernel):
                 global_scaling_const=scaling_consts,
                 is_complex_valued=False,
                 shape=shape,
-                implicit_strength=(not local_kernel),
                 nstrengths=dim)
 
     def __getinitargs__(self):
@@ -814,6 +821,21 @@ class StokesKernel(ExpressionKernel):
                 KernelArgument(
                     loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64),
                     )]
+
+    def get_kernel_to_output_mapping(self, kernel_exprs, strengths):
+        result = []
+        for i in range(self.dim+1):
+            result.append(sum(kernel_exprs[i * self.dim + j] *
+                            strengths[j] for j in range(self.dim)))
+        return result
+
+    def get_strength(self, coeff_ident):
+        import sumpy.symbolic as sp
+        num = coeff_ident % self.dim
+        return sp.Symbol("strength{}".format(num))
+
+    def get_num_expressions(self, output=False):
+        return self.dim + 1 if output else self.dim * (self.dim + 1)
 
     mapper_method = "map_expression_kernel"
 
@@ -841,8 +863,8 @@ class KernelWrapper(Kernel):
     def get_expressions(self, scaled_dist_vec):
         return self.inner_kernel.get_expressions(scaled_dist_vec)
 
-    def get_num_expressions(self):
-        return self.inner_kernel.get_num_expressions()
+    def get_num_expressions(self, output=False):
+        return self.inner_kernel.get_num_expressions(output=output)
 
     @property
     def has_efficient_scale_adjustment(self):

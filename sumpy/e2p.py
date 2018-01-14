@@ -131,8 +131,7 @@ class E2PFromSingleBox(E2PBase):
         ncoeffs = len(self.expansion)
 
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
-        num_exprs = self.expansion.kernel.get_num_expressions()
-        shape = self.expansion.kernel.shape
+        num_exprs = self.expansion.kernel.get_num_expressions(output=True)
 
         loopy_knl = lp.make_kernel(
                 [
@@ -157,13 +156,10 @@ class E2PFromSingleBox(E2PBase):
                         <> b[idim] = targets[idim, itgt] - center[idim] {dup=idim}
 
                         """] + loopy_insns + ["""
-                        result[{idx},itgt] = 0
-                        """.format(idx=idx) for idx in range(len(result_names) *
-                                                                shape[0])] + ["""
-                        result[{idx},itgt] = result[{idx},itgt] + \
+                        result[{idx},itgt] = \
                             kernel_scaling_{vidx} * result_{resultidx}_{vidx}_p \
                             {{id_prefix=write_result}}
-                        """.format(idx=i + (j//shape[1])*len(result_names),
+                        """.format(idx=i + j*len(result_names),
                                 resultidx=i, vidx=j) for i in
                                     range(len(result_names))
                                     for j in range(num_exprs)] + ["""
@@ -235,8 +231,7 @@ class E2PFromCSR(E2PBase):
         ncoeffs = len(self.expansion)
 
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
-        num_exprs = self.expansion.kernel.get_num_expressions()
-        shape = self.expansion.kernel.shape
+        num_exprs = self.expansion.kernel.get_num_expressions(output=True)
 
         loopy_knl = lp.make_kernel(
                 [
@@ -276,7 +271,7 @@ class E2PFromCSR(E2PBase):
                                 result[{idx},itgt] + \
                                 kernel_scaling_{vidx} * simul_reduce(sum, isrc_box,
                                 result_{residx}_{vidx}_p) {{id_prefix=write_result}}
-                        """.format(idx=i + (j//shape[1])*len(result_names), residx=i,
+                        """.format(idx=i + j*len(result_names), residx=i,
                                    vidx=j) for i in range(len(result_names))
                                    for j in range(num_exprs)] + ["""
                     end

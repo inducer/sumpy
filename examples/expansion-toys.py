@@ -22,7 +22,7 @@ def main():
     pt_src = t.PointSources(
             tctx,
             np.random.rand(2, 50) - 0.5,
-            [np.ones(50)]*tctx.kernel.shape[1])
+            [np.ones(50)]*tctx.kernel.nstrengths)
 
     fp = FieldPlotter([3, 0], extent=8)
 

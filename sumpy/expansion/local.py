@@ -35,7 +35,13 @@ from sumpy.expansion import (
 class LocalExpansionBase(ExpansionBase):
     def __init__(self, kernel, order, use_rscale=None):
         super(LocalExpansionBase, self).__init__(
-                kernel.get_local_kernel(), order, use_rscale=use_rscale)
+                kernel, order, use_rscale=use_rscale)
+
+    def get_num_expressions(self):
+        return self.kernel.get_num_expressions(output=True)
+
+    def get_expressions(self, avec_line):
+        return self.kernel.get_expressions(avec_line, output=True)
 
 
 import logging
@@ -56,11 +62,11 @@ __doc__ = """
 class LineTaylorLocalExpansion(LocalExpansionBase):
 
     def get_storage_index(self, k):
-        return k[0] + self.kernel.get_num_expressions() * k[1]
+        return k[0] + self.get_num_expressions() * k[1]
 
     def get_coefficient_identifiers(self):
         identifiers = []
-        for nexpr in range(self.kernel.get_num_expressions()):
+        for nexpr in range(self.get_num_expressions()):
             identifiers.extend([CoeffIdentifier(mi, nexpr) for mi in
             range(self.order+1)])
         return identifiers
@@ -76,7 +82,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
 
         avec_line = avec + tau*bvec
 
-        line_kernel = self.kernel.get_expressions(avec_line)
+        line_kernel = self.get_expressions(avec_line)
 
         from sumpy.symbolic import USE_SYMENGINE
 
@@ -109,7 +115,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
     def evaluate(self, coeffs, bvec, rscale):
         # no point in heeding rscale here--just ignore it
         from pytools import factorial
-        results = [[] for _ in range(self.kernel.get_num_expressions())]
+        results = [[] for _ in range(self.get_num_expressions())]
         for i in self.get_coefficient_identifiers():
             results[i[1]].append(coeffs[self.get_storage_index(i)] /
                                     factorial(i[0]))
@@ -128,7 +134,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
     def coefficients_from_source(self, avec, bvec, rscale):
         from sumpy.tools import MiDerivativeTaker
         ppkernel = self.kernel.postprocess_at_source(
-                self.kernel.get_expressions(avec), avec)
+                self.get_expressions(avec), avec)
 
         taker = MiDerivativeTaker(ppkernel, avec)
         return [
@@ -145,7 +151,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                     for coeff, (mi, nexpr) in zip(
                         evaluated_coeffs, self.get_full_coefficient_identifiers())
                         if nexpr == num)
-                  for num in range(self.kernel.get_num_expressions())]
+                  for num in range(self.get_num_expressions())]
+
         return result
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
@@ -219,7 +226,7 @@ class VolumeTaylorLocalExpansion(
 
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale)
-        VolumeTaylorExpansion.__init__(self, kernel, order, use_rscale)
+        VolumeTaylorExpansion.__init__(self, kernel, order, use_rscale, local=True)
 
 
 class LaplaceConformingVolumeTaylorLocalExpansion(
@@ -229,7 +236,7 @@ class LaplaceConformingVolumeTaylorLocalExpansion(
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale)
         LaplaceConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
+                self, kernel, order, use_rscale, local=True)
 
 
 class HelmholtzConformingVolumeTaylorLocalExpansion(
@@ -239,7 +246,7 @@ class HelmholtzConformingVolumeTaylorLocalExpansion(
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale)
         HelmholtzConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
+                self, kernel, order, use_rscale, local=True)
 
 
 class StokesConformingVolumeTaylorLocalExpansion(
@@ -249,7 +256,7 @@ class StokesConformingVolumeTaylorLocalExpansion(
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale)
         StokesConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
+                self, kernel, order, use_rscale, local=True)
 
 # }}}
 
