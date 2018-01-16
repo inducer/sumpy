@@ -290,9 +290,6 @@ class Kernel(object):
         """
         return []
 
-    def get_local_kernel(self):
-        return self
-
     def get_kernel_to_output_mapping(self, kernel_exprs, strengths):
         return [expr * strength for expr, strength in zip(kernel_exprs, strengths)]
 
@@ -748,7 +745,7 @@ class StressletKernel(ExpressionKernel):
 class StokesKernel(ExpressionKernel):
     init_arg_names = ("dim", "viscosity_mu_name")
 
-    def __init__(self, dim, viscosity_mu_name="mu", local_kernel=False):
+    def __init__(self, dim, viscosity_mu_name="mu"):
         r"""
         :arg force_name: The argument name to use for
                 the force `f` the then generating functions to
@@ -787,12 +784,6 @@ class StokesKernel(ExpressionKernel):
         self.viscosity_mu_name = viscosity_mu_name
         shape = (dim + 1, dim)
 
-        if local_kernel:
-            strengths = make_sym_vector("strength", dim)
-            exprs = [sum(exprs[row * dim + col]*strengths[col]
-                        for col in range(dim)) for row in range(dim+1)]
-            shape = (dim + 1, 1)
-
         super(StokesKernel, self).__init__(
                 dim,
                 expression=exprs,
@@ -803,10 +794,6 @@ class StokesKernel(ExpressionKernel):
 
     def __getinitargs__(self):
         return (self.dim, self.viscosity_mu_name)
-
-    def get_local_kernel(self):
-        return StokesKernel(self.dim, viscosity_mu_name=self.viscosity_mu_name,
-                            local_kernel=True)
 
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode())
