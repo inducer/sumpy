@@ -282,7 +282,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         # The coordinates are negated since avec points from source to center.
         source_angle_rel_center = sym.atan2(-avec[1], -avec[0])
         avec_len = sym_real_norm_2(avec)
-        return [self.kernel.postprocess_at_source(
+        return [sym.Symbol("strength0") * self.kernel.postprocess_at_source(
                     hankel_1(l, arg_scale * avec_len)
                     * rscale ** abs(l)
                     * sym.exp(sym.I * l * source_angle_rel_center), avec)
