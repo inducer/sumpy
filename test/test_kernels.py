@@ -186,7 +186,8 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
     sources = (0.7*(-0.5+np.random.rand(knl.dim, nsources).astype(np.float64))
             + center[:, np.newaxis])
 
-    strengths = np.ones(nsources, dtype=np.float64) * (1/nsources)
+    strengths = [np.ones(nsources, dtype=np.float64) * (1/nsources)]
+    strengths = strengths * base_knl.nstrengths
 
     source_boxes = np.array([0], dtype=np.int32)
     box_source_starts = np.array([0], dtype=np.int32)
@@ -261,7 +262,7 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
 
         evt, (pot_direct, grad_x_direct, ) = p2p(
                 queue,
-                targets, sources, (strengths,),
+                targets, sources, strengths,
                 out_host=True,
                 **extra_source_kwargs)
 
@@ -368,7 +369,7 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
     origin = np.array([2, 1], np.float64)
     sources = (0.7*(-0.5+np.random.rand(knl.dim, nsources).astype(np.float64))
             + origin[:, np.newaxis])
-    strengths = np.ones(nsources, dtype=np.float64) * (1/nsources)
+    strengths = [np.ones(nsources, dtype=np.float64) * (1/nsources)]*knl.nstrengths
 
     pconv_verifier_p2m2p = PConvergenceVerifier()
     pconv_verifier_p2m2m2p = PConvergenceVerifier()
@@ -455,7 +456,7 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
 
         evt, (pot_direct,) = p2p(
                 queue,
-                targets, sources, (strengths,),
+                targets, sources, strengths,
                 out_host=True, **extra_kwargs)
 
         # }}}

@@ -276,7 +276,7 @@ class P2PFromCSR(P2PBase):
                                 ] + [
                                 """
                             end
-                            """] +  + ["""
+                            """] + ["""
                             result[{iknl}, itgt] = result[{iknl}, itgt] + {scale} \
                                     * simul_reduce(sum, isrc, pair_result_{iknl})
                             """.format(iknl=iknl, scale=scale)

@@ -65,20 +65,17 @@ class YukawaKernelInfo:
 
 
 class StokesKernelInfo:
-    def __init__(self, dim, f, mu):
+    def __init__(self, dim, mu):
         self.kernel = StokesKernel(dim)
-        self.f = f
         self.mu = mu
-        extra_kwargs = dict(("f_{}".format(i), f[i]) for i in range(dim))
-        extra_kwargs["mu"] = mu
-        self.extra_kwargs = extra_kwargs
+        self.extra_kwargs = {"mu": mu}
         self.dim = dim
 
     def pde_func(self, cp, pot, num=0):
         if num == self.dim:
             return sum(cp.diff(i, pot[i]) for i in range(self.dim))
         else:
-            return (self.mu * sum(cp.diff(i, pot[num], 2) for i in range(self.dim)) +
+            return (self.mu * sum(cp.diff(i, pot[num], 2) for i in range(self.dim)) -
                     cp.diff(num, pot[self.dim], 1))
 
     nderivs = 2
@@ -89,7 +86,7 @@ class StokesKernelInfo:
     BiharmonicKernelInfo(2),
     BiharmonicKernelInfo(3),
     YukawaKernelInfo(2, 5),
-    StokesKernelInfo(3, [1, 2, 3], 4),
+    StokesKernelInfo(3, 4),
     ])
 def test_pde_check_kernels(ctx_factory, knl_info, order=5):
     dim = knl_info.kernel.dim
@@ -99,7 +96,7 @@ def test_pde_check_kernels(ctx_factory, knl_info, order=5):
     pt_src = t.PointSources(
             tctx,
             np.random.rand(dim, 50) - 0.5,
-            np.ones(50))
+            [np.ones(50)]*tctx.kernel.nstrengths)
 
     from pytools.convergence import EOCRecorder
     from sumpy.point_calculus import CalculusPatch

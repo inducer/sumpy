@@ -199,7 +199,6 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
             order_values = [10, 12]
 
     elif isinstance(knl, StokesKernel):
-        extra_kwargs = dict(("f_{}".format(i), i) for i in range(knl.dim))
         extra_kwargs["mu"] = 1
 
     pconv_verifiers = [PConvergenceVerifier() for i in

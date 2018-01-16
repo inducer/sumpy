@@ -334,7 +334,7 @@ class SumpyExpansionWrangler(object):
                     self.level_queues[lev],
                     source_boxes=source_boxes[start:stop],
                     centers=self.tree.box_centers,
-                    strengths=src_weights,
+                    strengths=(src_weights,),   # TODO: Fix this
                     tgt_expansions=mpoles_view,
                     tgt_base_ibox=level_start_ibox,
 
@@ -553,7 +553,7 @@ class SumpyExpansionWrangler(object):
                     source_box_starts=starts[start:stop+1],
                     source_box_lists=lists,
                     centers=self.tree.box_centers,
-                    strengths=src_weights,
+                    strengths=(src_weights,),   # TODO: Fix this
 
                     tgt_expansions=target_local_exps_view,
                     tgt_base_ibox=target_level_start_ibox,

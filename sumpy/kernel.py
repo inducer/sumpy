@@ -172,7 +172,7 @@ class Kernel(object):
         """
         return lambda expr: expr
 
-    def get_expressions(self, dist_vec):
+    def get_expressions(self, dist_vec, output):
         r"""Return a :mod:`sympy` expression for the kernel."""
         raise NotImplementedError
 
@@ -860,8 +860,8 @@ class KernelWrapper(Kernel):
     def is_complex_valued(self):
         return self.inner_kernel.is_complex_valued
 
-    def get_expressions(self, scaled_dist_vec):
-        return self.inner_kernel.get_expressions(scaled_dist_vec)
+    def get_expressions(self, scaled_dist_vec, output=False):
+        return self.inner_kernel.get_expressions(scaled_dist_vec, output)
 
     def get_num_expressions(self, output=False):
         return self.inner_kernel.get_num_expressions(output=output)
@@ -891,6 +891,11 @@ class KernelWrapper(Kernel):
 
     def get_source_args(self):
         return self.inner_kernel.get_source_args()
+
+    @property
+    def nstrengths(self):
+        return self.inner_kernel.nstrengths
+
 
 # }}}
 

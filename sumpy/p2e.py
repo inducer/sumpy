@@ -27,7 +27,7 @@ from six.moves import range
 
 import numpy as np
 import loopy as lp
-from sumpy.tools import KernelCacheWrapper
+from sumpy.tools import KernelCacheWrapper, CoeffIdentifier
 
 import logging
 logger = logging.getLogger(__name__)
@@ -112,9 +112,12 @@ class P2EBase(KernelCacheWrapper):
 
     def get_strength(self, coeff_ident):
         from sumpy.expansion.local import LocalExpansionBase
+        import sumpy.symbolic as sp
         if isinstance(self.expansion, LocalExpansionBase):
             return 1
-        return self.expansion.kernel.get_strength(coeff_ident[1])
+        if isinstance(coeff_ident, CoeffIdentifier):
+            return self.expansion.kernel.get_strength(coeff_ident[1])
+        return sp.Symbol("strength0")
 
 # }}}
 
