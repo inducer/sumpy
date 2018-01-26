@@ -408,9 +408,9 @@ class NewLinearRecurrenceBasedDerivativeWrangler \
         if len(pde_mat) > 0:
             pde_mat = np.array(pde_mat, dtype=np.float64)
             n = nullspace(pde_mat, atol=tol)
-            k, idx, _ = interp_decomp(n.T, tol)
+            k, idx, proj = interp_decomp(n.T, tol)
+            s = np.hstack([np.eye(k), proj])[:, np.argsort(idx)]
             idx = idx[:k]
-            s = np.linalg.solve(n[idx, :].T, n.T).T
             stored_identifiers = [mis[i] for i in idx]
         else:
             s = np.eye(len(mis))
