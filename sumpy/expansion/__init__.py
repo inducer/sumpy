@@ -405,12 +405,16 @@ class NewLinearRecurrenceBasedDerivativeWrangler \
                         eq[coeff_ident_enumerate_dict[c]] = 1
                     pde_mat.append(eq)
 
-        pde_mat = np.array(pde_mat, dtype=np.float64)
-        n = nullspace(pde_mat, atol=tol)
-        k, idx, _ = interp_decomp(n.T, tol)
-        idx = idx[:k]
-        s = np.linalg.solve(n[idx, :].T, n.T).T
-        stored_identifiers = [mis[i] for i in idx]
+        if len(pde_mat) > 0:
+            pde_mat = np.array(pde_mat, dtype=np.float64)
+            n = nullspace(pde_mat, atol=tol)
+            k, idx, _ = interp_decomp(n.T, tol)
+            idx = idx[:k]
+            s = np.linalg.solve(n[idx, :].T, n.T).T
+            stored_identifiers = [mis[i] for i in idx]
+        else:
+            s = np.eye(len(mis))
+            stored_identifiers = mis
 
         coeff_matrix = defaultdict(lambda: [])
         for i in range(s.shape[0]):
