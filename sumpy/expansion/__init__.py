@@ -372,32 +372,81 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
         return LinearRecurrenceBasedMiDerivativeTaker(expr, var_list, self)
 
 
-class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
+class NewLinearRecurrenceBasedDerivativeWrangler \
+        (LinearRecurrenceBasedDerivativeWrangler):
 
-    def try_get_recurrence_for_derivative(self, deriv, in_terms_of):
-        deriv = np.array(deriv, dtype=int)
+    @memoize_method
+    def _get_stored_ids_and_coeff_mat(self):
+        from scipy.linalg.interpolative import interp_decomp
+        from six import iteritems
+        from sumpy.tools import nullspace
 
-        for dim in np.where(2 <= deriv)[0]:
-            # Check if we can reduce this dimension in terms of the other
-            # dimensions.
+        tol = 1e-13
+        stored_identifiers = []
 
-            reduced_deriv = deriv.copy()
-            reduced_deriv[dim] -= 2
-            coeffs = {}
+        import time
+        start_time = time.time()
+        logger.debug("computing recurrence for Taylor coefficients: start")
 
-            for other_dim in range(self.dim):
-                if other_dim == dim:
-                    continue
-                needed_deriv = reduced_deriv.copy()
-                needed_deriv[other_dim] += 2
-                needed_deriv = tuple(needed_deriv)
+        pde_dict = self.get_pde_dict()
+        P = []
 
-                if needed_deriv not in in_terms_of:
-                    break
+        mis = self.get_full_coefficient_identifiers()
+        coeff_ident_enumerate_dict = dict((tuple(mi), i) for
+                                            (i, mi) in enumerate(mis))
 
-                coeffs[needed_deriv] = -1
-            else:
-                return coeffs
+        for mi in mis:
+            for pde_mi, coeff in iteritems(pde_dict):
+                diff = np.array(mi, dtype=int) - pde_mi
+                if (diff >= 0).all():
+                    eq = [0]*len(mis)
+                    for pde_mi2, coeff2 in iteritems(pde_dict):
+                        c = tuple(pde_mi2 + diff)
+                        eq[coeff_ident_enumerate_dict[c]] = 1
+                    P.append(eq)
+
+        P = np.array(P, dtype=np.float64)
+        N = nullspace(P, atol=tol)
+        k, idx, _ = interp_decomp(N.T, tol)
+        idx = idx[:k]
+        S = np.linalg.solve(N[idx, :].T, N.T).T
+        stored_identifiers = [mis[i] for i in idx]
+
+        coeff_matrix = defaultdict(lambda: [])
+        for i in range(S.shape[0]):
+            for j in range(S.shape[1]):
+                if np.abs(S[i][j]) > tol:
+                    coeff_matrix[i].append((j, S[i][j]))
+
+        logger.debug("computing recurrence for Taylor coefficients: "
+                     "done after {dur:.2f} seconds"
+                     .format(dur=time.time() - start_time))
+
+        logger.debug("number of Taylor coefficients was reduced from {orig} to {red}"
+                     .format(orig=len(self.get_full_coefficient_identifiers()),
+                             red=len(stored_identifiers)))
+
+        return stored_identifiers, coeff_matrix
+
+    @memoize_method
+    def get_coefficient_matrix(self, rscale):
+        _, coeff_matrix = self._get_stored_ids_and_coeff_mat()
+        return coeff_matrix
+
+    def get_derivative_taker(self, expr, var_list):
+        from sumpy.tools import NewLinearRecurrenceBasedMiDerivativeTaker
+        return NewLinearRecurrenceBasedMiDerivativeTaker(expr, var_list, self)
+
+
+class LaplaceDerivativeWrangler(NewLinearRecurrenceBasedDerivativeWrangler):
+
+    def get_pde_dict(self):
+        pde_dict = {}
+        for d in range(self.dim):
+            mi = [0]*self.dim
+            mi[d] = 2
+            pde_dict[tuple(mi)] = 1
+        return pde_dict
 
 
 class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):

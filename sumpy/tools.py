@@ -139,6 +139,37 @@ class LinearRecurrenceBasedMiDerivativeTaker(MiDerivativeTaker):
 
         return expr
 
+
+class NewLinearRecurrenceBasedMiDerivativeTaker(MiDerivativeTaker):
+    """
+    The derivative taker for expansions that use
+    :class:`sumpy.expansion.LinearRecurrenceBasedDerivativeWrangler`
+    """
+
+    def __init__(self, expr, var_list, wrangler):
+        super(NewLinearRecurrenceBasedMiDerivativeTaker, self).__init__(
+                expr, var_list)
+        self.wrangler = wrangler
+
+    @memoize_method
+    def diff(self, mi):
+        """
+        :arg mi: a multi-index (tuple) indicating how many x/y derivatives are
+            to be taken.
+        """
+        try:
+            expr = self.cache_by_mi[mi]
+        except KeyError:
+            closest_mi = self.get_closest_cached_mi(mi)
+            expr = self.cache_by_mi[closest_mi]
+
+            for next_deriv, next_mi in (
+                        self.get_derivative_taking_sequence(closest_mi, mi)):
+                expr = expr.diff(next_deriv)
+                self.cache_by_mi[next_mi] = expr
+
+        return expr
+
 # }}}
 
 
@@ -447,5 +478,49 @@ def my_syntactic_subs(expr, subst_dict):
 
         return expr
 
+
+# Source: http://scipy-cookbook.readthedocs.io/items/RankNullspace.html
+# Author: SciPy Developers
+# License: BSD-3-Clause
+
+def nullspace(A, atol=1e-13, rtol=0):
+    """Compute an approximate basis for the nullspace of A.
+
+    The algorithm used by this function is based on the singular value
+    decomposition of `A`.
+
+    Parameters
+    ----------
+    A : ndarray
+        A should be at most 2-D.  A 1-D array with length k will be treated
+        as a 2-D with shape (1, k)
+    atol : float
+        The absolute tolerance for a zero singular value.  Singular values
+        smaller than `atol` are considered to be zero.
+    rtol : float
+        The relative tolerance.  Singular values less than rtol*smax are
+        considered to be zero, where smax is the largest singular value.
+
+    If both `atol` and `rtol` are positive, the combined tolerance is the
+    maximum of the two; that is::
+        tol = max(atol, rtol * smax)
+    Singular values smaller than `tol` are considered to be zero.
+
+    Return value
+    ------------
+    ns : ndarray
+        If `A` is an array with shape (m, k), then `ns` will be an array
+        with shape (k, n), where n is the estimated dimension of the
+        nullspace of `A`.  The columns of `ns` are a basis for the
+        nullspace; each element in numpy.dot(A, ns) will be approximately
+        zero.
+    """
+    from numpy.linalg import svd
+    A = np.atleast_2d(A)
+    u, s, vh = svd(A)
+    tol = max(atol, rtol * s[0])
+    nnz = (s >= tol).sum()
+    ns = vh[nnz:].conj().T
+    return ns
 
 # vim: fdm=marker
