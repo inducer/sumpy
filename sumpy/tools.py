@@ -483,7 +483,7 @@ def my_syntactic_subs(expr, subst_dict):
 # Author: SciPy Developers
 # License: BSD-3-Clause
 
-def nullspace(A, atol=1e-13, rtol=0):
+def nullspace(A, atol=1e-13, rtol=0):  # noqa:N803
     """Compute an approximate basis for the nullspace of A.
 
     The algorithm used by this function is based on the singular value
@@ -516,7 +516,7 @@ def nullspace(A, atol=1e-13, rtol=0):
         zero.
     """
     from numpy.linalg import svd
-    A = np.atleast_2d(A)
+    A = np.atleast_2d(A)  # noqa:N806
     u, s, vh = svd(A)
     tol = max(atol, rtol * s[0])
     nnz = (s >= tol).sum()

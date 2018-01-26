@@ -389,7 +389,7 @@ class NewLinearRecurrenceBasedDerivativeWrangler \
         logger.debug("computing recurrence for Taylor coefficients: start")
 
         pde_dict = self.get_pde_dict()
-        P = []
+        pde_mat = []
 
         mis = self.get_full_coefficient_identifiers()
         coeff_ident_enumerate_dict = dict((tuple(mi), i) for
@@ -403,20 +403,20 @@ class NewLinearRecurrenceBasedDerivativeWrangler \
                     for pde_mi2, coeff2 in iteritems(pde_dict):
                         c = tuple(pde_mi2 + diff)
                         eq[coeff_ident_enumerate_dict[c]] = 1
-                    P.append(eq)
+                    pde_mat.append(eq)
 
-        P = np.array(P, dtype=np.float64)
-        N = nullspace(P, atol=tol)
-        k, idx, _ = interp_decomp(N.T, tol)
+        pde_mat = np.array(pde_mat, dtype=np.float64)
+        n = nullspace(pde_mat, atol=tol)
+        k, idx, _ = interp_decomp(n.T, tol)
         idx = idx[:k]
-        S = np.linalg.solve(N[idx, :].T, N.T).T
+        s = np.linalg.solve(n[idx, :].T, n.T).T
         stored_identifiers = [mis[i] for i in idx]
 
         coeff_matrix = defaultdict(lambda: [])
-        for i in range(S.shape[0]):
-            for j in range(S.shape[1]):
-                if np.abs(S[i][j]) > tol:
-                    coeff_matrix[i].append((j, S[i][j]))
+        for i in range(s.shape[0]):
+            for j in range(s.shape[1]):
+                if np.abs(s[i][j]) > tol:
+                    coeff_matrix[i].append((j, s[i][j]))
 
         logger.debug("computing recurrence for Taylor coefficients: "
                      "done after {dur:.2f} seconds"
