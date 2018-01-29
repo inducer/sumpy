@@ -420,7 +420,7 @@ class NewLinearRecurrenceBasedDerivativeWrangler \
         for i in range(s.shape[0]):
             for j in range(s.shape[1]):
                 if np.abs(s[i][j]) > tol:
-                    coeff_matrix[i].append((j, s[i][j]))
+                    coeff_matrix[j].append((i, s[i][j]))
 
         logger.debug("computing recurrence for Taylor coefficients: "
                      "done after {dur:.2f} seconds"
