@@ -29,7 +29,6 @@ import logging
 from pytools import memoize_method
 import sumpy.symbolic as sym
 from sumpy.tools import MiDerivativeTaker
-import sumpy.symbolic as sp
 from collections import defaultdict
 
 
