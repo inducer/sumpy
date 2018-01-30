@@ -126,7 +126,7 @@ class LinearRecurrenceBasedMiDerivativeTaker(MiDerivativeTaker):
 
                 recurrence = (
                         self.wrangler.try_get_recurrence_for_derivative(
-                            next_mi, self.cache_by_mi, rscale=1))
+                            next_mi, self.cache_by_mi))
 
                 if recurrence is not None:
                     expr = Add(*tuple(
