@@ -246,6 +246,10 @@ def _spmv(spmat, x, sparse_vectors):
 
 class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
 
+    def __init__(self, order, dim, deriv_multiplier):
+        super(LinearRecurrenceBasedDerivativeWrangler, self).__init__(order, dim)
+        self.deriv_multiplier = deriv_multiplier
+
     def get_coefficient_identifiers(self):
         return self.stored_identifiers
 
@@ -304,76 +308,11 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
             matrix_row = []
             for icol, coeff in row:
                 diff = row_rscale - sum(stored_identifiers[icol])
-                matrix_row.append((icol, coeff * rscale**diff))
+                mult = (rscale*self.deriv_multiplier)**diff
+                matrix_row.append((icol, coeff * mult))
             matrix_rows.append((irow, matrix_row))
 
         return defaultdict(list, matrix_rows)
-
-    @memoize_method
-    def _get_stored_ids_and_coeff_mat(self):
-        stored_identifiers = []
-        identifiers_so_far = {}
-
-        import time
-        start_time = time.time()
-        logger.debug("computing recurrence for Taylor coefficients: start")
-
-        # Sparse matrix, indexed by row
-        coeff_matrix_transpose = defaultdict(list)
-
-        # Build up the matrix transpose by row.
-        from six import iteritems
-        for i, identifier in enumerate(self.get_full_coefficient_identifiers()):
-            expr = self.try_get_recurrence_for_derivative(
-                    identifier, identifiers_so_far)
-
-            if expr is None:
-                # Identifier should be stored
-                coeff_matrix_transpose[len(stored_identifiers)] = [(i, 1)]
-                stored_identifiers.append(identifier)
-            else:
-                expr = dict((identifiers_so_far[ident], val) for ident, val in
-                            iteritems(expr))
-                result = _spmv(coeff_matrix_transpose, expr, sparse_vectors=True)
-                for j, item in iteritems(result):
-                    coeff_matrix_transpose[j].append((i, item))
-
-            identifiers_so_far[identifier] = i
-
-        stored_identifiers = stored_identifiers
-
-        coeff_matrix = defaultdict(list)
-        for i, row in iteritems(coeff_matrix_transpose):
-            for j, val in row:
-                coeff_matrix[j].append((i, val))
-
-        logger.debug("computing recurrence for Taylor coefficients: "
-                     "done after {dur:.2f} seconds"
-                     .format(dur=time.time() - start_time))
-
-        logger.debug("number of Taylor coefficients was reduced from {orig} to {red}"
-                     .format(orig=len(self.get_full_coefficient_identifiers()),
-                             red=len(stored_identifiers)))
-
-        return stored_identifiers, coeff_matrix
-
-    def try_get_recurrence_for_derivative(self, deriv, in_terms_of):
-        """
-        :arg deriv: a tuple of integers identifying a derivative for which
-            a recurrence is sought
-        :arg in_terms_of: a container supporting efficient containment testing
-            indicating availability of derivatives for use in recurrences
-        """
-
-        raise NotImplementedError
-
-    def get_derivative_taker(self, expr, var_list):
-        from sumpy.tools import LinearRecurrenceBasedMiDerivativeTaker
-        return LinearRecurrenceBasedMiDerivativeTaker(expr, var_list, self)
-
-
-class NewLinearRecurrenceBasedDerivativeWrangler \
-        (LinearRecurrenceBasedDerivativeWrangler):
 
     @memoize_method
     def _get_stored_ids_and_coeff_mat(self):
@@ -432,17 +371,23 @@ class NewLinearRecurrenceBasedDerivativeWrangler \
 
         return stored_identifiers, coeff_matrix
 
-    @memoize_method
-    def get_coefficient_matrix(self, rscale):
-        _, coeff_matrix = self._get_stored_ids_and_coeff_mat()
-        return coeff_matrix
+    def get_pde_dict(self):
+        """
+        Return the PDE as a dictionary of derivative_identifier: coeff such that
+        sum(derivative_identifer * coeff) = 0 is the PDE.
+        """
+
+        raise NotImplementedError
 
     def get_derivative_taker(self, expr, var_list):
         from sumpy.tools import NewLinearRecurrenceBasedMiDerivativeTaker
         return NewLinearRecurrenceBasedMiDerivativeTaker(expr, var_list, self)
 
 
-class LaplaceDerivativeWrangler(NewLinearRecurrenceBasedDerivativeWrangler):
+class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
+
+    def __init__(self, order, dim):
+        super(LaplaceDerivativeWrangler, self).__init__(order, dim, 1)
 
     def get_pde_dict(self):
         pde_dict = {}
@@ -456,35 +401,17 @@ class LaplaceDerivativeWrangler(NewLinearRecurrenceBasedDerivativeWrangler):
 class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
 
     def __init__(self, order, dim, helmholtz_k_name):
-        super(HelmholtzDerivativeWrangler, self).__init__(order, dim)
-        self.helmholtz_k_name = helmholtz_k_name
+        multiplier = sym.Symbol(helmholtz_k_name)
+        super(HelmholtzDerivativeWrangler, self).__init__(order, dim, multiplier)
 
-    def try_get_recurrence_for_derivative(self, deriv, in_terms_of):
-        deriv = np.array(deriv, dtype=int)
-
-        for dim in np.where(2 <= deriv)[0]:
-            # Check if we can reduce this dimension in terms of the other
-            # dimensions.
-
-            reduced_deriv = deriv.copy()
-            reduced_deriv[dim] -= 2
-            coeffs = {}
-
-            for other_dim in range(self.dim):
-                if other_dim == dim:
-                    continue
-                needed_deriv = reduced_deriv.copy()
-                needed_deriv[other_dim] += 2
-                needed_deriv = tuple(needed_deriv)
-
-                if needed_deriv not in in_terms_of:
-                    break
-
-                coeffs[needed_deriv] = -1
-            else:
-                k = sym.Symbol(self.helmholtz_k_name)
-                coeffs[tuple(reduced_deriv)] = -k*k
-                return coeffs
+    def get_pde_dict(self, **kwargs):
+        pde_dict = {}
+        for d in range(self.dim):
+            mi = [0]*self.dim
+            mi[d] = 2
+            pde_dict[tuple(mi)] = 1
+        pde_dict[tuple([0]*self.dim)] = -1
+        return pde_dict
 
 # }}}
 
