@@ -316,7 +316,6 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
 
     @memoize_method
     def _get_stored_ids_and_coeff_mat(self):
-        from scipy.linalg.interpolative import interp_decomp
         from six import iteritems
         from sumpy.tools import nullspace
 
@@ -350,9 +349,14 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
         if len(pde_mat) > 0:
             pde_mat = np.array(pde_mat, dtype=np.float64)
             n = nullspace(pde_mat, atol=tol)
-            k, idx, proj = interp_decomp(n.T, tol)
-            s = np.hstack([np.eye(k), proj])[:, np.argsort(idx)]
-            idx = idx[:k]
+            idx = self.get_reduced_coeffs()
+            if idx is None or len(idx) < n.shape[1]:
+                from scipy.linalg.interpolative import interp_decomp
+                k, idx, proj = interp_decomp(n.T, tol)
+                s = np.hstack([np.eye(k), proj])[:, np.argsort(idx)]
+                idx = idx[:k]
+            else:
+                s = np.linalg.solve(n.T[:, idx], n.T)
             stored_identifiers = [mis[i] for i in idx]
         else:
             s = np.eye(len(mis))
@@ -382,6 +386,15 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
 
         raise NotImplementedError
 
+    def get_reduced_coeffs(self):
+        """
+        If the coefficients of the derivatives can be reduced and the reduced
+        coefficients are known, returns a list of indices. Returning None
+        indicates the reduced coefficients are unknown and will be calculated
+        using an Interpolative Decomposition of the PDE matrix
+        """
+        return None
+
     def get_derivative_taker(self, expr, var_list):
         from sumpy.tools import NewLinearRecurrenceBasedMiDerivativeTaker
         return NewLinearRecurrenceBasedMiDerivativeTaker(expr, var_list, self)
@@ -400,6 +413,13 @@ class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
             pde_dict[tuple(mi)] = 1
         return pde_dict
 
+    def get_reduced_coeffs(self):
+        idx = []
+        for i, mi in enumerate(self.get_full_coefficient_identifiers()):
+            if mi[-1] < 2:
+                idx.append(i)
+        return idx
+
 
 class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
 
@@ -415,6 +435,13 @@ class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
             pde_dict[tuple(mi)] = 1
         pde_dict[tuple([0]*self.dim)] = -1
         return pde_dict
+
+    def get_reduced_coeffs(self):
+        idx = []
+        for i, mi in enumerate(self.get_full_coefficient_identifiers()):
+            if mi[-1] < 2:
+                idx.append(i)
+        return idx
 
 # }}}
 
