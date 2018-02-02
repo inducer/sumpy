@@ -341,8 +341,11 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
                     eq = [0]*len(mis)
                     for pde_mi2, coeff2 in iteritems(pde_dict):
                         c = tuple(pde_mi2 + diff)
+                        if c not in coeff_ident_enumerate_dict:
+                            break
                         eq[coeff_ident_enumerate_dict[c]] = 1
-                    pde_mat.append(eq)
+                    else:
+                        pde_mat.append(eq)
 
         if len(pde_mat) > 0:
             pde_mat = np.array(pde_mat, dtype=np.float64)
