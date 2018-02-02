@@ -97,7 +97,6 @@ setup(name="sumpy",
           "boxtree>=2013.1",
           "pytest>=2.3",
           "six",
-          "scipy>=0.13",
 
           # If this causes issues, see:
           # https://code.google.com/p/sympy/issues/detail?id=3874

@@ -13,5 +13,4 @@ dependencies:
 - python=3.5
 - symengine=0.3.0
 - python-symengine=0.3.0
-- scipy
 # things not in here: loopy boxtree pymbolic pyfmmlib
