@@ -720,6 +720,67 @@ class StressletKernel(ExpressionKernel):
 
     mapper_method = "map_stresslet_kernel"
 
+
+class FactorizedBiharmonicKernel(ExpressionKernel):
+    init_arg_names = ("dim", "lambda1_name", "lambda2_name")
+
+    def __init__(self, dim=None, lambda1_name="lam1", lambda2_name="lam2"):
+
+        lam = [var(lambda1_name), var(lambda2_name)]
+
+        if dim == 2:
+            r = pymbolic_real_norm_2(make_sym_vector("d", dim))
+
+            # http://dlmf.nist.gov/10.27#E8
+            expr_for_K0 = [var("hankel_1")(0, var("I")*lam[i]*r)
+                    for i in range(2)]
+            scaling_for_K0 = 1/2*var("pi")*var("I")  # noqa: N806
+
+            expr = expr_for_K0[0] - expr_for_K0[1]
+            scaling = -1/(2*var("pi")) * (
+                    lam[0]**2 - lam[1]**2) * scaling_for_K0
+        else:
+            raise NotImplementedError("unsupported dimensionality")
+
+        super(FactorizableBiharmonicKernel, self).__init__(
+                dim,
+                expression=expr,
+                global_scaling_const=scaling,
+                is_complex_valued=True)
+
+        self.lambda1_name = lambda1_name
+        self.lambda2_name = lambda2_name
+
+    def __getinitargs__(self):
+        return(self.dim, self.lambda1_name, self.lambda2_name)
+
+    def update_persistent_hash(self, key_hash, key_builder):
+        key_hash.update(type(self).__name__.encode("utf8"))
+        key_builder.rec(key_hash, 
+                (self.dim, self.lambda1_name, self.lambda2_name))
+
+    def __repr__(self):
+        return "FctBiharmKnl%dD(%s,%s)" % (
+                self.dim, self.lambda1_name, self.lambda2_name)
+
+    def prepare_loopy_kernel(self, loopy_knl):
+        from sumpy.codegen import (bessel_preamble_generator, bessel_mangler)
+        loopy_knl = lp.register_function_manglers(loopy_knl,
+                [bessel_mangler])
+        loopy_knl = lp.register_preamble_generators(loopy_knl,
+                [bessel_preamble_generator])
+
+        return loopy_knl
+
+    def get_args(self):
+        return [
+                KernelArgument(
+                    loopy_arg=lp.ValueArg(self.lambda1_name, np.float64),
+                    loopy_arg=lp.ValueArg(self.lambda2_name, np.float64)
+                    )]
+
+    mapper_method = "map_factorized_biharmonic_kernel"
+
 # }}}
 
 
@@ -963,6 +1024,7 @@ class KernelIdentityMapper(KernelMapper):
     map_yukawa_kernel = map_expression_kernel
     map_stokeslet_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
+    map_factorized_biharmonic_kernel = map_expression_kernel
 
     def map_axis_target_derivative(self, kernel):
         return AxisTargetDerivative(kernel.axis, self.rec(kernel.inner_kernel))
