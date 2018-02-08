@@ -22,8 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
 import sys
+import numpy as np
+import numpy.linalg as la
 
 import pytest
 import pyopencl as cl
@@ -41,7 +42,7 @@ else:
     faulthandler.enable()
 
 
-def create_arguments(n, mode):
+def create_arguments(n, mode, target_radius=1.0):
     # parametrize circle
     t = np.linspace(0.0, 2.0 * np.pi, n, endpoint=False)
     unit_circle = np.exp(1j * t)
@@ -52,7 +53,7 @@ def create_arguments(n, mode):
 
     # create sources and targets
     h = 2.0 * np.pi / n
-    targets = unit_circle
+    targets = target_radius * unit_circle
     sources = unit_circle
 
     radius = 7.0 * h
@@ -82,33 +83,22 @@ def test_qbx_direct(ctx_getter):
             [LineTaylorLocalExpansion(lknl, order)])
     lpot = LayerPotential(ctx, [LineTaylorLocalExpansion(lknl, order)])
 
-    from pytools.convergence import EOCRecorder
-    eocrec = EOCRecorder()
-
     for n in [200, 300, 400]:
         targets, sources, centers, sigma, expansion_radii = \
                 create_arguments(n, mode_nr)
-
-        eigval = 1.0 / (2.0 * mode_nr)
-        result_ref = eigval * sigma
 
         h = 2 * np.pi / n
         strengths = (sigma * h,)
 
         _, (mat,) = mat_gen(queue, targets, sources, centers,
                 expansion_radii=expansion_radii)
-        result_mat = mat @ strengths[0]
+        result_mat = mat.dot(strengths[0])
 
         _, (result_lpot,) = lpot(queue, targets, sources, centers, strengths,
                 expansion_radii=expansion_radii)
 
-        assert np.max(np.abs(result_mat - result_lpot)) < 1.0e-14
-        eocrec.add_data_point(h, np.max(np.abs(result_ref - result_lpot)))
-
-    print(eocrec)
-
-    slack = 1.5
-    assert eocrec.order_estimate() > order - slack
+        eps = 1.0e-10 * la.norm(result_lpot)
+        assert la.norm(result_mat - result_lpot) < eps
 
 
 @pytest.mark.parametrize("exclude_self", [True, False])
@@ -129,14 +119,9 @@ def test_p2p_direct(ctx_getter, exclude_self):
     mat_gen = P2PMatrixGenerator(ctx, [lknl], exclude_self=exclude_self)
     lpot = P2P(ctx, [lknl], exclude_self=exclude_self)
 
-    from pytools.convergence import EOCRecorder
-    eocrec = EOCRecorder()
-
     for n in [200, 300, 400]:
-        targets, sources, _, sigma, _ = create_arguments(n, mode_nr)
-
-        eigval = 1.0 / (2.0 * mode_nr)
-        result_ref = eigval * sigma
+        targets, sources, _, sigma, _ = \
+            create_arguments(n, mode_nr, target_radius=1.2)
 
         h = 2 * np.pi / n
         strengths = (sigma * h,)
@@ -146,17 +131,14 @@ def test_p2p_direct(ctx_getter, exclude_self):
             extra_kwargs["target_to_source"] = np.arange(n, dtype=np.int32)
 
         _, (mat,) = mat_gen(queue, targets, sources, **extra_kwargs)
-        result_mat = mat @ strengths[0]
+        result_mat = mat.dot(strengths[0])
 
         _, (result_lpot,) = lpot(queue, targets, sources, strengths,
                                  **extra_kwargs)
 
-        assert np.max(np.abs(result_mat - result_lpot)) < 1.0e-14
-        eocrec.add_data_point(h, np.max(np.abs(result_ref - result_lpot)))
+        eps = 1.0e-10 * la.norm(result_lpot)
+        assert la.norm(result_mat - result_lpot) < eps
 
-    print(eocrec)
-
-    assert eocrec.order_estimate() > 0.8
 
 # You can test individual routines by typing
 # $ python test_kernels.py 'test_p2p(cl.create_some_context)'

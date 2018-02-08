@@ -212,7 +212,7 @@ class P2P(P2PBase):
 
     def __call__(self, queue, targets, sources, strength, **kwargs):
         from pytools.obj_array import is_obj_array
-        knl = self.get_optimized_kernel(
+        knl = self.get_cached_optimized_kernel(
                 targets_is_obj_array=(
                     is_obj_array(targets) or isinstance(targets, (tuple, list))),
                 sources_is_obj_array=(
@@ -224,6 +224,7 @@ class P2P(P2PBase):
 # }}}
 
 # {{{ P2P Matrix Writer
+
 
 class P2PMatrixGenerator(P2PBase):
     default_name = "p2p_matrix"
@@ -248,7 +249,7 @@ class P2PMatrixGenerator(P2PBase):
 
     def __call__(self, queue, targets, sources, **kwargs):
         from pytools.obj_array import is_obj_array
-        knl = self.get_optimized_kernel(
+        knl = self.get_cached_optimized_kernel(
                 targets_is_obj_array=(
                     is_obj_array(targets) or isinstance(targets, (tuple, list))),
                 sources_is_obj_array=(
@@ -259,6 +260,7 @@ class P2PMatrixGenerator(P2PBase):
 # }}}
 
 # {{{ P2P from CSR-like interaction list
+
 
 class P2PFromCSR(P2PComputationBase):
     default_name = "p2p_from_csr"
