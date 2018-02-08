@@ -1,6 +1,6 @@
 from __future__ import division, absolute_import, print_function
 
-__copyright__ = "Copyright (C) 2017 Matt Wala"
+__copyright__ = "Copyright (C) 2018 Alexandru Fikl"
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy

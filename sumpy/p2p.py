@@ -1,6 +1,9 @@
 from __future__ import division, absolute_import
 
-__copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
+__copyright__ = """
+Copyright (C) 2012 Andreas Kloeckner
+Copyright (C) 2018 Alexandru Fikl
+"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -206,7 +209,7 @@ class P2P(P2PBase):
     def get_result_store_instructions(self):
         return ["""
                 result[{i}, itgt] = knl_{i}_scaling \
-                    * simul_reduce(sum, isrc, pair_result_{i})
+                    * simul_reduce(sum, isrc, pair_result_{i}) {inames=itgt}
                 """.format(i=iknl)
                 for iknl in range(len(self.kernels))]
 
@@ -242,7 +245,7 @@ class P2PMatrixGenerator(P2PBase):
         return [
                 """
                 result_{i}[itgt, isrc] = \
-                    knl_{i}_scaling * pair_result_{i}
+                    knl_{i}_scaling * pair_result_{i} {inames=isrc:itgt}
                 """.format(i=iknl)
                 for iknl in range(len(self.kernels))
                 ]
