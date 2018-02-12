@@ -40,8 +40,10 @@ __doc__ = """
 Particle-to-particle
 --------------------
 
-.. autoclass:: P2PBase
+.. autoclass:: P2PComputationBase
+.. autoclass:: SingleSrcTgtListP2PBase
 .. autoclass:: P2P
+.. autoclass:: P2PMatrixGenerator
 .. autoclass:: P2PFromCSR
 
 """
@@ -227,8 +229,8 @@ class P2P(SingleSrcTgtListP2PBase):
 
 # }}}
 
-# {{{ P2P Matrix Writer
 
+# {{{ P2P matrix writer
 
 class P2PMatrixGenerator(SingleSrcTgtListP2PBase):
     default_name = "p2p_matrix"
@@ -246,7 +248,7 @@ class P2PMatrixGenerator(SingleSrcTgtListP2PBase):
         return [
                 """
                 result_{i}[itgt, isrc] = \
-                    knl_{i}_scaling * pair_result_{i} {inames=isrc:itgt}
+                    knl_{i}_scaling * pair_result_{i} {{inames=isrc:itgt}}
                 """.format(i=iknl)
                 for iknl in range(len(self.kernels))
                 ]
