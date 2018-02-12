@@ -210,7 +210,7 @@ class P2P(SingleSrcTgtListP2PBase):
     def get_result_store_instructions(self):
         return ["""
                 result[{i}, itgt] = knl_{i}_scaling \
-                    * simul_reduce(sum, isrc, pair_result_{i}) {inames=itgt}
+                    * simul_reduce(sum, isrc, pair_result_{i}) {{inames=itgt}}
                 """.format(i=iknl)
                 for iknl in range(len(self.kernels))]
 
