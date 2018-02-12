@@ -111,7 +111,7 @@ class P2PComputationBase(KernelComputation, KernelCacheWrapper):
 
 # {{{ P2P with list of sources and list of targets
 
-class P2PBase(P2PComputationBase):
+class SingleSrcTgtListP2PBase(P2PComputationBase):
     def get_src_tgt_arguments(self):
         return [
                 lp.GlobalArg("sources", None,
@@ -190,9 +190,10 @@ class P2PBase(P2PComputationBase):
 
 # }}}
 
-# {{{
 
-class P2P(P2PBase):
+# {{{ P2P point-interaction calculation
+
+class P2P(SingleSrcTgtListP2PBase):
     default_name = "p2p_apply"
 
     def get_strength_or_not(self, isrc, kernel_idx):
@@ -229,7 +230,7 @@ class P2P(P2PBase):
 # {{{ P2P Matrix Writer
 
 
-class P2PMatrixGenerator(P2PBase):
+class P2PMatrixGenerator(SingleSrcTgtListP2PBase):
     default_name = "p2p_matrix"
 
     def get_strength_or_not(self, isrc, kernel_idx):
@@ -262,8 +263,8 @@ class P2PMatrixGenerator(P2PBase):
 
 # }}}
 
-# {{{ P2P from CSR-like interaction list
 
+# {{{ P2P from CSR-like interaction list
 
 class P2PFromCSR(P2PComputationBase):
     default_name = "p2p_from_csr"
