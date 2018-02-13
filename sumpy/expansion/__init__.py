@@ -307,7 +307,7 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
                 matrix_row.append((icol, coeff * rscale**diff))
             matrix_rows.append((irow, matrix_row))
 
-        return defaultdict(lambda: [], matrix_rows)
+        return defaultdict(list, matrix_rows)
 
     @memoize_method
     def _get_stored_ids_and_coeff_mat(self):
@@ -319,7 +319,7 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
         logger.debug("computing recurrence for Taylor coefficients: start")
 
         # Sparse matrix, indexed by row
-        coeff_matrix_transpose = defaultdict(lambda: [])
+        coeff_matrix_transpose = defaultdict(list)
 
         # Build up the matrix transpose by row.
         from six import iteritems
@@ -342,7 +342,7 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
 
         stored_identifiers = stored_identifiers
 
-        coeff_matrix = defaultdict(lambda: [])
+        coeff_matrix = defaultdict(list)
         for i, row in iteritems(coeff_matrix_transpose):
             for j, val in row:
                 coeff_matrix[j].append((i, val))
