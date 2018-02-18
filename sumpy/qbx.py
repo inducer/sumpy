@@ -116,9 +116,25 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                 lp.GlobalArg("center", None,
                     shape=(self.dim, "ntargets"), order="C"),
                 lp.GlobalArg("expansion_radii", None, shape="ntargets"),
-                lp.ValueArg("nsources", None),
-                lp.ValueArg("ntargets", None),
+                lp.ValueArg("nsources", np.int32),
+                lp.ValueArg("ntargets", np.int32),
                 ]
+
+    def get_domains(self):
+        return [
+                "{[itgt]: 0 <= itgt < ntargets}",
+                "{[isrc]: 0 <= isrc < nsources}",
+                "{[idim]: 0 <= idim < dim}"
+                ]
+
+    def get_loop_begin(self):
+        return ["for itgt, isrc"]
+
+    def get_loop_end(self):
+        return ["end"]
+
+    def get_assumptions(self):
+        return "nsources>=1 and ntargets>=1"
 
     @memoize_method
     def get_kernel(self):
@@ -162,10 +178,9 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                 + gather_loopy_source_arguments(self.kernels))
 
         loopy_knl = lp.make_kernel(
-                "{[isrc,itgt,idim]: 0<=itgt<ntargets and 0<=isrc<nsources "
-                "and 0<=idim<dim}",
+                self.get_domains(),
                 self.get_kernel_scaling_assignments()
-                + ["for itgt, isrc"]
+                + self.get_loop_begin()
                 + [self.get_compute_a_and_b_vecs()]
                 + loopy_insns
                 + [
@@ -174,11 +189,11 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                         temp_var_type=lp.auto)
                     for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
                 ]
-                + ["end"]
+                + self.get_loop_end()
                 + self.get_result_store_instructions(),
                 arguments,
                 name=self.name,
-                assumptions="nsources>=1 and ntargets>=1",
+                assumptions=self.get_assumptions(),
                 default_offset=lp.auto,
                 silenced_warnings="write_race(write_lpot*)",
                 fixed_parameters=dict(dim=self.dim),
@@ -197,7 +212,9 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
     def get_optimized_kernel(self):
         # FIXME specialize/tune for GPU/CPU
         loopy_knl = self.get_kernel()
+        return loopy_knl
 
+        # FIXME: how to tune for blocks?
         import pyopencl as cl
         dev = self.context.devices[0]
         if dev.type & cl.device_type.CPU:
@@ -294,6 +311,88 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
 
         return knl(queue, src=sources, tgt=targets, center=centers,
                 expansion_radii=expansion_radii, **kwargs)
+
+# }}}
+
+
+# {{{
+
+class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
+    default_name = "qbx_block"
+
+    def get_src_tgt_arguments(self):
+        return LayerPotentialBase.get_src_tgt_arguments(self) \
+            + [
+                lp.GlobalArg("srcindices", None, shape="nsrcindices"),
+                lp.GlobalArg("tgtindices", None, shape="ntgtindices"),
+                lp.GlobalArg("srcranges", None, shape="nranges"),
+                lp.GlobalArg("tgtranges", None, shape="nranges"),
+                lp.ValueArg("nsrcindices", np.int32),
+                lp.ValueArg("ntgtindices", np.int32),
+                lp.ValueArg("nranges", None)
+            ]
+
+    def get_domains(self):
+        # FIXME: this doesn't work when separating j and k
+        return [
+                "{[i]: 0 <= i < nranges - 1}",
+                "{[j, k]: 0 <= j < tgt_length and 0 <= k < src_length}",
+                "{[idim]: 0 <= idim < dim}"
+                ]
+
+    def get_loop_begin(self):
+        return [
+                """
+                for i
+                    <> tgtstart = tgtranges[i]
+                    <> tgtend = tgtranges[i + 1]
+                    <> tgt_length = tgtend - tgtstart
+                    <> srcstart = srcranges[i]
+                    <> srcend = srcranges[i + 1]
+                    <> src_length = srcend - srcstart
+                    for j, k
+                        <> itgt = tgtindices[tgtstart + j]
+                        <> isrc = srcindices[srcstart + k]
+                """
+                ]
+
+    def get_loop_end(self):
+        return [
+                """
+                    end
+                end
+                """
+                ]
+
+    def get_strength_or_not(self, isrc, kernel_idx):
+        return 1
+
+    def get_input_and_output_arguments(self):
+        return [
+                lp.GlobalArg("result_%d" % i, dtype, shape="ntgtindices,nsrcindices")
+                for i, dtype in enumerate(self.value_dtypes)
+                ]
+
+    def get_result_store_instructions(self):
+        return [
+                """
+                result_KNLIDX[tgtstart + j, srcstart + k] = \
+                        knl_KNLIDX_scaling*pair_result_KNLIDX  {inames=i}
+                """.replace("KNLIDX", str(iknl))
+                for iknl in range(len(self.expansions))
+                ]
+
+    def get_assumptions(self):
+        return "nranges>=2"
+
+    def __call__(self, queue, targets, sources, centers, expansion_radii,
+            tgtindices, srcindices, tgtranges, srcranges, **kwargs):
+        knl = self.get_optimized_kernel()
+
+        return knl(queue, src=sources, tgt=targets, center=centers,
+                expansion_radii=expansion_radii,
+                tgtindices=tgtindices, srcindices=srcindices,
+                tgtranges=tgtranges, srcranges=srcranges, **kwargs)
 
 # }}}
 
