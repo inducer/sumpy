@@ -27,7 +27,7 @@ import six
 from six.moves import range, zip
 import numpy as np
 import loopy as lp
-from loopy.version import MOST_RECENT_LANGUAGE_VERSION  # noqa
+from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 import sumpy.symbolic as sym
 from pytools import memoize_method
 from pymbolic import parse, var
@@ -181,7 +181,8 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                 assumptions="nsources>=1 and ntargets>=1",
                 default_offset=lp.auto,
                 silenced_warnings="write_race(write_lpot*)",
-                fixed_parameters=dict(dim=self.dim))
+                fixed_parameters=dict(dim=self.dim),
+                lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 

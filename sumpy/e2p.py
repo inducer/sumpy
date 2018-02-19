@@ -27,9 +27,10 @@ from six.moves import range
 
 import numpy as np
 import loopy as lp
-from loopy.version import MOST_RECENT_LANGUAGE_VERSION  # noqa
 import sumpy.symbolic as sym
+
 from sumpy.tools import KernelCacheWrapper
+from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 
 
 __doc__ = """
@@ -188,7 +189,8 @@ class E2PFromSingleBox(E2PBase):
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_result*)",
                 default_offset=lp.auto,
-                fixed_parameters=dict(dim=self.dim, nresults=len(result_names)))
+                fixed_parameters=dict(dim=self.dim, nresults=len(result_names)),
+                lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
@@ -295,7 +297,8 @@ class E2PFromCSR(E2PBase):
                 default_offset=lp.auto,
                 fixed_parameters=dict(
                     dim=self.dim,
-                    nresults=len(result_names)))
+                    nresults=len(result_names)),
+                lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.prioritize_loops(loopy_knl, "itgt_box,itgt,isrc_box")
