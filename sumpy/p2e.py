@@ -27,6 +27,7 @@ from six.moves import range
 
 import numpy as np
 import loopy as lp
+from loopy.version import MOST_RECENT_LANGUAGE_VERSION  # noqa
 from sumpy.tools import KernelCacheWrapper
 
 import logging

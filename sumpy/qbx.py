@@ -27,6 +27,7 @@ import six
 from six.moves import range, zip
 import numpy as np
 import loopy as lp
+from loopy.version import MOST_RECENT_LANGUAGE_VERSION  # noqa
 import sumpy.symbolic as sym
 from pytools import memoize_method
 from pymbolic import parse, var
