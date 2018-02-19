@@ -1,6 +1,9 @@
 from __future__ import division, absolute_import
 
-__copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
+__copyright__ = """
+Copyright (C) 2012 Andreas Kloeckner
+Copyright (C) 2018 Alexandru Fikl
+"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -27,7 +30,9 @@ from six.moves import range
 
 import numpy as np
 import loopy as lp
+
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION  # noqa
+from pymbolic import var
 
 from sumpy.tools import KernelComputation, KernelCacheWrapper
 
@@ -37,8 +42,10 @@ __doc__ = """
 Particle-to-particle
 --------------------
 
-.. autoclass:: P2PBase
+.. autoclass:: P2PComputationBase
+.. autoclass:: SingleSrcTgtListP2PBase
 .. autoclass:: P2P
+.. autoclass:: P2PMatrixGenerator
 .. autoclass:: P2PFromCSR
 
 """
@@ -49,7 +56,7 @@ Particle-to-particle
 
 # {{{ p2p base class
 
-class P2PBase(KernelComputation, KernelCacheWrapper):
+class P2PComputationBase(KernelComputation, KernelCacheWrapper):
     def __init__(self, ctx, kernels, exclude_self, strength_usage=None,
             value_dtypes=None,
             options=[], name=None, device=None):
@@ -108,16 +115,24 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
 
 # {{{ P2P with list of sources and list of targets
 
-class P2P(P2PBase):
-    default_name = "p2p"
+class SingleSrcTgtListP2PBase(P2PComputationBase):
+    def get_src_tgt_arguments(self):
+        return [
+                lp.GlobalArg("sources", None,
+                    shape=(self.dim, "nsources")),
+                lp.GlobalArg("targets", None,
+                   shape=(self.dim, "ntargets")),
+                lp.ValueArg("nsources", None),
+                lp.ValueArg("ntargets", None)
+                ]
 
     def get_kernel(self):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
 
-        from pymbolic import var
+        isrc_sym = var("isrc")
         exprs = [
                 var(name)
-                * var("strength").index((self.strength_usage[i], var("isrc")))
+                * self.get_strength_or_not(isrc_sym, i)
                 for i, name in enumerate(result_names)]
 
         if self.exclude_self:
@@ -125,46 +140,31 @@ class P2P(P2PBase):
             exprs = [If(Variable("is_self"), 0, expr) for expr in exprs]
 
         from sumpy.tools import gather_loopy_source_arguments
+        arguments = (
+                self.get_src_tgt_arguments()
+                + self.get_input_and_output_arguments()
+                + ([lp.GlobalArg("target_to_source", np.int32, shape=("ntargets",))]
+                    if self.exclude_self else [])
+                + gather_loopy_source_arguments(self.kernels))
+
         loopy_knl = lp.make_kernel(
                 "{[isrc,itgt,idim]: 0<=itgt<ntargets and 0<=isrc<nsources \
                         and 0<=idim<dim}",
                 self.get_kernel_scaling_assignments()
-                + ["""
-                for itgt
-                    for isrc
-                        """] + loopy_insns + ["""
-                        <> d[idim] = targets[idim,itgt] - sources[idim,isrc]
-                        """] + ["""
-                        <> is_self = (isrc == target_to_source[itgt])
-                        """ if self.exclude_self else ""] + [
-                        lp.Assignment(id=None,
-                            assignee="pair_result_%d" % i, expression=expr,
-                            temp_var_type=lp.auto)
-                        for i, expr in enumerate(exprs)
-                        ] + ["""
-                    end
-                    """] + ["""
-                    result[KNLIDX, itgt] = knl_KNLIDX_scaling \
-                            * simul_reduce(sum, isrc, pair_result_KNLIDX)
-                    """.replace("KNLIDX", str(iknl))
-                    for iknl in range(len(exprs))] + [
-                    ] + ["""
-                end
-                """],
-                [
-                    lp.GlobalArg("sources", None,
-                        shape=(self.dim, "nsources")),
-                    lp.GlobalArg("targets", None,
-                        shape=(self.dim, "ntargets")),
-                    lp.ValueArg("nsources", None),
-                    lp.ValueArg("ntargets", None),
-                    lp.GlobalArg("strength", None, shape="nstrengths,nsources"),
-                    lp.GlobalArg("result", None,
-                        shape="nresults,ntargets", dim_tags="sep,C")
-                ] + (
-                    [lp.GlobalArg("target_to_source", np.int32, shape=("ntargets",))]
-                    if self.exclude_self else []
-                ) + gather_loopy_source_arguments(self.kernels),
+                + ["for itgt, isrc"]
+                + loopy_insns
+                + ["<> d[idim] = targets[idim,itgt] - sources[idim,isrc]"]
+                + ["<> is_self = (isrc == target_to_source[itgt])"
+                    if self.exclude_self else ""]
+                + [
+                    lp.Assignment(id=None,
+                        assignee="pair_result_%d" % i, expression=expr,
+                        temp_var_type=lp.auto)
+                    for i, expr in enumerate(exprs)
+                ]
+                + ["end"]
+                + self.get_result_store_instructions(),
+                arguments,
                 name=self.name,
                 assumptions="nsources>=1 and ntargets>=1",
                 fixed_parameters=dict(
@@ -176,8 +176,6 @@ class P2P(P2PBase):
 
         for knl in self.kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
-
-        loopy_knl = lp.tag_array_axes(loopy_knl, "strength", "sep,C")
 
         return loopy_knl
 
@@ -193,6 +191,33 @@ class P2P(P2PBase):
         knl = lp.split_iname(knl, "itgt", 1024, outer_tag="g.0")
         return knl
 
+
+# }}}
+
+
+# {{{ P2P point-interaction calculation
+
+class P2P(SingleSrcTgtListP2PBase):
+    default_name = "p2p_apply"
+
+    def get_strength_or_not(self, isrc, kernel_idx):
+        return var("strength").index((self.strength_usage[kernel_idx], isrc))
+
+    def get_input_and_output_arguments(self):
+        return [
+                lp.GlobalArg("strength", None,
+                    shape="nstrengths,nsources", dim_tags="sep,C"),
+                lp.GlobalArg("result", None,
+                    shape="nresults,ntargets", dim_tags="sep,C")
+                ]
+
+    def get_result_store_instructions(self):
+        return ["""
+                result[{i}, itgt] = knl_{i}_scaling \
+                    * simul_reduce(sum, isrc, pair_result_{i}) {{inames=itgt}}
+                """.format(i=iknl)
+                for iknl in range(len(self.kernels))]
+
     def __call__(self, queue, targets, sources, strength, **kwargs):
         from pytools.obj_array import is_obj_array
         knl = self.get_cached_optimized_kernel(
@@ -207,9 +232,45 @@ class P2P(P2PBase):
 # }}}
 
 
+# {{{ P2P matrix writer
+
+class P2PMatrixGenerator(SingleSrcTgtListP2PBase):
+    default_name = "p2p_matrix"
+
+    def get_strength_or_not(self, isrc, kernel_idx):
+        return 1
+
+    def get_input_and_output_arguments(self):
+        return [
+                lp.GlobalArg("result_%d" % i, dtype, shape="ntargets,nsources")
+                for i, dtype in enumerate(self.value_dtypes)
+                ]
+
+    def get_result_store_instructions(self):
+        return [
+                """
+                result_{i}[itgt, isrc] = \
+                    knl_{i}_scaling * pair_result_{i} {{inames=isrc:itgt}}
+                """.format(i=iknl)
+                for iknl in range(len(self.kernels))
+                ]
+
+    def __call__(self, queue, targets, sources, **kwargs):
+        from pytools.obj_array import is_obj_array
+        knl = self.get_cached_optimized_kernel(
+                targets_is_obj_array=(
+                    is_obj_array(targets) or isinstance(targets, (tuple, list))),
+                sources_is_obj_array=(
+                    is_obj_array(sources) or isinstance(sources, (tuple, list))))
+
+        return knl(queue, sources=sources, targets=targets, **kwargs)
+
+# }}}
+
+
 # {{{ P2P from CSR-like interaction list
 
-class P2PFromCSR(P2PBase):
+class P2PFromCSR(P2PComputationBase):
     default_name = "p2p_from_csr"
 
     def get_kernel(self):
