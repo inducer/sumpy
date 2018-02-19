@@ -196,7 +196,7 @@ class E2EFromCSR(E2EBase):
                     """] + ["""
                     tgt_expansions[tgt_ibox - tgt_base_ibox, {coeffidx}] = \
                             simul_reduce(sum, isrc_box, coeff{coeffidx}) \
-                            {{id_prefix=write_expn}}
+                            {{id_prefix=write_expn,nosync=write_expn*}}
                     """.format(coeffidx=i) for i in range(ncoeff_tgt)] + ["""
                 end
                 """],
@@ -314,7 +314,7 @@ class E2EFromChildren(E2EBase):
                                 tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] \
                                 + coeff{i} \
                                 {{id_prefix=write_expn,dep=compute_coeff*,
-                                    nosync=read_coeff*}}
+                                    nosync=read_coeff*:write_expn*}}
                             """.format(i=i) for i in range(ncoeffs)] + ["""
                         end
                     end
@@ -422,7 +422,7 @@ class E2EFromParent(E2EBase):
 
                     tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] = \
                         tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] + coeff{i} \
-                        {{id_prefix=write_expn,nosync=read_expn*}}
+                        {{id_prefix=write_expn,nosync=read_expn*:write_expn*}}
                     """.format(i=i) for i in range(ncoeffs)] + ["""
                 end
                 """],
