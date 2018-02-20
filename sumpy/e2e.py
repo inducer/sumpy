@@ -28,6 +28,8 @@ from six.moves import range
 import numpy as np
 import loopy as lp
 import sumpy.symbolic as sym
+
+from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 from sumpy.tools import KernelCacheWrapper
 
 import logging
@@ -194,7 +196,7 @@ class E2EFromCSR(E2EBase):
                     """] + ["""
                     tgt_expansions[tgt_ibox - tgt_base_ibox, {coeffidx}] = \
                             simul_reduce(sum, isrc_box, coeff{coeffidx}) \
-                            {{id_prefix=write_expn}}
+                            {{id_prefix=write_expn,nosync=write_expn*}}
                     """.format(coeffidx=i) for i in range(ncoeff_tgt)] + ["""
                 end
                 """],
@@ -217,7 +219,8 @@ class E2EFromCSR(E2EBase):
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
                 default_offset=lp.auto,
-                fixed_parameters=dict(dim=self.dim))
+                fixed_parameters=dict(dim=self.dim),
+                lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         for expn in [self.src_expansion, self.tgt_expansion]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
@@ -311,7 +314,7 @@ class E2EFromChildren(E2EBase):
                                 tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] \
                                 + coeff{i} \
                                 {{id_prefix=write_expn,dep=compute_coeff*,
-                                    nosync=read_coeff*}}
+                                    nosync=read_coeff*:write_expn*}}
                             """.format(i=i) for i in range(ncoeffs)] + ["""
                         end
                     end
@@ -336,7 +339,8 @@ class E2EFromChildren(E2EBase):
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
-                fixed_parameters=dict(dim=self.dim, nchildren=2**self.dim))
+                fixed_parameters=dict(dim=self.dim, nchildren=2**self.dim),
+                lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         for expn in [self.src_expansion, self.tgt_expansion]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
@@ -418,7 +422,7 @@ class E2EFromParent(E2EBase):
 
                     tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] = \
                         tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] + coeff{i} \
-                        {{id_prefix=write_expn,nosync=read_expn*}}
+                        {{id_prefix=write_expn,nosync=read_expn*:write_expn*}}
                     """.format(i=i) for i in range(ncoeffs)] + ["""
                 end
                 """],
@@ -439,7 +443,8 @@ class E2EFromParent(E2EBase):
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name, assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
-                fixed_parameters=dict(dim=self.dim, nchildren=2**self.dim))
+                fixed_parameters=dict(dim=self.dim, nchildren=2**self.dim),
+                lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         for expn in [self.src_expansion, self.tgt_expansion]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
