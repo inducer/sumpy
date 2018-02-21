@@ -201,8 +201,7 @@ class SingleSrcTgtListP2PBase(P2PComputationBase):
         if targets_is_obj_array:
             knl = lp.tag_array_axes(knl, "targets", "sep,C")
 
-        # FIXME: how to split when using blocks?
-        # knl = lp.split_iname(knl, "itgt", 1024, outer_tag="g.0")
+        knl = lp.split_iname(knl, "itgt", 1024, outer_tag="g.0")
         return knl
 
 
@@ -300,9 +299,8 @@ class P2PMatrixBlockGenerator(SingleSrcTgtListP2PBase):
             ]
 
     def get_domains(self):
-        # FIXME: this doesn't work when separating j and k
         return [
-                "{[i]: 0 <= i < nranges - 1}",
+                "{[irange]: 0 <= irange < nranges - 1}",
                 "{[j, k]: 0 <= j < tgt_length and 0 <= k < src_length}",
                 "{[idim]: 0 <= idim < dim}"
                 ]
@@ -310,12 +308,12 @@ class P2PMatrixBlockGenerator(SingleSrcTgtListP2PBase):
     def get_loop_begin(self):
         return [
                 """
-                for i
-                    <> tgtstart = tgtranges[i]
-                    <> tgtend = tgtranges[i + 1]
+                for irange
+                    <> tgtstart = tgtranges[irange]
+                    <> tgtend = tgtranges[irange + 1]
                     <> tgt_length = tgtend - tgtstart
-                    <> srcstart = srcranges[i]
-                    <> srcend = srcranges[i + 1]
+                    <> srcstart = srcranges[irange]
+                    <> srcend = srcranges[irange + 1]
                     <> src_length = srcend - srcstart
                     for j, k
                         <> itgt = tgtindices[tgtstart + j]
@@ -341,11 +339,10 @@ class P2PMatrixBlockGenerator(SingleSrcTgtListP2PBase):
                 ]
 
     def get_result_store_instructions(self):
-        # FIXME: doesn't work without inames=i. check how the loops are nested!
         return [
                 """
                 result_{i}[tgtstart + j, srcstart + k] = \
-                        knl_{i}_scaling * pair_result_{i} {{inames=i}}
+                        knl_{i}_scaling * pair_result_{i} {{inames=irange}}
                 """.format(i=iknl)
                 for iknl in range(len(self.kernels))
                 ]
@@ -353,14 +350,27 @@ class P2PMatrixBlockGenerator(SingleSrcTgtListP2PBase):
     def get_assumptions(self):
         return "nranges>=2"
 
+    def get_optimized_kernel(self, targets_is_obj_array, sources_is_obj_array):
+        # FIXME
+        knl = self.get_kernel()
+
+        if sources_is_obj_array:
+            knl = lp.tag_array_axes(knl, "sources", "sep,C")
+        if targets_is_obj_array:
+            knl = lp.tag_array_axes(knl, "targets", "sep,C")
+
+        knl = lp.split_iname(knl, "irange", 128, outer_tag="g.0")
+        return knl
+
     def __call__(self, queue, targets, sources, tgtindices, srcindices,
             tgtranges, srcranges, **kwargs):
         from pytools.obj_array import is_obj_array
-        knl = self.get_optimized_kernel(
+        knl = self.get_cached_optimized_kernel(
                 targets_is_obj_array=(
                     is_obj_array(targets) or isinstance(targets, (tuple, list))),
                 sources_is_obj_array=(
                     is_obj_array(sources) or isinstance(sources, (tuple, list))))
+        print(knl)
 
         return knl(queue, targets=targets, sources=sources,
                 tgtindices=tgtindices, srcindices=srcindices,

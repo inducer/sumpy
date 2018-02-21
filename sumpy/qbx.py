@@ -212,7 +212,6 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
     def get_optimized_kernel(self):
         # FIXME specialize/tune for GPU/CPU
         loopy_knl = self.get_kernel()
-        return loopy_knl
 
         # FIXME: how to tune for blocks?
         import pyopencl as cl
@@ -335,7 +334,7 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
     def get_domains(self):
         # FIXME: this doesn't work when separating j and k
         return [
-                "{[i]: 0 <= i < nranges - 1}",
+                "{[irange]: 0 <= irange < nranges - 1}",
                 "{[j, k]: 0 <= j < tgt_length and 0 <= k < src_length}",
                 "{[idim]: 0 <= idim < dim}"
                 ]
@@ -343,12 +342,12 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
     def get_loop_begin(self):
         return [
                 """
-                for i
-                    <> tgtstart = tgtranges[i]
-                    <> tgtend = tgtranges[i + 1]
+                for irange
+                    <> tgtstart = tgtranges[irange]
+                    <> tgtend = tgtranges[irange + 1]
                     <> tgt_length = tgtend - tgtstart
-                    <> srcstart = srcranges[i]
-                    <> srcend = srcranges[i + 1]
+                    <> srcstart = srcranges[irange]
+                    <> srcend = srcranges[irange + 1]
                     <> src_length = srcend - srcstart
                     for j, k
                         <> itgt = tgtindices[tgtstart + j]
@@ -377,13 +376,21 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
         return [
                 """
                 result_KNLIDX[tgtstart + j, srcstart + k] = \
-                        knl_KNLIDX_scaling*pair_result_KNLIDX  {inames=i}
+                        knl_KNLIDX_scaling*pair_result_KNLIDX  {inames=irange}
                 """.replace("KNLIDX", str(iknl))
                 for iknl in range(len(self.expansions))
                 ]
 
     def get_assumptions(self):
         return "nranges>=2"
+
+    @memoize_method
+    def get_optimized_kernel(self):
+        # FIXME
+        loopy_knl = self.get_kernel()
+
+        loopy_knl = lp.split_iname(loopy_knl, "irange", 128, outer_tag="g.0")
+        return loopy_knl
 
     def __call__(self, queue, targets, sources, centers, expansion_radii,
             tgtindices, srcindices, tgtranges, srcranges, **kwargs):
