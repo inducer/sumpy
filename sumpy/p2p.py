@@ -370,7 +370,6 @@ class P2PMatrixBlockGenerator(SingleSrcTgtListP2PBase):
                     is_obj_array(targets) or isinstance(targets, (tuple, list))),
                 sources_is_obj_array=(
                     is_obj_array(sources) or isinstance(sources, (tuple, list))))
-        print(knl)
 
         return knl(queue, targets=targets, sources=sources,
                 tgtindices=tgtindices, srcindices=srcindices,
