@@ -137,7 +137,7 @@ class P2EFromSingleBox(P2EBase):
                     """] + ["""
                     tgt_expansions[src_ibox-tgt_base_ibox, {coeffidx}] = \
                             simul_reduce(sum, isrc, strength*coeff{coeffidx}) \
-                            {{id_prefix=write_expn,nosync=write_expn*}}
+                            {{id_prefix=write_expn}}
                     """.format(coeffidx=i) for i in range(ncoeffs)] + ["""
                 end
                 """],
@@ -256,7 +256,7 @@ class P2EFromCSR(P2EBase):
                     tgt_expansions[tgt_ibox - tgt_base_ibox, {coeffidx}] = \
                             simul_reduce(sum, (isrc_box, isrc),
                                 strength*coeff{coeffidx}) \
-                            {{id_prefix=write_expn,nosync=write_expn*}}
+                            {{id_prefix=write_expn}}
                     """.format(coeffidx=i) for i in range(ncoeffs)] + ["""
                 end
                 """],

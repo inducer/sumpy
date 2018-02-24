@@ -25,4 +25,8 @@ VERSION = (2016, 1)
 VERSION_STATUS = "beta1"
 VERSION_TEXT = ".".join(str(x) for x in VERSION) + VERSION_STATUS
 
-KERNEL_VERSION = 26
+# When developing on a branch, set the first element of this tuple to your
+# branch name, so as to avoid conflicts with the master branch. Make sure
+# to reset this to the next number up with "master" before merging into
+# master.
+KERNEL_VERSION = ("master", 28)
