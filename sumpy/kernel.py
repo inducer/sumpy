@@ -742,7 +742,7 @@ class FactorizedBiharmonicKernel(ExpressionKernel):
         else:
             raise NotImplementedError("unsupported dimensionality")
 
-        super(FactorizableBiharmonicKernel, self).__init__(
+        super(FactorizedBiharmonicKernel, self).__init__(
                 dim,
                 expression=expr,
                 global_scaling_const=scaling,
@@ -776,8 +776,11 @@ class FactorizedBiharmonicKernel(ExpressionKernel):
         return [
                 KernelArgument(
                     loopy_arg=lp.ValueArg(self.lambda1_name, np.float64),
+                    ),
+                KernelArgument(
                     loopy_arg=lp.ValueArg(self.lambda2_name, np.float64)
-                    )]
+                    )
+                ]
 
     mapper_method = "map_factorized_biharmonic_kernel"
 
