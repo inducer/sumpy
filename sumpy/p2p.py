@@ -120,9 +120,25 @@ class SingleSrcTgtListP2PBase(P2PComputationBase):
                     shape=(self.dim, "nsources")),
                 lp.GlobalArg("targets", None,
                    shape=(self.dim, "ntargets")),
-                lp.ValueArg("nsources", None),
-                lp.ValueArg("ntargets", None)
+                lp.ValueArg("nsources", np.int32),
+                lp.ValueArg("ntargets", np.int32)
                 ]
+
+    def get_domains(self):
+        return [
+                "{[itgt]: 0 <= itgt < ntargets}",
+                "{[isrc]: 0 <= isrc < nsources}",
+                "{[idim]: 0 <= idim < dim}"
+                ]
+
+    def get_loop_begin(self):
+        return ["for itgt, isrc"]
+
+    def get_loop_end(self):
+        return ["end"]
+
+    def get_assumptions(self):
+        return "nsources>=1 and ntargets>=1"
 
     def get_kernel(self):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
@@ -146,25 +162,24 @@ class SingleSrcTgtListP2PBase(P2PComputationBase):
                 + gather_loopy_source_arguments(self.kernels))
 
         loopy_knl = lp.make_kernel(
-                "{[isrc,itgt,idim]: 0<=itgt<ntargets and 0<=isrc<nsources \
-                        and 0<=idim<dim}",
+                self.get_domains(),
                 self.get_kernel_scaling_assignments()
-                + ["for itgt, isrc"]
-                + loopy_insns
+                + self.get_loop_begin()
                 + ["<> d[idim] = targets[idim,itgt] - sources[idim,isrc]"]
                 + ["<> is_self = (isrc == target_to_source[itgt])"
                     if self.exclude_self else ""]
+                + loopy_insns
                 + [
                     lp.Assignment(id=None,
                         assignee="pair_result_%d" % i, expression=expr,
                         temp_var_type=lp.auto)
                     for i, expr in enumerate(exprs)
                 ]
-                + ["end"]
+                + self.get_loop_end()
                 + self.get_result_store_instructions(),
                 arguments,
+                assumptions=self.get_assumptions(),
                 name=self.name,
-                assumptions="nsources>=1 and ntargets>=1",
                 fixed_parameters=dict(
                     dim=self.dim,
                     nstrengths=self.strength_count,
@@ -262,6 +277,103 @@ class P2PMatrixGenerator(SingleSrcTgtListP2PBase):
                     is_obj_array(sources) or isinstance(sources, (tuple, list))))
 
         return knl(queue, sources=sources, targets=targets, **kwargs)
+
+# }}}
+
+
+# {{{
+
+class P2PMatrixBlockGenerator(SingleSrcTgtListP2PBase):
+    default_name = "p2p_block"
+
+    def get_src_tgt_arguments(self):
+        return super(P2PMatrixBlockGenerator, self).get_src_tgt_arguments() \
+            + [
+                lp.GlobalArg("srcindices", None, shape="nsrcindices"),
+                lp.GlobalArg("tgtindices", None, shape="ntgtindices"),
+                lp.GlobalArg("srcranges", None, shape="nranges + 1"),
+                lp.GlobalArg("tgtranges", None, shape="nranges + 1"),
+                lp.ValueArg("nsrcindices", np.int32),
+                lp.ValueArg("ntgtindices", np.int32),
+                lp.ValueArg("nranges", None)
+            ]
+
+    def get_domains(self):
+        return [
+                "{[irange]: 0 <= irange < nranges}",
+                "{[j, k]: 0 <= j < tgt_length and 0 <= k < src_length}",
+                "{[idim]: 0 <= idim < dim}"
+                ]
+
+    def get_loop_begin(self):
+        return [
+                """
+                for irange
+                    <> tgtstart = tgtranges[irange]
+                    <> tgtend = tgtranges[irange + 1]
+                    <> tgt_length = tgtend - tgtstart
+                    <> srcstart = srcranges[irange]
+                    <> srcend = srcranges[irange + 1]
+                    <> src_length = srcend - srcstart
+                    for j, k
+                        <> itgt = tgtindices[tgtstart + j]
+                        <> isrc = srcindices[srcstart + k]
+                """
+                ]
+
+    def get_loop_end(self):
+        return [
+                """
+                    end
+                end
+                """
+                ]
+
+    def get_strength_or_not(self, isrc, kernel_idx):
+        return 1
+
+    def get_input_and_output_arguments(self):
+        return [
+                lp.GlobalArg("result_%d" % i, dtype, shape="ntgtindices,nsrcindices")
+                for i, dtype in enumerate(self.value_dtypes)
+                ]
+
+    def get_result_store_instructions(self):
+        return [
+                """
+                result_{i}[tgtstart + j, srcstart + k] = \
+                        knl_{i}_scaling * pair_result_{i} {{inames=irange}}
+                """.format(i=iknl)
+                for iknl in range(len(self.kernels))
+                ]
+
+    def get_assumptions(self):
+        return "nranges>=1"
+
+    def get_optimized_kernel(self, targets_is_obj_array, sources_is_obj_array):
+        # FIXME
+        knl = self.get_kernel()
+
+        if sources_is_obj_array:
+            knl = lp.tag_array_axes(knl, "sources", "sep,C")
+        if targets_is_obj_array:
+            knl = lp.tag_array_axes(knl, "targets", "sep,C")
+
+        knl = lp.split_iname(knl, "irange", 128, outer_tag="g.0")
+        return knl
+
+    def __call__(self, queue, targets, sources, tgtindices, srcindices,
+            tgtranges, srcranges, **kwargs):
+        from pytools.obj_array import is_obj_array
+        knl = self.get_cached_optimized_kernel(
+                targets_is_obj_array=(
+                    is_obj_array(targets) or isinstance(targets, (tuple, list))),
+                sources_is_obj_array=(
+                    is_obj_array(sources) or isinstance(sources, (tuple, list))))
+
+        return knl(queue, targets=targets, sources=sources,
+                tgtindices=tgtindices, srcindices=srcindices,
+                tgtranges=tgtranges, srcranges=srcranges, **kwargs)
 
 # }}}
 
