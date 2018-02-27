@@ -73,15 +73,19 @@ def test_qbx_direct(ctx_getter):
     from sumpy.kernel import LaplaceKernel
     lknl = LaplaceKernel(2)
 
+    nblks = 10
     order = 12
     mode_nr = 25
 
     from sumpy.qbx import LayerPotential
     from sumpy.qbx import LayerPotentialMatrixGenerator
+    from sumpy.qbx import LayerPotentialMatrixBlockGenerator
     from sumpy.expansion.local import LineTaylorLocalExpansion
+    lpot = LayerPotential(ctx, [LineTaylorLocalExpansion(lknl, order)])
     mat_gen = LayerPotentialMatrixGenerator(ctx,
             [LineTaylorLocalExpansion(lknl, order)])
-    lpot = LayerPotential(ctx, [LineTaylorLocalExpansion(lknl, order)])
+    blk_gen = LayerPotentialMatrixBlockGenerator(ctx,
+            [LineTaylorLocalExpansion(lknl, order)])
 
     for n in [200, 300, 400]:
         targets, sources, centers, sigma, expansion_radii = \
@@ -90,15 +94,36 @@ def test_qbx_direct(ctx_getter):
         h = 2 * np.pi / n
         strengths = (sigma * h,)
 
+        tgtindices = np.arange(0, n)
+        tgtindices = np.random.choice(tgtindices, size=int(0.8 * n))
+        tgtranges = np.arange(0, tgtindices.shape[0] + 1,
+                              tgtindices.shape[0] // nblks)
+        srcindices = np.arange(0, n)
+        srcindices = np.random.choice(srcindices, size=int(0.8 * n))
+        srcranges = np.arange(0, srcindices.shape[0] + 1,
+                              srcindices.shape[0] // nblks)
+        assert tgtranges.shape == srcranges.shape
+
         _, (mat,) = mat_gen(queue, targets, sources, centers,
-                expansion_radii=expansion_radii)
+                expansion_radii)
         result_mat = mat.dot(strengths[0])
 
         _, (result_lpot,) = lpot(queue, targets, sources, centers, strengths,
-                expansion_radii=expansion_radii)
+                expansion_radii)
 
         eps = 1.0e-10 * la.norm(result_lpot)
         assert la.norm(result_mat - result_lpot) < eps
+
+        _, (blk,) = blk_gen(queue, targets, sources, centers, expansion_radii,
+                            tgtindices, srcindices, tgtranges, srcranges)
+
+        for i in range(srcranges.shape[0] - 1):
+            itgt = np.s_[tgtranges[i]:tgtranges[i + 1]]
+            isrc = np.s_[srcranges[i]:srcranges[i + 1]]
+            block = np.ix_(tgtindices[itgt], srcindices[isrc])
+
+            eps = 1.0e-10 * la.norm(mat[block])
+            assert la.norm(blk[itgt, isrc] - mat[block]) < eps
 
 
 @pytest.mark.parametrize("exclude_self", [True, False])
@@ -112,12 +137,14 @@ def test_p2p_direct(ctx_getter, exclude_self):
     from sumpy.kernel import LaplaceKernel
     lknl = LaplaceKernel(2)
 
+    nblks = 10
     mode_nr = 25
 
     from sumpy.p2p import P2P
-    from sumpy.p2p import P2PMatrixGenerator
-    mat_gen = P2PMatrixGenerator(ctx, [lknl], exclude_self=exclude_self)
+    from sumpy.p2p import P2PMatrixGenerator, P2PMatrixBlockGenerator
     lpot = P2P(ctx, [lknl], exclude_self=exclude_self)
+    mat_gen = P2PMatrixGenerator(ctx, [lknl], exclude_self=exclude_self)
+    blk_gen = P2PMatrixBlockGenerator(ctx, [lknl], exclude_self=exclude_self)
 
     for n in [200, 300, 400]:
         targets, sources, _, sigma, _ = \
@@ -125,6 +152,16 @@ def test_p2p_direct(ctx_getter, exclude_self):
 
         h = 2 * np.pi / n
         strengths = (sigma * h,)
+
+        tgtindices = np.arange(0, n)
+        tgtindices = np.random.choice(tgtindices, size=int(0.8 * n))
+        tgtranges = np.arange(0, tgtindices.shape[0] + 1,
+                              tgtindices.shape[0] // nblks)
+        srcindices = np.arange(0, n)
+        srcindices = np.random.choice(srcindices, size=int(0.8 * n))
+        srcranges = np.arange(0, srcindices.shape[0] + 1,
+                              srcindices.shape[0] // nblks)
+        assert tgtranges.shape == srcranges.shape
 
         extra_kwargs = {}
         if exclude_self:
@@ -138,6 +175,18 @@ def test_p2p_direct(ctx_getter, exclude_self):
 
         eps = 1.0e-10 * la.norm(result_lpot)
         assert la.norm(result_mat - result_lpot) < eps
+
+        _, (blk,) = blk_gen(queue, targets, sources,
+                            tgtindices, srcindices, tgtranges, srcranges,
+                            **extra_kwargs)
+
+        for i in range(srcranges.shape[0] - 1):
+            itgt = np.s_[tgtranges[i]:tgtranges[i + 1]]
+            isrc = np.s_[srcranges[i]:srcranges[i + 1]]
+            block = np.ix_(tgtindices[itgt], srcindices[isrc])
+
+            eps = 1.0e-10 * la.norm(mat[block])
+            assert la.norm(blk[itgt, isrc] - mat[block]) < eps
 
 
 # You can test individual routines by typing
