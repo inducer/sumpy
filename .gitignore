@@ -15,3 +15,4 @@ a.out
 doc/_build
 .cache
 .DS_Store
+.ipynb_checkpoints
