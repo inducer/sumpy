@@ -1034,7 +1034,7 @@ class LaplacianTargetDerivative(LaplacianDerivative):
         return sum(expr.diff(bvec[axis]).diff(bvec[axis])
                 for axis in range(dimensions))
 
-        mapper_method = "map_laplacian_target_derivative"
+    mapper_method = "map_laplacian_target_derivative"
 
 
 class LaplacianSourceDerivative(LaplacianDerivative):
