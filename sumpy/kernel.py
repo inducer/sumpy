@@ -737,8 +737,8 @@ class FactorizedBiharmonicKernel(ExpressionKernel):
             scaling_for_K0 = 1/2*var("pi")*var("I")  # noqa: N806
 
             expr = expr_for_K0[0] - expr_for_K0[1]
-            scaling = -1/(2*var("pi")) * (
-                    lam[0]**2 - lam[1]**2) * scaling_for_K0
+            scaling = -1/(2 * var("pi") * (
+                    lam[0]**2 - lam[1]**2)) * scaling_for_K0
         else:
             raise NotImplementedError("unsupported dimensionality")
 
@@ -986,6 +986,81 @@ class DirectionalSourceDerivative(DirectionalDerivative):
 
     mapper_method = "map_directional_source_derivative"
 
+
+class LaplacianDerivative(DerivativeBase):
+    init_arg_names = ("inner_kernel", )
+
+    def __init__(self, inner_kernel):
+        KernelWrapper.__init__(self, inner_kernel)
+
+    def __getinitargs__(self):
+        return (self.inner_kernel, )
+
+    def update_persistent_hash(self, key_hash, key_builder):
+        key_hash.update(type(self).__name__.encode("utf8"))
+        key_builder.rec(key_hash, self.inner_kernel)
+
+    def __str__(self):
+        return r"Lap_%s %s" % (
+                self.laplacian_kind[0], self.inner_kernel)
+
+    def __repr__(self):
+        return "%s(%s)" % (
+                type(self).__name__,
+                self.inner_kernel)
+
+    def get_source_args(self):
+        return self.inner_kernel.get_source_args()
+
+
+class LaplacianTargetDerivative(LaplacianDerivative):
+    laplacian_kind = "tgt"
+
+    def get_code_transformer(self):
+        inner = self.inner_kernel.get_code_transformer()
+
+        def transform(expr):
+            return inner(expr)
+
+        return transform
+
+    def postprocess_at_target(self, expr, bvec):
+        expr = self.inner_kernel.postprocess_at_target(expr, bvec)
+
+        dimensions = len(bvec)
+        assert dimensions == self.dim
+
+        # vec_r = target - bvec
+        return sum(expr.diff(bvec[axis]).diff(bvec[axis])
+                for axis in range(dimensions))
+
+        mapper_method = "map_laplacian_target_derivative"
+
+
+class LaplacianSourceDerivative(LaplacianDerivative):
+    laplacian_kind = "src"
+
+    def get_code_transformer(self):
+        inner = self.inner_kernel.get_code_transformer()
+
+        def transform(expr):
+            return inner(expr)
+
+        return transform
+
+    def postprocess_at_source(self, expr, avec):
+        expr = self.inner_kernel.postprocess_at_source(expr, avec)
+
+        dimensions = len(avec)
+        assert dimensions == self.dim
+
+        # vec_r = avec - source, (-1)^2 cancels out
+        return sum(expr.diff(avec[axis]).diff(avec[axis])
+                for axis in range(dimensions))
+
+    mapper_method = "map_laplacian_source_derivative"
+
+
 # }}}
 
 
@@ -1039,6 +1114,11 @@ class KernelIdentityMapper(KernelMapper):
 
     map_directional_source_derivative = map_directional_target_derivative
 
+    def map_laplacian_target_derivative(self, kernel):
+        return type(kernel)(self.rec(kernel.inner_kernel))
+
+    map_laplacian_source_derivative = map_laplacian_target_derivative
+
 
 class AxisTargetDerivativeRemover(KernelIdentityMapper):
     def map_axis_target_derivative(self, kernel):
@@ -1074,6 +1154,11 @@ class DerivativeCounter(KernelCombineMapper):
 
     map_directional_target_derivative = map_axis_target_derivative
     map_directional_source_derivative = map_axis_target_derivative
+
+    def map_laplacian_target_derivative(self, kernel):
+        return 2 + self.rec(kernel.inner_kernel)
+
+    map_laplacian_source_derivative = map_laplacian_target_derivative
 
 # }}}
 
