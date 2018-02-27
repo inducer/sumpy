@@ -327,8 +327,8 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
             + [
                 lp.GlobalArg("srcindices", None, shape="nsrcindices"),
                 lp.GlobalArg("tgtindices", None, shape="ntgtindices"),
-                lp.GlobalArg("srcranges", None, shape="nranges"),
-                lp.GlobalArg("tgtranges", None, shape="nranges"),
+                lp.GlobalArg("srcranges", None, shape="nranges + 1"),
+                lp.GlobalArg("tgtranges", None, shape="nranges + 1"),
                 lp.ValueArg("nsrcindices", np.int32),
                 lp.ValueArg("ntgtindices", np.int32),
                 lp.ValueArg("nranges", None)
@@ -337,7 +337,7 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
     def get_domains(self):
         # FIXME: this doesn't work when separating j and k
         return [
-                "{[irange]: 0 <= irange < nranges - 1}",
+                "{[irange]: 0 <= irange < nranges}",
                 "{[j, k]: 0 <= j < tgt_length and 0 <= k < src_length}",
                 "{[idim]: 0 <= idim < dim}"
                 ]
@@ -385,7 +385,7 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
                 ]
 
     def get_assumptions(self):
-        return "nranges>=2"
+        return "nranges>=1"
 
     @memoize_method
     def get_optimized_kernel(self):
