@@ -458,6 +458,7 @@ class SumpyExpansionWrangler(object):
 
         wait_for = mpole_exps.events
 
+        has_evt = False
         for isrc_level, ssn in enumerate(source_boxes_by_level):
             if len(target_boxes_by_source_level[isrc_level]) == 0:
                 continue
@@ -485,14 +486,16 @@ class SumpyExpansionWrangler(object):
 
                     **kwargs)
 
+            has_evt = True
             wait_for = [evt]
 
             for pot_i, pot_res_i in zip(pot, pot_res):
                 assert pot_i is pot_res_i
 
-        for pot_i in pot:
-            # Intentionally only adding the last event.
-            pot_i.add_event(evt)
+        if has_evt:
+            for pot_i in pot:
+                # Intentionally only adding the last event.
+                pot_i.add_event(evt)
 
         return pot
 
