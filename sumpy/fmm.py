@@ -449,7 +449,6 @@ class SumpyExpansionWrangler(object):
         return local_exps
 
     def eval_multipoles(self,
-            level_start_target_box_nrs,
             target_boxes_by_source_level, source_boxes_by_level, mpole_exps):
         pot = self.output_zeros()
 
