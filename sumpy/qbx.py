@@ -49,6 +49,7 @@ QBX for Layer Potentials
 .. autoclass:: LayerPotentialBase
 .. autoclass:: LayerPotential
 .. autoclass:: LayerPotentialMatrixGenerator
+.. autoclass:: LayerPotentialMatrixBlockGenerator
 
 """
 
