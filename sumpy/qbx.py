@@ -153,7 +153,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                 lp.GlobalArg("tgt", None,
                     shape=(self.dim, "ntargets"), order="C"),
                 lp.GlobalArg("center", None,
-                    shape=(self.dim, "ntargets"), order="C"),
+                    shape=(self.dim, "ntargets"), dim_tags="sep,C"),
                 lp.GlobalArg("expansion_radii",
                     None, shape="ntargets"),
                 lp.ValueArg("nsources", None),
