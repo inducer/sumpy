@@ -68,8 +68,7 @@ class E2PBase(KernelCacheWrapper):
                 sdr(expansion.kernel))
 
         for knl in kernels:
-            pass
-            # assert sdr(tdr(knl)) == expansion.kernel
+            assert sdr(tdr(knl)) == expansion.kernel
 
         self.ctx = ctx
         self.expansion = expansion

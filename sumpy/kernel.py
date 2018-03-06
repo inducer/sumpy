@@ -1129,9 +1129,15 @@ class TargetDerivativeRemover(AxisTargetDerivativeRemover):
     def map_directional_target_derivative(self, kernel):
         return self.rec(kernel.inner_kernel)
 
+    def map_laplacian_target_derivative(self, kernel):
+        return self.rec(kernel.inner_kernel)
+
 
 class SourceDerivativeRemover(KernelIdentityMapper):
     def map_directional_source_derivative(self, kernel):
+        return self.rec(kernel.inner_kernel)
+
+    def map_laplacian_source_derivative(self, kernel):
         return self.rec(kernel.inner_kernel)
 
 
