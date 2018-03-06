@@ -1,0 +1,4 @@
+{
+  "test/test_matrixgen.py::test_p2p_direct[ctx_getter=<context factory for <pyopencl.Device 'pthread-Intel(R) Core(TM) i7-4712HQ CPU @ 2.30GHz' on 'Portable Computing Language' at 0x55b29f3ad210>>-False]": true,
+  "test/test_matrixgen.py::test_p2p_direct[ctx_getter=<context factory for <pyopencl.Device 'pthread-Intel(R) Core(TM) i7-4712HQ CPU @ 2.30GHz' on 'Portable Computing Language' at 0x55b29f3ad210>>-True]": true
+}
