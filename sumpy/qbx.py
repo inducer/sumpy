@@ -383,8 +383,11 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
             fixed_parameters=dict(dim=self.dim),
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
-        loopy_knl = lp.add_dtypes(loopy_knl,
-            dict(nsources=np.int64, ntargets=np.int64))
+        loopy_knl = lp.add_dtypes(loopy_knl, dict(
+            nsources=np.int64,
+            ntargets=np.int64,
+            ntgtindices=np.int64,
+            nsrcindices=np.int64))
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         for expn in self.expansions:

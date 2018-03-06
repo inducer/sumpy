@@ -308,8 +308,8 @@ class P2PMatrixBlockGenerator(P2PBase):
                 lp.GlobalArg("tgtindices", None, shape="ntgtindices"),
                 lp.GlobalArg("srcranges", None, shape="nranges + 1"),
                 lp.GlobalArg("tgtranges", None, shape="nranges + 1"),
-                lp.ValueArg("nsrcindices", np.int64),
-                lp.ValueArg("ntgtindices", np.int64),
+                lp.ValueArg("nsrcindices", None),
+                lp.ValueArg("ntgtindices", None),
                 lp.ValueArg("nranges", None)
             ] +
             [lp.GlobalArg("result_%d" % i, dtype,
@@ -356,8 +356,11 @@ class P2PMatrixBlockGenerator(P2PBase):
             fixed_parameters=dict(dim=self.dim),
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
-        loopy_knl = lp.add_dtypes(loopy_knl,
-            dict(nsources=np.int64, ntargets=np.int64))
+        loopy_knl = lp.add_dtypes(loopy_knl, dict(
+            nsources=np.int64,
+            ntargets=np.int64,
+            ntgtindices=np.int64,
+            nsrcindices=np.int64))
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         for knl in self.kernels:
