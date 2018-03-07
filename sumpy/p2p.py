@@ -58,7 +58,7 @@ Particle-to-particle
 class P2PBase(KernelComputation, KernelCacheWrapper):
     def __init__(self, ctx, kernels, exclude_self, strength_usage=None,
             value_dtypes=None,
-            options=[], name="p2p", device=None):
+            options=[], name=None, device=None):
         """
         :arg kernels: list of :class:`sumpy.kernel.Kernel` instances
         :arg strength_usage: A list of integers indicating which expression
@@ -343,7 +343,7 @@ class P2PMatrixBlockGenerator(P2PBase):
             + ["""
                         result_{i}[tgtstart + itgt, srcstart + isrc] = \
                             knl_{i}_scaling * pair_result_{i} \
-                                {{inames=irange}}
+                                {{id_prefix=write_p2p,inames=irange}}
                 """.format(i=iknl)
                 for iknl in range(len(self.kernels))]
             + ["""
@@ -352,6 +352,7 @@ class P2PMatrixBlockGenerator(P2PBase):
             """],
             arguments,
             assumptions="nranges>=1",
+            silenced_warnings="write_race(write_p2p*)",
             name=self.name,
             fixed_parameters=dict(dim=self.dim),
             lang_version=MOST_RECENT_LANGUAGE_VERSION)

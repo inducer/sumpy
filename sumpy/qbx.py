@@ -88,7 +88,7 @@ def expand(expansion_nr, sac, expansion, avec, bvec):
 class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
     def __init__(self, ctx, expansions, strength_usage=None,
             value_dtypes=None,
-            options=[], name="layerpot", device=None):
+            options=[], name=None, device=None):
         KernelComputation.__init__(self, ctx, expansions, strength_usage,
                 value_dtypes,
                 name, options, device)
@@ -206,30 +206,30 @@ class LayerPotential(LayerPotentialBase):
             for i, dtype in enumerate(self.value_dtypes)])
 
         loopy_knl = lp.make_kernel([
-                "{[itgt]: 0 <= itgt < ntargets}",
-                "{[isrc]: 0 <= isrc < nsources}",
-                "{[idim]: 0 <= idim < dim}"
-                ],
-                self.get_kernel_scaling_assignments()
-                + ["for itgt, isrc"]
-                + ["<> a[idim] = center[idim, itgt] - src[idim, isrc] {dup=idim}"]
-                + ["<> b[idim] = tgt[idim, itgt] - center[idim, itgt] {dup=idim}"]
-                + ["<> rscale = expansion_radii[itgt]"]
-                + loopy_insns + kernel_exprs
-                + ["""
-                    result_{i}[itgt] = knl_{i}_scaling * \
-                        simul_reduce(sum, isrc, pair_result_{i}) \
-                            {{id_prefix=write_lpot,inames=itgt}}
-                    """.format(i=iknl)
-                    for iknl in range(len(self.expansions))]
-                + ["end"],
-                arguments,
-                name=self.name,
-                assumptions="ntargets>=1 and nsources>=1",
-                default_offset=lp.auto,
-                silenced_warnings="write_race(write_lpot*)",
-                fixed_parameters=dict(dim=self.dim),
-                lang_version=MOST_RECENT_LANGUAGE_VERSION)
+            "{[itgt]: 0 <= itgt < ntargets}",
+            "{[isrc]: 0 <= isrc < nsources}",
+            "{[idim]: 0 <= idim < dim}"
+            ],
+            self.get_kernel_scaling_assignments()
+            + ["for itgt, isrc"]
+            + ["<> a[idim] = center[idim, itgt] - src[idim, isrc] {dup=idim}"]
+            + ["<> b[idim] = tgt[idim, itgt] - center[idim, itgt] {dup=idim}"]
+            + ["<> rscale = expansion_radii[itgt]"]
+            + loopy_insns + kernel_exprs
+            + ["""
+                result_{i}[itgt] = knl_{i}_scaling * \
+                    simul_reduce(sum, isrc, pair_result_{i}) \
+                        {{id_prefix=write_lpot,inames=itgt}}
+                """.format(i=iknl)
+                for iknl in range(len(self.expansions))]
+            + ["end"],
+            arguments,
+            name=self.name,
+            assumptions="ntargets>=1 and nsources>=1",
+            default_offset=lp.auto,
+            silenced_warnings="write_race(write_lpot*)",
+            fixed_parameters=dict(dim=self.dim),
+            lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         for expn in self.expansions:
@@ -370,7 +370,7 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
             + ["""
                     result_{i}[tgtstart + itgt, srcstart + isrc] = \
                         knl_{i}_scaling * pair_result_{i} \
-                            {{inames=irange}}
+                            {{id_prefix=write_lpot,inames=irange}}
                 """.format(i=iknl)
                 for iknl in range(len(self.expansions))]
             + ["""
@@ -381,6 +381,7 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
             name=self.name,
             assumptions="nranges>=1",
             default_offset=lp.auto,
+            silenced_warnings="write_race(write_lpot*)",
             fixed_parameters=dict(dim=self.dim),
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
