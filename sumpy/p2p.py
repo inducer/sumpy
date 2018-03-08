@@ -458,8 +458,8 @@ class P2PFromCSR(P2PBase):
                         <> is_self = (isrc == target_to_source[itgt])
                     """ if self.exclude_self else ""]
             + loopy_insns + kernel_exprs
+            + ["    end"]
             + ["""
-                    end
                     result[{i}, itgt] = result[{i}, itgt] + \
                         knl_{i}_scaling * simul_reduce(sum, isrc, pair_result_{i})
                 """.format(i=iknl)
