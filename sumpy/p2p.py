@@ -358,10 +358,10 @@ class P2PMatrixBlockGenerator(P2PBase):
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = lp.add_dtypes(loopy_knl, dict(
-            nsources=np.int64,
-            ntargets=np.int64,
-            ntgtindices=np.int64,
-            nsrcindices=np.int64))
+            nsources=np.int32,
+            ntargets=np.int32,
+            ntgtindices=np.int32,
+            nsrcindices=np.int32))
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         for knl in self.kernels:
@@ -479,7 +479,7 @@ class P2PFromCSR(P2PBase):
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = lp.add_dtypes(loopy_knl,
-            dict(nsources=np.int64, ntargets=np.int64))
+            dict(nsources=np.int32, ntargets=np.int32))
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")

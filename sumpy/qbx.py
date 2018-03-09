@@ -202,8 +202,8 @@ class LayerPotential(LayerPotentialBase):
                 None, shape="nsources", order="C")
             for i in range(self.strength_count)] +
             [lp.GlobalArg("result_%d" % i,
-                dtype, shape="ntargets", order="C")
-            for i, dtype in enumerate(self.value_dtypes)])
+                None, shape="ntargets", order="C")
+            for i, _ in enumerate(self.value_dtypes)])
 
         loopy_knl = lp.make_kernel([
             "{[itgt]: 0 <= itgt < ntargets}",
@@ -386,10 +386,10 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = lp.add_dtypes(loopy_knl, dict(
-            nsources=np.int64,
-            ntargets=np.int64,
-            ntgtindices=np.int64,
-            nsrcindices=np.int64))
+            nsources=np.int32,
+            ntargets=np.int32,
+            ntgtindices=np.int32,
+            nsrcindices=np.int32))
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         for expn in self.expansions:
