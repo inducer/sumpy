@@ -29,4 +29,4 @@ VERSION_TEXT = ".".join(str(x) for x in VERSION) + VERSION_STATUS
 # branch name, so as to avoid conflicts with the master branch. Make sure
 # to reset this to the next number up with "master" before merging into
 # master.
-KERNEL_VERSION = ("master", 29)
+KERNEL_VERSION = ("master", 30)
