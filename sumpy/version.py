@@ -30,7 +30,7 @@ if os.environ.get("AKPYTHON_EXEC_FROM_WITHIN_WITHIN_SETUP_PY") is not None:
     _git_rev = None
 
 else:
-    import loopy._git_rev as _git_rev_mod
+    import sumpy._git_rev as _git_rev_mod
     _git_rev = _git_rev_mod.GIT_REVISION
 
     # If we're running from a dev tree, the last install (and hence the most
