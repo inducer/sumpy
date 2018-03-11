@@ -132,7 +132,7 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
         from sumpy.tools import gather_loopy_source_arguments
         return ([
                 lp.GlobalArg("sources", None,
-                        shape=(self.dim, "nsources")),
+                    shape=(self.dim, "nsources")),
                 lp.GlobalArg("targets", None,
                    shape=(self.dim, "ntargets")),
                 lp.ValueArg("nsources", None),
@@ -179,11 +179,12 @@ class P2P(P2PBase):
                     shape="nresults, ntargets", dim_tags="sep,C")
             ])
 
-        loopy_knl = lp.make_kernel([
-            "{[itgt]: 0 <= itgt < ntargets}",
-            "{[isrc]: 0 <= isrc < nsources}",
-            "{[idim]: 0 <= idim < dim}"
-            ],
+        loopy_knl = lp.make_kernel(["""
+            {[itgt, isrc, idim]: \
+                0 <= itgt < ntargets and \
+                0 <= isrc < nsources and \
+                0 <= idim < dim}
+            """],
             self.get_kernel_scaling_assignments()
             + ["for itgt, isrc"]
             + ["<> d[idim] = targets[idim, itgt] - sources[idim, isrc]"]
@@ -245,11 +246,12 @@ class P2PMatrixGenerator(P2PBase):
                 shape="ntargets,nsources")
              for i, dtype in enumerate(self.value_dtypes)])
 
-        loopy_knl = lp.make_kernel([
-            "{[itgt]: 0 <= itgt < ntargets}",
-            "{[isrc]: 0 <= isrc < nsources}",
-            "{[idim]: 0 <= idim < dim}"
-            ],
+        loopy_knl = lp.make_kernel(["""
+            {[itgt, isrc, idim]: \
+                0 <= itgt < ntargets and \
+                0 <= isrc < nsources and \
+                0 <= idim < dim}
+            """],
             self.get_kernel_scaling_assignments()
             + ["for itgt, isrc"]
             + ["<> d[idim] = targets[idim, itgt] - sources[idim, isrc]"]
@@ -318,8 +320,10 @@ class P2PMatrixBlockGenerator(P2PBase):
 
         loopy_knl = lp.make_kernel([
             "{[irange]: 0 <= irange < nranges}",
-            "{[itgt, isrc]: 0 <= itgt < ntgtblock and 0 <= isrc < nsrcblock}",
-            "{[idim]: 0 <= idim < dim}"
+            "{[itgt, isrc, idim]: \
+                0 <= itgt < ntgtblock and \
+                0 <= isrc < nsrcblock and \
+                0 <= idim < dim}",
             ],
             self.get_kernel_scaling_assignments()
             + ["""

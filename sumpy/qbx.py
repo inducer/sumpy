@@ -193,6 +193,7 @@ class LayerPotential(LayerPotentialBase):
 
     default_name = "qbx_apply"
 
+    @memoize_method
     def get_kernel(self):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
         kernel_exprs = self.get_kernel_exprs(result_names)
@@ -203,13 +204,14 @@ class LayerPotential(LayerPotentialBase):
             for i in range(self.strength_count)] +
             [lp.GlobalArg("result_%d" % i,
                 None, shape="ntargets", order="C")
-            for i, _ in enumerate(self.value_dtypes)])
+            for i in range(len(self.kernels))])
 
-        loopy_knl = lp.make_kernel([
-            "{[itgt]: 0 <= itgt < ntargets}",
-            "{[isrc]: 0 <= isrc < nsources}",
-            "{[idim]: 0 <= idim < dim}"
-            ],
+        loopy_knl = lp.make_kernel(["""
+            {[itgt, isrc, idim]: \
+                0 <= itgt < ntargets and \
+                0 <= isrc < nsources and \
+                0 <= idim < dim}
+            """],
             self.get_kernel_scaling_assignments()
             + ["for itgt, isrc"]
             + ["<> a[idim] = center[idim, itgt] - src[idim, isrc] {dup=idim}"]
@@ -265,6 +267,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
     def get_strength_or_not(self, isrc, kernel_idx):
         return 1
 
+    @memoize_method
     def get_kernel(self):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
         kernel_exprs = self.get_kernel_exprs(result_names)
@@ -274,11 +277,12 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
                 dtype, shape="ntargets, nsources", order="C")
              for i, dtype in enumerate(self.value_dtypes)])
 
-        loopy_knl = lp.make_kernel([
-            "{[itgt]: 0 <= itgt < ntargets}",
-            "{[isrc]: 0 <= isrc < nsources}",
-            "{[idim]: 0 <= idim < dim}"
-            ],
+        loopy_knl = lp.make_kernel(["""
+            {[itgt, isrc, idim]: \
+                0 <= itgt < ntargets and \
+                0 <= isrc < nsources and \
+                0 <= idim < dim}
+            """],
             self.get_kernel_scaling_assignments()
             + ["for itgt, isrc"]
             + ["<> a[idim] = center[idim, itgt] - src[idim, isrc] {dup=idim}"]
@@ -324,6 +328,7 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
     def get_strength_or_not(self, isrc, kernel_idx):
         return 1
 
+    @memoize_method
     def get_kernel(self):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
         kernel_exprs = self.get_kernel_exprs(result_names)
