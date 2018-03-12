@@ -465,7 +465,8 @@ class P2PFromCSR(P2PBase):
             + ["    end"]
             + ["""
                     result[{i}, itgt] = result[{i}, itgt] + \
-                        knl_{i}_scaling * simul_reduce(sum, isrc, pair_result_{i})
+                        knl_{i}_scaling * simul_reduce(sum, isrc, pair_result_{i}) \
+                        {{id_prefix=write_csr}}
                 """.format(i=iknl)
                 for iknl in range(len(self.kernels))]
             + ["""
@@ -476,6 +477,7 @@ class P2PFromCSR(P2PBase):
             arguments,
             assumptions="ntgt_boxes>=1",
             name=self.name,
+            silenced_warnings="write_race(write_csr*)",
             fixed_parameters=dict(
                 dim=self.dim,
                 nstrengths=self.strength_count,
