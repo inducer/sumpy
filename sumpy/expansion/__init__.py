@@ -350,13 +350,8 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
             pde_mat = np.array(pde_mat, dtype=np.float64)
             n = nullspace(pde_mat, atol=tol)
             idx = self.get_reduced_coeffs()
-            if idx is None or len(idx) < n.shape[1]:
-                from scipy.linalg.interpolative import interp_decomp
-                k, idx, proj = interp_decomp(n.T, tol)
-                s = np.hstack([np.eye(k), proj])[:, np.argsort(idx)]
-                idx = idx[:k]
-            else:
-                s = np.linalg.solve(n.T[:, idx], n.T)
+            assert len(idx) >= n.shape[1]
+            s = np.linalg.solve(n.T[:, idx], n.T)
             stored_identifiers = [mis[i] for i in idx]
         else:
             s = np.eye(len(mis))
@@ -393,7 +388,7 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
         indicates the reduced coefficients are unknown and will be calculated
         using an Interpolative Decomposition of the PDE matrix
         """
-        return None
+        raise NotImplementedError
 
     def get_derivative_taker(self, expr, var_list):
         from sumpy.tools import NewLinearRecurrenceBasedMiDerivativeTaker
