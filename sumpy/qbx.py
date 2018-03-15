@@ -27,7 +27,7 @@ THE SOFTWARE.
 
 
 import six
-from six.moves import range, zip
+from six.moves import range
 import numpy as np
 import loopy as lp
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
@@ -49,6 +49,7 @@ QBX for Layer Potentials
 .. autoclass:: LayerPotentialBase
 .. autoclass:: LayerPotential
 .. autoclass:: LayerPotentialMatrixGenerator
+.. autoclass:: LayerPotentialMatrixBlockGenerator
 
 """
 
@@ -87,7 +88,7 @@ def expand(expansion_nr, sac, expansion, avec, bvec):
 class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
     def __init__(self, ctx, expansions, strength_usage=None,
             value_dtypes=None,
-            options=[], name="layerpot", device=None):
+            options=[], name=None, device=None):
         KernelComputation.__init__(self, ctx, expansions, strength_usage,
                 value_dtypes,
                 name, options, device)
@@ -103,46 +104,8 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
     def expansions(self):
         return self.kernels
 
-    def get_compute_a_and_b_vecs(self):
-        return """
-            <> a[idim] = center[idim,itgt] - src[idim,isrc] {dup=idim}
-            <> b[idim] = tgt[idim,itgt] - center[idim,itgt] {dup=idim}
-            <> rscale = expansion_radii[itgt]
-            """
-
-    def get_src_tgt_arguments(self):
-        return [
-                lp.GlobalArg("src", None,
-                    shape=(self.dim, "nsources"), order="C"),
-                lp.GlobalArg("tgt", None,
-                    shape=(self.dim, "ntargets"), order="C"),
-                lp.GlobalArg("center", None,
-                    shape=(self.dim, "ntargets"), order="C"),
-                lp.GlobalArg("expansion_radii", None, shape="ntargets"),
-                lp.ValueArg("nsources", np.int32),
-                lp.ValueArg("ntargets", np.int32),
-                ]
-
-    def get_domains(self):
-        return [
-                "{[itgt]: 0 <= itgt < ntargets}",
-                "{[isrc]: 0 <= isrc < nsources}",
-                "{[idim]: 0 <= idim < dim}"
-                ]
-
-    def get_loop_begin(self):
-        return ["for itgt, isrc"]
-
-    def get_loop_end(self):
-        return ["end"]
-
-    def get_assumptions(self):
-        return "nsources>=1 and ntargets>=1"
-
-    @memoize_method
-    def get_kernel(self):
+    def get_loopy_insns_and_result_names(self):
         from sumpy.symbolic import make_sym_vector
-
         avec = make_sym_vector("a", self.dim)
         bvec = make_sym_vector("b", self.dim)
 
@@ -152,7 +115,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
         logger.info("compute expansion expressions: start")
 
         result_names = [expand(i, sac, expn, avec, bvec)
-                for i, expn in enumerate(self.expansions)]
+                        for i, expn in enumerate(self.expansions)]
 
         logger.info("compute expansion expressions: done")
 
@@ -168,55 +131,43 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                 complex_dtype=np.complex128  # FIXME
                 )
 
+        return loopy_insns, result_names
+
+    def get_strength_or_not(self, isrc, kernel_idx):
+        return var("strength_%d" % self.strength_usage[kernel_idx]).index(isrc)
+
+    def get_kernel_exprs(self, result_names):
         isrc_sym = var("isrc")
-        exprs = [
-                var(name)
-                * self.get_strength_or_not(isrc_sym, i)
-                for i, name in enumerate(result_names)]
+        exprs = [var(name) * self.get_strength_or_not(isrc_sym, i)
+                 for i, name in enumerate(result_names)]
 
+        return [lp.Assignment(id=None,
+                    assignee="pair_result_%d" % i, expression=expr,
+                    temp_var_type=lp.auto)
+                for i, expr in enumerate(exprs)]
+
+    def get_default_src_tgt_arguments(self):
         from sumpy.tools import gather_loopy_source_arguments
-        arguments = (
-                self.get_src_tgt_arguments()
-                + self.get_input_and_output_arguments()
-                + gather_loopy_source_arguments(self.kernels))
+        return ([
+                lp.GlobalArg("src", None,
+                    shape=(self.dim, "nsources"), order="C"),
+                lp.GlobalArg("tgt", None,
+                    shape=(self.dim, "ntargets"), order="C"),
+                lp.GlobalArg("center", None,
+                    shape=(self.dim, "ntargets"), dim_tags="sep,C"),
+                lp.GlobalArg("expansion_radii",
+                    None, shape="ntargets"),
+                lp.ValueArg("nsources", None),
+                lp.ValueArg("ntargets", None)] +
+                gather_loopy_source_arguments(self.kernels))
 
-        loopy_knl = lp.make_kernel(
-                self.get_domains(),
-                self.get_kernel_scaling_assignments()
-                + self.get_loop_begin()
-                + [self.get_compute_a_and_b_vecs()]
-                + loopy_insns
-                + [
-                    lp.Assignment(id=None,
-                        assignee="pair_result_%d" % i, expression=expr,
-                        temp_var_type=lp.auto)
-                    for i, (expr, dtype) in enumerate(zip(exprs, self.value_dtypes))
-                ]
-                + self.get_loop_end()
-                + self.get_result_store_instructions(),
-                arguments,
-                name=self.name,
-                assumptions=self.get_assumptions(),
-                default_offset=lp.auto,
-                silenced_warnings="write_race(write_lpot*)",
-                fixed_parameters=dict(dim=self.dim),
-                lang_version=MOST_RECENT_LANGUAGE_VERSION)
+    def get_kernel(self):
+        raise NotImplementedError
 
-        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-
-        for expn in self.expansions:
-            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
-
-        loopy_knl = lp.tag_array_axes(loopy_knl, "center", "sep,C")
-
-        return loopy_knl
-
-    @memoize_method
     def get_optimized_kernel(self):
         # FIXME specialize/tune for GPU/CPU
         loopy_knl = self.get_kernel()
 
-        # FIXME: how to tune for blocks?
         import pyopencl as cl
         dev = self.context.devices[0]
         if dev.type & cl.device_type.CPU:
@@ -242,28 +193,51 @@ class LayerPotential(LayerPotentialBase):
 
     default_name = "qbx_apply"
 
-    def get_strength_or_not(self, isrc, kernel_idx):
-        return var("strength_%d" % self.strength_usage[kernel_idx]).index(isrc)
+    @memoize_method
+    def get_kernel(self):
+        loopy_insns, result_names = self.get_loopy_insns_and_result_names()
+        kernel_exprs = self.get_kernel_exprs(result_names)
+        arguments = (
+            self.get_default_src_tgt_arguments() +
+            [lp.GlobalArg("strength_%d" % i,
+                None, shape="nsources", order="C")
+            for i in range(self.strength_count)] +
+            [lp.GlobalArg("result_%d" % i,
+                None, shape="ntargets", order="C")
+            for i in range(len(self.kernels))])
 
-    def get_input_and_output_arguments(self):
-        return [
-                lp.GlobalArg("strength_%d" % i, None, shape="nsources", order="C")
-                for i in range(self.strength_count)
-                ]+[
-                lp.GlobalArg("result_%d" % i, None, shape="ntargets", order="C")
-                for i in range(len(self.kernels))
-                ]
-
-    def get_result_store_instructions(self):
-        return [
-                """
-                result_{i}[itgt] = \
-                        knl_{i}_scaling*simul_reduce(
-                            sum, isrc, pair_result_{i}) \
-                                    {{id_prefix=write_lpot,inames=itgt}}
+        loopy_knl = lp.make_kernel(["""
+            {[itgt, isrc, idim]: \
+                0 <= itgt < ntargets and \
+                0 <= isrc < nsources and \
+                0 <= idim < dim}
+            """],
+            self.get_kernel_scaling_assignments()
+            + ["for itgt, isrc"]
+            + ["<> a[idim] = center[idim, itgt] - src[idim, isrc] {dup=idim}"]
+            + ["<> b[idim] = tgt[idim, itgt] - center[idim, itgt] {dup=idim}"]
+            + ["<> rscale = expansion_radii[itgt]"]
+            + loopy_insns + kernel_exprs
+            + ["""
+                result_{i}[itgt] = knl_{i}_scaling * \
+                    simul_reduce(sum, isrc, pair_result_{i}) \
+                        {{id_prefix=write_lpot,inames=itgt}}
                 """.format(i=iknl)
-                for iknl in range(len(self.expansions))
-                ]
+                for iknl in range(len(self.expansions))]
+            + ["end"],
+            arguments,
+            name=self.name,
+            assumptions="ntargets>=1 and nsources>=1",
+            default_offset=lp.auto,
+            silenced_warnings="write_race(write_lpot*)",
+            fixed_parameters=dict(dim=self.dim),
+            lang_version=MOST_RECENT_LANGUAGE_VERSION)
+
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+        for expn in self.expansions:
+            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+
+        return loopy_knl
 
     def __call__(self, queue, targets, sources, centers, strengths, expansion_radii,
             **kwargs):
@@ -293,23 +267,50 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
     def get_strength_or_not(self, isrc, kernel_idx):
         return 1
 
-    def get_input_and_output_arguments(self):
-        return [
-                lp.GlobalArg("result_%d" % i, dtype, shape="ntargets,nsources")
-                for i, dtype in enumerate(self.value_dtypes)
-                ]
+    @memoize_method
+    def get_kernel(self):
+        loopy_insns, result_names = self.get_loopy_insns_and_result_names()
+        kernel_exprs = self.get_kernel_exprs(result_names)
+        arguments = (
+            self.get_default_src_tgt_arguments() +
+            [lp.GlobalArg("result_%d" % i,
+                dtype, shape="ntargets, nsources", order="C")
+             for i, dtype in enumerate(self.value_dtypes)])
 
-    def get_result_store_instructions(self):
-        return [
-                """
-                result_KNLIDX[itgt, isrc] = \
-                        knl_KNLIDX_scaling*pair_result_KNLIDX  {inames=isrc:itgt}
-                """.replace("KNLIDX", str(iknl))
-                for iknl in range(len(self.expansions))
-                ]
+        loopy_knl = lp.make_kernel(["""
+            {[itgt, isrc, idim]: \
+                0 <= itgt < ntargets and \
+                0 <= isrc < nsources and \
+                0 <= idim < dim}
+            """],
+            self.get_kernel_scaling_assignments()
+            + ["for itgt, isrc"]
+            + ["<> a[idim] = center[idim, itgt] - src[idim, isrc] {dup=idim}"]
+            + ["<> b[idim] = tgt[idim, itgt] - center[idim, itgt] {dup=idim}"]
+            + ["<> rscale = expansion_radii[itgt]"]
+            + loopy_insns + kernel_exprs
+            + ["""
+                result_{i}[itgt, isrc] = \
+                    knl_{i}_scaling * pair_result_{i} \
+                        {{inames=isrc:itgt}}
+                """.format(i=iknl)
+                for iknl in range(len(self.expansions))]
+            + ["end"],
+            arguments,
+            name=self.name,
+            assumptions="ntargets>=1 and nsources>=1",
+            default_offset=lp.auto,
+            fixed_parameters=dict(dim=self.dim),
+            lang_version=MOST_RECENT_LANGUAGE_VERSION)
+
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+        for expn in self.expansions:
+            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+
+        return loopy_knl
 
     def __call__(self, queue, targets, sources, centers, expansion_radii, **kwargs):
-        knl = self.get_optimized_kernel()
+        knl = self.get_cached_optimized_kernel()
 
         return knl(queue, src=sources, tgt=targets, center=centers,
                 expansion_radii=expansion_radii, **kwargs)
@@ -320,76 +321,88 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
 # {{{
 
 class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
+    """Generator for a subset of the layer potential matrix entries."""
+
     default_name = "qbx_block"
-
-    def get_src_tgt_arguments(self):
-        return LayerPotentialBase.get_src_tgt_arguments(self) \
-            + [
-                lp.GlobalArg("srcindices", None, shape="nsrcindices"),
-                lp.GlobalArg("tgtindices", None, shape="ntgtindices"),
-                lp.GlobalArg("srcranges", None, shape="nranges + 1"),
-                lp.GlobalArg("tgtranges", None, shape="nranges + 1"),
-                lp.ValueArg("nsrcindices", np.int32),
-                lp.ValueArg("ntgtindices", np.int32),
-                lp.ValueArg("nranges", None)
-            ]
-
-    def get_domains(self):
-        # FIXME: this doesn't work when separating j and k
-        return [
-                "{[irange]: 0 <= irange < nranges}",
-                "{[j, k]: 0 <= j < tgt_length and 0 <= k < src_length}",
-                "{[idim]: 0 <= idim < dim}"
-                ]
-
-    def get_loop_begin(self):
-        return [
-                """
-                for irange
-                    <> tgtstart = tgtranges[irange]
-                    <> tgtend = tgtranges[irange + 1]
-                    <> tgt_length = tgtend - tgtstart
-                    <> srcstart = srcranges[irange]
-                    <> srcend = srcranges[irange + 1]
-                    <> src_length = srcend - srcstart
-                    for j, k
-                        <> itgt = tgtindices[tgtstart + j]
-                        <> isrc = srcindices[srcstart + k]
-                """
-                ]
-
-    def get_loop_end(self):
-        return [
-                """
-                    end
-                end
-                """
-                ]
 
     def get_strength_or_not(self, isrc, kernel_idx):
         return 1
 
-    def get_input_and_output_arguments(self):
-        return [
-                lp.GlobalArg("result_%d" % i, dtype, shape="ntgtindices,nsrcindices")
-                for i, dtype in enumerate(self.value_dtypes)
-                ]
-
-    def get_result_store_instructions(self):
-        return [
-                """
-                result_KNLIDX[tgtstart + j, srcstart + k] = \
-                        knl_KNLIDX_scaling*pair_result_KNLIDX  {inames=irange}
-                """.replace("KNLIDX", str(iknl))
-                for iknl in range(len(self.expansions))
-                ]
-
-    def get_assumptions(self):
-        return "nranges>=1"
-
     @memoize_method
+    def get_kernel(self):
+        loopy_insns, result_names = self.get_loopy_insns_and_result_names()
+        kernel_exprs = self.get_kernel_exprs(result_names)
+        arguments = (
+            self.get_default_src_tgt_arguments() +
+            [
+                lp.GlobalArg("srcindices", None, shape="nsrcindices"),
+                lp.GlobalArg("tgtindices", None, shape="ntgtindices"),
+                lp.GlobalArg("srcranges", None, shape="nranges + 1"),
+                lp.GlobalArg("tgtranges", None, shape="nranges + 1"),
+                lp.ValueArg("nsrcindices", None),
+                lp.ValueArg("ntgtindices", None),
+                lp.ValueArg("nranges", None)
+            ] +
+            [lp.GlobalArg("result_%d" % i,
+                dtype, shape="ntgtindices, nsrcindices")
+            for i, dtype in enumerate(self.value_dtypes)])
+
+        loopy_knl = lp.make_kernel([
+            "{[irange]: 0 <= irange < nranges}",
+            "{[itgt, isrc]: 0 <= itgt < ntgtblock and 0 <= isrc < nsrcblock}",
+            "{[idim]: 0 <= idim < dim}"
+            ],
+            self.get_kernel_scaling_assignments()
+            + ["""
+                for irange
+                <> tgtstart = tgtranges[irange]
+                <> tgtend = tgtranges[irange + 1]
+                <> ntgtblock = tgtend - tgtstart
+                <> srcstart = srcranges[irange]
+                <> srcend = srcranges[irange + 1]
+                <> nsrcblock = srcend - srcstart
+
+                for itgt, isrc
+                    <> a[idim] = center[idim, tgtindices[tgtstart + itgt]] - \
+                                 src[idim, srcindices[srcstart + isrc]] \
+                                 {dup=idim}
+                    <> b[idim] = tgt[idim, tgtindices[tgtstart + itgt]] - \
+                                 center[idim, tgtindices[tgtstart + itgt]] \
+                                 {dup=idim}
+                    <> rscale = expansion_radii[tgtindices[tgtstart + itgt]]
+            """]
+            + loopy_insns + kernel_exprs
+            + ["""
+                    result_{i}[tgtstart + itgt, srcstart + isrc] = \
+                        knl_{i}_scaling * pair_result_{i} \
+                            {{id_prefix=write_lpot,inames=irange}}
+                """.format(i=iknl)
+                for iknl in range(len(self.expansions))]
+            + ["""
+                    end
+                end
+            """],
+            arguments,
+            name=self.name,
+            assumptions="nranges>=1",
+            default_offset=lp.auto,
+            silenced_warnings="write_race(write_lpot*)",
+            fixed_parameters=dict(dim=self.dim),
+            lang_version=MOST_RECENT_LANGUAGE_VERSION)
+
+        loopy_knl = lp.add_dtypes(loopy_knl, dict(
+            nsources=np.int32,
+            ntargets=np.int32,
+            ntgtindices=np.int32,
+            nsrcindices=np.int32))
+
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+        for expn in self.expansions:
+            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+
+        return loopy_knl
+
     def get_optimized_kernel(self):
-        # FIXME
         loopy_knl = self.get_kernel()
 
         loopy_knl = lp.split_iname(loopy_knl, "irange", 128, outer_tag="g.0")
@@ -397,7 +410,7 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
 
     def __call__(self, queue, targets, sources, centers, expansion_radii,
             tgtindices, srcindices, tgtranges, srcranges, **kwargs):
-        knl = self.get_optimized_kernel()
+        knl = self.get_cached_optimized_kernel()
 
         return knl(queue, src=sources, tgt=targets, center=centers,
                 expansion_radii=expansion_radii,
