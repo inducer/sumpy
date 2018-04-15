@@ -63,6 +63,19 @@ def create_arguments(n, mode, target_radius=1.0):
     return targets, sources, centers, sigma, expansion_radii
 
 
+def create_subset(indices, ranges, factor):
+    indices_ = np.empty(ranges.shape[0] - 1, dtype=np.object)
+    for i in range(ranges.shape[0] - 1):
+        iidx = indices[np.s_[ranges[i]:ranges[i + 1]]]
+        indices_[i] = np.sort(np.random.choice(iidx,
+            size=int(factor * len(iidx)), replace=False))
+
+    ranges_ = np.cumsum([0] + [r.shape[0] for r in indices_])
+    indices_ = np.hstack(indices_)
+
+    return indices_, ranges_
+
+
 def test_qbx_direct(ctx_getter):
     # This evaluates a single layer potential on a circle.
     logging.basicConfig(level=logging.INFO)
@@ -154,13 +167,14 @@ def test_p2p_direct(ctx_getter, exclude_self):
         strengths = (sigma * h,)
 
         tgtindices = np.arange(0, n)
-        tgtindices = np.random.choice(tgtindices, size=int(0.8 * n))
         tgtranges = np.arange(0, tgtindices.shape[0] + 1,
                               tgtindices.shape[0] // nblks)
+        tgtindices, tgtranges = create_subset(tgtindices, tgtranges, 0.6)
+
         srcindices = np.arange(0, n)
-        srcindices = np.random.choice(srcindices, size=int(0.8 * n))
         srcranges = np.arange(0, srcindices.shape[0] + 1,
                               srcindices.shape[0] // nblks)
+        srcindices, srcranges = create_subset(srcindices, srcranges, 0.6)
         assert tgtranges.shape == srcranges.shape
 
         extra_kwargs = {}
