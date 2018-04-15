@@ -63,15 +63,22 @@ def create_arguments(n, mode, target_radius=1.0):
     return targets, sources, centers, sigma, expansion_radii
 
 
-def create_subset(indices, ranges, factor):
-    indices_ = np.empty(ranges.shape[0] - 1, dtype=np.object)
-    for i in range(ranges.shape[0] - 1):
-        iidx = indices[np.s_[ranges[i]:ranges[i + 1]]]
-        indices_[i] = np.sort(np.random.choice(iidx,
-            size=int(factor * len(iidx)), replace=False))
+def create_index_subset(nnodes, nblks, factor):
+    indices = np.arange(0, nnodes)
+    ranges = np.arange(0, nnodes + 1, nnodes // nblks)
 
-    ranges_ = np.cumsum([0] + [r.shape[0] for r in indices_])
-    indices_ = np.hstack(indices_)
+    if abs(factor - 1.0) < 1.0e-14:
+        ranges_ = ranges
+        indices_ = indices
+    else:
+        indices_ = np.empty(ranges.shape[0] - 1, dtype=np.object)
+        for i in range(ranges.shape[0] - 1):
+            iidx = indices[np.s_[ranges[i]:ranges[i + 1]]]
+            indices_[i] = np.sort(np.random.choice(iidx,
+                size=int(factor * len(iidx)), replace=False))
+
+        ranges_ = np.cumsum([0] + [r.shape[0] for r in indices_])
+        indices_ = np.hstack(indices_)
 
     return indices_, ranges_
 
@@ -139,11 +146,12 @@ def test_qbx_direct(ctx_getter):
             assert la.norm(blk[itgt, isrc] - mat[block]) < eps
 
 
-@pytest.mark.parametrize("exclude_self", [True, False])
-def test_p2p_direct(ctx_getter, exclude_self):
-    # This evaluates a single layer potential on a circle.
+@pytest.mark.parametrize("exclude_self", "factor", [
+    (True, 1.0), (True, 0.6), (False, 1.0), (False, 0.6)
+    ])
+def test_p2p_direct(ctx_getter, exclude_self, factor):
+    # This does a point-to-point kernel evaluation on a circle.
     logging.basicConfig(level=logging.INFO)
-
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
 
@@ -166,15 +174,8 @@ def test_p2p_direct(ctx_getter, exclude_self):
         h = 2 * np.pi / n
         strengths = (sigma * h,)
 
-        tgtindices = np.arange(0, n)
-        tgtranges = np.arange(0, tgtindices.shape[0] + 1,
-                              tgtindices.shape[0] // nblks)
-        tgtindices, tgtranges = create_subset(tgtindices, tgtranges, 0.6)
-
-        srcindices = np.arange(0, n)
-        srcranges = np.arange(0, srcindices.shape[0] + 1,
-                              srcindices.shape[0] // nblks)
-        srcindices, srcranges = create_subset(srcindices, srcranges, 0.6)
+        tgtindices, tgtranges = create_index_subset(n, nblks, factor)
+        srcindices, srcranges = create_index_subset(n, nblks, factor)
         assert tgtranges.shape == srcranges.shape
 
         extra_kwargs = {}
@@ -190,17 +191,11 @@ def test_p2p_direct(ctx_getter, exclude_self):
         eps = 1.0e-10 * la.norm(result_lpot)
         assert la.norm(result_mat - result_lpot) < eps
 
-        _, (blk,) = blk_gen(queue, targets, sources,
-                            tgtindices, srcindices, tgtranges, srcranges,
-                            **extra_kwargs)
+        _, (blk, rowindices, colindices) = blk_gen(queue, targets, sources,
+            tgtindices, srcindices, tgtranges, srcranges, **extra_kwargs)
 
-        for i in range(srcranges.shape[0] - 1):
-            itgt = np.s_[tgtranges[i]:tgtranges[i + 1]]
-            isrc = np.s_[srcranges[i]:srcranges[i + 1]]
-            block = np.ix_(tgtindices[itgt], srcindices[isrc])
-
-            eps = 1.0e-10 * la.norm(mat[block])
-            assert la.norm(blk[itgt, isrc] - mat[block]) < eps
+        eps = 1.0e-10 * la.norm(mat)
+        assert la.norm(blk - mat[rowindices, colindices].reshape(-1)) < eps
 
 
 # You can test individual routines by typing

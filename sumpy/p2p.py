@@ -33,6 +33,7 @@ import loopy as lp
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 from pymbolic import var
 
+from pytools import memoize_in
 from sumpy.tools import KernelComputation, KernelCacheWrapper
 
 
@@ -306,68 +307,44 @@ class P2PMatrixBlockGenerator(P2PBase):
         arguments = (
             self.get_default_src_tgt_arguments() +
             [
-                lp.GlobalArg("srcindices", None, shape="nsrcindices"),
-                lp.GlobalArg("tgtindices", None, shape="ntgtindices"),
-                lp.GlobalArg("srcranges", None, shape="nranges + 1"),
-                lp.GlobalArg("tgtranges", None, shape="nranges + 1"),
-                lp.ValueArg("nsrcindices", None),
-                lp.ValueArg("ntgtindices", None),
-                lp.ValueArg("nranges", None)
+                lp.GlobalArg("srcindices", None, shape="nresults"),
+                lp.GlobalArg("tgtindices", None, shape="nresults"),
+                lp.ValueArg("nresults", None)
             ] +
-            [lp.GlobalArg("result_%d" % i, dtype,
-                shape="ntgtindices, nsrcindices")
+            [lp.GlobalArg("result_%d" % i, dtype, shape="nresults")
              for i, dtype in enumerate(self.value_dtypes)])
 
-        loopy_knl = lp.make_kernel([
-            "{[irange]: 0 <= irange < nranges}",
-            "{[itgt, isrc, idim]: \
-                0 <= itgt < ntgtblock and \
-                0 <= isrc < nsrcblock and \
-                0 <= idim < dim}",
-            ],
+        loopy_knl = lp.make_kernel(
+            "{[imat, idim]: 0 <= imat < nresults and 0 <= idim < dim}",
             self.get_kernel_scaling_assignments()
             + ["""
-                for irange
-                    <> tgtstart = tgtranges[irange]
-                    <> tgtend = tgtranges[irange + 1]
-                    <> ntgtblock = tgtend - tgtstart
-                    <> srcstart = srcranges[irange]
-                    <> srcend = srcranges[irange + 1]
-                    <> nsrcblock = srcend - srcstart
-
-                    for itgt, isrc
-                        <> d[idim] = targets[idim, tgtindices[tgtstart + itgt]] - \
-                                     sources[idim, srcindices[srcstart + isrc]]
+                for imat
+                    <> d[idim] = targets[idim, tgtindices[imat]] - \
+                                 sources[idim, srcindices[imat]]
             """]
             + ["""
-                        <> is_self = (srcindices[srcstart + isrc] ==
-                                      target_to_source[tgtindices[tgtstart + itgt]])
+                    <> is_self = (srcindices[imat] ==
+                                  target_to_source[tgtindices[imat]])
                 """ if self.exclude_self else ""]
             + loopy_insns + kernel_exprs
             + ["""
-                        result_{i}[tgtstart + itgt, srcstart + isrc] = \
-                            knl_{i}_scaling * pair_result_{i} \
-                                {{id_prefix=write_p2p,inames=irange}}
+                    result_{i}[imat] = \
+                        knl_{i}_scaling * pair_result_{i} \
+                            {{id_prefix=write_p2p}}
                 """.format(i=iknl)
                 for iknl in range(len(self.kernels))]
-            + ["""
-                    end
-                end
-            """],
+            + ["end"],
             arguments,
-            assumptions="nranges>=1",
+            assumptions="nresults>=1",
             silenced_warnings="write_race(write_p2p*)",
             name=self.name,
             fixed_parameters=dict(dim=self.dim),
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
-        loopy_knl = lp.add_dtypes(loopy_knl, dict(
-            nsources=np.int32,
-            ntargets=np.int32,
-            ntgtindices=np.int32,
-            nsrcindices=np.int32))
-
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+        loopy_knl = lp.add_dtypes(loopy_knl,
+            dict(nsources=np.int32, ntargets=np.int32))
+
         for knl in self.kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
@@ -382,11 +359,74 @@ class P2PMatrixBlockGenerator(P2PBase):
         if targets_is_obj_array:
             knl = lp.tag_array_axes(knl, "targets", "sep,C")
 
-        knl = lp.split_iname(knl, "irange", 128, outer_tag="g.0")
+        knl = lp.split_iname(knl, "imat", 1024, outer_tag="g.0")
         return knl
 
     def __call__(self, queue, targets, sources, tgtindices, srcindices,
             tgtranges, srcranges, **kwargs):
+        @memoize_in(self, "block_cumsum_knl")
+        def cumsum():
+            loopy_knl = lp.make_kernel(
+                "{[i, j]: 1 <= i <= nranges and 1 <= j <= i}",
+                """
+                blkprefix[0] = 0.0
+                blkprefix[i] = reduce(sum, j, \
+                    (srcranges[j] - srcranges[j - 1]) * \
+                    (tgtranges[j] - tgtranges[j - 1])) \
+                """,
+                [
+                    lp.GlobalArg("tgtranges", None, shape="nranges + 1"),
+                    lp.GlobalArg("srcranges", None, shape="nranges + 1"),
+                    lp.GlobalArg("blkprefix", np.int32, shape="nranges + 1"),
+                    lp.ValueArg("nranges", None)
+                ],
+                name="block_cumsum_knl",
+                default_offset=lp.auto,
+                lang_version=MOST_RECENT_LANGUAGE_VERSION)
+
+            loopy_knl = lp.realize_reduction(loopy_knl, force_scan=True,
+                force_outer_iname_for_scan="i")
+            return loopy_knl
+
+        @memoize_in(self, "block_linear_index_knl")
+        def linear_index():
+            loopy_knl = lp.make_kernel([
+                "{[irange]: 0 <= irange < nranges}",
+                "{[itgt, isrc]: 0 <= itgt < ntgtblock and 0 <= isrc < nsrcblock}"
+                ],
+                """
+                for irange
+                    <> ntgtblock = tgtranges[irange + 1] - tgtranges[irange]
+                    <> nsrcblock = srcranges[irange + 1] - srcranges[irange]
+
+                    for itgt, isrc
+                        <> imat = blkprefix[irange] + (nsrcblock * itgt + isrc)
+
+                        rowindices[imat] = tgtindices[tgtranges[irange] + itgt]
+                        colindices[imat] = srcindices[srcranges[irange] + isrc]
+                    end
+                end
+                """,
+                [
+                    lp.GlobalArg("srcindices", None, shape="nsrcindices"),
+                    lp.GlobalArg("tgtindices", None, shape="ntgtindices"),
+                    lp.GlobalArg("srcranges", None, shape="nranges + 1"),
+                    lp.GlobalArg("tgtranges", None, shape="nranges + 1"),
+                    lp.GlobalArg("blkprefix", None, shape="nranges + 1"),
+                    lp.GlobalArg("rowindices", None, shape="nresults"),
+                    lp.GlobalArg("colindices", None, shape="nresults"),
+                    lp.ValueArg("nsrcindices", np.int32),
+                    lp.ValueArg("ntgtindices", np.int32),
+                    lp.ValueArg("nresults", None),
+                    lp.ValueArg("nranges", None)
+                ],
+                name="block_linear_prefix_knl",
+                default_offset=lp.auto,
+                lang_version=MOST_RECENT_LANGUAGE_VERSION)
+            loopy_knl = lp.split_iname(loopy_knl, "irange", 128, outer_tag="g.0")
+
+            return loopy_knl
+
         from pytools.obj_array import is_obj_array
         knl = self.get_cached_optimized_kernel(
                 targets_is_obj_array=(
@@ -394,9 +434,16 @@ class P2PMatrixBlockGenerator(P2PBase):
                 sources_is_obj_array=(
                     is_obj_array(sources) or isinstance(sources, (tuple, list))))
 
-        return knl(queue, targets=targets, sources=sources,
-                tgtindices=tgtindices, srcindices=srcindices,
-                tgtranges=tgtranges, srcranges=srcranges, **kwargs)
+        _, (blkprefix,) = cumsum()(queue,
+            tgtranges=tgtranges, srcranges=srcranges)
+        _, (rowindices, colindices,) = linear_index()(queue,
+            tgtindices=tgtindices, srcindices=srcindices,
+            tgtranges=tgtranges, srcranges=srcranges,
+            blkprefix=blkprefix, nresults=blkprefix[-1])
+        evt, results = knl(queue, targets=targets, sources=sources,
+            tgtindices=rowindices, srcindices=colindices, **kwargs)
+
+        return evt, tuple(list(results) + [rowindices, colindices])
 
 # }}}
 
