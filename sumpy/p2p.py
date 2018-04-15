@@ -369,15 +369,15 @@ class P2PMatrixBlockGenerator(P2PBase):
             loopy_knl = lp.make_kernel(
                 "{[i, j]: 1 <= i <= nranges and 1 <= j <= i}",
                 """
-                blkprefix[0] = 0.0
-                blkprefix[i] = reduce(sum, j, \
+                blkranges[0] = 0.0
+                blkranges[i] = reduce(sum, j, \
                     (srcranges[j] - srcranges[j - 1]) * \
                     (tgtranges[j] - tgtranges[j - 1])) \
                 """,
                 [
                     lp.GlobalArg("tgtranges", None, shape="nranges + 1"),
                     lp.GlobalArg("srcranges", None, shape="nranges + 1"),
-                    lp.GlobalArg("blkprefix", np.int32, shape="nranges + 1"),
+                    lp.GlobalArg("blkranges", np.int32, shape="nranges + 1"),
                     lp.ValueArg("nranges", None)
                 ],
                 name="block_cumsum_knl",
@@ -400,7 +400,7 @@ class P2PMatrixBlockGenerator(P2PBase):
                     <> nsrcblock = srcranges[irange + 1] - srcranges[irange]
 
                     for itgt, isrc
-                        <> imat = blkprefix[irange] + (nsrcblock * itgt + isrc)
+                        <> imat = blkranges[irange] + (nsrcblock * itgt + isrc)
 
                         rowindices[imat] = tgtindices[tgtranges[irange] + itgt]
                         colindices[imat] = srcindices[srcranges[irange] + isrc]
@@ -412,7 +412,7 @@ class P2PMatrixBlockGenerator(P2PBase):
                     lp.GlobalArg("tgtindices", None, shape="ntgtindices"),
                     lp.GlobalArg("srcranges", None, shape="nranges + 1"),
                     lp.GlobalArg("tgtranges", None, shape="nranges + 1"),
-                    lp.GlobalArg("blkprefix", None, shape="nranges + 1"),
+                    lp.GlobalArg("blkranges", None, shape="nranges + 1"),
                     lp.GlobalArg("rowindices", None, shape="nresults"),
                     lp.GlobalArg("colindices", None, shape="nresults"),
                     lp.ValueArg("nsrcindices", np.int32),
@@ -434,16 +434,16 @@ class P2PMatrixBlockGenerator(P2PBase):
                 sources_is_obj_array=(
                     is_obj_array(sources) or isinstance(sources, (tuple, list))))
 
-        _, (blkprefix,) = cumsum()(queue,
+        _, (blkranges,) = cumsum()(queue,
             tgtranges=tgtranges, srcranges=srcranges)
         _, (rowindices, colindices,) = linear_index()(queue,
             tgtindices=tgtindices, srcindices=srcindices,
             tgtranges=tgtranges, srcranges=srcranges,
-            blkprefix=blkprefix, nresults=blkprefix[-1])
+            blkranges=blkranges, nresults=blkranges[-1])
         evt, results = knl(queue, targets=targets, sources=sources,
             tgtindices=rowindices, srcindices=colindices, **kwargs)
 
-        return evt, tuple(list(results) + [rowindices, colindices])
+        return evt, tuple(list(results) + [rowindices, colindices, blkranges])
 
 # }}}
 

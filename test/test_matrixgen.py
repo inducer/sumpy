@@ -146,9 +146,8 @@ def test_qbx_direct(ctx_getter):
             assert la.norm(blk[itgt, isrc] - mat[block]) < eps
 
 
-@pytest.mark.parametrize("exclude_self", "factor", [
-    (True, 1.0), (True, 0.6), (False, 1.0), (False, 0.6)
-    ])
+@pytest.mark.parametrize(("exclude_self", "factor"),
+    [(True, 1.0), (True, 0.6), (False, 1.0), (False, 0.6)])
 def test_p2p_direct(ctx_getter, exclude_self, factor):
     # This does a point-to-point kernel evaluation on a circle.
     logging.basicConfig(level=logging.INFO)
@@ -191,8 +190,10 @@ def test_p2p_direct(ctx_getter, exclude_self, factor):
         eps = 1.0e-10 * la.norm(result_lpot)
         assert la.norm(result_mat - result_lpot) < eps
 
-        _, (blk, rowindices, colindices) = blk_gen(queue, targets, sources,
-            tgtindices, srcindices, tgtranges, srcranges, **extra_kwargs)
+        _, (blk, rowindices, colindices, blkranges) = \
+            blk_gen(queue, targets, sources,
+                    tgtindices, srcindices, tgtranges, srcranges,
+                    **extra_kwargs)
 
         eps = 1.0e-10 * la.norm(mat)
         assert la.norm(blk - mat[rowindices, colindices].reshape(-1)) < eps
