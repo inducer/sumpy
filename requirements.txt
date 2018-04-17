@@ -4,5 +4,5 @@ git+https://github.com/inducer/pymbolic
 git+https://github.com/inducer/islpy
 git+https://github.com/inducer/pyopencl
 git+https://gitlab.tiker.net/inducer/boxtree
-git+https://github.com/inducer/loopy
+git+https://gitlab.tiker.net/inducer/loopy@perf-count-require-no-boostable-into
 git+https://github.com/inducer/pyfmmlib
