@@ -189,7 +189,10 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
 # {{{ direct applier
 
 class LayerPotential(LayerPotentialBase):
-    """Direct applier for the layer potential."""
+    """Direct applier for the layer potential.
+
+    .. automethod:: __call__
+    """
 
     default_name = "qbx_apply"
 
@@ -321,7 +324,10 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
 # {{{
 
 class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
-    """Generator for a subset of the layer potential matrix entries."""
+    """Generator for a subset of the layer potential matrix entries.
+
+    .. automethod:: __call__
+    """
 
     default_name = "qbx_block"
 

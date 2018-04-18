@@ -294,7 +294,10 @@ class P2PMatrixGenerator(P2PBase):
 # {{{ P2P matrix block writer
 
 class P2PMatrixBlockGenerator(P2PBase):
-    """Generator for a subset of P2P interaction matrix entries."""
+    """Generator for a subset of P2P interaction matrix entries.
+
+    .. automethod:: __call__
+    """
 
     default_name = "p2p_block"
 
@@ -381,9 +384,9 @@ class P2PMatrixBlockGenerator(P2PBase):
         :arg targets: target point coordinates.
         :arg sources: source point coordinates.
         :arg index_set: a :class:`sumpy.tools.MatrixBlockIndex` object used
-        to define the various blocks.
+            to define the various blocks.
         :return: a tuple of one-dimensional arrays of kernel evaluations at
-        target-source pairs described by `index_set`.
+            target-source pairs described by `index_set`.
         """
         from pytools.obj_array import is_obj_array
         knl = self.get_cached_optimized_kernel(
