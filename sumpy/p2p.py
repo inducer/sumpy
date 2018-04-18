@@ -33,7 +33,7 @@ import loopy as lp
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 from pymbolic import var
 
-from pytools import memoize_in
+from pytools import memoize_method, memoize_in
 from sumpy.tools import KernelComputation, KernelCacheWrapper
 
 
@@ -293,6 +293,97 @@ class P2PMatrixGenerator(P2PBase):
 
 # {{{ P2P matrix block writer
 
+class P2PMatrixLinearIndex(object):
+    def __init__(self, queue, tgtindices, srcindices, tgtranges, srcranges):
+        self.queue = queue
+        self.tgtindices = tgtindices
+        self.tgtranges = tgtranges
+        self.srcindices = srcindices
+        self.srcranges = srcranges
+
+    @memoize_method
+    def block_ranges(self):
+        @memoize_in(self, "linear_cumsum_knl")
+        def cumsum():
+            loopy_knl = lp.make_kernel(
+                "{[i, j]: 0 <= i < nranges and 0 <= j <= i}",
+                """
+                blkranges[0] = 0
+                blkranges[i + 1] = reduce(sum, j, \
+                    (srcranges[j + 1] - srcranges[j]) * \
+                    (tgtranges[j + 1] - tgtranges[j])) \
+                """,
+                [
+                    lp.GlobalArg("tgtranges", None, shape="nranges + 1"),
+                    lp.GlobalArg("srcranges", None, shape="nranges + 1"),
+                    lp.GlobalArg("blkranges", np.int32, shape="nranges + 1"),
+                    lp.ValueArg("nranges", None)
+                ],
+                name="linear_cumsum_knl",
+                default_offset=lp.auto,
+                lang_version=MOST_RECENT_LANGUAGE_VERSION)
+
+            loopy_knl = lp.realize_reduction(loopy_knl, force_scan=True,
+                force_outer_iname_for_scan="i")
+            return loopy_knl
+
+        _, (blkranges,) = cumsum()(self.queue,
+            tgtranges=self.tgtranges, srcranges=self.srcranges);
+
+        return blkranges
+
+    @memoize_method
+    def linear_indices(self):
+        @memoize_in(self, "linear_index_knl")
+        def linear_index():
+            loopy_knl = lp.make_kernel([
+                "{[irange]: 0 <= irange < nranges}",
+                "{[itgt, isrc]: 0 <= itgt < ntgtblock and 0 <= isrc < nsrcblock}"
+                ],
+                """
+                for irange
+                    <> ntgtblock = tgtranges[irange + 1] - tgtranges[irange]
+                    <> nsrcblock = srcranges[irange + 1] - srcranges[irange]
+
+                    for itgt, isrc
+                        <> imat = blkranges[irange] + (nsrcblock * itgt + isrc)
+
+                        rowindices[imat] = tgtindices[tgtranges[irange] + itgt] \
+                            {id_prefix=write_index}
+                        colindices[imat] = srcindices[srcranges[irange] + isrc] \
+                            {id_prefix=write_index}
+                    end
+                end
+                """,
+                [
+                    lp.GlobalArg("srcindices", None),
+                    lp.GlobalArg("tgtindices", None),
+                    lp.GlobalArg("srcranges", None, shape="nranges + 1"),
+                    lp.GlobalArg("tgtranges", None, shape="nranges + 1"),
+                    lp.GlobalArg("blkranges", None, shape="nranges + 1"),
+                    lp.GlobalArg("rowindices", None, shape="nresults"),
+                    lp.GlobalArg("colindices", None, shape="nresults"),
+                    lp.ValueArg("nresults", None),
+                    lp.ValueArg("nranges", None),
+                    "..."
+                ],
+                name="linear_index_knl",
+                default_offset=lp.auto,
+                silenced_warnings="write_race(write_index*)",
+                lang_version=MOST_RECENT_LANGUAGE_VERSION)
+            loopy_knl = lp.split_iname(loopy_knl, "irange", 128, outer_tag="g.0")
+
+            return loopy_knl
+
+        blkranges = self.block_ranges()
+        _, (rowindices, colindices) = linear_index()(self.queue,
+            tgtindices=self.tgtindices, srcindices=self.srcindices,
+            tgtranges=self.tgtranges, srcranges=self.srcranges,
+            blkranges=blkranges, nresults=blkranges[-1])
+
+        return rowindices, colindices, blkranges
+
+
 class P2PMatrixBlockGenerator(P2PBase):
     """Generator for a subset of P2P interaction matrix entries."""
 
@@ -362,71 +453,27 @@ class P2PMatrixBlockGenerator(P2PBase):
         knl = lp.split_iname(knl, "imat", 1024, outer_tag="g.0")
         return knl
 
-    def __call__(self, queue, targets, sources, tgtindices, srcindices,
-            tgtranges, srcranges, **kwargs):
-        @memoize_in(self, "block_cumsum_knl")
-        def cumsum():
-            loopy_knl = lp.make_kernel(
-                "{[i, j]: 1 <= i <= nranges and 1 <= j <= i}",
-                """
-                blkranges[0] = 0.0
-                blkranges[i] = reduce(sum, j, \
-                    (srcranges[j] - srcranges[j - 1]) * \
-                    (tgtranges[j] - tgtranges[j - 1])) \
-                """,
-                [
-                    lp.GlobalArg("tgtranges", None, shape="nranges + 1"),
-                    lp.GlobalArg("srcranges", None, shape="nranges + 1"),
-                    lp.GlobalArg("blkranges", np.int32, shape="nranges + 1"),
-                    lp.ValueArg("nranges", None)
-                ],
-                name="block_cumsum_knl",
-                default_offset=lp.auto,
-                lang_version=MOST_RECENT_LANGUAGE_VERSION)
+    def __call__(self, queue, targets, sources, index_set, **kwargs):
+        """Construct a set of blocks from the full P2P interaction matrix.
+        The relevant subset of indices for block :math:`i` is given by the
+        row indices `tgtindices[tgtranges[i]:tgtranges[i + 1]]` and the
+        column indices `srcindices[srcranges[i]:srcranges[i + 1]]`.
 
-            loopy_knl = lp.realize_reduction(loopy_knl, force_scan=True,
-                force_outer_iname_for_scan="i")
-            return loopy_knl
+        :arg tgtindices: list of row indices for all blocks.
+        :arg srcindices: list of column indices for all blocks.
+        :arg tgtranges: list used to index `tgtindices` in each block.
+        :arg srcindices: list used to index `srcindices` in each block.
 
-        @memoize_in(self, "block_linear_index_knl")
-        def linear_index():
-            loopy_knl = lp.make_kernel([
-                "{[irange]: 0 <= irange < nranges}",
-                "{[itgt, isrc]: 0 <= itgt < ntgtblock and 0 <= isrc < nsrcblock}"
-                ],
-                """
-                for irange
-                    <> ntgtblock = tgtranges[irange + 1] - tgtranges[irange]
-                    <> nsrcblock = srcranges[irange + 1] - srcranges[irange]
-
-                    for itgt, isrc
-                        <> imat = blkranges[irange] + (nsrcblock * itgt + isrc)
-
-                        rowindices[imat] = tgtindices[tgtranges[irange] + itgt]
-                        colindices[imat] = srcindices[srcranges[irange] + isrc]
-                    end
-                end
-                """,
-                [
-                    lp.GlobalArg("srcindices", None, shape="nsrcindices"),
-                    lp.GlobalArg("tgtindices", None, shape="ntgtindices"),
-                    lp.GlobalArg("srcranges", None, shape="nranges + 1"),
-                    lp.GlobalArg("tgtranges", None, shape="nranges + 1"),
-                    lp.GlobalArg("blkranges", None, shape="nranges + 1"),
-                    lp.GlobalArg("rowindices", None, shape="nresults"),
-                    lp.GlobalArg("colindices", None, shape="nresults"),
-                    lp.ValueArg("nsrcindices", np.int32),
-                    lp.ValueArg("ntgtindices", np.int32),
-                    lp.ValueArg("nresults", None),
-                    lp.ValueArg("nranges", None)
-                ],
-                name="block_linear_prefix_knl",
-                default_offset=lp.auto,
-                lang_version=MOST_RECENT_LANGUAGE_VERSION)
-            loopy_knl = lp.split_iname(loopy_knl, "irange", 128, outer_tag="g.0")
-
-            return loopy_knl
-
+        :return: a tuple containing `(kernel_1_block, ... kernel_n_block,
+        rowindices, colindices, blkranges)`. The set `(rowindices, colindices)`
+        can be used to place each element of each block in the full matrix.
+        Each `kernel_i_block` is a one-dimensional array containing all the
+        blocks, i.e. the ith kernel evaluated at each of the input
+        source-target pairs. To retrieve a given block :math:`j`, one can
+        use `kernel_i_block[blkranges[j]:blkranges[j + 1]]`, which can then
+        be reshaped into the original block size using the `tgtranges` and
+        `srcranges` index lists.
+        """
         from pytools.obj_array import is_obj_array
         knl = self.get_cached_optimized_kernel(
                 targets_is_obj_array=(
@@ -434,16 +481,9 @@ class P2PMatrixBlockGenerator(P2PBase):
                 sources_is_obj_array=(
                     is_obj_array(sources) or isinstance(sources, (tuple, list))))
 
-        _, (blkranges,) = cumsum()(queue,
-            tgtranges=tgtranges, srcranges=srcranges)
-        _, (rowindices, colindices,) = linear_index()(queue,
-            tgtindices=tgtindices, srcindices=srcindices,
-            tgtranges=tgtranges, srcranges=srcranges,
-            blkranges=blkranges, nresults=blkranges[-1])
-        evt, results = knl(queue, targets=targets, sources=sources,
+        rowindices, colindices, _ = index_set.linear_indices()
+        return knl(queue, targets=targets, sources=sources,
             tgtindices=rowindices, srcindices=colindices, **kwargs)
-
-        return evt, tuple(list(results) + [rowindices, colindices, blkranges])
 
 # }}}
 
