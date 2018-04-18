@@ -307,15 +307,15 @@ class P2PMatrixBlockGenerator(P2PBase):
         arguments = (
             self.get_default_src_tgt_arguments() +
             [
-                lp.GlobalArg("srcindices", None, shape="nresults"),
-                lp.GlobalArg("tgtindices", None, shape="nresults"),
-                lp.ValueArg("nresults", None)
+                lp.GlobalArg("srcindices", None, shape="nresult"),
+                lp.GlobalArg("tgtindices", None, shape="nresult"),
+                lp.ValueArg("nresult", None)
             ] +
-            [lp.GlobalArg("result_%d" % i, dtype, shape="nresults")
+            [lp.GlobalArg("result_%d" % i, dtype, shape="nresult")
              for i, dtype in enumerate(self.value_dtypes)])
 
         loopy_knl = lp.make_kernel(
-            "{[imat, idim]: 0 <= imat < nresults and 0 <= idim < dim}",
+            "{[imat, idim]: 0 <= imat < nresult and 0 <= idim < dim}",
             self.get_kernel_scaling_assignments()
             + ["""
                 for imat
@@ -335,7 +335,7 @@ class P2PMatrixBlockGenerator(P2PBase):
                 for iknl in range(len(self.kernels))]
             + ["end"],
             arguments,
-            assumptions="nresults>=1",
+            assumptions="nresult>=1",
             silenced_warnings="write_race(write_p2p*)",
             name=self.name,
             fixed_parameters=dict(dim=self.dim),
@@ -392,9 +392,9 @@ class P2PMatrixBlockGenerator(P2PBase):
                 sources_is_obj_array=(
                     is_obj_array(sources) or isinstance(sources, (tuple, list))))
 
-        rowindices, colindices = index_set.linear_indices()
+        tgtindices, srcindices = index_set.linear_indices()
         return knl(queue, targets=targets, sources=sources,
-            tgtindices=rowindices, srcindices=colindices, **kwargs)
+                tgtindices=tgtindices, srcindices=srcindices, **kwargs)
 
 # }}}
 

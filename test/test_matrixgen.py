@@ -31,6 +31,8 @@ import pyopencl as cl
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 
+from sumpy.tools import MatrixBlockIndex
+
 import logging
 logger = logging.getLogger(__name__)
 
@@ -82,8 +84,8 @@ def create_index_subset(nnodes, nblks, factor):
 
     return indices_, ranges_
 
-
-def test_qbx_direct(ctx_getter):
+@pytest.mark.parametrize('factor', [1.0, 0.6])
+def test_qbx_direct(ctx_getter, factor):
     # This evaluates a single layer potential on a circle.
     logging.basicConfig(level=logging.INFO)
 
@@ -114,14 +116,8 @@ def test_qbx_direct(ctx_getter):
         h = 2 * np.pi / n
         strengths = (sigma * h,)
 
-        tgtindices = np.arange(0, n)
-        tgtindices = np.random.choice(tgtindices, size=int(0.8 * n))
-        tgtranges = np.arange(0, tgtindices.shape[0] + 1,
-                              tgtindices.shape[0] // nblks)
-        srcindices = np.arange(0, n)
-        srcindices = np.random.choice(srcindices, size=int(0.8 * n))
-        srcranges = np.arange(0, srcindices.shape[0] + 1,
-                              srcindices.shape[0] // nblks)
+        tgtindices, tgtranges = create_index_subset(n, nblks, factor)
+        srcindices, srcranges = create_index_subset(n, nblks, factor)
         assert tgtranges.shape == srcranges.shape
 
         _, (mat,) = mat_gen(queue, targets, sources, centers,
@@ -134,16 +130,14 @@ def test_qbx_direct(ctx_getter):
         eps = 1.0e-10 * la.norm(result_lpot)
         assert la.norm(result_mat - result_lpot) < eps
 
+        index_set = MatrixBlockIndex(queue,
+            tgtindices, srcindices, tgtranges, srcranges)
         _, (blk,) = blk_gen(queue, targets, sources, centers, expansion_radii,
-                            tgtindices, srcindices, tgtranges, srcranges)
+                            index_set)
 
-        for i in range(srcranges.shape[0] - 1):
-            itgt = np.s_[tgtranges[i]:tgtranges[i + 1]]
-            isrc = np.s_[srcranges[i]:srcranges[i + 1]]
-            block = np.ix_(tgtindices[itgt], srcindices[isrc])
-
-            eps = 1.0e-10 * la.norm(mat[block])
-            assert la.norm(blk[itgt, isrc] - mat[block]) < eps
+        rowindices, colindices = index_set.linear_indices()
+        eps = 1.0e-10 * la.norm(mat)
+        assert la.norm(blk - mat[rowindices, colindices].reshape(-1)) < eps
 
 
 @pytest.mark.parametrize(("exclude_self", "factor"),
@@ -161,7 +155,6 @@ def test_p2p_direct(ctx_getter, exclude_self, factor):
     mode_nr = 25
 
     from sumpy.p2p import P2P
-    from sumpy.tools import MatrixBlockIndex
     from sumpy.p2p import P2PMatrixGenerator, P2PMatrixBlockGenerator
     lpot = P2P(ctx, [lknl], exclude_self=exclude_self)
     mat_gen = P2PMatrixGenerator(ctx, [lknl], exclude_self=exclude_self)

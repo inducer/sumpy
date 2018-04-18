@@ -335,68 +335,44 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
         arguments = (
             self.get_default_src_tgt_arguments() +
             [
-                lp.GlobalArg("srcindices", None, shape="nsrcindices"),
-                lp.GlobalArg("tgtindices", None, shape="ntgtindices"),
-                lp.GlobalArg("srcranges", None, shape="nranges + 1"),
-                lp.GlobalArg("tgtranges", None, shape="nranges + 1"),
-                lp.ValueArg("nsrcindices", None),
-                lp.ValueArg("ntgtindices", None),
-                lp.ValueArg("nranges", None)
+                lp.GlobalArg("srcindices", None, shape="nresult"),
+                lp.GlobalArg("tgtindices", None, shape="nresult"),
+                lp.ValueArg("nresult", None)
             ] +
-            [lp.GlobalArg("result_%d" % i,
-                dtype, shape="ntgtindices, nsrcindices")
-            for i, dtype in enumerate(self.value_dtypes)])
+            [lp.GlobalArg("result_%d" % i, dtype, shape="nresult")
+             for i, dtype in enumerate(self.value_dtypes)])
 
         loopy_knl = lp.make_kernel([
-            "{[irange]: 0 <= irange < nranges}",
-            "{[itgt, isrc]: 0 <= itgt < ntgtblock and 0 <= isrc < nsrcblock}",
-            "{[idim]: 0 <= idim < dim}"
+            "{[imat, idim]: 0 <= imat < nresult and 0 <= idim < dim}"
             ],
             self.get_kernel_scaling_assignments()
             + ["""
-                for irange
-                <> tgtstart = tgtranges[irange]
-                <> tgtend = tgtranges[irange + 1]
-                <> ntgtblock = tgtend - tgtstart
-                <> srcstart = srcranges[irange]
-                <> srcend = srcranges[irange + 1]
-                <> nsrcblock = srcend - srcstart
-
-                for itgt, isrc
-                    <> a[idim] = center[idim, tgtindices[tgtstart + itgt]] - \
-                                 src[idim, srcindices[srcstart + isrc]] \
-                                 {dup=idim}
-                    <> b[idim] = tgt[idim, tgtindices[tgtstart + itgt]] - \
-                                 center[idim, tgtindices[tgtstart + itgt]] \
-                                 {dup=idim}
-                    <> rscale = expansion_radii[tgtindices[tgtstart + itgt]]
+                for imat
+                    <> a[idim] = center[idim, tgtindices[imat]] - \
+                                 src[idim, srcindices[imat]] {dup=idim}
+                    <> b[idim] = tgt[idim, tgtindices[imat]] - \
+                                 center[idim, tgtindices[imat]] {dup=idim}
+                    <> rscale = expansion_radii[tgtindices[imat]]
             """]
             + loopy_insns + kernel_exprs
             + ["""
-                    result_{i}[tgtstart + itgt, srcstart + isrc] = \
-                        knl_{i}_scaling * pair_result_{i} \
-                            {{id_prefix=write_lpot,inames=irange}}
+                    result_{i}[imat] = knl_{i}_scaling * pair_result_{i} \
+                            {{id_prefix=write_lpot}}
                 """.format(i=iknl)
                 for iknl in range(len(self.expansions))]
-            + ["""
-                    end
-                end
-            """],
+            + ["end"],
             arguments,
             name=self.name,
-            assumptions="nranges>=1",
+            assumptions="nresult>=1",
             default_offset=lp.auto,
             silenced_warnings="write_race(write_lpot*)",
             fixed_parameters=dict(dim=self.dim),
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
-        loopy_knl = lp.add_dtypes(loopy_knl, dict(
-            nsources=np.int32,
-            ntargets=np.int32,
-            ntgtindices=np.int32,
-            nsrcindices=np.int32))
-
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+        loopy_knl = lp.add_dtypes(loopy_knl,
+            dict(nsources=np.int32, ntargets=np.int32))
+
         for expn in self.expansions:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
@@ -405,17 +381,17 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
     def get_optimized_kernel(self):
         loopy_knl = self.get_kernel()
 
-        loopy_knl = lp.split_iname(loopy_knl, "irange", 128, outer_tag="g.0")
+        loopy_knl = lp.split_iname(loopy_knl, "imat", 1024, outer_tag="g.0")
         return loopy_knl
 
     def __call__(self, queue, targets, sources, centers, expansion_radii,
-            tgtindices, srcindices, tgtranges, srcranges, **kwargs):
+                 index_set, **kwargs):
         knl = self.get_cached_optimized_kernel()
 
+        tgtindices, srcindices = index_set.linear_indices()
         return knl(queue, src=sources, tgt=targets, center=centers,
                 expansion_radii=expansion_radii,
-                tgtindices=tgtindices, srcindices=srcindices,
-                tgtranges=tgtranges, srcranges=srcranges, **kwargs)
+                tgtindices=tgtindices, srcindices=srcindices, **kwargs)
 
 # }}}
 
