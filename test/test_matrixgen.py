@@ -161,7 +161,7 @@ def test_p2p_direct(ctx_getter, exclude_self, factor):
     mode_nr = 25
 
     from sumpy.p2p import P2P
-    from sumpy.p2p import P2PMatrixLinearIndex
+    from sumpy.tools import MatrixBlockIndex
     from sumpy.p2p import P2PMatrixGenerator, P2PMatrixBlockGenerator
     lpot = P2P(ctx, [lknl], exclude_self=exclude_self)
     mat_gen = P2PMatrixGenerator(ctx, [lknl], exclude_self=exclude_self)
@@ -191,11 +191,11 @@ def test_p2p_direct(ctx_getter, exclude_self, factor):
         eps = 1.0e-10 * la.norm(result_lpot)
         assert la.norm(result_mat - result_lpot) < eps
 
-        index_set = P2PMatrixLinearIndex(queue,
+        index_set = MatrixBlockIndex(queue,
                 tgtindices, srcindices, tgtranges, srcranges)
         _, (blk,) = blk_gen(queue, targets, sources, index_set, **extra_kwargs)
 
-        rowindices, colindices, _ = index_set.linear_indices()
+        rowindices, colindices = index_set.linear_indices()
         eps = 1.0e-10 * la.norm(mat)
         assert la.norm(blk - mat[rowindices, colindices].reshape(-1)) < eps
 
