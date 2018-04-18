@@ -84,6 +84,7 @@ def create_index_subset(nnodes, nblks, factor):
 
     return indices_, ranges_
 
+
 @pytest.mark.parametrize('factor', [1.0, 0.6])
 def test_qbx_direct(ctx_getter, factor):
     # This evaluates a single layer potential on a circle.

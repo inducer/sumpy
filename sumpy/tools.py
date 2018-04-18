@@ -297,6 +297,7 @@ class KernelComputation(object):
 
 # }}}
 
+
 # {{{
 
 class MatrixBlockIndex(object):
@@ -358,7 +359,7 @@ class MatrixBlockIndex(object):
             return loopy_knl
 
         _, (blkranges,) = cumsum()(self.queue,
-            tgtranges=self.tgtranges, srcranges=self.srcranges);
+            tgtranges=self.tgtranges, srcranges=self.srcranges)
 
         return blkranges
 
@@ -425,6 +426,7 @@ class MatrixBlockIndex(object):
         return rowindices, colindices
 
 # }}}
+
 
 # {{{ OrderedSet
 

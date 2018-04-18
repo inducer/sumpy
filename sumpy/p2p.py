@@ -33,7 +33,6 @@ import loopy as lp
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 from pymbolic import var
 
-from pytools import memoize_method, memoize_in
 from sumpy.tools import KernelComputation, KernelCacheWrapper
 
 
