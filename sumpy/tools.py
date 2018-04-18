@@ -347,6 +347,7 @@ class MatrixBlockIndex(object):
                 ],
                 name="block_cumsum_knl",
                 default_offset=lp.auto,
+                assumptions="nranges>=1",
                 lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
             loopy_knl = lp.realize_reduction(loopy_knl, force_scan=True,
@@ -397,19 +398,15 @@ class MatrixBlockIndex(object):
                 end
                 """,
                 [
-                    lp.GlobalArg("srcindices", None),
-                    lp.GlobalArg("tgtindices", None),
-                    lp.GlobalArg("srcranges", None, shape="nranges + 1"),
-                    lp.GlobalArg("tgtranges", None, shape="nranges + 1"),
-                    lp.GlobalArg("blkranges", None, shape="nranges + 1"),
+                    lp.GlobalArg('blkranges', None, shape="nranges + 1"),
                     lp.GlobalArg("rowindices", None, shape="nresults"),
                     lp.GlobalArg("colindices", None, shape="nresults"),
                     lp.ValueArg("nresults", None),
-                    lp.ValueArg("nranges", None),
-                    "..."
+                    '...'
                 ],
                 name="block_index_knl",
                 default_offset=lp.auto,
+                assumptions='nranges>=1',
                 silenced_warnings="write_race(write_index*)",
                 lang_version=MOST_RECENT_LANGUAGE_VERSION)
             loopy_knl = lp.split_iname(loopy_knl, "irange", 128, outer_tag="g.0")
