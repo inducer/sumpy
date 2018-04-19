@@ -167,19 +167,44 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
             from sumpy.tools import add_mi
 
+            src_max_sum = max(sum(mi) for mi in
+                              src_expansion.get_coefficient_identifiers())
+            tgt_max_sum = max(sum(mi) for mi in
+                              self.get_coefficient_identifiers())
+
+            max_sum = src_max_sum + tgt_max_sum
+            new_deriv_wrangler = \
+                src_expansion.derivative_wrangler.get_wrangler_of_order(max_sum)
+            new_coeffs = new_deriv_wrangler.get_coefficient_identifiers()
+            new_full_coeffs = new_deriv_wrangler.get_full_coefficient_identifiers()
+
+            ident_to_index = dict((ident, i) for i, ident in
+                                enumerate(new_full_coeffs))
+
             result = []
             for deriv in self.get_coefficient_identifiers():
                 local_result = []
+
+                full_coeffs = [0] * len(new_full_coeffs)
                 for coeff, term in zip(
                         src_coeff_exprs,
                         src_expansion.get_coefficient_identifiers()):
+                    full_coeffs[ident_to_index[add_mi(deriv, term)]] = coeff
 
+                stored_coeffs = \
+                    new_deriv_wrangler.get_stored_mpole_coefficients_from_full(
+                        full_coeffs, src_rscale)
+
+                for i, coeff in enumerate(stored_coeffs):
+                    if coeff == 0:
+                        continue
+                    nderivatives_for_scaling = sum(new_coeffs[i])-sum(deriv)
                     kernel_deriv = (
                             src_expansion.get_scaled_multipole(
-                                taker.diff(add_mi(deriv, term)),
+                                taker.diff(new_coeffs[i]),
                                 dvec, src_rscale,
-                                nderivatives=sum(deriv) + sum(term),
-                                nderivatives_for_scaling=sum(term)))
+                                nderivatives=sum(new_coeffs[i]),
+                                nderivatives_for_scaling=nderivatives_for_scaling))
 
                     local_result.append(
                             coeff * kernel_deriv * tgt_rscale**sum(deriv))

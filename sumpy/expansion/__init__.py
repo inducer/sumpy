@@ -192,6 +192,13 @@ class DerivativeWrangler(object):
         res = sorted(gnitstam(self.order, self.dim), key=sum)
         return res
 
+    @memoize_method
+    def get_wrangler_of_order(self, order):
+        obj = self.__class__.__new__(self.__class__)
+        obj.order = order
+        obj.dim = self.dim
+        return obj
+
 
 class FullDerivativeWrangler(DerivativeWrangler):
 
@@ -391,8 +398,14 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
         raise NotImplementedError
 
     def get_derivative_taker(self, expr, var_list):
-        from sumpy.tools import NewLinearRecurrenceBasedMiDerivativeTaker
-        return NewLinearRecurrenceBasedMiDerivativeTaker(expr, var_list, self)
+        from sumpy.tools import MiDerivativeTaker
+        return MiDerivativeTaker(expr, var_list)
+
+    @memoize_method
+    def get_wrangler_of_order(self, order):
+        obj = DerivativeWrangler.get_wrangler_of_order(self, order)
+        obj.deriv_multiplier = self.deriv_multiplier
+        return obj
 
 
 class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
