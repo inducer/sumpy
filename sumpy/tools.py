@@ -1,6 +1,9 @@
 from __future__ import division, absolute_import
 
-__copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
+__copyright__ = """
+Copyright (C) 2012 Andreas Kloeckner
+Copyright (C) 2018 Alexandru Fikl
+"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -24,9 +27,12 @@ THE SOFTWARE.
 
 import six
 from six.moves import range, zip
-from pytools import memoize_method
+from pytools import memoize_method, memoize_in
 import numpy as np
 import sumpy.symbolic as sym
+
+import loopy as lp
+from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 
 import logging
 logger = logging.getLogger(__name__)
@@ -288,6 +294,136 @@ class KernelComputation(object):
                     temp_var_type=dtype)
                 for i, (kernel, dtype) in enumerate(
                     zip(self.kernels, self.value_dtypes))]
+
+# }}}
+
+
+# {{{
+
+class MatrixBlockIndex(object):
+    def __init__(self, queue, tgtindices, srcindices, tgtranges, srcranges):
+        """Keep track of different ways to index into matrix blocks.
+
+        In this description, a block is given by a subset of indices of
+        the global matrix operator. For example, the :math:`i`-th block of
+        a matrix `mat` using the input arguments is obtained by:
+
+        .. code-block:: python
+
+            mat[np.ix_(tgtindices[tgtranges[i]:tgtranges[i + 1]],
+                       srcindices[srcranges[i]:srcranges[i + 1]])]
+
+        :arg tgtindices: a subset of the full matrix row index set.
+        :arg srcindices: a subset of the full matrix column index set.
+        :arg tgtranges: an array used to index into `tgtindices`.
+        :arg srcranges: an array used to index into `srcindices`.
+        """
+
+        self.queue = queue
+        self.tgtindices = tgtindices
+        self.tgtranges = tgtranges
+        self.srcindices = srcindices
+        self.srcranges = srcranges
+
+    @memoize_method
+    def linear_ranges(self):
+        """
+        :return: an array containing the cummulative sum of all block sizes.
+            It can be used to index into a linear representation of the
+            matrix blocks.
+        """
+
+        @memoize_in(self, "block_cumsum_knl")
+        def cumsum():
+            loopy_knl = lp.make_kernel(
+                "{[i, j]: 0 <= i < nranges and 0 <= j <= i}",
+                """
+                blkranges[0] = 0
+                blkranges[i + 1] = reduce(sum, j, \
+                    (srcranges[j + 1] - srcranges[j]) * \
+                    (tgtranges[j + 1] - tgtranges[j])) \
+                """,
+                [
+                    lp.GlobalArg("tgtranges", None, shape="nranges + 1"),
+                    lp.GlobalArg("srcranges", None, shape="nranges + 1"),
+                    lp.GlobalArg("blkranges", np.int32, shape="nranges + 1"),
+                    lp.ValueArg("nranges", None)
+                ],
+                name="block_cumsum_knl",
+                default_offset=lp.auto,
+                assumptions="nranges>=1",
+                lang_version=MOST_RECENT_LANGUAGE_VERSION)
+
+            loopy_knl = lp.realize_reduction(loopy_knl, force_scan=True,
+                force_outer_iname_for_scan="i")
+            return loopy_knl
+
+        _, (blkranges,) = cumsum()(self.queue,
+            tgtranges=self.tgtranges, srcranges=self.srcranges)
+
+        return blkranges
+
+    @memoize_method
+    def linear_indices(self):
+        """
+        :return: a tuple of `(rowindices, colindices)` that can be used in
+            conjunction with :func:`linear_ranges` to provide linear indexing
+            into a set of matrix blocks. These index arrays are just the
+            concatenated Cartesian products of all the block arrays described
+            by :attr:`tgtindices` and :arg:`srcindices`.
+
+            They can be used to index directly into the matrix as follows:
+
+            .. code-block:: python
+
+                mat[rowindices[blkranges[i]:blkranges[i + 1]],
+                    colindices[blkranges[i]:blkranges[i + 1]]]
+        """
+
+        @memoize_in(self, "block_index_knl")
+        def linear_index():
+            loopy_knl = lp.make_kernel([
+                "{[irange]: 0 <= irange < nranges}",
+                "{[itgt, isrc]: 0 <= itgt < ntgtblock and 0 <= isrc < nsrcblock}"
+                ],
+                """
+                for irange
+                    <> ntgtblock = tgtranges[irange + 1] - tgtranges[irange]
+                    <> nsrcblock = srcranges[irange + 1] - srcranges[irange]
+
+                    for itgt, isrc
+                        <> imat = blkranges[irange] + (nsrcblock * itgt + isrc)
+
+                        rowindices[imat] = tgtindices[tgtranges[irange] + itgt] \
+                            {id_prefix=write_index}
+                        colindices[imat] = srcindices[srcranges[irange] + isrc] \
+                            {id_prefix=write_index}
+                    end
+                end
+                """,
+                [
+                    lp.GlobalArg('blkranges', None, shape="nranges + 1"),
+                    lp.GlobalArg("rowindices", None, shape="nresults"),
+                    lp.GlobalArg("colindices", None, shape="nresults"),
+                    lp.ValueArg("nresults", None),
+                    '...'
+                ],
+                name="block_index_knl",
+                default_offset=lp.auto,
+                assumptions='nranges>=1',
+                silenced_warnings="write_race(write_index*)",
+                lang_version=MOST_RECENT_LANGUAGE_VERSION)
+            loopy_knl = lp.split_iname(loopy_knl, "irange", 128, outer_tag="g.0")
+
+            return loopy_knl
+
+        blkranges = self.linear_ranges()
+        _, (rowindices, colindices) = linear_index()(self.queue,
+            tgtindices=self.tgtindices, srcindices=self.srcindices,
+            tgtranges=self.tgtranges, srcranges=self.srcranges,
+            blkranges=blkranges, nresults=blkranges[-1])
+
+        return rowindices, colindices
 
 # }}}
 

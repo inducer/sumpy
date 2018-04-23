@@ -293,7 +293,10 @@ class P2PMatrixGenerator(P2PBase):
 # {{{ P2P matrix block writer
 
 class P2PMatrixBlockGenerator(P2PBase):
-    """Generator for a subset of P2P interaction matrix entries."""
+    """Generator for a subset of P2P interaction matrix entries.
+
+    .. automethod:: __call__
+    """
 
     default_name = "p2p_block"
 
@@ -306,68 +309,44 @@ class P2PMatrixBlockGenerator(P2PBase):
         arguments = (
             self.get_default_src_tgt_arguments() +
             [
-                lp.GlobalArg("srcindices", None, shape="nsrcindices"),
-                lp.GlobalArg("tgtindices", None, shape="ntgtindices"),
-                lp.GlobalArg("srcranges", None, shape="nranges + 1"),
-                lp.GlobalArg("tgtranges", None, shape="nranges + 1"),
-                lp.ValueArg("nsrcindices", None),
-                lp.ValueArg("ntgtindices", None),
-                lp.ValueArg("nranges", None)
+                lp.GlobalArg("srcindices", None, shape="nresult"),
+                lp.GlobalArg("tgtindices", None, shape="nresult"),
+                lp.ValueArg("nresult", None)
             ] +
-            [lp.GlobalArg("result_%d" % i, dtype,
-                shape="ntgtindices, nsrcindices")
+            [lp.GlobalArg("result_%d" % i, dtype, shape="nresult")
              for i, dtype in enumerate(self.value_dtypes)])
 
-        loopy_knl = lp.make_kernel([
-            "{[irange]: 0 <= irange < nranges}",
-            "{[itgt, isrc, idim]: \
-                0 <= itgt < ntgtblock and \
-                0 <= isrc < nsrcblock and \
-                0 <= idim < dim}",
-            ],
+        loopy_knl = lp.make_kernel(
+            "{[imat, idim]: 0 <= imat < nresult and 0 <= idim < dim}",
             self.get_kernel_scaling_assignments()
             + ["""
-                for irange
-                    <> tgtstart = tgtranges[irange]
-                    <> tgtend = tgtranges[irange + 1]
-                    <> ntgtblock = tgtend - tgtstart
-                    <> srcstart = srcranges[irange]
-                    <> srcend = srcranges[irange + 1]
-                    <> nsrcblock = srcend - srcstart
-
-                    for itgt, isrc
-                        <> d[idim] = targets[idim, tgtindices[tgtstart + itgt]] - \
-                                     sources[idim, srcindices[srcstart + isrc]]
+                for imat
+                    <> d[idim] = targets[idim, tgtindices[imat]] - \
+                                 sources[idim, srcindices[imat]]
             """]
             + ["""
-                        <> is_self = (srcindices[srcstart + isrc] ==
-                                      target_to_source[tgtindices[tgtstart + itgt]])
+                    <> is_self = (srcindices[imat] ==
+                                  target_to_source[tgtindices[imat]])
                 """ if self.exclude_self else ""]
             + loopy_insns + kernel_exprs
             + ["""
-                        result_{i}[tgtstart + itgt, srcstart + isrc] = \
-                            knl_{i}_scaling * pair_result_{i} \
-                                {{id_prefix=write_p2p,inames=irange}}
+                    result_{i}[imat] = \
+                        knl_{i}_scaling * pair_result_{i} \
+                            {{id_prefix=write_p2p}}
                 """.format(i=iknl)
                 for iknl in range(len(self.kernels))]
-            + ["""
-                    end
-                end
-            """],
+            + ["end"],
             arguments,
-            assumptions="nranges>=1",
+            assumptions="nresult>=1",
             silenced_warnings="write_race(write_p2p*)",
             name=self.name,
             fixed_parameters=dict(dim=self.dim),
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
-        loopy_knl = lp.add_dtypes(loopy_knl, dict(
-            nsources=np.int32,
-            ntargets=np.int32,
-            ntgtindices=np.int32,
-            nsrcindices=np.int32))
-
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+        loopy_knl = lp.add_dtypes(loopy_knl,
+            dict(nsources=np.int32, ntargets=np.int32))
+
         for knl in self.kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
@@ -382,11 +361,32 @@ class P2PMatrixBlockGenerator(P2PBase):
         if targets_is_obj_array:
             knl = lp.tag_array_axes(knl, "targets", "sep,C")
 
-        knl = lp.split_iname(knl, "irange", 128, outer_tag="g.0")
+        knl = lp.split_iname(knl, "imat", 1024, outer_tag="g.0")
         return knl
 
-    def __call__(self, queue, targets, sources, tgtindices, srcindices,
-            tgtranges, srcranges, **kwargs):
+    def __call__(self, queue, targets, sources, index_set, **kwargs):
+        """Construct a set of blocks of the full P2P interaction matrix.
+
+        The blocks are returned as one-dimensional arrays, for performance
+        and storage reasons. If the two-dimensional form is desired, it can
+        be obtained using the information in the `index_set` for a block
+        :math:`i` in the following way:
+
+        .. code-block:: python
+
+            blkranges = index_set.linear_ranges()
+            m = index_set.tgtranges[i + 1] - index_set.tgtranges[i]
+            n = index_set.srcranges[i + 1] - index_set.srcranges[i]
+
+            block2d = result[blkranges[i]:blkranges[i + 1]].reshape(m, n)
+
+        :arg targets: target point coordinates.
+        :arg sources: source point coordinates.
+        :arg index_set: a :class:`sumpy.tools.MatrixBlockIndex` object used
+            to define the various blocks.
+        :return: a tuple of one-dimensional arrays of kernel evaluations at
+            target-source pairs described by `index_set`.
+        """
         from pytools.obj_array import is_obj_array
         knl = self.get_cached_optimized_kernel(
                 targets_is_obj_array=(
@@ -394,9 +394,9 @@ class P2PMatrixBlockGenerator(P2PBase):
                 sources_is_obj_array=(
                     is_obj_array(sources) or isinstance(sources, (tuple, list))))
 
+        tgtindices, srcindices = index_set.linear_indices()
         return knl(queue, targets=targets, sources=sources,
-                tgtindices=tgtindices, srcindices=srcindices,
-                tgtranges=tgtranges, srcranges=srcranges, **kwargs)
+                tgtindices=tgtindices, srcindices=srcindices, **kwargs)
 
 # }}}
 
