@@ -34,6 +34,7 @@ from collections import defaultdict
 
 __doc__ = """
 .. autoclass:: ExpansionBase
+.. autoclass:: LinearRecurrenceBasedDerivativeWrangler
 
 Expansion Factories
 ^^^^^^^^^^^^^^^^^^^
@@ -252,8 +253,22 @@ def _spmv(spmat, x, sparse_vectors):
 
 
 class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
+    """
+    .. automethod:: __init__
+    .. automethod:: get_pde_dict
+    .. automethod:: get_reduced_coeffs
+    """
 
     def __init__(self, order, dim, deriv_multiplier):
+        """
+        :param order: order of the expansion
+        :param dim: number of dimensions
+        :param deriv_multiplier: symbolic expression that should be multiplied
+                    with each coefficient_identifier to recover the linear
+                    recurrence for the PDE.
+
+        .. seealso:: :func:`~LinearRecurrenceBasedDerivativeWrangler.get_pde_dict`
+        """
         super(LinearRecurrenceBasedDerivativeWrangler, self).__init__(order, dim)
         self.deriv_multiplier = deriv_multiplier
 
@@ -352,8 +367,15 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
                         eq[coeff_ident_enumerate_dict[c]] = 1
                     else:
                         pde_mat.append(eq)
-
         if len(pde_mat) > 0:
+            """
+            Find a matrix :math:`s` such that :math:`K = S^T K_{[r]}`
+            where :math:`r` is the indices of the  reduced coefficients and
+            :math:`K` is a column vector of coefficients. Let :math:`P` be the
+            PDE matrix and :math:`N` be the nullspace of :math:`P`.
+            Then, :math:`S^T = N * N_{[r, :]}^{-1}` which implies,
+            :math:`S = N_{[r, :]}^{-T} N^T = solve(N_{[r, :]}^T, N^T)`
+            """
             pde_mat = np.array(pde_mat, dtype=np.float64)
             n = nullspace(pde_mat, atol=tol)
             idx = self.get_reduced_coeffs()
@@ -364,7 +386,9 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
             s = np.eye(len(mis))
             stored_identifiers = mis
 
-        coeff_matrix = defaultdict(lambda: [])
+        # coeff_matrix is a dictionary of lists. Each key in the dictionary
+        # is a row number and the values are pairs of column number and value.
+        coeff_matrix = defaultdict(list)
         for i in range(s.shape[0]):
             for j in range(s.shape[1]):
                 if np.abs(s[i][j]) > tol:
@@ -381,19 +405,35 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
         return stored_identifiers, coeff_matrix
 
     def get_pde_dict(self):
-        """
-        Return the PDE as a dictionary of derivative_identifier: coeff such that
-        sum(derivative_identifer * coeff) = 0 is the PDE.
+        r"""
+        Returns the PDE as a dictionary of (mi, coeff) such that mi
+        is the multi index of the derivative and the PDE is represented by,
+
+        .. math::
+
+            \sum(\frac{mi \times coeff}{deriv\_multiplier^{sum(mi)}}) = 0
+
+        Note that coeff should be numeric instead of symbolic to enable use of
+        numeric linear algebra routines. `deriv_multiplier` can be symbolic
+        and should be used when the PDE has symbolic values as coefficients
+        for the derivatives.
+
+        :Example:
+
+            :math:`\Delta u - k^2 u = 0` for 2D can be written as,
+
+            .. math::
+
+                \frac{(2, 0) \times 1}{k^{sum((2, 0))}} +
+                \frac{(0, 2) \times 1}{k^{sum((0, 2))}} +
+                \frac{(0, 0) \times -1}{k^{sum((0, 0))}} = 0
         """
 
         raise NotImplementedError
 
     def get_reduced_coeffs(self):
         """
-        If the coefficients of the derivatives can be reduced and the reduced
-        coefficients are known, returns a list of indices. Returning None
-        indicates the reduced coefficients are unknown and will be calculated
-        using an Interpolative Decomposition of the PDE matrix
+        Returns the indices of the reduced set of derivatives which are stored.
         """
         raise NotImplementedError
 
@@ -424,6 +464,8 @@ class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
     def get_reduced_coeffs(self):
         idx = []
         for i, mi in enumerate(self.get_full_coefficient_identifiers()):
+            # Return only the derivatives with the order of the last dimension
+            # 0 or 1. Higher order derivatives can be reduced down to these.
             if mi[-1] < 2:
                 idx.append(i)
         return idx
@@ -447,6 +489,8 @@ class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
     def get_reduced_coeffs(self):
         idx = []
         for i, mi in enumerate(self.get_full_coefficient_identifiers()):
+            # Return only the derivatives with the order of the last dimension
+            # 0 or 1. Higher order derivatives can be reduced down to these.
             if mi[-1] < 2:
                 idx.append(i)
         return idx
