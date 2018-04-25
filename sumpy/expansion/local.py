@@ -174,7 +174,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
             max_sum = src_max_sum + tgt_max_sum
             new_deriv_wrangler = \
-                src_expansion.derivative_wrangler.get_wrangler_of_order(max_sum)
+                src_expansion.derivative_wrangler.copy(order=max_sum)
             new_coeffs = new_deriv_wrangler.get_coefficient_identifiers()
             new_full_coeffs = new_deriv_wrangler.get_full_coefficient_identifiers()
 

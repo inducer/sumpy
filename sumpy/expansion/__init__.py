@@ -194,11 +194,8 @@ class DerivativeWrangler(object):
         return res
 
     @memoize_method
-    def get_wrangler_of_order(self, order):
-        obj = self.__class__.__new__(self.__class__)
-        obj.order = order
-        obj.dim = self.dim
-        return obj
+    def copy(self, order):
+        raise NotImplementedError
 
 
 class FullDerivativeWrangler(DerivativeWrangler):
@@ -215,6 +212,12 @@ class FullDerivativeWrangler(DerivativeWrangler):
 
     get_stored_mpole_coefficients_from_full = (
             get_full_kernel_derivatives_from_stored)
+
+    @memoize_method
+    def copy(self, **kwargs):
+        order = kwargs.pop('order', self.order)
+        dim = kwargs.pop('dim', self.dim)
+        return type(self)(order, dim)
 
 
 # {{{ sparse matrix-vector multiplication
@@ -442,9 +445,13 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
         return MiDerivativeTaker(expr, var_list)
 
     @memoize_method
-    def get_wrangler_of_order(self, order):
-        obj = DerivativeWrangler.get_wrangler_of_order(self, order)
-        obj.deriv_multiplier = self.deriv_multiplier
+    def copy(self, **kwargs):
+        obj = type(self).__new__(type(self))
+        order = kwargs.pop('order', self.order)
+        dim = kwargs.pop('dim', self.dim)
+        deriv_multiplier = kwargs.pop('deriv_multiplier', self.deriv_multiplier)
+        LinearRecurrenceBasedDerivativeWrangler.__init__(obj, order,
+            dim, deriv_multiplier)
         return obj
 
 
