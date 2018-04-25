@@ -490,7 +490,7 @@ class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
             mi = [0]*self.dim
             mi[d] = 2
             pde_dict[tuple(mi)] = 1
-        pde_dict[tuple([0]*self.dim)] = -1
+        pde_dict[tuple([0]*self.dim)] = 1
         return pde_dict
 
     def get_reduced_coeffs(self):
