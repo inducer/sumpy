@@ -94,7 +94,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                     mi_power(avec, mi) / mi_factorial(mi)
                     for mi in self.get_full_coefficient_identifiers()]
         return (
-            self.derivative_wrangler.get_stored_mpole_coefficients_from_full(
+            self.expansion_terms_wrangler.get_stored_mpole_coefficients_from_full(
                 result, rscale))
 
     def get_scaled_multipole(self, expr, bvec, rscale, nderivatives,
@@ -127,8 +127,8 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         return result
 
     def get_kernel_derivative_taker(self, bvec):
-        return (self.derivative_wrangler.get_derivative_taker(
-            self.kernel.get_expression(bvec), bvec))
+        from sumpy.tools import MiDerivativeTaker
+        return MiDerivativeTaker(self.kernel.get_expression(bvec), bvec)
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale):
@@ -188,7 +188,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
         logger.info("building translation operator: done")
         return (
-            self.derivative_wrangler.get_stored_mpole_coefficients_from_full(
+            self.expansion_terms_wrangler.get_stored_mpole_coefficients_from_full(
                 result, tgt_rscale))
 
 

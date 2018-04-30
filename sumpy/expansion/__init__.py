@@ -28,13 +28,12 @@ import numpy as np
 import logging
 from pytools import memoize_method
 import sumpy.symbolic as sym
-from sumpy.tools import MiDerivativeTaker
 from collections import defaultdict
 
 
 __doc__ = """
 .. autoclass:: ExpansionBase
-.. autoclass:: LinearRecurrenceBasedDerivativeWrangler
+.. autoclass:: LinearRecurrenceBasedExpansionTermsWrangler
 
 Expansion Factories
 ^^^^^^^^^^^^^^^^^^^
@@ -159,9 +158,9 @@ class ExpansionBase(object):
 # }}}
 
 
-# {{{ derivative wrangler
+# {{{ expansion terms wrangler
 
-class DerivativeWrangler(object):
+class ExpansionTermsWrangler(object):
 
     def __init__(self, order, dim):
         self.order = order
@@ -178,9 +177,6 @@ class DerivativeWrangler(object):
             rscale):
         raise NotImplementedError
 
-    def get_derivative_taker(self, expr, var_list):
-        raise NotImplementedError
-
     @memoize_method
     def get_full_coefficient_identifiers(self):
         """
@@ -193,27 +189,6 @@ class DerivativeWrangler(object):
         res = sorted(gnitstam(self.order, self.dim), key=sum)
         return res
 
-    @memoize_method
-    def copy(self, order):
-        raise NotImplementedError
-
-
-class FullDerivativeWrangler(DerivativeWrangler):
-
-    def get_derivative_taker(self, expr, dvec):
-        return MiDerivativeTaker(expr, dvec)
-
-    get_coefficient_identifiers = (
-            DerivativeWrangler.get_full_coefficient_identifiers)
-
-    def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
-            rscale):
-        return stored_kernel_derivatives
-
-    get_stored_mpole_coefficients_from_full = (
-            get_full_kernel_derivatives_from_stored)
-
-    @memoize_method
     def copy(self, **kwargs):
         order = kwargs.pop('order', self.order)
         dim = kwargs.pop('dim', self.dim)
@@ -223,6 +198,19 @@ class FullDerivativeWrangler(DerivativeWrangler):
                 % ", ".join(kwargs))
 
         return type(self)(order, dim)
+
+
+class FullExpansionTermsWrangler(ExpansionTermsWrangler):
+
+    get_coefficient_identifiers = (
+            ExpansionTermsWrangler.get_full_coefficient_identifiers)
+
+    def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
+            rscale):
+        return stored_kernel_derivatives
+
+    get_stored_mpole_coefficients_from_full = (
+            get_full_kernel_derivatives_from_stored)
 
 
 # {{{ sparse matrix-vector multiplication
@@ -260,7 +248,7 @@ def _spmv(spmat, x, sparse_vectors):
 # }}}
 
 
-class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
+class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     """
     .. automethod:: __init__
     .. automethod:: get_pde_dict
@@ -271,13 +259,14 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
         r"""
         :param order: order of the expansion
         :param dim: number of dimensions
-        :param deriv_multiplier: a symbolic expression that is used to 'normalize out'
-            constant coefficients in the PDE in 
-            :func:`~LinearRecurrenceBasedDerivativeWrangler.get_pde_dict`, so that the
-            Taylor coefficient with multi-index :math:`\nu` as seen by that representation
-            of the PDE is :math:`\text{coeff} / {\text{deriv\_multiplier}^{|\nu|}}`.
+        :param deriv_multiplier: a symbolic expression that is used to
+            'normalize out' constant coefficients in the PDE in
+            :func:`~LinearRecurrenceBasedExpansionTermsWrangler.get_pde_dict`, so that
+            the Taylor coefficient with multi-index :math:`\nu` as seen by that
+            representation of the PDE is :math:`\text{coeff} /
+            {\text{deriv\_multiplier}^{|\nu|}}`.
         """
-        super(LinearRecurrenceBasedDerivativeWrangler, self).__init__(order, dim)
+        super(LinearRecurrenceBasedExpansionTermsWrangler, self).__init__(order, dim)
         self.deriv_multiplier = deriv_multiplier
 
     def get_coefficient_identifiers(self):
@@ -451,15 +440,11 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
         """
         raise NotImplementedError
 
-    def get_derivative_taker(self, expr, var_list):
-        from sumpy.tools import MiDerivativeTaker
-        return MiDerivativeTaker(expr, var_list)
 
-
-class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
+class LaplaceExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler):
 
     def __init__(self, order, dim):
-        super(LaplaceDerivativeWrangler, self).__init__(order, dim, 1)
+        super(LaplaceExpansionTermsWrangler, self).__init__(order, dim, 1)
 
     def get_pde_dict(self):
         pde_dict = {}
@@ -479,11 +464,11 @@ class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
         return idx
 
 
-class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
+class HelmholtzExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler):
 
     def __init__(self, order, dim, helmholtz_k_name):
         multiplier = sym.Symbol(helmholtz_k_name)
-        super(HelmholtzDerivativeWrangler, self).__init__(order, dim, multiplier)
+        super(HelmholtzExpansionTermsWrangler, self).__init__(order, dim, multiplier)
 
     def get_pde_dict(self, **kwargs):
         pde_dict = {}
@@ -511,31 +496,33 @@ class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
 class VolumeTaylorExpansionBase(object):
 
     @classmethod
-    def get_or_make_derivative_wrangler(cls, *key):
+    def get_or_make_expansion_terms_wrangler(cls, *key):
         """
-        This stores the derivative wrangler at the class attribute level because
-        precomputing the derivative wrangler may become expensive.
+        This stores the expansion terms wrangler at the class attribute level
+        because recreating the expansion terms wrangler implicitly empties its
+        caches.
         """
         try:
-            wrangler = cls.derivative_wrangler_cache[key]
+            wrangler = cls.expansion_terms_wrangler_cache[key]
         except KeyError:
-            wrangler = cls.derivative_wrangler_class(*key)
-            cls.derivative_wrangler_cache[key] = wrangler
+            wrangler = cls.expansion_terms_wrangler_class(*key)
+            cls.expansion_terms_wrangler_cache[key] = wrangler
 
         return wrangler
 
     @property
-    def derivative_wrangler(self):
-        return self.get_or_make_derivative_wrangler(*self.derivative_wrangler_key)
+    def expansion_terms_wrangler(self):
+        return self.get_or_make_expansion_terms_wrangler(
+                *self.expansion_terms_wrangler_key)
 
     def get_coefficient_identifiers(self):
         """
         Returns the identifiers of the coefficients that actually get stored.
         """
-        return self.derivative_wrangler.get_coefficient_identifiers()
+        return self.expansion_terms_wrangler.get_coefficient_identifiers()
 
     def get_full_coefficient_identifiers(self):
-        return self.derivative_wrangler.get_full_coefficient_identifiers()
+        return self.expansion_terms_wrangler.get_full_coefficient_identifiers()
 
     @property
     @memoize_method
@@ -549,33 +536,33 @@ class VolumeTaylorExpansionBase(object):
 
 class VolumeTaylorExpansion(VolumeTaylorExpansionBase):
 
-    derivative_wrangler_class = FullDerivativeWrangler
-    derivative_wrangler_cache = {}
+    expansion_terms_wrangler_class = FullExpansionTermsWrangler
+    expansion_terms_wrangler_cache = {}
 
     # not user-facing, be strict about having to pass use_rscale
     def __init__(self, kernel, order, use_rscale):
-        self.derivative_wrangler_key = (order, kernel.dim)
+        self.expansion_terms_wrangler_key = (order, kernel.dim)
 
 
 class LaplaceConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
 
-    derivative_wrangler_class = LaplaceDerivativeWrangler
-    derivative_wrangler_cache = {}
+    expansion_terms_wrangler_class = LaplaceExpansionTermsWrangler
+    expansion_terms_wrangler_cache = {}
 
     # not user-facing, be strict about having to pass use_rscale
     def __init__(self, kernel, order, use_rscale):
-        self.derivative_wrangler_key = (order, kernel.dim)
+        self.expansion_terms_wrangler_key = (order, kernel.dim)
 
 
 class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
 
-    derivative_wrangler_class = HelmholtzDerivativeWrangler
-    derivative_wrangler_cache = {}
+    expansion_terms_wrangler_class = HelmholtzExpansionTermsWrangler
+    expansion_terms_wrangler_cache = {}
 
     # not user-facing, be strict about having to pass use_rscale
     def __init__(self, kernel, order, use_rscale):
         helmholtz_k_name = kernel.get_base_kernel().helmholtz_k_name
-        self.derivative_wrangler_key = (order, kernel.dim, helmholtz_k_name)
+        self.expansion_terms_wrangler_key = (order, kernel.dim, helmholtz_k_name)
 
 # }}}
 
