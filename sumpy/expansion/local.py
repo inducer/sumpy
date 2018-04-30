@@ -194,10 +194,12 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                             tgtplusderiv_ident_to_index[add_mi(lexp_mi, term)]] \
                                     = coeff
 
+                # Compress the embedded coefficient set
                 stored_coeffs = tgtplusderiv_exp_terms_wrangler \
                         .get_stored_mpole_coefficients_from_full(
                                 embedded_coeffs, src_rscale)
 
+                # Sum the embeeded coefficient set
                 for i, coeff in enumerate(stored_coeffs):
                     if coeff == 0:
                         continue
