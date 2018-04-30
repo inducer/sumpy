@@ -169,8 +169,10 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
             src_max_sum = max(sum(mi) for mi in
                               src_expansion.get_coefficient_identifiers())
+            assert src_max_sum == src_expansion.order
             tgt_max_sum = max(sum(mi) for mi in
                               self.get_coefficient_identifiers())
+            assert tgt_max_sum == tgt_expansion.order            
 
             max_sum = src_max_sum + tgt_max_sum
             new_deriv_wrangler = \
@@ -209,6 +211,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                     local_result.append(
                             coeff * kernel_deriv * tgt_rscale**sum(deriv))
                 result.append(sym.Add(*local_result))
+
         else:
             from sumpy.tools import MiDerivativeTaker
             expr = src_expansion.evaluate(src_coeff_exprs, dvec, rscale=src_rscale)

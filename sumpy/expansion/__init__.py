@@ -217,6 +217,11 @@ class FullDerivativeWrangler(DerivativeWrangler):
     def copy(self, **kwargs):
         order = kwargs.pop('order', self.order)
         dim = kwargs.pop('dim', self.dim)
+
+        if kwargs:
+            raise TypeError("unexpected keyword arguments '%s'"
+                % ", ".join(kwargs))
+
         return type(self)(order, dim)
 
 
@@ -263,14 +268,14 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
     """
 
     def __init__(self, order, dim, deriv_multiplier):
-        """
+        r"""
         :param order: order of the expansion
         :param dim: number of dimensions
-        :param deriv_multiplier: symbolic expression that should be multiplied
-                    with each coefficient_identifier to recover the linear
-                    recurrence for the PDE.
-
-        .. seealso:: :func:`~LinearRecurrenceBasedDerivativeWrangler.get_pde_dict`
+        :param deriv_multiplier: a symbolic expression that is used to 'normalize out'
+            constant coefficients in the PDE in 
+            :func:`~LinearRecurrenceBasedDerivativeWrangler.get_pde_dict`, so that the
+            Taylor coefficient with multi-index :math:`\nu` as seen by that representation
+            of the PDE is :math:`\text{coeff} / {\text{deriv\_multiplier}^{|\nu|}}`.
         """
         super(LinearRecurrenceBasedDerivativeWrangler, self).__init__(order, dim)
         self.deriv_multiplier = deriv_multiplier
@@ -306,19 +311,19 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
         Return a matrix that expresses every derivative in terms of a
         set of "stored" derivatives.
 
-        For example, for the recurrence
+        For example, for the recurrence::
 
             u_xx + u_yy + u_zz = 0
 
-        the coefficient matrix features the following entries:
+        the coefficient matrix features the following entries::
 
-              ... u_xx u_yy ... <= cols = only stored derivatives
-             ==================
-         ...| ...  ...  ... ...
-            |
-        u_zz| ...  -1   -1  ...
+                ... u_xx u_yy ... <= cols = only stored derivatives
+                ==================
+             ...| ...  ...  ... ...
+                |
+            u_zz| ...  -1   -1  ...
 
-           ^ rows = one for every derivative
+            ^ rows = one for every derivative
         """
         stored_identifiers, coeff_matrix = self._get_stored_ids_and_coeff_mat()
 
@@ -347,9 +352,8 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
         tol = 1e-13
         stored_identifiers = []
 
-        import time
-        start_time = time.time()
-        logger.debug("computing recurrence for Taylor coefficients: start")
+        from pytools import ProcessLogger
+        plog = ProcessLogger(logger, "compute recurrence for Taylor coefficients")
 
         pde_dict = self.get_pde_dict()
         pde_mat = []
@@ -371,13 +375,18 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
                     else:
                         pde_mat.append(eq)
         if len(pde_mat) > 0:
-            """
+            r"""
             Find a matrix :math:`s` such that :math:`K = S^T K_{[r]}`
             where :math:`r` is the indices of the  reduced coefficients and
             :math:`K` is a column vector of coefficients. Let :math:`P` be the
-            PDE matrix and :math:`N` be the nullspace of :math:`P`.
+            PDE matrix, i.e. the matrix obtained by applying the PDE
+            as an identity to each of the Taylor coefficients.
+            (Realize that those, as functions of space, each still satisfy the PDE.)
+            As a result, if :math:`\mathbf\alpha` is a vector of Taylor coefficients,
+            one would expect :math:`P\mathbf\alpha = \mathbf 0`.
+            Further, let :math:`N` be the nullspace of :math:`P`.
             Then, :math:`S^T = N * N_{[r, :]}^{-1}` which implies,
-            :math:`S = N_{[r, :]}^{-T} N^T = solve(N_{[r, :]}^T, N^T)`
+            :math:`S = N_{[r, :]}^{-T} N^T = N_{[r, :]}^{-T} N^T`.
             """
             pde_mat = np.array(pde_mat, dtype=np.float64)
             n = nullspace(pde_mat, atol=tol)
@@ -397,9 +406,7 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
                 if np.abs(s[i][j]) > tol:
                     coeff_matrix[j].append((i, s[i][j]))
 
-        logger.debug("computing recurrence for Taylor coefficients: "
-                     "done after {dur:.2f} seconds"
-                     .format(dur=time.time() - start_time))
+        plog.done()
 
         logger.debug("number of Taylor coefficients was reduced from {orig} to {red}"
                      .format(orig=len(self.get_full_coefficient_identifiers()),
@@ -410,14 +417,18 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
     def get_pde_dict(self):
         r"""
         Returns the PDE as a dictionary of (mi, coeff) such that mi
-        is the multi index of the derivative and the PDE is represented by,
+        is the multi-index of the derivative and the PDE is represented by,
 
         .. math::
 
-            \sum(\frac{mi \times coeff}{deriv\_multiplier^{sum(mi)}}) = 0
+            \sum_{\nu,c_\nu\in \text{pde\_dict}}
+            \frac{c_\nu\cdot \alpha_\nu}
+            {\text{deriv\_multiplier}^{\sum \text{mi}}} = 0,
 
-        Note that coeff should be numeric instead of symbolic to enable use of
-        numeric linear algebra routines. `deriv_multiplier` can be symbolic
+        where :math:`\mathbf\alpha` is a coefficient vector.
+
+        Note that *coeff* should be a number (not symbolic) to enable use of
+        numeric linear algebra routines. *deriv_multiplier* can be symbolic
         and should be used when the PDE has symbolic values as coefficients
         for the derivatives.
 
@@ -443,16 +454,6 @@ class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
     def get_derivative_taker(self, expr, var_list):
         from sumpy.tools import MiDerivativeTaker
         return MiDerivativeTaker(expr, var_list)
-
-    @memoize_method
-    def copy(self, **kwargs):
-        obj = type(self).__new__(type(self))
-        order = kwargs.pop('order', self.order)
-        dim = kwargs.pop('dim', self.dim)
-        deriv_multiplier = kwargs.pop('deriv_multiplier', self.deriv_multiplier)
-        LinearRecurrenceBasedDerivativeWrangler.__init__(obj, order,
-            dim, deriv_multiplier)
-        return obj
 
 
 class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
