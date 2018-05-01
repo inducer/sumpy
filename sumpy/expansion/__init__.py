@@ -189,16 +189,6 @@ class ExpansionTermsWrangler(object):
         res = sorted(gnitstam(self.order, self.dim), key=sum)
         return res
 
-    def copy(self, **kwargs):
-        order = kwargs.pop('order', self.order)
-        dim = kwargs.pop('dim', self.dim)
-
-        if kwargs:
-            raise TypeError("unexpected keyword arguments '%s'"
-                % ", ".join(kwargs))
-
-        return type(self)(order, dim)
-
 
 class FullExpansionTermsWrangler(ExpansionTermsWrangler):
 
@@ -261,9 +251,9 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         :param dim: number of dimensions
         :param deriv_multiplier: a symbolic expression that is used to
             'normalize out' constant coefficients in the PDE in
-            :func:`~LinearRecurrenceBasedExpansionTermsWrangler.get_pde_dict`, so that
-            the Taylor coefficient with multi-index :math:`\nu` as seen by that
-            representation of the PDE is :math:`\text{coeff} /
+            :func:`~LinearRecurrenceBasedExpansionTermsWrangler.get_pde_dict`,
+            so that the Taylor coefficient with multi-index :math:`\nu` as seen
+            by that representation of the PDE is :math:`\text{coeff} /
             {\text{deriv\_multiplier}^{|\nu|}}`.
         """
         super(LinearRecurrenceBasedExpansionTermsWrangler, self).__init__(order, dim)
