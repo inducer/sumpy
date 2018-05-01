@@ -199,7 +199,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                         .get_stored_mpole_coefficients_from_full(
                                 embedded_coeffs, src_rscale)
 
-                # Sum the embeeded coefficient set
+                # Sum the embedded coefficient set
                 for i, coeff in enumerate(stored_coeffs):
                     if coeff == 0:
                         continue
