@@ -157,44 +157,64 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             #
             #    coeff0 * diff(kernel, mi0) + coeff1 * diff(kernel, mi1) + ...
             #
-            # The local is formed by differentiating the mpole, i.e. the
-            # target variable is in the mpole basis--so that is what the
-            # derivatives for the local will hit.
+            # To get the local expansion coefficients, we take derivatives of
+            # the multipole expansion.
             #
-            # We group the calculation here so that we take all derivatives
-            # in one big gulp, which ends up being more efficient than
-            # evaluating the mpole (as a giant sum) and then differentiating
-            # that.
-            #
-            # In particular, this speeds up derivative taking by allowing all
-            # kernel derivatives to be cached.
+            # This code speeds up derivative taking by caching all kernel
+            # derivatives.
 
             taker = src_expansion.get_kernel_derivative_taker(dvec)
 
             from sumpy.tools import add_mi
 
-            src_exp_terms_wrangler = src_expansion.expansion_terms_wrangler
-            src_exp_stored_coeff_ids = \
-                src_exp_terms_wrangler.get_coefficient_identifiers()
+            # Create a expansion terms wrangler for derivatives up to order
+            # (tgt order)+(src order).
+            tgtplusderiv_exp_terms_wrangler = \
+                src_expansion.expansion_terms_wrangler.copy(
+                        order=self.order + src_expansion.order)
+            tgtplusderiv_coeff_ids = \
+                tgtplusderiv_exp_terms_wrangler.get_coefficient_identifiers()
+            tgtplusderiv_full_coeff_ids = \
+                tgtplusderiv_exp_terms_wrangler.get_full_coefficient_identifiers()
+
+            tgtplusderiv_ident_to_index = dict((ident, i) for i, ident in
+                                enumerate(tgtplusderiv_full_coeff_ids))
 
             result = []
-            for tgt_coeff_id in self.get_coefficient_identifiers():
-                tgt_coeff_terms = []
+            for lexp_mi in self.get_coefficient_identifiers():
+                lexp_mi_terms = []
 
-                for src_coeff_id, coeff in zip(
-                        src_exp_stored_coeff_ids, src_coeff_exprs):
-                    nderivatives_for_scaling = sum(src_coeff_id)
-                    term_mi = add_mi(src_coeff_id, tgt_coeff_id)
+                # Embed the source coefficients in the coefficient array
+                # for the (tgt order)+(src order) wrangler, offset by lexp_mi.
+                embedded_coeffs = [0] * len(tgtplusderiv_full_coeff_ids)
+                for coeff, term in zip(
+                        src_coeff_exprs,
+                        src_expansion.get_coefficient_identifiers()):
+                    embedded_coeffs[
+                            tgtplusderiv_ident_to_index[add_mi(lexp_mi, term)]] \
+                                    = coeff
+
+                # Compress the embedded coefficient set
+                stored_coeffs = tgtplusderiv_exp_terms_wrangler \
+                        .get_stored_mpole_coefficients_from_full(
+                                embedded_coeffs, src_rscale)
+
+                # Sum the embeeded coefficient set
+                for i, coeff in enumerate(stored_coeffs):
+                    if coeff == 0:
+                        continue
+                    nderivatives_for_scaling = \
+                            sum(tgtplusderiv_coeff_ids[i])-sum(lexp_mi)
                     kernel_deriv = (
                             src_expansion.get_scaled_multipole(
-                                taker.diff(term_mi),
+                                taker.diff(tgtplusderiv_coeff_ids[i]),
                                 dvec, src_rscale,
-                                nderivatives=sum(term_mi),
+                                nderivatives=sum(tgtplusderiv_coeff_ids[i]),
                                 nderivatives_for_scaling=nderivatives_for_scaling))
 
-                    tgt_coeff_terms.append(
-                            coeff * kernel_deriv * tgt_rscale**sum(tgt_coeff_id))
-                result.append(sym.Add(*tgt_coeff_terms))
+                    lexp_mi_terms.append(
+                            coeff * kernel_deriv * tgt_rscale**sum(lexp_mi))
+                result.append(sym.Add(*lexp_mi_terms))
 
         else:
             from sumpy.tools import MiDerivativeTaker
