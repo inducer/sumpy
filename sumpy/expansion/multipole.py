@@ -97,6 +97,9 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             self.expansion_terms_wrangler.get_stored_mpole_coefficients_from_full(
                 result, rscale))
 
+    def get_multipole_scaling(self, rscale, nderivatives_for_scaling=None):
+        return rscale**nderivatives_for_scaling
+
     def get_scaled_multipole(self, expr, bvec, rscale, nderivatives,
             nderivatives_for_scaling=None):
         if nderivatives_for_scaling is None:
@@ -111,7 +114,8 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                         rscale, nderivatives)
                     / rscale ** (nderivatives - nderivatives_for_scaling))
         else:
-            return (rscale**nderivatives_for_scaling * expr)
+            return (expr
+                    * self.get_multipole_scaling(rscale, nderivatives_for_scaling))
 
     def evaluate(self, coeffs, bvec, rscale):
         if not self.use_rscale:

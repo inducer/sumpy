@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import six
 from six.moves import range, zip
 import sumpy.symbolic as sym
 
@@ -179,22 +180,24 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
             result = []
             for tgt_coeff_id in self.get_coefficient_identifiers():
-                tgt_coeff_terms = []
+                tgt_coeff_terms_by_deriv = {}
 
                 for src_coeff_id, coeff in zip(
                         src_exp_stored_coeff_ids, src_coeff_exprs):
-                    nderivatives_for_scaling = sum(src_coeff_id)
-                    term_mi = add_mi(src_coeff_id, tgt_coeff_id)
-                    kernel_deriv = (
-                            src_expansion.get_scaled_multipole(
-                                taker.diff(term_mi),
-                                dvec, src_rscale,
-                                nderivatives=sum(term_mi),
-                                nderivatives_for_scaling=nderivatives_for_scaling))
+                    diff_mi = add_mi(src_coeff_id, tgt_coeff_id)
 
-                    tgt_coeff_terms.append(
-                            coeff * kernel_deriv * tgt_rscale**sum(tgt_coeff_id))
-                result.append(sym.Add(*tgt_coeff_terms))
+                    tgt_coeff_terms_by_deriv.setdefault(diff_mi, []).append(
+                            coeff
+                            * tgt_rscale**sum(tgt_coeff_id)
+                            * src_expansion.get_multipole_scaling(
+                                    rscale=src_rscale,
+                                    nderivatives_for_scaling=sum(src_coeff_id)))
+
+                result.append(
+                        sym.Add(*[
+                            taker.diff(diff_mi) * sym.Add(*coeffs)
+                            for diff_mi, coeffs
+                            in six.iteritems(tgt_coeff_terms_by_deriv)]))
 
         else:
             from sumpy.tools import MiDerivativeTaker
