@@ -378,7 +378,7 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                         c = tuple(pde_mi2 + diff)
                         if c not in coeff_ident_enumerate_dict:
                             break
-                        eq[coeff_ident_enumerate_dict[c]] = 1
+                        eq[coeff_ident_enumerate_dict[c]] = coeff
                     else:
                         pde_mat.append(eq)
         if len(pde_mat) > 0:
