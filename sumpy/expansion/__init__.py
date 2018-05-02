@@ -162,11 +162,12 @@ class ExpansionBase(object):
 
 class ExpansionTermsWrangler(object):
 
-    init_arg_names = ("order", "dim")
+    init_arg_names = ("order", "dim", "max_mi")
 
-    def __init__(self, order, dim):
+    def __init__(self, order, dim, max_mi=None):
         self.order = order
         self.dim = dim
+        self.max_mi = max_mi
 
     def get_coefficient_identifiers(self):
         raise NotImplementedError
@@ -189,6 +190,16 @@ class ExpansionTermsWrangler(object):
                 as gnitstam)
 
         res = sorted(gnitstam(self.order, self.dim), key=sum)
+
+        def filter_tuple(tup):
+            if self.max_mi is None:
+                return True
+            for a, b in zip(tup, self.max_mi):
+                if a > b:
+                    return False
+            return True
+
+        res = list(filter(filter_tuple, res))
         return res
 
     def copy(self, **kwargs):
@@ -196,8 +207,8 @@ class ExpansionTermsWrangler(object):
                 (name, getattr(self, name))
                 for name in self.init_arg_names)
 
-        new_kwargs["order"] = kwargs.pop("order", self.order)
-        new_kwargs["dim"] = kwargs.pop("dim", self.dim)
+        for name in self.init_arg_names:
+            new_kwargs[name] = kwargs.pop(name, getattr(self, name))
 
         if kwargs:
             raise TypeError("unexpected keyword arguments '%s'"
@@ -261,9 +272,9 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     .. automethod:: get_reduced_coeffs
     """
 
-    init_arg_names = ("order", "dim", "deriv_multiplier")
+    init_arg_names = ("order", "dim", "deriv_multiplier", "max_mi")
 
-    def __init__(self, order, dim, deriv_multiplier):
+    def __init__(self, order, dim, deriv_multiplier, max_mi=None):
         r"""
         :param order: order of the expansion
         :param dim: number of dimensions
@@ -274,7 +285,7 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             that representation of the PDE is :math:`\text{coeff} /
             {\text{deriv\_multiplier}^{|\nu|}}`.
         """
-        super(LinearRecurrenceBasedExpansionTermsWrangler, self).__init__(order, dim)
+        super(LinearRecurrenceBasedExpansionTermsWrangler, self).__init__(order, dim, max_mi)
         self.deriv_multiplier = deriv_multiplier
 
     def get_coefficient_identifiers(self):
@@ -354,7 +365,6 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         pde_dict = self.get_pde_dict()
         pde_mat = []
-
         mis = self.get_full_coefficient_identifiers()
         coeff_ident_enumerate_dict = dict((tuple(mi), i) for
                                             (i, mi) in enumerate(mis))
@@ -385,11 +395,10 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             Then, :math:`S^T = N * N_{[r, :]}^{-1}` which implies,
             :math:`S = N_{[r, :]}^{-T} N^T = N_{[r, :]}^{-T} N^T`.
             """
-            pde_mat = np.array(pde_mat, dtype=np.float64)
-            n = nullspace(pde_mat, atol=tol)
+            n = nullspace(pde_mat)
             idx = self.get_reduced_coeffs()
             assert len(idx) >= n.shape[1]
-            s = np.linalg.solve(n.T[:, idx], n.T)
+            s = n.T[:, idx].solve(n.T)
             stored_identifiers = [mis[i] for i in idx]
         else:
             s = np.eye(len(mis))
@@ -400,8 +409,8 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         coeff_matrix = defaultdict(list)
         for i in range(s.shape[0]):
             for j in range(s.shape[1]):
-                if np.abs(s[i][j]) > tol:
-                    coeff_matrix[j].append((i, s[i][j]))
+                if np.abs(s[i, j]) > tol:
+                    coeff_matrix[j].append((i, s[i, j]))
 
         plog.done()
 
@@ -453,10 +462,10 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
 class LaplaceExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler):
 
-    init_arg_names = ("order", "dim")
+    init_arg_names = ("order", "dim", "max_mi")
 
-    def __init__(self, order, dim):
-        super(LaplaceExpansionTermsWrangler, self).__init__(order, dim, 1)
+    def __init__(self, order, dim, max_mi=None):
+        super(LaplaceExpansionTermsWrangler, self).__init__(order, dim, 1, max_mi)
 
     def get_pde_dict(self):
         pde_dict = {}
@@ -478,13 +487,13 @@ class LaplaceExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler)
 
 class HelmholtzExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler):
 
-    init_arg_names = ("order", "dim", "helmholtz_k_name")
+    init_arg_names = ("order", "dim", "helmholtz_k_name", "max_mi")
 
-    def __init__(self, order, dim, helmholtz_k_name):
+    def __init__(self, order, dim, helmholtz_k_name, max_mi=None):
         self.helmholtz_k_name = helmholtz_k_name
 
         multiplier = sym.Symbol(helmholtz_k_name)
-        super(HelmholtzExpansionTermsWrangler, self).__init__(order, dim, multiplier)
+        super(HelmholtzExpansionTermsWrangler, self).__init__(order, dim, multiplier, max_mi)
 
     def get_pde_dict(self, **kwargs):
         pde_dict = {}

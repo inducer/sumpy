@@ -401,48 +401,55 @@ def my_syntactic_subs(expr, subst_dict):
         return expr
 
 
-# Source: http://scipy-cookbook.readthedocs.io/items/RankNullspace.html
-# Author: SciPy Developers
-# License: BSD-3-Clause
+def rref(mat):
+    rows = len(mat)
+    cols = len(mat[0])
+    col = 0
+    pivot_cols = []
 
-def nullspace(A, atol=1e-13, rtol=0):  # noqa:N803
-    """Compute an approximate basis for the nullspace of A.
+    for row in range(rows):
+        if col >= cols:
+            break
+        i = row
+        while mat[i][col] == 0:
+            i += 1
+            if i == rows:
+                i = row
+                col += 1
+                if col == cols:
+                    return mat, pivot_cols
 
-    The algorithm used by this function is based on the singular value
-    decomposition of `A`.
+        pivot_cols.append(col)
+        mat[i], mat[row] = mat[row], mat[i]
 
-    Parameters
-    ----------
-    A : ndarray
-        A should be at most 2-D.  A 1-D array with length k will be treated
-        as a 2-D with shape (1, k)
-    atol : float
-        The absolute tolerance for a zero singular value.  Singular values
-        smaller than `atol` are considered to be zero.
-    rtol : float
-        The relative tolerance.  Singular values less than rtol*smax are
-        considered to be zero, where smax is the largest singular value.
+        piv = mat[row][col]
+        for c in range(col, cols):
+            mat[row][c] /= piv
 
-    If both `atol` and `rtol` are positive, the combined tolerance is the
-    maximum of the two; that is::
-        tol = max(atol, rtol * smax)
-    Singular values smaller than `tol` are considered to be zero.
+        for r in range(rows):
+            if r == row:
+                continue
+            piv = mat[r][col]
+            for c in range(col, cols):
+                mat[r][c] -= piv * mat[row][c]
+        col += 1
+    return mat, pivot_cols
 
-    Return value
-    ------------
-    ns : ndarray
-        If `A` is an array with shape (m, k), then `ns` will be an array
-        with shape (k, n), where n is the estimated dimension of the
-        nullspace of `A`.  The columns of `ns` are a basis for the
-        nullspace; each element in numpy.dot(A, ns) will be approximately
-        zero.
-    """
-    from numpy.linalg import svd
-    A = np.atleast_2d(A)  # noqa:N806
-    u, s, vh = svd(A)
-    tol = max(atol, rtol * s[0])
-    nnz = (s >= tol).sum()
-    ns = vh[nnz:].conj().T
-    return ns
+def nullspace(m):
+    m2 = [[sym.sympify(col) for col in row] for row in m]
+    mat, pivot_cols = rref(m2)
+    cols = len(mat[0])
+
+    free_vars = [i for i in range(cols) if i not in pivot_cols]
+
+    n = []
+    for free_var in free_vars:
+        vec = [0]*cols
+        vec[free_var] = 1
+        for piv_row, piv_col in enumerate(pivot_cols):
+            for pos in pivot_cols[piv_row+1:] + [free_var]:
+                vec[piv_col] -= mat[piv_row][pos]
+        n.append(vec)
+    return sym.Matrix(n).T
 
 # vim: fdm=marker

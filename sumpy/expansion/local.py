@@ -167,11 +167,18 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
             from sumpy.tools import add_mi
 
+            max_mi = [0]*self.dim
+            for i in range(self.dim):
+                max_mi[i] = max(mi[i] for mi in
+                                  src_expansion.get_coefficient_identifiers())
+                max_mi[i] += max(mi[i] for mi in
+                                  self.get_coefficient_identifiers())
+
             # Create a expansion terms wrangler for derivatives up to order
             # (tgt order)+(src order).
             tgtplusderiv_exp_terms_wrangler = \
                 src_expansion.expansion_terms_wrangler.copy(
-                        order=self.order + src_expansion.order)
+                        order=self.order + src_expansion.order, max_mi=tuple(max_mi))
             tgtplusderiv_coeff_ids = \
                 tgtplusderiv_exp_terms_wrangler.get_coefficient_identifiers()
             tgtplusderiv_full_coeff_ids = \
