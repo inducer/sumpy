@@ -435,6 +435,7 @@ def rref(mat):
         col += 1
     return mat, pivot_cols
 
+
 def nullspace(m):
     m2 = [[sym.sympify(col) for col in row] for row in m]
     mat, pivot_cols = rref(m2)

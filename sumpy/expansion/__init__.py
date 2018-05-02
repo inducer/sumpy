@@ -285,7 +285,8 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             that representation of the PDE is :math:`\text{coeff} /
             {\text{deriv\_multiplier}^{|\nu|}}`.
         """
-        super(LinearRecurrenceBasedExpansionTermsWrangler, self).__init__(order, dim, max_mi)
+        super(LinearRecurrenceBasedExpansionTermsWrangler, self).__init__(order, dim,
+                max_mi)
         self.deriv_multiplier = deriv_multiplier
 
     def get_coefficient_identifiers(self):
@@ -493,7 +494,8 @@ class HelmholtzExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangle
         self.helmholtz_k_name = helmholtz_k_name
 
         multiplier = sym.Symbol(helmholtz_k_name)
-        super(HelmholtzExpansionTermsWrangler, self).__init__(order, dim, multiplier, max_mi)
+        super(HelmholtzExpansionTermsWrangler, self).__init__(order, dim, multiplier,
+                max_mi)
 
     def get_pde_dict(self, **kwargs):
         pde_dict = {}
