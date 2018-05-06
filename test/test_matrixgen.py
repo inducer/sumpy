@@ -31,6 +31,8 @@ import pyopencl as cl
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 
+from sumpy.tools import MatrixBlockIndex
+
 import logging
 logger = logging.getLogger(__name__)
 
@@ -63,7 +65,28 @@ def create_arguments(n, mode, target_radius=1.0):
     return targets, sources, centers, sigma, expansion_radii
 
 
-def test_qbx_direct(ctx_getter):
+def create_index_subset(nnodes, nblks, factor):
+    indices = np.arange(0, nnodes)
+    ranges = np.arange(0, nnodes + 1, nnodes // nblks)
+
+    if abs(factor - 1.0) < 1.0e-14:
+        ranges_ = ranges
+        indices_ = indices
+    else:
+        indices_ = np.empty(ranges.shape[0] - 1, dtype=np.object)
+        for i in range(ranges.shape[0] - 1):
+            iidx = indices[np.s_[ranges[i]:ranges[i + 1]]]
+            indices_[i] = np.sort(np.random.choice(iidx,
+                size=int(factor * len(iidx)), replace=False))
+
+        ranges_ = np.cumsum([0] + [r.shape[0] for r in indices_])
+        indices_ = np.hstack(indices_)
+
+    return indices_, ranges_
+
+
+@pytest.mark.parametrize('factor', [1.0, 0.6])
+def test_qbx_direct(ctx_getter, factor):
     # This evaluates a single layer potential on a circle.
     logging.basicConfig(level=logging.INFO)
 
@@ -73,15 +96,19 @@ def test_qbx_direct(ctx_getter):
     from sumpy.kernel import LaplaceKernel
     lknl = LaplaceKernel(2)
 
+    nblks = 10
     order = 12
     mode_nr = 25
 
     from sumpy.qbx import LayerPotential
     from sumpy.qbx import LayerPotentialMatrixGenerator
+    from sumpy.qbx import LayerPotentialMatrixBlockGenerator
     from sumpy.expansion.local import LineTaylorLocalExpansion
+    lpot = LayerPotential(ctx, [LineTaylorLocalExpansion(lknl, order)])
     mat_gen = LayerPotentialMatrixGenerator(ctx,
             [LineTaylorLocalExpansion(lknl, order)])
-    lpot = LayerPotential(ctx, [LineTaylorLocalExpansion(lknl, order)])
+    blk_gen = LayerPotentialMatrixBlockGenerator(ctx,
+            [LineTaylorLocalExpansion(lknl, order)])
 
     for n in [200, 300, 400]:
         targets, sources, centers, sigma, expansion_radii = \
@@ -90,34 +117,49 @@ def test_qbx_direct(ctx_getter):
         h = 2 * np.pi / n
         strengths = (sigma * h,)
 
+        tgtindices, tgtranges = create_index_subset(n, nblks, factor)
+        srcindices, srcranges = create_index_subset(n, nblks, factor)
+        assert tgtranges.shape == srcranges.shape
+
         _, (mat,) = mat_gen(queue, targets, sources, centers,
-                expansion_radii=expansion_radii)
+                expansion_radii)
         result_mat = mat.dot(strengths[0])
 
         _, (result_lpot,) = lpot(queue, targets, sources, centers, strengths,
-                expansion_radii=expansion_radii)
+                expansion_radii)
 
         eps = 1.0e-10 * la.norm(result_lpot)
         assert la.norm(result_mat - result_lpot) < eps
 
+        index_set = MatrixBlockIndex(queue,
+            tgtindices, srcindices, tgtranges, srcranges)
+        _, (blk,) = blk_gen(queue, targets, sources, centers, expansion_radii,
+                            index_set)
 
-@pytest.mark.parametrize("exclude_self", [True, False])
-def test_p2p_direct(ctx_getter, exclude_self):
-    # This evaluates a single layer potential on a circle.
+        rowindices, colindices = index_set.linear_indices()
+        eps = 1.0e-10 * la.norm(mat)
+        assert la.norm(blk - mat[rowindices, colindices].reshape(-1)) < eps
+
+
+@pytest.mark.parametrize(("exclude_self", "factor"),
+    [(True, 1.0), (True, 0.6), (False, 1.0), (False, 0.6)])
+def test_p2p_direct(ctx_getter, exclude_self, factor):
+    # This does a point-to-point kernel evaluation on a circle.
     logging.basicConfig(level=logging.INFO)
-
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
 
     from sumpy.kernel import LaplaceKernel
     lknl = LaplaceKernel(2)
 
+    nblks = 10
     mode_nr = 25
 
     from sumpy.p2p import P2P
-    from sumpy.p2p import P2PMatrixGenerator
-    mat_gen = P2PMatrixGenerator(ctx, [lknl], exclude_self=exclude_self)
+    from sumpy.p2p import P2PMatrixGenerator, P2PMatrixBlockGenerator
     lpot = P2P(ctx, [lknl], exclude_self=exclude_self)
+    mat_gen = P2PMatrixGenerator(ctx, [lknl], exclude_self=exclude_self)
+    blk_gen = P2PMatrixBlockGenerator(ctx, [lknl], exclude_self=exclude_self)
 
     for n in [200, 300, 400]:
         targets, sources, _, sigma, _ = \
@@ -125,6 +167,10 @@ def test_p2p_direct(ctx_getter, exclude_self):
 
         h = 2 * np.pi / n
         strengths = (sigma * h,)
+
+        tgtindices, tgtranges = create_index_subset(n, nblks, factor)
+        srcindices, srcranges = create_index_subset(n, nblks, factor)
+        assert tgtranges.shape == srcranges.shape
 
         extra_kwargs = {}
         if exclude_self:
@@ -139,6 +185,14 @@ def test_p2p_direct(ctx_getter, exclude_self):
         eps = 1.0e-10 * la.norm(result_lpot)
         assert la.norm(result_mat - result_lpot) < eps
 
+        index_set = MatrixBlockIndex(queue,
+                tgtindices, srcindices, tgtranges, srcranges)
+        _, (blk,) = blk_gen(queue, targets, sources, index_set, **extra_kwargs)
+
+        rowindices, colindices = index_set.linear_indices()
+        eps = 1.0e-10 * la.norm(mat)
+        assert la.norm(blk - mat[rowindices, colindices].reshape(-1)) < eps
+
 
 # You can test individual routines by typing
 # $ python test_kernels.py 'test_p2p(cl.create_some_context)'
@@ -147,7 +201,7 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
     else:
-        from py.test.cmdline import main
+        from pytest import main
         main([__file__])
 
 # vim: fdm=marker

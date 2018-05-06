@@ -449,8 +449,7 @@ class SumpyExpansionWrangler(object):
         return local_exps
 
     def eval_multipoles(self,
-            level_start_target_box_nrs,
-            target_boxes, source_boxes_by_level, mpole_exps):
+            target_boxes_by_source_level, source_boxes_by_level, mpole_exps):
         pot = self.output_zeros()
 
         kwargs = self.kernel_extra_kwargs.copy()
@@ -458,8 +457,9 @@ class SumpyExpansionWrangler(object):
 
         wait_for = mpole_exps.events
 
+        has_evt = False
         for isrc_level, ssn in enumerate(source_boxes_by_level):
-            if len(target_boxes) == 0:
+            if len(target_boxes_by_source_level[isrc_level]) == 0:
                 continue
 
             m2p = self.code.m2p(self.level_orders[isrc_level])
@@ -473,7 +473,7 @@ class SumpyExpansionWrangler(object):
                     src_expansions=source_mpoles_view,
                     src_base_ibox=source_level_start_ibox,
 
-                    target_boxes=target_boxes,
+                    target_boxes=target_boxes_by_source_level[isrc_level],
                     source_box_starts=ssn.starts,
                     source_box_lists=ssn.lists,
                     centers=self.tree.box_centers,
@@ -485,14 +485,16 @@ class SumpyExpansionWrangler(object):
 
                     **kwargs)
 
+            has_evt = True
             wait_for = [evt]
 
             for pot_i, pot_res_i in zip(pot, pot_res):
                 assert pot_i is pot_res_i
 
-        for pot_i in pot:
-            # Intentionally only adding the last event.
-            pot_i.add_event(evt)
+        if has_evt:
+            for pot_i in pot:
+                # Intentionally only adding the last event.
+                pot_i.add_event(evt)
 
         return pot
 
