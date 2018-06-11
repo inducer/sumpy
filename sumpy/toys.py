@@ -445,6 +445,11 @@ class ExpansionPotentialSource(PotentialSource):
         self.expn_style = expn_style
         self.text_kwargs = text_kwargs
 
+    def with_coeffs(self, coeffs):
+        return type(self)(self.toy_ctx, self.center, self.rscale, self.order,
+                coeffs, self.derived_from, radius=self.radius,
+                expn_style=self.expn_style, text_kwargs=self.text_kwargs)
+
 
 class MultipoleExpansion(ExpansionPotentialSource):
     def eval(self, targets):
