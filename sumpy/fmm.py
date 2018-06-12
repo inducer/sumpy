@@ -34,7 +34,7 @@ from six.moves import zip
 import pyopencl as cl
 import pyopencl.array  # noqa
 
-from pytools import memoize_method
+from pytools import memoize_method, record_time
 
 from sumpy import (
         P2EFromSingleBox, P2EFromCSR,
@@ -263,9 +263,11 @@ class SumpyExpansionWrangler(object):
                     dtype=self.dtype)
                 for k in self.code.out_kernels])
 
+    @record_time("timing_data")
     def reorder_sources(self, source_array):
         return source_array.with_queue(self.queue)[self.tree.user_source_ids]
 
+    @record_time("timing_data")
     def reorder_potentials(self, potentials):
         from pytools.obj_array import is_obj_array, with_object_array_or_scalar
         assert is_obj_array(potentials)
@@ -297,6 +299,7 @@ class SumpyExpansionWrangler(object):
 
     # }}}
 
+    @record_time("timing_data")
     def form_multipoles(self,
             level_start_source_box_nrs, source_boxes,
             src_weights):
@@ -330,6 +333,7 @@ class SumpyExpansionWrangler(object):
 
         return mpoles
 
+    @record_time("timing_data")
     def coarsen_multipoles(self,
             level_start_source_parent_box_nrs,
             source_parent_boxes,
@@ -385,6 +389,7 @@ class SumpyExpansionWrangler(object):
 
         return mpoles
 
+    @record_time("timing_data")
     def eval_direct(self, target_boxes, source_box_starts,
             source_box_lists, src_weights):
         pot = self.output_zeros()
@@ -409,6 +414,7 @@ class SumpyExpansionWrangler(object):
 
         return pot
 
+    @record_time("timing_data")
     def multipole_to_local(self,
             level_start_target_box_nrs,
             target_boxes, src_box_starts, src_box_lists,
@@ -448,6 +454,7 @@ class SumpyExpansionWrangler(object):
 
         return local_exps
 
+    @record_time("timing_data")
     def eval_multipoles(self,
             target_boxes_by_source_level, source_boxes_by_level, mpole_exps):
         pot = self.output_zeros()
@@ -498,6 +505,7 @@ class SumpyExpansionWrangler(object):
 
         return pot
 
+    @record_time("timing_data")
     def form_locals(self,
             level_start_target_or_target_parent_box_nrs,
             target_or_target_parent_boxes, starts, lists, src_weights):
@@ -536,6 +544,7 @@ class SumpyExpansionWrangler(object):
 
         return local_exps
 
+    @record_time("timing_data")
     def refine_locals(self,
             level_start_target_or_target_parent_box_nrs,
             target_or_target_parent_boxes,
@@ -577,6 +586,7 @@ class SumpyExpansionWrangler(object):
 
         return local_exps
 
+    @record_time("timing_data")
     def eval_locals(self, level_start_target_box_nrs, target_boxes, local_exps):
         pot = self.output_zeros()
 
@@ -612,6 +622,7 @@ class SumpyExpansionWrangler(object):
 
         return pot
 
+    @record_time("timing_data")
     def finalize_potentials(self, potentials):
         return potentials
 
