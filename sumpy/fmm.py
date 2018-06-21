@@ -34,7 +34,7 @@ from six.moves import zip
 import pyopencl as cl
 import pyopencl.array  # noqa
 
-from pytools import memoize_method, record_time
+from pytools import memoize_method
 
 from sumpy import (
         P2EFromSingleBox, P2EFromCSR,
@@ -145,7 +145,33 @@ class SumpyExpansionWranglerCodeContainer(object):
 # }}}
 
 
+# {{{ timing future
+
+_SECONDS_PER_NANOSECOND = 1e-9
+
+
+class TimingFuture(object):
+
+    def __init__(self, events):
+        self.events = events
+
+    def __call__(self):
+        pyopencl.wait_for_events(self.events)
+
+        result = 0
+        for event in self.events:
+            result += event.profile.end - event.profile.start
+
+        return result * _SECONDS_PER_NANOSECOND
+
+# }}}
+
+
 # {{{ expansion wrangler
+
+class UnableToCollectTimingData(UserWarning):
+    pass
+
 
 class SumpyExpansionWrangler(object):
     """Implements the :class:`boxtree.fmm.ExpansionWranglerInterface`
@@ -175,6 +201,7 @@ class SumpyExpansionWrangler(object):
         self.code = code_container
         self.queue = queue
         self.tree = tree
+        self.issued_timing_data_warning = False
 
         self.dtype = dtype
 
@@ -263,11 +290,9 @@ class SumpyExpansionWrangler(object):
                     dtype=self.dtype)
                 for k in self.code.out_kernels])
 
-    @record_time("timing_data")
     def reorder_sources(self, source_array):
         return source_array.with_queue(self.queue)[self.tree.user_source_ids]
 
-    @record_time("timing_data")
     def reorder_potentials(self, potentials):
         from pytools.obj_array import is_obj_array, with_object_array_or_scalar
         assert is_obj_array(potentials)
@@ -299,14 +324,34 @@ class SumpyExpansionWrangler(object):
 
     # }}}
 
-    @record_time("timing_data")
+    def _update_timing_data(self, description, timing_data, events):
+        if timing_data is None:
+            return
+
+        if not self.queue.properties & cl.command_queue_properties.PROFILING_ENABLE:
+            if not self.issued_timing_data_warning:
+                from warnings import warn
+                warn(
+                        "Profiling was not enabled in the command queue. "
+                        "Timing data will not be collected.",
+                        category=UnableToCollectTimingData,
+                        stacklevel=3)
+
+            self.issued_timing_data_warning = True
+            return
+
+        timing_data["description"] = description
+        timing_data["callback"] = TimingFuture(events)
+
     def form_multipoles(self,
             level_start_source_box_nrs, source_boxes,
-            src_weights):
+            src_weights, timing_data=None):
         mpoles = self.multipole_expansion_zeros()
 
         kwargs = self.extra_kwargs.copy()
         kwargs.update(self.box_source_list_kwargs())
+
+        events = []
 
         for lev in range(self.tree.nlevels):
             p2m = self.code.p2m(self.level_orders[lev])
@@ -328,19 +373,21 @@ class SumpyExpansionWrangler(object):
                     rscale=level_to_rscale(self.tree, lev),
 
                     **kwargs)
+            events.append(evt)
 
             assert mpoles_res is mpoles_view
 
+        self._update_timing_data("form_multipoles", timing_data, events)
+
         return mpoles
 
-    @record_time("timing_data")
     def coarsen_multipoles(self,
             level_start_source_parent_box_nrs,
             source_parent_boxes,
-            mpoles):
+            mpoles, timing_data=None):
         tree = self.tree
 
-        evt = None
+        events = []
 
         # nlevels-1 is the last valid level index
         # nlevels-2 is the last valid level that could have children
@@ -382,22 +429,27 @@ class SumpyExpansionWrangler(object):
                     tgt_rscale=level_to_rscale(self.tree, target_level),
 
                     **self.kernel_extra_kwargs)
+            events.append(evt)
+
             assert mpoles_res is target_mpoles_view
 
-        if evt is not None:
-            mpoles.add_event(evt)
+        if events:
+            mpoles.add_event(events[-1])
+
+        self._update_timing_data("coarsen_multipoles", timing_data, events)
 
         return mpoles
 
-    @record_time("timing_data")
     def eval_direct(self, target_boxes, source_box_starts,
-            source_box_lists, src_weights):
+            source_box_lists, src_weights, timing_data=None):
         pot = self.output_zeros()
 
         kwargs = self.extra_kwargs.copy()
         kwargs.update(self.self_extra_kwargs)
         kwargs.update(self.box_source_list_kwargs())
         kwargs.update(self.box_target_list_kwargs())
+
+        events = []
 
         evt, pot_res = self.code.p2p()(self.queue,
                 target_boxes=target_boxes,
@@ -407,19 +459,23 @@ class SumpyExpansionWrangler(object):
                 result=pot,
 
                 **kwargs)
+        events.append(evt)
 
         for pot_i, pot_res_i in zip(pot, pot_res):
             assert pot_i is pot_res_i
             pot_i.add_event(evt)
 
+        self._update_timing_data("eval_direct", timing_data, events)
+
         return pot
 
-    @record_time("timing_data")
     def multipole_to_local(self,
             level_start_target_box_nrs,
             target_boxes, src_box_starts, src_box_lists,
-            mpole_exps):
+            mpole_exps, timing_data=None):
         local_exps = self.local_expansion_zeros()
+
+        events = []
 
         for lev in range(self.tree.nlevels):
             start, stop = level_start_target_box_nrs[lev:lev+2]
@@ -451,20 +507,24 @@ class SumpyExpansionWrangler(object):
                     tgt_rscale=level_to_rscale(self.tree, lev),
 
                     **self.kernel_extra_kwargs)
+            events.append(evt)
+
+        self._update_timing_data("eval_direct", timing_data, events)
 
         return local_exps
 
-    @record_time("timing_data")
     def eval_multipoles(self,
-            target_boxes_by_source_level, source_boxes_by_level, mpole_exps):
+            target_boxes_by_source_level, source_boxes_by_level, mpole_exps,
+            timing_data=None):
         pot = self.output_zeros()
 
         kwargs = self.kernel_extra_kwargs.copy()
         kwargs.update(self.box_target_list_kwargs())
 
+        events = []
+
         wait_for = mpole_exps.events
 
-        has_evt = False
         for isrc_level, ssn in enumerate(source_boxes_by_level):
             if len(target_boxes_by_source_level[isrc_level]) == 0:
                 continue
@@ -491,28 +551,31 @@ class SumpyExpansionWrangler(object):
                     wait_for=wait_for,
 
                     **kwargs)
+            events.append(evt)
 
-            has_evt = True
             wait_for = [evt]
 
             for pot_i, pot_res_i in zip(pot, pot_res):
                 assert pot_i is pot_res_i
 
-        if has_evt:
+        if events:
             for pot_i in pot:
-                # Intentionally only adding the last event.
-                pot_i.add_event(evt)
+                pot_i.add_event(events[-1])
+
+        self._update_timing_data("eval_multipoles", timing_data, events)
 
         return pot
 
-    @record_time("timing_data")
     def form_locals(self,
             level_start_target_or_target_parent_box_nrs,
-            target_or_target_parent_boxes, starts, lists, src_weights):
+            target_or_target_parent_boxes, starts, lists, src_weights,
+            timing_data=None):
         local_exps = self.local_expansion_zeros()
 
         kwargs = self.extra_kwargs.copy()
         kwargs.update(self.box_source_list_kwargs())
+
+        events = []
 
         for lev in range(self.tree.nlevels):
             start, stop = \
@@ -539,16 +602,21 @@ class SumpyExpansionWrangler(object):
                     rscale=level_to_rscale(self.tree, lev),
 
                     **kwargs)
+            events.append(evt)
 
             assert result is target_local_exps_view
 
+        self._update_timing_data("form_locals", timing_data, events)
+
         return local_exps
 
-    @record_time("timing_data")
     def refine_locals(self,
             level_start_target_or_target_parent_box_nrs,
             target_or_target_parent_boxes,
-            local_exps):
+            local_exps, timing_data=None):
+
+        events = []
+
         for target_lev in range(1, self.tree.nlevels):
             start, stop = level_start_target_or_target_parent_box_nrs[
                     target_lev:target_lev+2]
@@ -579,19 +647,24 @@ class SumpyExpansionWrangler(object):
                     tgt_rscale=level_to_rscale(self.tree, target_lev),
 
                     **self.kernel_extra_kwargs)
+            events.append(evt)
 
             assert local_exps_res is target_local_exps_view
 
         local_exps.add_event(evt)
 
+        self._update_timing_data("refine_locals", timing_data, events)
+
         return local_exps
 
-    @record_time("timing_data")
-    def eval_locals(self, level_start_target_box_nrs, target_boxes, local_exps):
+    def eval_locals(self, level_start_target_box_nrs, target_boxes, local_exps,
+            timing_data=None):
         pot = self.output_zeros()
 
         kwargs = self.kernel_extra_kwargs.copy()
         kwargs.update(self.box_target_list_kwargs())
+
+        events = []
 
         for lev in range(self.tree.nlevels):
             start, stop = level_start_target_box_nrs[lev:lev+2]
@@ -616,13 +689,15 @@ class SumpyExpansionWrangler(object):
                     rscale=level_to_rscale(self.tree, lev),
 
                     **kwargs)
+            events.append(evt)
 
             for pot_i, pot_res_i in zip(pot, pot_res):
                 assert pot_i is pot_res_i
 
+        self._update_timing_data("eval_locals", timing_data, events)
+
         return pot
 
-    @record_time("timing_data")
     def finalize_potentials(self, potentials):
         return potentials
 
