@@ -27,7 +27,6 @@ import numpy as np
 import numpy.linalg as la
 
 import pyopencl as cl
-import pyopencl.array
 
 from pytools.obj_array import make_obj_array
 
