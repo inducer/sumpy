@@ -26,12 +26,17 @@ import sys
 import numpy as np
 import numpy.linalg as la
 
-import pytest
 import pyopencl as cl
+import pyopencl.array
+
+from pytools.obj_array import make_obj_array
+
+from sumpy.tools import MatrixBlockIndex
+
+import pytest
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 
-from sumpy.tools import MatrixBlockIndex
 
 import logging
 logger = logging.getLogger(__name__)
@@ -44,7 +49,7 @@ else:
     faulthandler.enable()
 
 
-def create_arguments(n, mode, target_radius=1.0):
+def _build_geometry(n, mode, target_radius=1.0):
     # parametrize circle
     t = np.linspace(0.0, 2.0 * np.pi, n, endpoint=False)
     unit_circle = np.exp(1j * t)
@@ -65,7 +70,7 @@ def create_arguments(n, mode, target_radius=1.0):
     return targets, sources, centers, sigma, expansion_radii
 
 
-def create_index_subset(nnodes, nblks, factor):
+def _build_block_index(nnodes, nblks, factor):
     indices = np.arange(0, nnodes)
     ranges = np.arange(0, nnodes + 1, nnodes // nblks)
 
@@ -86,15 +91,22 @@ def create_index_subset(nnodes, nblks, factor):
 
 
 @pytest.mark.parametrize('factor', [1.0, 0.6])
-def test_qbx_direct(ctx_getter, factor):
+@pytest.mark.parametrize('lpot_id', [1, 2])
+def test_qbx_direct(ctx_getter, factor, lpot_id):
     # This evaluates a single layer potential on a circle.
     logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
 
-    from sumpy.kernel import LaplaceKernel
-    lknl = LaplaceKernel(2)
+    from sumpy.kernel import LaplaceKernel, DirectionalSourceDerivative
+    if lpot_id == 1:
+        lknl = LaplaceKernel(2)
+    elif lpot_id == 2:
+        lknl = LaplaceKernel(2)
+        lknl = DirectionalSourceDerivative(lknl, dir_vec_name="dsource_vec")
+    else:
+        raise ValueError("unknow lpot_id")
 
     nblks = 10
     order = 12
@@ -112,21 +124,26 @@ def test_qbx_direct(ctx_getter, factor):
 
     for n in [200, 300, 400]:
         targets, sources, centers, sigma, expansion_radii = \
-                create_arguments(n, mode_nr)
+                _build_geometry(n, mode_nr)
 
         h = 2 * np.pi / n
         strengths = (sigma * h,)
 
-        tgtindices, tgtranges = create_index_subset(n, nblks, factor)
-        srcindices, srcranges = create_index_subset(n, nblks, factor)
+        tgtindices, tgtranges = _build_block_index(n, nblks, factor)
+        srcindices, srcranges = _build_block_index(n, nblks, factor)
         assert tgtranges.shape == srcranges.shape
 
+        knl_kwargs = {}
+        if lpot_id == 2:
+            knl_kwargs["dsource_vec"] = make_obj_array([
+                np.ones(n) for _ in range(2)])
+
         _, (mat,) = mat_gen(queue, targets, sources, centers,
-                expansion_radii)
+                expansion_radii, **knl_kwargs)
         result_mat = mat.dot(strengths[0])
 
         _, (result_lpot,) = lpot(queue, targets, sources, centers, strengths,
-                expansion_radii)
+                expansion_radii, **knl_kwargs)
 
         eps = 1.0e-10 * la.norm(result_lpot)
         assert la.norm(result_mat - result_lpot) < eps
@@ -134,7 +151,7 @@ def test_qbx_direct(ctx_getter, factor):
         index_set = MatrixBlockIndex(queue,
             tgtindices, srcindices, tgtranges, srcranges)
         _, (blk,) = blk_gen(queue, targets, sources, centers, expansion_radii,
-                            index_set)
+                            index_set, **knl_kwargs)
 
         rowindices, colindices = index_set.linear_indices()
         eps = 1.0e-10 * la.norm(mat)
@@ -163,13 +180,13 @@ def test_p2p_direct(ctx_getter, exclude_self, factor):
 
     for n in [200, 300, 400]:
         targets, sources, _, sigma, _ = \
-            create_arguments(n, mode_nr, target_radius=1.2)
+            _build_geometry(n, mode_nr, target_radius=1.2)
 
         h = 2 * np.pi / n
         strengths = (sigma * h,)
 
-        tgtindices, tgtranges = create_index_subset(n, nblks, factor)
-        srcindices, srcranges = create_index_subset(n, nblks, factor)
+        tgtindices, tgtranges = _build_block_index(n, nblks, factor)
+        srcindices, srcranges = _build_block_index(n, nblks, factor)
         assert tgtranges.shape == srcranges.shape
 
         extra_kwargs = {}

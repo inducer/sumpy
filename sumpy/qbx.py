@@ -354,6 +354,9 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
             self.get_kernel_scaling_assignments()
             + ["""
                 for imat
+                    <> itgt = tgtindices[imat]
+                    <> isrc = srcindices[imat]
+
                     <> a[idim] = center[idim, tgtindices[imat]] - \
                                  src[idim, srcindices[imat]] {dup=idim}
                     <> b[idim] = tgt[idim, tgtindices[imat]] - \
