@@ -677,6 +677,25 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
     #    cse_walk(expr)
     #cse_tag = CSETagMapper(cse_walk)
 
+    # {{{ complex constant mapper
+
+    class ComplexConstantMapper(IdentityMapper):
+        """Map complex constants to, for example, add additional size info.
+        """
+        def __init__(self, complex_dtype=None):
+            if complex_dtype is None:
+                self.complex_dtype = complex
+            else:
+                self.complex_dtype = complex_dtype
+
+        def map_constant(self, expr, *args, **kwargs):
+            if np.asarray(expr).dtype.kind == 'c':
+                return self.complex_dtype(expr)
+            else:
+                return expr
+
+    # }}} End complex constant mapper
+
     # do the rest of the conversion
     bessel_sub = BesselSubstitutor(BesselGetter(btog.bessel_j_arg_to_top_order))
     vcr = VectorComponentRewriter(vector_names)
@@ -684,6 +703,7 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
     ssg = SumSignGrouper()
     fck = FractionKiller()
     bik = BigIntegerKiller()
+    ccm = ComplexConstantMapper(complex_dtype)
 
     def convert_expr(name, expr):
         logger.debug("generate expression for: %s" % name)
@@ -694,6 +714,7 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
         expr = fck(expr)
         expr = ssg(expr)
         expr = bik(expr)
+        expr = ccm(expr)
         #expr = cse_tag(expr)
         for m in pymbolic_expr_maps:
             expr = m(expr)
