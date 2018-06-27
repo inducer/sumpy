@@ -440,7 +440,7 @@ class MatrixBlockIndex(object):
         if isinstance(self.row.indices, cl.array.Array) or \
                 isinstance(self.col.indices, cl.array.Array):
             raise ValueError("CL `Array`s are not supported."
-                             "Use MatrixBlockIndex.get() and then view into matrices.")
+                    "Use MatrixBlockIndex.get() and then view into matrices.")
 
         irow = self.row.indices[self.row.ranges[i]:self.row.ranges[i + 1]]
         icol = self.col.indices[self.col.ranges[i]:self.col.ranges[i + 1]]
