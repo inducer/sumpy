@@ -312,18 +312,18 @@ def _to_host(x, queue=None):
 
 
 class BlockIndexRanges(object):
-    """Convenience class for working with block indices.
+    """Convenience class for working with blocks of a global array.
 
     .. attribute:: indices
 
-        A list of not necessarily continuous integers representing all the
-        indices making up a block (or range) of a global array. The individual
-        blocks are delimited using :attr:`ranges`.
+        A list of not necessarily continuous or increasing integers
+        representing the indices of a global array. The individual blocks are
+        delimited using :attr:`ranges`.
 
     .. attribute:: ranges
 
         A list of nondecreasing integers used to index into :attr:`indices`.
-        A block (or range) :math:`i` can be retrieved using
+        A block :math:`i` can be retrieved using
         `indices[ranges[i]:ranges[i + 1]]`.
 
     .. automethod:: block_shape
