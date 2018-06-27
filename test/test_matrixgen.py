@@ -27,9 +27,11 @@ import numpy as np
 import numpy.linalg as la
 
 import pyopencl as cl
+import pyopencl.array
 
 from pytools.obj_array import make_obj_array
 
+from sumpy.tools import vector_to_device
 from sumpy.tools import MatrixBlockIndex
 
 import pytest
@@ -48,7 +50,7 @@ else:
     faulthandler.enable()
 
 
-def _build_geometry(n, mode, target_radius=1.0):
+def _build_geometry(queue, n, mode, target_radius=1.0):
     # parametrize circle
     t = np.linspace(0.0, 2.0 * np.pi, n, endpoint=False)
     unit_circle = np.exp(1j * t)
@@ -66,10 +68,14 @@ def _build_geometry(n, mode, target_radius=1.0):
     centers = unit_circle * (1.0 - radius)
     expansion_radii = radius * np.ones(n)
 
-    return targets, sources, centers, sigma, expansion_radii
+    return (cl.array.to_device(queue, targets),
+            cl.array.to_device(queue, sources),
+            vector_to_device(queue, centers),
+            cl.array.to_device(queue, expansion_radii),
+            cl.array.to_device(queue, sigma))
 
 
-def _build_block_index(nnodes, nblks, factor):
+def _build_block_index(queue, nnodes, nblks, factor):
     indices = np.arange(0, nnodes)
     ranges = np.arange(0, nnodes + 1, nnodes // nblks)
 
@@ -86,128 +92,158 @@ def _build_block_index(nnodes, nblks, factor):
         ranges_ = np.cumsum([0] + [r.shape[0] for r in indices_])
         indices_ = np.hstack(indices_)
 
-    return indices_, ranges_
+    from sumpy.tools import BlockIndex
+    return BlockIndex(cl.array.to_device(queue, indices_),
+                      cl.array.to_device(queue, ranges_))
 
 
 @pytest.mark.parametrize('factor', [1.0, 0.6])
 @pytest.mark.parametrize('lpot_id', [1, 2])
 def test_qbx_direct(ctx_getter, factor, lpot_id):
-    # This evaluates a single layer potential on a circle.
     logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
 
-    from sumpy.kernel import LaplaceKernel, DirectionalSourceDerivative
-    if lpot_id == 1:
-        lknl = LaplaceKernel(2)
-    elif lpot_id == 2:
-        lknl = LaplaceKernel(2)
-        lknl = DirectionalSourceDerivative(lknl, dir_vec_name="dsource_vec")
-    else:
-        raise ValueError("unknow lpot_id")
-
+    ndim = 2
     nblks = 10
     order = 12
     mode_nr = 25
 
-    from sumpy.qbx import LayerPotential
-    from sumpy.qbx import LayerPotentialMatrixGenerator
-    from sumpy.qbx import LayerPotentialMatrixBlockGenerator
+    from sumpy.kernel import LaplaceKernel, DirectionalSourceDerivative
+    if lpot_id == 1:
+        knl = LaplaceKernel(ndim)
+    elif lpot_id == 2:
+        knl = LaplaceKernel(ndim)
+        knl = DirectionalSourceDerivative(knl, dir_vec_name="dsource_vec")
+    else:
+        raise ValueError("unknow lpot_id")
+
     from sumpy.expansion.local import LineTaylorLocalExpansion
-    lpot = LayerPotential(ctx, [LineTaylorLocalExpansion(lknl, order)])
-    mat_gen = LayerPotentialMatrixGenerator(ctx,
-            [LineTaylorLocalExpansion(lknl, order)])
-    blk_gen = LayerPotentialMatrixBlockGenerator(ctx,
-            [LineTaylorLocalExpansion(lknl, order)])
+    lknl = LineTaylorLocalExpansion(knl, order)
+
+    from sumpy.qbx import LayerPotential
+    lpot = LayerPotential(ctx, [lknl])
+
+    from sumpy.qbx import LayerPotentialMatrixGenerator
+    mat_gen = LayerPotentialMatrixGenerator(ctx, [lknl])
+
+    from sumpy.qbx import LayerPotentialMatrixBlockGenerator
+    blk_gen = LayerPotentialMatrixBlockGenerator(ctx, [lknl])
 
     for n in [200, 300, 400]:
-        targets, sources, centers, sigma, expansion_radii = \
-                _build_geometry(n, mode_nr)
+        targets, sources, centers, expansion_radii, sigma = \
+                _build_geometry(queue, n, mode_nr)
 
         h = 2 * np.pi / n
         strengths = (sigma * h,)
 
-        tgtindices, tgtranges = _build_block_index(n, nblks, factor)
-        srcindices, srcranges = _build_block_index(n, nblks, factor)
-        assert tgtranges.shape == srcranges.shape
+        tgtindices = _build_block_index(queue, n, nblks, factor)
+        srcindices = _build_block_index(queue, n, nblks, factor)
+        index_set = MatrixBlockIndex(queue, tgtindices, srcindices)
 
-        knl_kwargs = {}
+        extra_kwargs = {}
         if lpot_id == 2:
-            knl_kwargs["dsource_vec"] = make_obj_array([
-                np.ones(n) for _ in range(2)])
+            extra_kwargs["dsource_vec"] = \
+                    vector_to_device(queue, np.ones((ndim, n)))
 
-        _, (mat,) = mat_gen(queue, targets, sources, centers,
-                expansion_radii, **knl_kwargs)
-        result_mat = mat.dot(strengths[0])
+        _, (result_lpot,) = lpot(queue,
+                targets=targets,
+                sources=sources,
+                centers=centers,
+                expansion_radii=expansion_radii,
+                strengths=strengths, **extra_kwargs)
+        result_lpot = result_lpot.get()
 
-        _, (result_lpot,) = lpot(queue, targets, sources, centers, strengths,
-                expansion_radii, **knl_kwargs)
+        _, (mat,) = mat_gen(queue,
+                targets=targets,
+                sources=sources,
+                centers=centers,
+                expansion_radii=expansion_radii, **extra_kwargs)
+        mat = mat.get()
+        result_mat = mat.dot(strengths[0].get())
 
-        eps = 1.0e-10 * la.norm(result_lpot)
+        _, (blk,) = blk_gen(queue,
+                targets=targets,
+                sources=sources,
+                centers=centers,
+                expansion_radii=expansion_radii,
+                index_set=index_set, **extra_kwargs)
+        blk = blk.get()
+
+        rowindices = index_set.linear_row_indices.get(queue)
+        colindices = index_set.linear_col_indices.get(queue)
+
+        eps = 1.0e-13 * la.norm(result_lpot)
         assert la.norm(result_mat - result_lpot) < eps
-
-        index_set = MatrixBlockIndex(queue,
-            tgtindices, srcindices, tgtranges, srcranges)
-        _, (blk,) = blk_gen(queue, targets, sources, centers, expansion_radii,
-                            index_set, **knl_kwargs)
-
-        rowindices, colindices = index_set.linear_indices()
-        eps = 1.0e-10 * la.norm(mat)
-        assert la.norm(blk - mat[rowindices, colindices].reshape(-1)) < eps
+        assert la.norm(blk - mat[rowindices, colindices]) < eps
 
 
-@pytest.mark.parametrize(("exclude_self", "factor"),
-    [(True, 1.0), (True, 0.6), (False, 1.0), (False, 0.6)])
+@pytest.mark.parametrize("exclude_self", [True, False])
+@pytest.mark.parametrize("factor", [1.0, 0.6])
 def test_p2p_direct(ctx_getter, exclude_self, factor):
-    # This does a point-to-point kernel evaluation on a circle.
     logging.basicConfig(level=logging.INFO)
+
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
 
-    from sumpy.kernel import LaplaceKernel
-    lknl = LaplaceKernel(2)
-
+    ndim = 2
     nblks = 10
     mode_nr = 25
 
+    from sumpy.kernel import LaplaceKernel
+    lknl = LaplaceKernel(ndim)
+
     from sumpy.p2p import P2P
-    from sumpy.p2p import P2PMatrixGenerator, P2PMatrixBlockGenerator
     lpot = P2P(ctx, [lknl], exclude_self=exclude_self)
+
+    from sumpy.p2p import P2PMatrixGenerator
     mat_gen = P2PMatrixGenerator(ctx, [lknl], exclude_self=exclude_self)
+
+    from sumpy.p2p import P2PMatrixBlockGenerator
     blk_gen = P2PMatrixBlockGenerator(ctx, [lknl], exclude_self=exclude_self)
 
     for n in [200, 300, 400]:
-        targets, sources, _, sigma, _ = \
-            _build_geometry(n, mode_nr, target_radius=1.2)
+        targets, sources, _, _, sigma = \
+            _build_geometry(queue, n, mode_nr, target_radius=1.2)
 
         h = 2 * np.pi / n
         strengths = (sigma * h,)
 
-        tgtindices, tgtranges = _build_block_index(n, nblks, factor)
-        srcindices, srcranges = _build_block_index(n, nblks, factor)
-        assert tgtranges.shape == srcranges.shape
+        tgtindices = _build_block_index(queue, n, nblks, factor)
+        srcindices = _build_block_index(queue, n, nblks, factor)
+        index_set = MatrixBlockIndex(queue, tgtindices, srcindices)
 
         extra_kwargs = {}
         if exclude_self:
-            extra_kwargs["target_to_source"] = np.arange(n, dtype=np.int32)
+            extra_kwargs["target_to_source"] = \
+                cl.array.arange(queue, 0, n, dtype=np.int)
 
-        _, (mat,) = mat_gen(queue, targets, sources, **extra_kwargs)
-        result_mat = mat.dot(strengths[0])
+        _, (result_lpot,) = lpot(queue,
+                targets=targets,
+                sources=sources,
+                strength=strengths, **extra_kwargs)
+        result_lpot = result_lpot.get()
 
-        _, (result_lpot,) = lpot(queue, targets, sources, strengths,
-                                 **extra_kwargs)
+        _, (mat,) = mat_gen(queue,
+                targets=targets,
+                sources=sources, **extra_kwargs)
+        mat = mat.get()
+        result_mat = mat.dot(strengths[0].get())
 
-        eps = 1.0e-10 * la.norm(result_lpot)
+        _, (blk,) = blk_gen(queue,
+                targets=targets,
+                sources=sources,
+                index_set=index_set, **extra_kwargs)
+        blk = blk.get()
+
+        eps = 1.0e-13 * la.norm(result_lpot)
         assert la.norm(result_mat - result_lpot) < eps
 
-        index_set = MatrixBlockIndex(queue,
-                tgtindices, srcindices, tgtranges, srcranges)
-        _, (blk,) = blk_gen(queue, targets, sources, index_set, **extra_kwargs)
-
-        rowindices, colindices = index_set.linear_indices()
-        eps = 1.0e-10 * la.norm(mat)
-        assert la.norm(blk - mat[rowindices, colindices].reshape(-1)) < eps
+        index_set = index_set.get(queue)
+        for i in range(index_set.nblocks):
+            assert la.norm(index_set.view_block(blk, i) -
+                           index_set.view(mat, i)) < eps
 
 
 # You can test individual routines by typing

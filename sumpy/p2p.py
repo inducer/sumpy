@@ -375,10 +375,9 @@ class P2PMatrixBlockGenerator(P2PBase):
         .. code-block:: python
 
             blkranges = index_set.linear_ranges()
-            m = index_set.tgtranges[i + 1] - index_set.tgtranges[i]
-            n = index_set.srcranges[i + 1] - index_set.srcranges[i]
+            blkshape = index_set.block_shape(i)
 
-            block2d = result[blkranges[i]:blkranges[i + 1]].reshape(m, n)
+            block2d = result[blkranges[i]:blkranges[i + 1]].reshape(*blkshape)
 
         :arg targets: target point coordinates.
         :arg sources: source point coordinates.
@@ -394,9 +393,11 @@ class P2PMatrixBlockGenerator(P2PBase):
                 sources_is_obj_array=(
                     is_obj_array(sources) or isinstance(sources, (tuple, list))))
 
-        tgtindices, srcindices = index_set.linear_indices()
-        return knl(queue, targets=targets, sources=sources,
-                tgtindices=tgtindices, srcindices=srcindices, **kwargs)
+        return knl(queue,
+                   targets=targets,
+                   sources=sources,
+                   tgtindices=index_set.linear_row_indices,
+                   srcindices=index_set.linear_col_indices, **kwargs)
 
 # }}}
 

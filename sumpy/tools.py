@@ -31,6 +31,9 @@ from pytools import memoize_method, memoize_in
 import numpy as np
 import sumpy.symbolic as sym
 
+import pyopencl as cl
+import pyopencl.array  # noqa
+
 import loopy as lp
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 
@@ -300,88 +303,170 @@ class KernelComputation(object):
 
 # {{{
 
+
+def _to_host(x, queue=None):
+    if isinstance(x, cl.array.Array):
+        queue = queue or x.queue
+        return x.get(queue)
+    return x
+
+
+class BlockIndex(object):
+    """Convenience class for working with block indices.
+
+    .. automethod:: block_shape
+    .. automethod:: get
+    .. automethod:: view
+    """
+
+    def __init__(self, indices, ranges):
+        self.indices = indices
+        self.ranges = ranges
+
+    @property
+    def nblocks(self):
+        return self.ranges.shape[0] - 1
+
+    def block_shape(self, i):
+        return (self._ranges[i + 1] - self._ranges[i],)
+
+    def get(self, queue=None):
+        return BlockIndex(_to_host(self.indices, queue=queue),
+                          _to_host(self.ranges, queue=queue))
+
+    @property
+    @memoize_method
+    def _ranges(self):
+        return _to_host(self.ranges)
+
+    def view(self, x, i):
+        return x[self.indices[self._ranges[i]:self._ranges[i + 1]]]
+
+
 class MatrixBlockIndex(object):
-    def __init__(self, queue, tgtindices, srcindices, tgtranges, srcranges):
-        """Keep track of different ways to index into matrix blocks.
+    """Keep track of different ways to index into matrix blocks.
 
-        In this description, a block is given by a subset of indices of
-        the global matrix operator. For example, the :math:`i`-th block of
-        a matrix `mat` using the input arguments is obtained by:
+    .. attribute:: row
 
-        .. code-block:: python
+        A :class:`BlockIndex`.
 
-            mat[np.ix_(tgtindices[tgtranges[i]:tgtranges[i + 1]],
-                       srcindices[srcranges[i]:srcranges[i + 1]])]
+    .. attribute:: col
 
-        :arg tgtindices: a subset of the full matrix row index set.
-        :arg srcindices: a subset of the full matrix column index set.
-        :arg tgtranges: an array used to index into `tgtindices`.
-        :arg srcranges: an array used to index into `srcindices`.
-        """
+        A :class:`BlockIndex`.
 
+    .. automethod:: block_shape
+    .. automethod:: get
+    .. automethod:: view
+    """
+
+    def __init__(self, queue, rowindices, colindices):
         self.queue = queue
-        self.tgtindices = tgtindices
-        self.tgtranges = tgtranges
-        self.srcindices = srcindices
-        self.srcranges = srcranges
+        self.row = rowindices
+        self.col = colindices
+        assert self.row.nblocks == self.col.nblocks
 
-    @memoize_method
+        self.blkranges = np.cumsum([0] + [
+            self.row.block_shape(i)[0] * self.col.block_shape(i)[0]
+            for i in range(self.row.nblocks)])
+        if self.queue:
+            self.blkranges = cl.array.to_device(self.queue, self.blkranges)
+
+    @property
+    def nblocks(self):
+        return self.row.nblocks
+
+    def block_shape(self, i):
+        return self.row.block_shape(i) + self.col.block_shape(i)
+
+    @property
+    def linear_row_indices(self):
+        r, _ = self._linear_indices()
+        return r
+
+    @property
+    def linear_col_indices(self):
+        _, c = self._linear_indices()
+        return c
+
+    @property
     def linear_ranges(self):
+        return self.blkranges
+
+    def get(self, queue=None):
+        """Transfer data to the host. Only the initial given data is
+        transfered, not the arrays returned by :meth:`linear_row_indices` and
+        friends.
+
+        :return: a copy of `self` in which all data lives on the host, i.e.
+        all :class:`pyopencl.array.Array` instances are replaces by
+        :class:`numpy.ndarray` instances.
         """
-        :return: an array containing the cummulative sum of all block sizes.
-            It can be used to index into a linear representation of the
-            matrix blocks.
+        queue = queue or self.queue
+
+        return MatrixBlockIndex(None,
+                rowindices=self.row.get(queue),
+                colindices=self.col.get(queue))
+
+    def view(self, x, i):
+        """Retrieve a block from a global matrix.
+
+        :arg x: a 2D :class:`numpy.ndarray`, i.e. a matrix.
+        :arg i: the block index.
+        :return: the requested block from the matrix.
         """
 
-        @memoize_in(self, "block_cumsum_knl")
-        def cumsum():
-            loopy_knl = lp.make_kernel(
-                "{[i, j]: 0 <= i < nranges and 0 <= j <= i}",
-                """
-                blkranges[0] = 0
-                blkranges[i + 1] = reduce(sum, j, \
-                    (srcranges[j + 1] - srcranges[j]) * \
-                    (tgtranges[j + 1] - tgtranges[j])) \
-                """,
-                [
-                    lp.GlobalArg("tgtranges", None, shape="nranges + 1"),
-                    lp.GlobalArg("srcranges", None, shape="nranges + 1"),
-                    lp.GlobalArg("blkranges", np.int32, shape="nranges + 1"),
-                    lp.ValueArg("nranges", None)
-                ],
-                name="block_cumsum_knl",
-                default_offset=lp.auto,
-                assumptions="nranges>=1",
-                lang_version=MOST_RECENT_LANGUAGE_VERSION)
+        if isinstance(x, cl.array.Array) or \
+                isinstance(self.row.indices, cl.array.Array) or \
+                isinstance(self.col.indices, cl.array.Array):
+            raise ValueError("CL `Array`s are not supported."
+                             "Use MatrixBlockIndex.get() and then view into matrices.")
 
-            loopy_knl = lp.realize_reduction(loopy_knl, force_scan=True,
-                force_outer_iname_for_scan="i")
-            return loopy_knl
+        irow = self.row.indices[self.row.ranges[i]:self.row.ranges[i + 1]]
+        icol = self.col.indices[self.col.ranges[i]:self.col.ranges[i + 1]]
 
-        _, (blkranges,) = cumsum()(self.queue,
-            tgtranges=self.tgtranges, srcranges=self.srcranges)
+        return x[np.ix_(irow, icol)]
 
-        return blkranges
+    def view_block(self, x, i):
+        """Retrieve a block from a linear representation of the matrix blocks.
+
+        :arg x: a 1D :class:`numpy.ndarray`.
+        :arg i: the block index.
+        :return: the requested block, reshaped into a 2D array. The result
+            matches, in shape and value, the block returned by
+            :meth:`view` with the global matrix.
+        """
+        if isinstance(x, cl.array.Array) or \
+                isinstance(self.blkranges, cl.array.Array):
+            raise ValueError("CL `Array`s are not supported."
+                             "Use MatrixBlockIndex.get() and then view into matrices.")
+
+        iblk = np.s_[self.blkranges[i]:self.blkranges[i + 1]]
+        return x[iblk].reshape(*self.block_shape(i))
 
     @memoize_method
-    def linear_indices(self):
+    def _linear_indices(self):
         """
-        :return: a tuple of `(rowindices, colindices)` that can be used in
-            conjunction with :func:`linear_ranges` to provide linear indexing
-            into a set of matrix blocks. These index arrays are just the
-            concatenated Cartesian products of all the block arrays described
-            by :attr:`tgtindices` and :arg:`srcindices`.
+        :return: a tuple of `(rowindices, colindices)` that can be
+            used to provide linear indexing into a set of matrix blocks. These
+            index arrays are just the concatenated Cartesian products of all
+            the block arrays described by :attr:`row` and :attr:`col`.
 
-            They can be used to index directly into the matrix as follows:
+            They can be used to index directly into a matrix as follows:
 
             .. code-block:: python
 
                 mat[rowindices[blkranges[i]:blkranges[i + 1]],
                     colindices[blkranges[i]:blkranges[i + 1]]]
+
+            The same block can be obtained more easily using
+
+            .. code-block:: python
+
+                index.view(mat, i).reshape(-1)
         """
 
         @memoize_in(self, "block_index_knl")
-        def linear_index():
+        def _build_index():
             loopy_knl = lp.make_kernel([
                 "{[irange]: 0 <= irange < nranges}",
                 "{[itgt, isrc]: 0 <= itgt < ntgtblock and 0 <= isrc < nsrcblock}"
@@ -417,11 +502,13 @@ class MatrixBlockIndex(object):
 
             return loopy_knl
 
-        blkranges = self.linear_ranges()
-        _, (rowindices, colindices) = linear_index()(self.queue,
-            tgtindices=self.tgtindices, srcindices=self.srcindices,
-            tgtranges=self.tgtranges, srcranges=self.srcranges,
-            blkranges=blkranges, nresults=blkranges[-1])
+        _, (rowindices, colindices) = _build_index()(self.queue,
+            tgtindices=self.row.indices,
+            srcindices=self.col.indices,
+            tgtranges=self.row.ranges,
+            srcranges=self.col.ranges,
+            blkranges=self.blkranges,
+            nresults=self.blkranges[-1].get(self.queue))
 
         return rowindices, colindices
 

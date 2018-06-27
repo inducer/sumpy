@@ -408,10 +408,13 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
 
         knl = self.get_cached_optimized_kernel()
 
-        tgtindices, srcindices = index_set.linear_indices()
-        return knl(queue, src=sources, tgt=targets, center=centers,
-                expansion_radii=expansion_radii,
-                tgtindices=tgtindices, srcindices=srcindices, **kwargs)
+        return knl(queue,
+                   src=sources,
+                   tgt=targets,
+                   center=centers,
+                   expansion_radii=expansion_radii,
+                   tgtindices=index_set.linear_row_indices,
+                   srcindices=index_set.linear_col_indices, **kwargs)
 
 # }}}
 
