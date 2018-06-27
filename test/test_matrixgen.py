@@ -92,9 +92,10 @@ def _build_block_index(queue, nnodes, nblks, factor):
         ranges_ = np.cumsum([0] + [r.shape[0] for r in indices_])
         indices_ = np.hstack(indices_)
 
-    from sumpy.tools import BlockIndex
-    return BlockIndex(cl.array.to_device(queue, indices_),
-                      cl.array.to_device(queue, ranges_))
+    from sumpy.tools import BlockIndexRanges
+    return BlockIndexRanges(queue.context,
+                            cl.array.to_device(queue, indices_).with_queue(None),
+                            cl.array.to_device(queue, ranges_).with_queue(None))
 
 
 @pytest.mark.parametrize('factor', [1.0, 0.6])
@@ -140,7 +141,7 @@ def test_qbx_direct(ctx_getter, factor, lpot_id):
 
         tgtindices = _build_block_index(queue, n, nblks, factor)
         srcindices = _build_block_index(queue, n, nblks, factor)
-        index_set = MatrixBlockIndex(queue, tgtindices, srcindices)
+        index_set = MatrixBlockIndex(ctx, tgtindices, srcindices)
 
         extra_kwargs = {}
         if lpot_id == 2:
@@ -212,7 +213,7 @@ def test_p2p_direct(ctx_getter, exclude_self, factor):
 
         tgtindices = _build_block_index(queue, n, nblks, factor)
         srcindices = _build_block_index(queue, n, nblks, factor)
-        index_set = MatrixBlockIndex(queue, tgtindices, srcindices)
+        index_set = MatrixBlockIndex(ctx, tgtindices, srcindices)
 
         extra_kwargs = {}
         if exclude_self:
@@ -242,8 +243,8 @@ def test_p2p_direct(ctx_getter, exclude_self, factor):
 
         index_set = index_set.get(queue)
         for i in range(index_set.nblocks):
-            assert la.norm(index_set.view_block(blk, i) -
-                           index_set.view(mat, i)) < eps
+            assert la.norm(index_set.block_take(blk, i) -
+                           index_set.take(mat, i)) < eps
 
 
 # You can test individual routines by typing

@@ -311,15 +311,28 @@ def _to_host(x, queue=None):
     return x
 
 
-class BlockIndex(object):
+class BlockIndexRanges(object):
     """Convenience class for working with block indices.
+
+    .. attribute:: indices
+
+        A list of not necessarily continuous integers representing all the
+        indices making up a block (or range) of a global array. The individual
+        blocks are delimited using :attr:`ranges`.
+
+    .. attribute:: ranges
+
+        A list of nondecreasing integers used to index into :attr:`indices`.
+        A block (or range) :math:`i` can be retrieved using
+        `indices[ranges[i]:ranges[i + 1]]`.
 
     .. automethod:: block_shape
     .. automethod:: get
-    .. automethod:: view
+    .. automethod:: take
     """
 
-    def __init__(self, indices, ranges):
+    def __init__(self, cl_context, indices, ranges):
+        self.cl_context = cl_context
         self.indices = indices
         self.ranges = ranges
 
@@ -331,15 +344,21 @@ class BlockIndex(object):
         return (self._ranges[i + 1] - self._ranges[i],)
 
     def get(self, queue=None):
-        return BlockIndex(_to_host(self.indices, queue=queue),
-                          _to_host(self.ranges, queue=queue))
+        return BlockIndexRanges(self.cl_context,
+                                _to_host(self.indices, queue=queue),
+                                _to_host(self.ranges, queue=queue))
 
     @property
     @memoize_method
     def _ranges(self):
-        return _to_host(self.ranges)
+        with cl.CommandQueue(self.cl_context) as queue:
+            return _to_host(self.ranges, queue=queue)
 
-    def view(self, x, i):
+    def take(self, x, i):
+        """Return the subset of a global array `x` that is defined by
+        the :attr:`indices` in block :math:`i`.
+        """
+
         return x[self.indices[self._ranges[i]:self._ranges[i + 1]]]
 
 
@@ -348,28 +367,33 @@ class MatrixBlockIndex(object):
 
     .. attribute:: row
 
-        A :class:`BlockIndex`.
+        A :class:`BlockIndexRanges` encapsulating row block indices.
 
     .. attribute:: col
 
-        A :class:`BlockIndex`.
+        A :class:`BlockIndexRanges` encapsulating column block indices.
 
     .. automethod:: block_shape
+    .. automethod:: block_take
     .. automethod:: get
-    .. automethod:: view
+    .. automethod:: take
+
     """
 
-    def __init__(self, queue, rowindices, colindices):
-        self.queue = queue
-        self.row = rowindices
-        self.col = colindices
+    def __init__(self, cl_context, row, col):
+        self.cl_context = cl_context
+        self.row = row
+        self.col = col
         assert self.row.nblocks == self.col.nblocks
 
         self.blkranges = np.cumsum([0] + [
             self.row.block_shape(i)[0] * self.col.block_shape(i)[0]
             for i in range(self.row.nblocks)])
-        if self.queue:
-            self.blkranges = cl.array.to_device(self.queue, self.blkranges)
+
+        if isinstance(self.row.indices, cl.array.Array):
+            with cl.CommandQueue(self.cl_context) as queue:
+                self.blkranges = \
+                    cl.array.to_device(queue, self.blkranges).with_queue(None)
 
     @property
     def nblocks(self):
@@ -401,22 +425,19 @@ class MatrixBlockIndex(object):
         all :class:`pyopencl.array.Array` instances are replaces by
         :class:`numpy.ndarray` instances.
         """
-        queue = queue or self.queue
+        return MatrixBlockIndex(self.cl_context,
+                row=self.row.get(queue=queue),
+                col=self.col.get(queue=queue))
 
-        return MatrixBlockIndex(None,
-                rowindices=self.row.get(queue),
-                colindices=self.col.get(queue))
-
-    def view(self, x, i):
+    def take(self, x, i):
         """Retrieve a block from a global matrix.
 
-        :arg x: a 2D :class:`numpy.ndarray`, i.e. a matrix.
-        :arg i: the block index.
-        :return: the requested block from the matrix.
+        :arg x: a 2D :class:`numpy.ndarray`.
+        :arg i: block index.
+        :return: requested block from the matrix.
         """
 
-        if isinstance(x, cl.array.Array) or \
-                isinstance(self.row.indices, cl.array.Array) or \
+        if isinstance(self.row.indices, cl.array.Array) or \
                 isinstance(self.col.indices, cl.array.Array):
             raise ValueError("CL `Array`s are not supported."
                              "Use MatrixBlockIndex.get() and then view into matrices.")
@@ -426,19 +447,25 @@ class MatrixBlockIndex(object):
 
         return x[np.ix_(irow, icol)]
 
-    def view_block(self, x, i):
+    def block_take(self, x, i):
         """Retrieve a block from a linear representation of the matrix blocks.
+        A linear representation of the matrix blocks can be obtained, or
+        should be consistent with
+
+        .. code-block:: python
+
+            i = index.linear_row_indices()
+            j = index.linear_col_indices()
+            linear_blks = global_mat[i, j]
+
+            for k in range(index.nblocks):
+                assert np.allclose(index.block_take(linear_blks, k),
+                                   index.take(global_mat, k))
 
         :arg x: a 1D :class:`numpy.ndarray`.
-        :arg i: the block index.
-        :return: the requested block, reshaped into a 2D array. The result
-            matches, in shape and value, the block returned by
-            :meth:`view` with the global matrix.
+        :arg i: block index.
+        :return: requested block, reshaped into a 2D array.
         """
-        if isinstance(x, cl.array.Array) or \
-                isinstance(self.blkranges, cl.array.Array):
-            raise ValueError("CL `Array`s are not supported."
-                             "Use MatrixBlockIndex.get() and then view into matrices.")
 
         iblk = np.s_[self.blkranges[i]:self.blkranges[i + 1]]
         return x[iblk].reshape(*self.block_shape(i))
@@ -502,15 +529,16 @@ class MatrixBlockIndex(object):
 
             return loopy_knl
 
-        _, (rowindices, colindices) = _build_index()(self.queue,
-            tgtindices=self.row.indices,
-            srcindices=self.col.indices,
-            tgtranges=self.row.ranges,
-            srcranges=self.col.ranges,
-            blkranges=self.blkranges,
-            nresults=self.blkranges[-1].get(self.queue))
-
-        return rowindices, colindices
+        with cl.CommandQueue(self.cl_context) as queue:
+            _, (rowindices, colindices) = _build_index()(queue,
+                tgtindices=self.row.indices,
+                srcindices=self.col.indices,
+                tgtranges=self.row.ranges,
+                srcranges=self.col.ranges,
+                blkranges=self.blkranges,
+                nresults=_to_host(self.blkranges[-1], queue=queue))
+            return (rowindices.with_queue(None),
+                    colindices.with_queue(None))
 
 # }}}
 
