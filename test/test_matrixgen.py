@@ -173,7 +173,7 @@ def test_qbx_direct(ctx_getter, factor, lpot_id):
         rowindices = index_set.linear_row_indices.get(queue)
         colindices = index_set.linear_col_indices.get(queue)
 
-        eps = 1.0e-13 * la.norm(result_lpot)
+        eps = 1.0e-10 * la.norm(result_lpot)
         assert la.norm(result_mat - result_lpot) < eps
         assert la.norm(blk - mat[rowindices, colindices]) < eps
 
@@ -236,7 +236,7 @@ def test_p2p_direct(ctx_getter, exclude_self, factor):
                 index_set=index_set, **extra_kwargs)
         blk = blk.get()
 
-        eps = 1.0e-13 * la.norm(result_lpot)
+        eps = 1.0e-10 * la.norm(result_lpot)
         assert la.norm(result_mat - result_lpot) < eps
 
         index_set = index_set.get(queue)
