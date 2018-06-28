@@ -449,7 +449,8 @@ class MatrixBlockIndex(object):
             raise ValueError("CL `Array`s are not supported."
                     "Use MatrixBlockIndex.get() and then view into matrices.")
 
-        return x[np.ix_(*self.block_indices)]
+        irow, icol = self.block_indices(i)
+        return x[np.ix_(irow, icol)]
 
     def block_take(self, x, i):
         """Retrieve a block from a linear representation of the matrix blocks.
