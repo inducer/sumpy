@@ -336,6 +336,11 @@ class BlockIndexRanges(object):
         self.indices = indices
         self.ranges = ranges
 
+    @memoize_method
+    def _ranges(self):
+        with cl.CommandQueue(self.cl_context) as queue:
+            return _to_host(self.ranges, queue=queue)
+
     @property
     def nblocks(self):
         return self.ranges.shape[0] - 1
@@ -343,23 +348,20 @@ class BlockIndexRanges(object):
     def block_shape(self, i):
         return (self._ranges[i + 1] - self._ranges[i],)
 
+    def block_indices(self, i):
+        return self.indices[self._ranges[i]:self._ranges[i + 1]]
+
     def get(self, queue=None):
         return BlockIndexRanges(self.cl_context,
                                 _to_host(self.indices, queue=queue),
                                 _to_host(self.ranges, queue=queue))
-
-    @property
-    @memoize_method
-    def _ranges(self):
-        with cl.CommandQueue(self.cl_context) as queue:
-            return _to_host(self.ranges, queue=queue)
 
     def take(self, x, i):
         """Return the subset of a global array `x` that is defined by
         the :attr:`indices` in block :math:`i`.
         """
 
-        return x[self.indices[self._ranges[i]:self._ranges[i + 1]]]
+        return x[self.block_indices(i)]
 
 
 class MatrixBlockIndex(object):
@@ -402,6 +404,10 @@ class MatrixBlockIndex(object):
     def block_shape(self, i):
         return self.row.block_shape(i) + self.col.block_shape(i)
 
+    def block_indices(self, i):
+        return (self.row.block_indices(i),
+                self.col.block_indices(i))
+
     @property
     def linear_row_indices(self):
         r, _ = self._linear_indices()
@@ -442,10 +448,7 @@ class MatrixBlockIndex(object):
             raise ValueError("CL `Array`s are not supported."
                     "Use MatrixBlockIndex.get() and then view into matrices.")
 
-        irow = self.row.indices[self.row.ranges[i]:self.row.ranges[i + 1]]
-        icol = self.col.indices[self.col.ranges[i]:self.col.ranges[i + 1]]
-
-        return x[np.ix_(irow, icol)]
+        return x[np.ix_(*self.block_indices)]
 
     def block_take(self, x, i):
         """Retrieve a block from a linear representation of the matrix blocks.
