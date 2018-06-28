@@ -336,6 +336,7 @@ class BlockIndexRanges(object):
         self.indices = indices
         self.ranges = ranges
 
+    @property
     @memoize_method
     def _ranges(self):
         with cl.CommandQueue(self.cl_context) as queue:
