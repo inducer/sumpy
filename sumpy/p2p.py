@@ -381,8 +381,8 @@ class P2PMatrixBlockGenerator(P2PBase):
 
         :arg targets: target point coordinates.
         :arg sources: source point coordinates.
-        :arg index_set: a :class:`sumpy.tools.MatrixBlockIndex` object used
-            to define the various blocks.
+        :arg index_set: a :class:`sumpy.tools.MatrixBlockIndexRanges` used
+            to define the blocks.
         :return: a tuple of one-dimensional arrays of kernel evaluations at
             target-source pairs described by `index_set`.
         """

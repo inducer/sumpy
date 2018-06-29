@@ -400,10 +400,10 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
         :arg sources: source point coordinates.
         :arg centers: QBX target expansion centers.
         :arg expansion_radii: radii for each expansion center.
-        :arg index_set: a :class:`sumpy.tools.MatrixBlockIndex` object used
-        to define the various blocks.
+        :arg index_set: a :class:`sumpy.tools.MatrixBlockIndexRanges` used
+            to define the blocks.
         :return: a tuple of one-dimensional arrays of kernel evaluations at
-        target-source pairs described by `index_set`.
+            target-source pairs described by `index_set`.
         """
 
         knl = self.get_cached_optimized_kernel()

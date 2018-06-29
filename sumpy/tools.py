@@ -365,7 +365,7 @@ class BlockIndexRanges(object):
         return x[self.block_indices(i)]
 
 
-class MatrixBlockIndex(object):
+class MatrixBlockIndexRanges(object):
     """Keep track of different ways to index into matrix blocks.
 
     .. attribute:: row
@@ -432,7 +432,7 @@ class MatrixBlockIndex(object):
         all :class:`pyopencl.array.Array` instances are replaces by
         :class:`numpy.ndarray` instances.
         """
-        return MatrixBlockIndex(self.cl_context,
+        return MatrixBlockIndexRanges(self.cl_context,
                 row=self.row.get(queue=queue),
                 col=self.col.get(queue=queue))
 
@@ -447,7 +447,7 @@ class MatrixBlockIndex(object):
         if isinstance(self.row.indices, cl.array.Array) or \
                 isinstance(self.col.indices, cl.array.Array):
             raise ValueError("CL `Array`s are not supported."
-                    "Use MatrixBlockIndex.get() and then view into matrices.")
+                    "Use MatrixBlockIndexRanges.get() and then view into matrices.")
 
         irow, icol = self.block_indices(i)
         return x[np.ix_(irow, icol)]

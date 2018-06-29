@@ -30,7 +30,7 @@ import pyopencl as cl
 import pyopencl.array  # noqa
 
 from sumpy.tools import vector_to_device
-from sumpy.tools import MatrixBlockIndex
+from sumpy.tools import MatrixBlockIndexRanges
 
 import pytest
 from pyopencl.tools import (  # noqa
@@ -139,7 +139,7 @@ def test_qbx_direct(ctx_getter, factor, lpot_id):
 
         tgtindices = _build_block_index(queue, n, nblks, factor)
         srcindices = _build_block_index(queue, n, nblks, factor)
-        index_set = MatrixBlockIndex(ctx, tgtindices, srcindices)
+        index_set = MatrixBlockIndexRanges(ctx, tgtindices, srcindices)
 
         extra_kwargs = {}
         if lpot_id == 2:
@@ -211,7 +211,7 @@ def test_p2p_direct(ctx_getter, exclude_self, factor):
 
         tgtindices = _build_block_index(queue, n, nblks, factor)
         srcindices = _build_block_index(queue, n, nblks, factor)
-        index_set = MatrixBlockIndex(ctx, tgtindices, srcindices)
+        index_set = MatrixBlockIndexRanges(ctx, tgtindices, srcindices)
 
         extra_kwargs = {}
         if exclude_self:
