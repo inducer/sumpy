@@ -438,7 +438,7 @@ class BiharmonicKernel(ExpressionKernel):
             scaling = 1/(8*var("pi"))
         elif dim == 3:
             expr = r
-            scaling = 1  # FIXME: Unknown
+            scaling = - 1/(8*var("pi"))
         else:
             raise RuntimeError("unsupported dimensionality")
 
