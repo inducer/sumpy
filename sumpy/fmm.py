@@ -34,10 +34,7 @@ from six.moves import zip
 import pyopencl as cl
 import pyopencl.array  # noqa
 
-from pytools import memoize_method, log_process
-
-import logging
-logger = logging.getLogger(__name__)
+from pytools import memoize_method
 
 from sumpy import (
         P2EFromSingleBox, P2EFromCSR,
@@ -300,7 +297,6 @@ class SumpyExpansionWrangler(object):
 
     # }}}
 
-    @log_process(logger)
     def form_multipoles(self,
             level_start_source_box_nrs, source_boxes,
             src_weights):
@@ -334,7 +330,6 @@ class SumpyExpansionWrangler(object):
 
         return mpoles
 
-    @log_process(logger)
     def coarsen_multipoles(self,
             level_start_source_parent_box_nrs,
             source_parent_boxes,
@@ -390,7 +385,6 @@ class SumpyExpansionWrangler(object):
 
         return mpoles
 
-    @log_process(logger)
     def eval_direct(self, target_boxes, source_box_starts,
             source_box_lists, src_weights):
         pot = self.output_zeros()
@@ -415,7 +409,6 @@ class SumpyExpansionWrangler(object):
 
         return pot
 
-    @log_process(logger)
     def multipole_to_local(self,
             level_start_target_box_nrs,
             target_boxes, src_box_starts, src_box_lists,
@@ -455,7 +448,6 @@ class SumpyExpansionWrangler(object):
 
         return local_exps
 
-    @log_process(logger)
     def eval_multipoles(self,
             target_boxes_by_source_level, source_boxes_by_level, mpole_exps):
         pot = self.output_zeros()
@@ -506,7 +498,6 @@ class SumpyExpansionWrangler(object):
 
         return pot
 
-    @log_process(logger)
     def form_locals(self,
             level_start_target_or_target_parent_box_nrs,
             target_or_target_parent_boxes, starts, lists, src_weights):
@@ -545,7 +536,6 @@ class SumpyExpansionWrangler(object):
 
         return local_exps
 
-    @log_process(logger)
     def refine_locals(self,
             level_start_target_or_target_parent_box_nrs,
             target_or_target_parent_boxes,
@@ -587,7 +577,6 @@ class SumpyExpansionWrangler(object):
 
         return local_exps
 
-    @log_process(logger)
     def eval_locals(self, level_start_target_box_nrs, target_boxes, local_exps):
         pot = self.output_zeros()
 
@@ -623,7 +612,6 @@ class SumpyExpansionWrangler(object):
 
         return pot
 
-    @log_process(logger)
     def finalize_potentials(self, potentials):
         return potentials
 
