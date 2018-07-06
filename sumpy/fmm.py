@@ -330,7 +330,7 @@ class SumpyExpansionWrangler(object):
 
     # }}}
 
-    def _update_timing_data(self, description, timing_data, events):
+    def update_timing_data(self, description, timing_data, events):
         if timing_data is None:
             return
 
@@ -383,7 +383,7 @@ class SumpyExpansionWrangler(object):
 
             assert mpoles_res is mpoles_view
 
-        self._update_timing_data("form_multipoles", timing_data, events)
+        self.update_timing_data("form_multipoles", timing_data, events)
 
         return mpoles
 
@@ -442,7 +442,7 @@ class SumpyExpansionWrangler(object):
         if events:
             mpoles.add_event(events[-1])
 
-        self._update_timing_data("coarsen_multipoles", timing_data, events)
+        self.update_timing_data("coarsen_multipoles", timing_data, events)
 
         return mpoles
 
@@ -471,7 +471,7 @@ class SumpyExpansionWrangler(object):
             assert pot_i is pot_res_i
             pot_i.add_event(evt)
 
-        self._update_timing_data("eval_direct", timing_data, events)
+        self.update_timing_data("eval_direct", timing_data, events)
 
         return pot
 
@@ -515,7 +515,7 @@ class SumpyExpansionWrangler(object):
                     **self.kernel_extra_kwargs)
             events.append(evt)
 
-        self._update_timing_data("eval_direct", timing_data, events)
+        self.update_timing_data("eval_direct", timing_data, events)
 
         return local_exps
 
@@ -568,7 +568,7 @@ class SumpyExpansionWrangler(object):
             for pot_i in pot:
                 pot_i.add_event(events[-1])
 
-        self._update_timing_data("eval_multipoles", timing_data, events)
+        self.update_timing_data("eval_multipoles", timing_data, events)
 
         return pot
 
@@ -612,7 +612,7 @@ class SumpyExpansionWrangler(object):
 
             assert result is target_local_exps_view
 
-        self._update_timing_data("form_locals", timing_data, events)
+        self.update_timing_data("form_locals", timing_data, events)
 
         return local_exps
 
@@ -659,7 +659,7 @@ class SumpyExpansionWrangler(object):
 
         local_exps.add_event(evt)
 
-        self._update_timing_data("refine_locals", timing_data, events)
+        self.update_timing_data("refine_locals", timing_data, events)
 
         return local_exps
 
@@ -700,7 +700,7 @@ class SumpyExpansionWrangler(object):
             for pot_i, pot_res_i in zip(pot, pot_res):
                 assert pot_i is pot_res_i
 
-        self._update_timing_data("eval_locals", timing_data, events)
+        self.update_timing_data("eval_locals", timing_data, events)
 
         return pot
 
