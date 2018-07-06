@@ -155,14 +155,20 @@ class TimingFuture(object):
     def __init__(self, events):
         self.events = events
 
-    def __call__(self):
+    @memoize_method
+    def get(self):
         pyopencl.wait_for_events(self.events)
 
         result = 0
         for event in self.events:
-            result += event.profile.end - event.profile.start
+            result += (
+                    (event.profile.end - event.profile.start)
+                    * _SECONDS_PER_NANOSECOND)
+        return result
 
-        return result * _SECONDS_PER_NANOSECOND
+    def __call__(self):
+        from boxtree.fmm import TimingResult
+        return TimingResult(wall_elapsed=self.get(), process_elapsed=None)
 
 # }}}
 
@@ -340,8 +346,8 @@ class SumpyExpansionWrangler(object):
             self.issued_timing_data_warning = True
             return
 
-        timing_data["description"] = description
-        timing_data["callback"] = TimingFuture(events)
+        timing_data.description = description
+        timing_data.callback = TimingFuture(events)
 
     def form_multipoles(self,
             level_start_source_box_nrs, source_boxes,

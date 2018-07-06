@@ -286,6 +286,7 @@ def test_sumpy_fmm_timing_data(ctx_getter):
 
     timing_data = {}
     pot, = drive_fmm(trav, wrangler, weights, timing_data=timing_data)
+    print(timing_data)
     assert timing_data
 
 
