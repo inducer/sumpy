@@ -234,7 +234,7 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
     pconv_verifier()
 
 
-def test_sumpy_fmm_timing_data(ctx_getter):
+def test_sumpy_fmm_timing_data_collection(ctx_getter):
     logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_getter()
