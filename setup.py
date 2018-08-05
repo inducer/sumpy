@@ -94,7 +94,7 @@ setup(name="sumpy",
       install_requires=[
           "pytools>=2018.2",
           "loo.py>=2017.2",
-          "boxtree>=2013.1",
+          "boxtree>=2018.1",
           "pytest>=2.3",
           "six",
 
