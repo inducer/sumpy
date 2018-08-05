@@ -320,7 +320,12 @@ class E2PFromCSR(E2PBase):
         # meaningfully inferred. Make the type of rscale explicit.
         rscale = centers.dtype.type(kwargs.pop("rscale"))
 
-        return knl(queue, centers=centers, rscale=rscale, **kwargs)
+        try:
+            return knl(queue, centers=centers, rscale=rscale, **kwargs)
+        except TypeError as e:
+            logger.debug("Initial trial of p2e failed, probably the loopy kernel does not accept rscale")
+            logger.debug("Trying to make self-adjustments")
+            return knl(queue, centers=centers, **kwargs)
 
 # }}}
 
