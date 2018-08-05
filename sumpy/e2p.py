@@ -32,6 +32,8 @@ import sumpy.symbolic as sym
 from sumpy.tools import KernelCacheWrapper
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 
+import logging
+logger = logging.getLogger(__name__)
 
 __doc__ = """
 
