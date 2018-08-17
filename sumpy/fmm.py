@@ -55,6 +55,10 @@ class SumpyExpansionWranglerCodeContainer(object):
     necessarily must have a :class:`pyopencl.CommandQueue`, but this queue
     is allowed to be more ephemeral than the code, the code's lifetime
     is decoupled by storing it in this object.
+
+    Timing results returned by this wrangler contain the values *wall_elapsed*
+    which measures elapsed wall time. This requires a command queue with
+    profiling enabled.
     """
 
     def __init__(self, cl_context,
@@ -171,7 +175,7 @@ class SumpyTimingFuture(object):
                     "Timing data will not be collected.",
                     category=UnableToCollectTimingData,
                     stacklevel=3)
-            return TimingResult(wall_elapsed=None, process_elapsed=None)
+            return TimingResult(wall_elapsed=None)
 
         pyopencl.wait_for_events(self.events)
 
@@ -181,7 +185,7 @@ class SumpyTimingFuture(object):
                     (event.profile.end - event.profile.start)
                     * _SECONDS_PER_NANOSECOND)
 
-        return TimingResult(wall_elapsed=result, process_elapsed=None)
+        return TimingResult(wall_elapsed=result)
 
     def done(self):
         return all(
