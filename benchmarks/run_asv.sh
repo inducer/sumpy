@@ -1,9 +1,15 @@
 pip install asv
+
+if [[ ! -z "$CI" ]]; then
+  mkdir -p ~/.sumpy/asv
+  ln -s ~/.sumpy/asv .asv
+fi
+
 asv setup --verbose
 master_commit=`git rev-parse master`
 test_commit=`git rev-parse HEAD`
 
-export PYOPENCL_CTX=0
+export PYOPENCL_CTX=port
 
 asv run $master_commit...$master_commit~ --skip-existing --verbose
 asv run $test_commit...$test_commit~ --skip-existing --verbose
@@ -13,4 +19,5 @@ echo "$output"
 
 if [[ "$output" = *"worse"* ]]; then
   echo "Some of the benchmarks have gotten worse"
+  exit 1
 fi
