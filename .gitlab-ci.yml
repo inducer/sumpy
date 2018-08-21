@@ -99,3 +99,16 @@ Flake8:
   - python3.5
   except:
   - tags
+
+Benchmarks:
+  script:
+  - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
+  - REQUIREMENTS_TXT=.test-conda-env-py3-requirements.txt
+  - rm -rf test
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project-within-miniconda.sh
+  - ". ./build-and-test-py-project-within-miniconda.sh"
+  - ./benchmarks/run_asv.sh
+  tags:
+  - linux
+  except:
+  - tags
