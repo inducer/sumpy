@@ -5,6 +5,7 @@ if [[ ! -z "$CI" ]]; then
   ln -s ~/.sumpy/asv .asv
 fi
 
+asv machine --yes
 asv setup --verbose
 master_commit=`git rev-parse master`
 test_commit=`git rev-parse HEAD`
