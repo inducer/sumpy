@@ -107,6 +107,8 @@ Benchmarks:
   - rm -rf test
   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project-within-miniconda.sh
   - ". ./build-and-test-py-project-within-miniconda.sh"
+  - conda config --add channels conda-forge
+  - conda config --add channels inducer
   - ./benchmarks/run_asv.sh
   tags:
   - linux
