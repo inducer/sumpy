@@ -32,4 +32,4 @@ Resources:
 * `source code via git <http://github.com/inducer/sumpy>`_
 
 If you can see inside the UIUC firewall, you may browse
-`benchmark results <http://koelsch.cs.illinois.edu/benchmarks/asv/sumpy/>`_.
+`benchmark results <http://koelsch.d.tiker.net/benchmarks/asv/sumpy/>`_.
