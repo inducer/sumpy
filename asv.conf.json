@@ -4,7 +4,7 @@
     "version": 1,
 
     // The name of the project being benchmarked
-    "project": "project",
+    "project": "sumpy",
 
     // The project's homepage
     "project_url": "https://documen.tician.de/sumpy",
@@ -41,7 +41,7 @@
     //"install_timeout": 600,
 
     // the base URL to show a commit for the project.
-    // "show_commit_url": "http://github.com/owner/project/commit/",
+    "show_commit_url": "http://gitlab.tiker.net/inducer/sumpy/commits/",
 
     // The Pythons you'd like to test against.  If not provided, defaults
     // to the current version of Python used to run `asv`.
