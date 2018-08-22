@@ -234,6 +234,62 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
     pconv_verifier()
 
 
+def test_sumpy_fmm_timing_data_collection(ctx_getter):
+    logging.basicConfig(level=logging.INFO)
+
+    ctx = ctx_getter()
+    queue = cl.CommandQueue(
+            ctx,
+            properties=cl.command_queue_properties.PROFILING_ENABLE)
+
+    nsources = 500
+    dtype = np.float64
+
+    from boxtree.tools import (
+            make_normal_particle_array as p_normal)
+
+    knl = LaplaceKernel(2)
+    local_expn_class = VolumeTaylorLocalExpansion
+    mpole_expn_class = VolumeTaylorMultipoleExpansion
+    order = 1
+
+    sources = p_normal(queue, nsources, knl.dim, dtype, seed=15)
+
+    from boxtree import TreeBuilder
+    tb = TreeBuilder(ctx)
+
+    tree, _ = tb(queue, sources,
+            max_particles_in_box=30, debug=True)
+
+    from boxtree.traversal import FMMTraversalBuilder
+    tbuild = FMMTraversalBuilder(ctx)
+    trav, _ = tbuild(queue, tree, debug=True)
+
+    from pyopencl.clrandom import PhiloxGenerator
+    rng = PhiloxGenerator(ctx)
+    weights = rng.uniform(queue, nsources, dtype=np.float64)
+
+    out_kernels = [knl]
+
+    from functools import partial
+
+    from sumpy.fmm import SumpyExpansionWranglerCodeContainer
+    wcc = SumpyExpansionWranglerCodeContainer(
+            ctx,
+            partial(mpole_expn_class, knl),
+            partial(local_expn_class, knl),
+            out_kernels)
+
+    wrangler = wcc.get_wrangler(queue, tree, dtype,
+            fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order)
+    from boxtree.fmm import drive_fmm
+
+    timing_data = {}
+    pot, = drive_fmm(trav, wrangler, weights, timing_data=timing_data)
+    print(timing_data)
+    assert timing_data
+
+
 def test_sumpy_fmm_exclude_self(ctx_getter):
     logging.basicConfig(level=logging.INFO)
 
