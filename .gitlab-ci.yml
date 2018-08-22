@@ -112,5 +112,6 @@ Benchmarks:
   - ./benchmarks/run_asv.sh
   tags:
   - linux
+  - benchmark
   except:
   - tags
