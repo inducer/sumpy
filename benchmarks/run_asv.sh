@@ -22,3 +22,7 @@ if [[ "$output" = *"worse"* ]]; then
   echo "Some of the benchmarks have gotten worse"
   exit 1
 fi
+
+if [[ ! -z "$CI" ]]; then
+  asv publish --html-dir ~/.scicomp-benchmarks/asv/sumpy
+fi
