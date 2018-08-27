@@ -22,8 +22,12 @@ import logging
 logger = logging.getLogger(__name__)
 
 import sympy
-import sumpy.symbolic as sym
+import six
+import pymbolic.mapper.flop_counter
 
+import sumpy.symbolic as sym
+from sumpy.assignment_collection import SymbolicAssignmentCollection
+from sumpy.codegen import to_loopy_insns
 
 class Param:
     def __init__(self, knl, local_expn_class, mpole_expn_class):
@@ -66,6 +70,13 @@ class TranslationSuite:
         tgt_rscale = sym.Symbol("tgt_rscale")
         result = l_expn.translate_from(m_expn, src_coeff_exprs, src_rscale,
                                        dvec, tgt_rscale)
-        return sympy.count_ops(result)
+        sac = SymbolicAssignmentCollection()
+        for i, expr in enumerate(result):
+            sac.assign_unique("coeff%d" % i, expr)
+        sac.run_global_cse()
+        insns = to_loopy_insns(six.iteritems(sac.assignments))
+        counter = pymbolic.mapper.flop_counter.FlopCounter()
+
+        return sum([counter.rec(insn.expression) for insn in insns])
 
     track_m2l_op_count.unit = "ops"
