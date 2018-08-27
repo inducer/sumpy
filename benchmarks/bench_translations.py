@@ -81,6 +81,7 @@ class TranslationBenchmarkSuite:
         return sum([counter.rec(insn.expression)+1 for insn in insns])
 
     track_m2l_op_count.unit = "ops"
+    track_m2l_op_count.timeout = 200.0
 
 
 class LaplaceVolumeTaylorTranslation(TranslationBenchmarkSuite):
@@ -121,8 +122,6 @@ class HelmholtzConformingVolumeTaylorTranslation(TranslationBenchmarkSuite):
     mpole_expn_class = HelmholtzConformingVolumeTaylorMultipoleExpansion
     params = [
         Param(2, 10),
-        Param(2, 15),
-        Param(2, 20),
         Param(3, 5),
     ]
 
@@ -134,7 +133,6 @@ class Helmholtz2DTranslation(TranslationBenchmarkSuite):
     params = [
         Param(2, 10),
         Param(2, 15),
-        Param(2, 20),
     ]
 
 
