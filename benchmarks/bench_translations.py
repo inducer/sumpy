@@ -77,6 +77,6 @@ class TranslationSuite:
         insns = to_loopy_insns(six.iteritems(sac.assignments))
         counter = pymbolic.mapper.flop_counter.FlopCounter()
 
-        return sum([counter.rec(insn.expression) for insn in insns])
+        return sum([counter.rec(insn.expression)+1 for insn in insns])
 
     track_m2l_op_count.unit = "ops"
