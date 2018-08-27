@@ -30,38 +30,39 @@ from sumpy.assignment_collection import SymbolicAssignmentCollection
 from sumpy.codegen import to_loopy_insns
 
 class Param:
-    def __init__(self, knl, local_expn_class, mpole_expn_class):
-        self.knl = knl
-        self.local_expn_class = local_expn_class
-        self.mpole_expn_class = mpole_expn_class
+    def __init__(self, dim, order):
+        self.dim = dim
+        self.order = order
 
     def __repr__(self):
-        return "{}_{}_{}".format(self.knl, self.local_expn_class.__name__, self.mpole_expn_class.__name__)
+        return "{}D_order_{}".format(self.dim, self.order)
 
 
-class TranslationSuite:
+class TranslationBenchmarkSuite:
 
     params = [
-        Param(LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
-        Param(LaplaceKernel(2), LaplaceConformingVolumeTaylorLocalExpansion,
-         LaplaceConformingVolumeTaylorMultipoleExpansion),
-        Param(HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
-        Param(HelmholtzKernel(2), HelmholtzConformingVolumeTaylorLocalExpansion,
-         HelmholtzConformingVolumeTaylorMultipoleExpansion),
-        Param(HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion)
+        Param(2, 10),
+        Param(2, 15),
+        Param(2, 20),
+        Param(3, 5),
+        Param(3, 10),
     ]
-    param_names = ['translation']
+
+    param_names = ['order']
 
     def setup(self, param):
         logging.basicConfig(level=logging.INFO)
-        self.ctx = cl.create_some_context()
-        self.queue = cl.CommandQueue(self.ctx)
         np.random.seed(17)
+        if self.__class__ == TranslationBenchmarkSuite:
+            raise NotImplementedError
+        mpole_expn_class = self.mpole_expn_class
+        if param.order == 3 and H2DMultipoleExpansion == mpole_expn_class:
+            raise NotImplementedError
 
     def track_m2l_op_count(self, param):
-        knl = param.knl
-        m_expn = param.mpole_expn_class(knl, order=3)
-        l_expn = param.local_expn_class(knl, order=3)
+        knl = self.knl(param.dim)
+        m_expn = self.mpole_expn_class(knl, order=param.order)
+        l_expn = self.local_expn_class(knl, order=param.order)
 
         src_coeff_exprs = [sym.Symbol("src_coeff%d" % i)
                 for i in range(len(m_expn))]
@@ -80,3 +81,60 @@ class TranslationSuite:
         return sum([counter.rec(insn.expression)+1 for insn in insns])
 
     track_m2l_op_count.unit = "ops"
+
+
+class LaplaceVolumeTaylorTranslation(TranslationBenchmarkSuite):
+    knl = LaplaceKernel
+    local_expn_class = VolumeTaylorLocalExpansion
+    mpole_expn_class = VolumeTaylorMultipoleExpansion
+    params = [
+        Param(2, 10),
+        Param(3, 5),
+    ]
+
+
+class LaplaceConformingVolumeTaylorTranslation(TranslationBenchmarkSuite):
+    knl = LaplaceKernel
+    local_expn_class = LaplaceConformingVolumeTaylorLocalExpansion
+    mpole_expn_class = LaplaceConformingVolumeTaylorMultipoleExpansion
+    params = [
+        Param(2, 10),
+        Param(2, 15),
+        Param(2, 20),
+        Param(3, 5),
+    ]
+
+
+class HelmholtzVolumeTaylorTranslation(TranslationBenchmarkSuite):
+    knl = HelmholtzKernel
+    local_expn_class = VolumeTaylorLocalExpansion
+    mpole_expn_class = VolumeTaylorMultipoleExpansion
+    params = [
+        Param(2, 10),
+        Param(3, 5),
+    ]
+
+
+class HelmholtzConformingVolumeTaylorTranslation(TranslationBenchmarkSuite):
+    knl = HelmholtzKernel
+    local_expn_class = HelmholtzConformingVolumeTaylorLocalExpansion
+    mpole_expn_class = HelmholtzConformingVolumeTaylorMultipoleExpansion
+    params = [
+        Param(2, 10),
+        Param(2, 15),
+        Param(2, 20),
+        Param(3, 5),
+    ]
+
+
+class Helmholtz2DTranslation(TranslationBenchmarkSuite):
+    knl = HelmholtzKernel
+    local_expn_class = H2DLocalExpansion
+    mpole_expn_class = H2DMultipoleExpansion
+    params = [
+        Param(2, 10),
+        Param(2, 15),
+        Param(2, 20),
+    ]
+
+
