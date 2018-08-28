@@ -27,6 +27,7 @@ from six.moves import range
 
 import numpy as np
 import loopy as lp
+from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 
 from sumpy.tools import KernelCacheWrapper
 
@@ -159,7 +160,8 @@ class P2EFromSingleBox(P2EBase):
                 assumptions="nsrc_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
                 default_offset=lp.auto,
-                fixed_parameters=dict(dim=self.dim))
+                fixed_parameters=dict(dim=self.dim),
+                version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
@@ -265,7 +267,8 @@ class P2EFromCSR(P2EBase):
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
                 default_offset=lp.auto,
-                fixed_parameters=dict(dim=self.dim))
+                fixed_parameters=dict(dim=self.dim),
+                version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
