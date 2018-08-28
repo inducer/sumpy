@@ -98,12 +98,6 @@ class LaplaceConformingVolumeTaylorTranslation(TranslationBenchmarkSuite):
     knl = LaplaceKernel
     local_expn_class = LaplaceConformingVolumeTaylorLocalExpansion
     mpole_expn_class = LaplaceConformingVolumeTaylorMultipoleExpansion
-    params = [
-        Param(2, 10),
-        Param(2, 15),
-        Param(2, 20),
-        Param(3, 5),
-    ]
 
 
 class HelmholtzVolumeTaylorTranslation(TranslationBenchmarkSuite):
@@ -120,10 +114,6 @@ class HelmholtzConformingVolumeTaylorTranslation(TranslationBenchmarkSuite):
     knl = HelmholtzKernel
     local_expn_class = HelmholtzConformingVolumeTaylorLocalExpansion
     mpole_expn_class = HelmholtzConformingVolumeTaylorMultipoleExpansion
-    params = [
-        Param(2, 10),
-        Param(3, 5),
-    ]
 
 
 class Helmholtz2DTranslation(TranslationBenchmarkSuite):
@@ -133,6 +123,7 @@ class Helmholtz2DTranslation(TranslationBenchmarkSuite):
     params = [
         Param(2, 10),
         Param(2, 15),
+        Param(2, 20),
     ]
 
 
