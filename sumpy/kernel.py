@@ -269,12 +269,12 @@ class Kernel(object):
         return expr
 
     def get_global_scaling_const(self):
-        """Return a global scaling constant of the kernel.
-         Typically, this ensures that the kernel is scaled so that
-         :math:`\mathcal L(G)(x)=C\delta(x)` with a constant of 1, where
-         :math:`\mathcal L` is the PDE operator associated with the kernel.
-         Not to be confused with *rscale*, which keeps expansion
-         coefficients benignly scaled.
+        r"""Return a global scaling constant of the kernel.
+        Typically, this ensures that the kernel is scaled so that
+        :math:`\mathcal L(G)(x)=C\delta(x)` with a constant of 1, where
+        :math:`\mathcal L` is the PDE operator associated with the kernel.
+        Not to be confused with *rscale*, which keeps expansion
+        coefficients benignly scaled.
         """
         raise NotImplementedError
 
@@ -302,7 +302,7 @@ class ExpressionKernel(Kernel):
 
     def __init__(self, dim, expression, global_scaling_const,
             is_complex_valued):
-        """
+        r"""
         :arg expression: A :mod:`pymbolic` expression depending on
             variables *d_1* through *d_N* where *N* equals *dim*.
             (These variables match what is returned from
