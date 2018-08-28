@@ -76,7 +76,7 @@ class TranslationBenchmarkSuite:
             sac.assign_unique("coeff%d" % i, expr)
         sac.run_global_cse()
         insns = to_loopy_insns(six.iteritems(sac.assignments))
-        counter = pymbolic.mapper.flop_counter.FlopCounter()
+        counter = pymbolic.mapper.flop_counter.CSEAwareFlopCounter()
 
         return sum([counter.rec(insn.expression)+1 for insn in insns])
 
