@@ -99,3 +99,17 @@ Flake8:
   - python3.5
   except:
   - tags
+
+Benchmarks:
+  script:
+  - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
+  - REQUIREMENTS_TXT=.test-conda-env-py3-requirements.txt
+  - PROJECT=sumpy
+  - PYOPENCL_TEST=portable
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-benchmark-py-project.sh
+  - ". ./build-and-benchmark-py-project.sh"
+  tags:
+  - linux
+  - benchmark
+  except:
+  - tags

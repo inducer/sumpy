@@ -19,3 +19,4 @@ doc/_build
 .pytest_cache
 
 sumpy/_git_rev.py
+.asv
