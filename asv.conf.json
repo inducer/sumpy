@@ -72,9 +72,9 @@
         "pyopencl" : [""],
         "islpy" : [""],
         "pocl" : [""],
-        "pip+git+https://github.com/inducer/pymbolic": [""],
-        "pip+git+https://gitlab.tiker.net/inducer/boxtree": [""],
-        "pip+git+https://github.com/inducer/loopy": [""],
+        "pip+git+https://github.com/inducer/pymbolic#egg=pymbolic": [""],
+        "pip+git+https://gitlab.tiker.net/inducer/boxtree#egg=boxtree": [""],
+        "pip+git+https://github.com/inducer/loopy#egg=loopy": [""],
     },
 
     // Combinations of libraries/python versions can be excluded/included
