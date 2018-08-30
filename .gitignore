@@ -16,5 +16,7 @@ doc/_build
 .cache
 .DS_Store
 .ipynb_checkpoints
+.pytest_cache
 
 sumpy/_git_rev.py
+.asv
