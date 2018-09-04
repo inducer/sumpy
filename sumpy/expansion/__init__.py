@@ -356,7 +356,7 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     @memoize_method
     def _get_stored_ids_and_coeff_mat(self):
         from six import iteritems
-        from sumpy.tools import nullspace
+        from sumpy.tools import nullspace, solve_symbolic
 
         tol = 1e-13
         stored_identifiers = []
@@ -382,6 +382,7 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                         eq[coeff_ident_enumerate_dict[c]] = coeff
                     else:
                         pde_mat.append(eq)
+
         if len(pde_mat) > 0:
             r"""
             Find a matrix :math:`s` such that :math:`K = S^T K_{[r]}`
@@ -399,7 +400,7 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             n = nullspace(pde_mat)
             idx = self.get_reduced_coeffs()
             assert len(idx) >= n.shape[1]
-            s = n.T[:, idx].solve(n.T)
+            s = solve_symbolic(n.T[:,idx], n.T)
             stored_identifiers = [mis[i] for i in idx]
         else:
             s = np.eye(len(mis))
