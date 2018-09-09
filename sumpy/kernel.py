@@ -797,6 +797,10 @@ class AxisTargetDerivative(DerivativeBase):
         expr = self.inner_kernel.postprocess_at_target(expr, bvec)
         return expr.diff(bvec[self.axis])
 
+    def replace_inner_kernel(self, new_inner_kernel):
+        self.inner_kernel = new_inner_kernel
+        return self
+
     mapper_method = "map_axis_target_derivative"
 
 
