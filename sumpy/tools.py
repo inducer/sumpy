@@ -657,50 +657,50 @@ def my_syntactic_subs(expr, subst_dict):
         return expr
 
 
-
 def rref(m):
-    l = np.array(m, dtype=object)
+    mat = np.array(m, dtype=object)
     index = 0
-    nrows = l.shape[0]
-    ncols = l.shape[1]
+    nrows = mat.shape[0]
+    ncols = mat.shape[1]
     pivot_cols = []
     for i in range(ncols):
         if index == nrows:
             break
         pivot = nrows
         for k in range(index, nrows):
-            if l[k, i] != 0 and pivot == nrows:
+            if mat[k, i] != 0 and pivot == nrows:
                 pivot = k
-            if abs(l[k, i]) == 1:
+            if abs(mat[k, i]) == 1:
                 pivot = k
                 break
         if pivot == nrows:
             continue
         if pivot != index:
-            l[pivot,:], l[index,:] = l[index,:].copy(), l[pivot,:].copy()
+            mat[[pivot, index], :] = mat[[index, pivot], :]
 
         pivot_cols.append(i)
-        scale = l[index, i]
-        t = l[index,:]//scale
-        not_exact = (t * scale != l[index, :])
+        scale = mat[index, i]
+        t = mat[index, :]//scale
+        not_exact = (t * scale != mat[index, :])
+
         if (np.any(not_exact)):
             for j in range(ncols):
                 if not_exact[j]:
-                    t[j] = sym.sympify(l[index, j])/scale
+                    t[j] = sym.sympify(mat[index, j])/scale
 
-        l[index,:] = t
+        mat[index, :] = t
 
         for j in range(nrows):
             if (j == index):
                 continue
 
-            scale = l[j, i]
+            scale = mat[j, i]
             if scale != 0:
-                l[j,:] = l[j,:] - l[index,:]*scale
+                mat[j, :] = mat[j, :] - mat[index, :]*scale
 
         index = index + 1
 
-    return l, pivot_cols
+    return mat, pivot_cols
 
 
 def nullspace(m):
@@ -716,17 +716,17 @@ def nullspace(m):
         vec[free_var] = 1
         for piv_row, piv_col in enumerate(pivot_cols):
             for pos in pivot_cols[piv_row+1:] + [free_var]:
-                vec[piv_col] -= mat[piv_row,pos]
+                vec[piv_col] -= mat[piv_row, pos]
         n.append(vec)
     return np.array(n, dtype=object).T
 
 
-def solve_symbolic(A, b):
-    if isinstance(A, sym.Matrix):
-        big = A.row_join(b)
+def solve_symbolic(a, b):
+    if isinstance(a, sym.Matrix):
+        big = a.row_join(b)
     else:
-        big = np.hstack((A, b))
+        big = np.hstack((a, b))
     red = rref(big)[0]
-    return red[:,big.shape[0]:]
+    return red[:, big.shape[0]:]
 
 # vim: fdm=marker

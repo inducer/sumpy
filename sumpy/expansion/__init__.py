@@ -400,7 +400,7 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             n = nullspace(pde_mat)
             idx = self.get_reduced_coeffs()
             assert len(idx) >= n.shape[1]
-            s = solve_symbolic(n.T[:,idx], n.T)
+            s = solve_symbolic(n.T[:, idx], n.T)
             stored_identifiers = [mis[i] for i in idx]
         else:
             s = np.eye(len(mis))
