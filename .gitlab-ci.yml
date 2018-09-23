@@ -11,6 +11,9 @@ Python 3.5 Titan X:
   except:
   - tags
   allow_failure: True
+  artifacts:
+    reports:
+      junit: test/pytest.xml
 
 # Sumpy thus far is poorly parallelized (no workgroup-level parallelism), and
 # the Kepler has a tendency to hang as a result.
@@ -27,6 +30,9 @@ Python 3.5 Titan X:
 #   - nvidia-k40
 #   except:
 #   - tags
+#  artifacts:
+#    reports:
+#      junit: test/pytest.xml
 
 Python 2.7 POCL:
   script:
@@ -40,6 +46,9 @@ Python 2.7 POCL:
   - pocl
   except:
   - tags
+  artifacts:
+    reports:
+      junit: test/pytest.xml
 
 Python 3.5 POCL:
   script:
@@ -53,6 +62,9 @@ Python 3.5 POCL:
   - pocl
   except:
   - tags
+  artifacts:
+    reports:
+      junit: test/pytest.xml
 
 Python 3.6 POCL:
   script:
@@ -66,6 +78,9 @@ Python 3.6 POCL:
   - pocl
   except:
   - tags
+  artifacts:
+    reports:
+      junit: test/pytest.xml
 
 Python 3.5 Conda:
   script:
@@ -80,6 +95,9 @@ Python 3.5 Conda:
   - linux
   except:
   - tags
+  artifacts:
+    reports:
+      junit: test/pytest.xml
 
 Documentation:
   script:
