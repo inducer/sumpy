@@ -398,7 +398,7 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             :math:`S = N_{[r, :]}^{-T} N^T = N_{[r, :]}^{-T} N^T`.
             """
             n = nullspace(pde_mat)
-            idx = self.get_reduced_coeffs()
+            idx = self.get_reduced_coeffs(n)
             assert len(idx) >= n.shape[1]
             s = solve_symbolic(n.T[:, idx], n.T)
             stored_identifiers = [mis[i] for i in idx]
@@ -455,11 +455,25 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         raise NotImplementedError
 
-    def get_reduced_coeffs(self):
+    def get_reduced_coeffs(self, nullspace):
         """
         Returns the indices of the reduced set of derivatives which are stored.
         """
-        raise NotImplementedError
+        mat = nullspace.copy()
+        nrows = mat.shape[0]
+        ncols = mat.shape[1]
+        rows = []
+        for i in range(nrows):
+            for j in range(ncols):
+                if mat[i, j] != 0:
+                    col = j
+                    break
+            else:
+                continue
+            rows.append(i)
+            for j in range(i+1, nrows):
+                mat[j, :] = mat[i, col]*mat[j, :] - mat[i, :]*mat[j, col]
+        return rows
 
 
 class LaplaceExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler):
@@ -477,7 +491,7 @@ class LaplaceExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler)
             pde_dict[tuple(mi)] = 1
         return pde_dict
 
-    def get_reduced_coeffs(self):
+    def get_reduced_coeffs(self, nullspace):
         idx = []
         for i, mi in enumerate(self.get_full_coefficient_identifiers()):
             # Return only the derivatives with the order of the last dimension
@@ -507,7 +521,7 @@ class HelmholtzExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangle
         pde_dict[tuple([0]*self.dim)] = 1
         return pde_dict
 
-    def get_reduced_coeffs(self):
+    def get_reduced_coeffs(self, nullspace):
         idx = []
         for i, mi in enumerate(self.get_full_coefficient_identifiers()):
             # Return only the derivatives with the order of the last dimension
