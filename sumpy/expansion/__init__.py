@@ -491,7 +491,7 @@ class LaplaceExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler)
             pde_dict[tuple(mi)] = 1
         return pde_dict
 
-    def get_reduced_coeffs(self, nullspace):
+    def _get_reduced_coeffs(self, nullspace):
         idx = []
         for i, mi in enumerate(self.get_full_coefficient_identifiers()):
             # Return only the derivatives with the order of the last dimension
@@ -521,7 +521,7 @@ class HelmholtzExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangle
         pde_dict[tuple([0]*self.dim)] = 1
         return pde_dict
 
-    def get_reduced_coeffs(self, nullspace):
+    def _get_reduced_coeffs(self, nullspace):
         idx = []
         for i, mi in enumerate(self.get_full_coefficient_identifiers()):
             # Return only the derivatives with the order of the last dimension
