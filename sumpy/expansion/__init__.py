@@ -458,6 +458,12 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     def get_reduced_coeffs(self, nullspace):
         """
         Returns the indices of the reduced set of derivatives which are stored.
+        Override this method if the reduced set is known analytically.
+
+        This method does elementary row operations to figure out which rows are
+        linearly dependent on the previous rows. Partial pivoting is not done
+        to preserve the order so that a row is not linearly dependent on a row
+        that came after in the original row order.
         """
         mat = nullspace.copy()
         nrows = mat.shape[0]
