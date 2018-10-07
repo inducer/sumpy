@@ -319,14 +319,18 @@ class P2PMatrixBlockGenerator(P2PBase):
         loopy_knl = lp.make_kernel(
             "{[imat, idim]: 0 <= imat < nresult and 0 <= idim < dim}",
             self.get_kernel_scaling_assignments()
+            # NOTE: itgt, isrc need to always be defined in case a statement
+            # in loopy_insns or kernel_exprs needs them (e.g. hardcoded in
+            # places like get_kernel_exprs)
             + ["""
                 for imat
-                    <> d[idim] = targets[idim, tgtindices[imat]] - \
-                                 sources[idim, srcindices[imat]]
+                    <> itgt = tgtindices[imat]
+                    <> isrc = srcindices[imat]
+
+                    <> d[idim] = targets[idim, itgt] - sources[idim, isrc]
             """]
             + ["""
-                    <> is_self = (srcindices[imat] ==
-                                  target_to_source[tgtindices[imat]])
+                    <> is_self = (isrc == target_to_source[itgt])
                 """ if self.exclude_self else ""]
             + loopy_insns + kernel_exprs
             + ["""
