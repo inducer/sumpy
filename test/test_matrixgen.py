@@ -132,7 +132,7 @@ def test_qbx_direct(ctx_getter, factor, lpot_id):
 
     for n in [200, 300, 400]:
         targets, sources, centers, expansion_radii, sigma = \
-                _build_geometry(queue, n, mode_nr)
+                _build_geometry(queue, n, mode_nr, target_radius=1.2)
 
         h = 2 * np.pi / n
         strengths = (sigma * h,)
@@ -180,7 +180,8 @@ def test_qbx_direct(ctx_getter, factor, lpot_id):
 
 @pytest.mark.parametrize("exclude_self", [True, False])
 @pytest.mark.parametrize("factor", [1.0, 0.6])
-def test_p2p_direct(ctx_getter, exclude_self, factor):
+@pytest.mark.parametrize('lpot_id', [1, 2])
+def test_p2p_direct(ctx_getter, exclude_self, factor, lpot_id):
     logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_getter()
@@ -190,8 +191,14 @@ def test_p2p_direct(ctx_getter, exclude_self, factor):
     nblks = 10
     mode_nr = 25
 
-    from sumpy.kernel import LaplaceKernel
-    lknl = LaplaceKernel(ndim)
+    from sumpy.kernel import LaplaceKernel, DirectionalSourceDerivative
+    if lpot_id == 1:
+        lknl = LaplaceKernel(ndim)
+    elif lpot_id == 2:
+        lknl = LaplaceKernel(ndim)
+        lknl = DirectionalSourceDerivative(lknl, dir_vec_name="dsource_vec")
+    else:
+        raise ValueError("unknow lpot_id")
 
     from sumpy.p2p import P2P
     lpot = P2P(ctx, [lknl], exclude_self=exclude_self)
@@ -217,6 +224,9 @@ def test_p2p_direct(ctx_getter, exclude_self, factor):
         if exclude_self:
             extra_kwargs["target_to_source"] = \
                 cl.array.arange(queue, 0, n, dtype=np.int)
+        if lpot_id == 2:
+            extra_kwargs["dsource_vec"] = \
+                    vector_to_device(queue, np.ones((ndim, n)))
 
         _, (result_lpot,) = lpot(queue,
                 targets=targets,

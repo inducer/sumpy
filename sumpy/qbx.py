@@ -352,16 +352,17 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
             "{[imat, idim]: 0 <= imat < nresult and 0 <= idim < dim}"
             ],
             self.get_kernel_scaling_assignments()
+            # NOTE: itgt, isrc need to always be defined in case a statement
+            # in loopy_insns or kernel_exprs needs them (e.g. hardcoded in
+            # places like get_kernel_exprs)
             + ["""
                 for imat
                     <> itgt = tgtindices[imat]
                     <> isrc = srcindices[imat]
 
-                    <> a[idim] = center[idim, tgtindices[imat]] - \
-                                 src[idim, srcindices[imat]] {dup=idim}
-                    <> b[idim] = tgt[idim, tgtindices[imat]] - \
-                                 center[idim, tgtindices[imat]] {dup=idim}
-                    <> rscale = expansion_radii[tgtindices[imat]]
+                    <> a[idim] = center[idim, itgt] - src[idim, isrc] {dup=idim}
+                    <> b[idim] = tgt[idim, itgt] - center[idim, itgt] {dup=idim}
+                    <> rscale = expansion_radii[itgt]
             """]
             + loopy_insns + kernel_exprs
             + ["""
