@@ -21,30 +21,22 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
-from six.moves import range
-
 import numpy as np
 import numpy.linalg as la
-import sys
 
-import pytest
 import pyopencl as cl
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 
 from sumpy.expansion.multipole import (
-        VolumeTaylorMultipoleExpansion, H2DMultipoleExpansion,
-        VolumeTaylorMultipoleExpansionBase,
+        VolumeTaylorMultipoleExpansion,
         LaplaceConformingVolumeTaylorMultipoleExpansion,
         HelmholtzConformingVolumeTaylorMultipoleExpansion)
 from sumpy.expansion.local import (
-        VolumeTaylorLocalExpansion, H2DLocalExpansion,
+        VolumeTaylorLocalExpansion,
         LaplaceConformingVolumeTaylorLocalExpansion,
         HelmholtzConformingVolumeTaylorLocalExpansion)
-from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, AxisTargetDerivative,
-        DirectionalSourceDerivative)
-from pytools.convergence import PConvergenceVerifier
+from sumpy.kernel import LaplaceKernel, HelmholtzKernel
 
 import logging
 logger = logging.getLogger(__name__)
@@ -57,6 +49,7 @@ else:
     faulthandler.enable()
 
 import matplotlib.pyplot as plt
+
 
 def test_m2m(ctx_getter, order):
     logging.basicConfig(level=logging.INFO)
@@ -82,11 +75,6 @@ def test_m2m(ctx_getter, order):
     # Just to make sure things also work away from the origin
     origin = np.array([2, 1], np.float64)
     strengths = np.ones(nsources, dtype=np.float64) * (1/nsources)
-
-    pconv_verifier_p2m2p = PConvergenceVerifier()
-    pconv_verifier_p2m2m2p = PConvergenceVerifier()
-    pconv_verifier_p2m2m2l2p = PConvergenceVerifier()
-    pconv_verifier_full = PConvergenceVerifier()
 
     from sumpy.visualization import FieldPlotter
 
@@ -141,11 +129,15 @@ def test_m2m(ctx_getter, order):
         return pot
 
     if isinstance(knl, LaplaceKernel):
-        mpole_expn_classes = [LaplaceConformingVolumeTaylorMultipoleExpansion, VolumeTaylorMultipoleExpansion]
-        local_expn_classes = [LaplaceConformingVolumeTaylorLocalExpansion, VolumeTaylorLocalExpansion]
+        mpole_expn_classes = [LaplaceConformingVolumeTaylorMultipoleExpansion,
+                                VolumeTaylorMultipoleExpansion]
+        local_expn_classes = [LaplaceConformingVolumeTaylorLocalExpansion,
+                                VolumeTaylorLocalExpansion]
     elif isinstance(knl, HelmholtzKernel):
-        mpole_expn_classes = [HelmholtzConformingVolumeTaylorMultipoleExpansion, VolumeTaylorMultipoleExpansion]
-        local_expn_classes = [HelmholtzConformingVolumeTaylorLocalExpansion, VolumeTaylorLocalExpansion]
+        mpole_expn_classes = [HelmholtzConformingVolumeTaylorMultipoleExpansion,
+                                VolumeTaylorMultipoleExpansion]
+        local_expn_classes = [HelmholtzConformingVolumeTaylorLocalExpansion,
+                                VolumeTaylorLocalExpansion]
 
     h_values = 2.0**np.arange(-3, 7)
     distances = []
@@ -155,9 +147,9 @@ def test_m2m(ctx_getter, order):
                 + origin[:, np.newaxis])
         distances.append(np.max(np.abs(sources - centers[:, 1].reshape(2, 1))))
         m2m_vals = []
-        for i, (mpole_expn_class, local_expn_class) in enumerate(zip(mpole_expn_classes, local_expn_classes)):
+        for i, (mpole_expn_class, local_expn_class) in \
+                enumerate(zip(mpole_expn_classes, local_expn_classes)):
             m_expn = mpole_expn_class(knl, order=order)
-            l_expn = local_expn_class(knl, order=order)
 
             from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P, E2EFromCSR
             p2m = P2EFromSingleBox(ctx, m_expn)
@@ -238,13 +230,16 @@ def test_m2m(ctx_getter, order):
     p1 = 5
     distances = np.array(distances)
     plt.loglog(distances, errs, label="order={}".format(order), marker='x')
-    plt.loglog(distances, distances**(order+1) / distances[p1]**(order+1) * errs[p1], label="h**%.2f" % (order+1))
-    plt.loglog(distances, distances**(order) / distances[p1]**(order) * errs[p1], label="h**%.2f" % (order))
+    plt.loglog(distances, distances**(order+1) / distances[p1]**(order+1) * errs[p1],
+                label="h**%.2f" % (order+1))
+    plt.loglog(distances, distances**(order) / distances[p1]**(order) * errs[p1],
+                label="h**%.2f" % (order))
 
     plt.xlabel("Distance between furthest source and center")
     plt.ylabel("Error between reduced and full")
     plt.legend()
     plt.show()
+
 
 if __name__ == "__main__":
     test_m2m(cl.create_some_context, 8)
