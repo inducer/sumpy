@@ -58,7 +58,7 @@ else:
 
 import matplotlib.pyplot as plt
 
-def test_m2m(ctx_getter, order=5):
+def test_m2m(ctx_getter, order):
     logging.basicConfig(level=logging.INFO)
 
     from sympy.core.cache import clear_cache
@@ -77,12 +77,10 @@ def test_m2m(ctx_getter, order=5):
 
     extra_kwargs = {}
     if isinstance(knl, HelmholtzKernel):
-        extra_kwargs["k"] = 0.05
+        extra_kwargs["k"] = 0.1
 
     # Just to make sure things also work away from the origin
     origin = np.array([2, 1], np.float64)
-    sources = (0.7*(-0.5+np.random.rand(knl.dim, nsources).astype(np.float64))
-            + origin[:, np.newaxis])
     strengths = np.ones(nsources, dtype=np.float64) * (1/nsources)
 
     pconv_verifier_p2m2p = PConvergenceVerifier()
@@ -149,106 +147,106 @@ def test_m2m(ctx_getter, order=5):
         mpole_expn_classes = [HelmholtzConformingVolumeTaylorMultipoleExpansion, VolumeTaylorMultipoleExpansion]
         local_expn_classes = [HelmholtzConformingVolumeTaylorLocalExpansion, VolumeTaylorLocalExpansion]
 
-    h_values = 1000*2.0**np.arange(-5, 3)
-    for order in [6]:
-        h_errs = []
-        for h in h_values:
-            m2m_vals = []
-            for i, (mpole_expn_class, local_expn_class) in enumerate(zip(mpole_expn_classes, local_expn_classes)):
-                m_expn = mpole_expn_class(knl, order=order)
-                l_expn = local_expn_class(knl, order=order)
+    h_values = 2.0**np.arange(-3, 7)
+    distances = []
+    errs = []
+    for h in h_values:
+        sources = (h*(-0.5+np.random.rand(knl.dim, nsources).astype(np.float64))
+                + origin[:, np.newaxis])
+        distances.append(np.max(np.abs(sources - centers[:, 1].reshape(2, 1))))
+        m2m_vals = []
+        for i, (mpole_expn_class, local_expn_class) in enumerate(zip(mpole_expn_classes, local_expn_classes)):
+            m_expn = mpole_expn_class(knl, order=order)
+            l_expn = local_expn_class(knl, order=order)
 
-                from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P, E2EFromCSR
-                p2m = P2EFromSingleBox(ctx, m_expn)
-                m2m = E2EFromCSR(ctx, m_expn, m_expn)
-                m2p = E2PFromSingleBox(ctx, m_expn, out_kernels)
-                p2p = P2P(ctx, out_kernels, exclude_self=False)
+            from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P, E2EFromCSR
+            p2m = P2EFromSingleBox(ctx, m_expn)
+            m2m = E2EFromCSR(ctx, m_expn, m_expn)
+            m2p = E2PFromSingleBox(ctx, m_expn, out_kernels)
+            p2p = P2P(ctx, out_kernels, exclude_self=False)
 
-                fp = FieldPlotter(centers[:, -1], extent=h, npoints=res)
-                targets = fp.points
+            fp = FieldPlotter(centers[:, -1], extent=0.1, npoints=res)
+            targets = fp.points
 
-                m1_rscale = 0.5
-                m2_rscale = 0.25
+            m1_rscale = 0.5
+            m2_rscale = 0.25
 
-                # {{{ apply P2M
+            # {{{ apply P2M
 
-                p2m_source_boxes = np.array([0], dtype=np.int32)
+            p2m_source_boxes = np.array([0], dtype=np.int32)
 
-                # These are indexed by global box numbers.
-                p2m_box_source_starts = np.array([0, 0, 0, 0], dtype=np.int32)
-                p2m_box_source_counts_nonchild = np.array([nsources, 0, 0, 0],
-                        dtype=np.int32)
+            # These are indexed by global box numbers.
+            p2m_box_source_starts = np.array([0, 0, 0, 0], dtype=np.int32)
+            p2m_box_source_counts_nonchild = np.array([nsources, 0, 0, 0],
+                    dtype=np.int32)
 
-                evt, (mpoles,) = p2m(queue,
-                        source_boxes=p2m_source_boxes,
-                        box_source_starts=p2m_box_source_starts,
-                        box_source_counts_nonchild=p2m_box_source_counts_nonchild,
-                        centers=centers,
-                        sources=sources,
-                        strengths=strengths,
-                        nboxes=nboxes,
-                        rscale=m1_rscale,
+            evt, (mpoles,) = p2m(queue,
+                    source_boxes=p2m_source_boxes,
+                    box_source_starts=p2m_box_source_starts,
+                    box_source_counts_nonchild=p2m_box_source_counts_nonchild,
+                    centers=centers,
+                    sources=sources,
+                    strengths=strengths,
+                    nboxes=nboxes,
+                    rscale=m1_rscale,
 
-                        tgt_base_ibox=0,
+                    tgt_base_ibox=0,
+                    out_host=True, **extra_kwargs)
 
-                        #flags="print_hl_wrapper",
-                        out_host=True, **extra_kwargs)
+            # }}}
 
-                # }}}
+            ntargets = targets.shape[-1]
 
-                ntargets = targets.shape[-1]
+            # {{{ apply M2M
 
-                # {{{ apply M2M
+            m2m_target_boxes = np.array([1], dtype=np.int32)
+            m2m_src_box_starts = np.array([0, 1], dtype=np.int32)
+            m2m_src_box_lists = np.array([0], dtype=np.int32)
 
-                m2m_target_boxes = np.array([1], dtype=np.int32)
-                m2m_src_box_starts = np.array([0, 1], dtype=np.int32)
-                m2m_src_box_lists = np.array([0], dtype=np.int32)
+            evt, (mpoles,) = m2m(queue,
+                    src_expansions=mpoles,
+                    src_base_ibox=0,
+                    tgt_base_ibox=0,
+                    ntgt_level_boxes=mpoles.shape[0],
 
-                evt, (mpoles,) = m2m(queue,
-                        src_expansions=mpoles,
-                        src_base_ibox=0,
-                        tgt_base_ibox=0,
-                        ntgt_level_boxes=mpoles.shape[0],
+                    target_boxes=m2m_target_boxes,
 
-                        target_boxes=m2m_target_boxes,
+                    src_box_starts=m2m_src_box_starts,
+                    src_box_lists=m2m_src_box_lists,
+                    centers=centers,
 
-                        src_box_starts=m2m_src_box_starts,
-                        src_box_lists=m2m_src_box_lists,
-                        centers=centers,
+                    src_rscale=m1_rscale,
+                    tgt_rscale=m2_rscale,
 
-                        src_rscale=m1_rscale,
-                        tgt_rscale=m2_rscale,
+                    #flags="print_hl_cl",
+                    out_host=True, **extra_kwargs)
 
-                        #flags="print_hl_cl",
-                        out_host=True, **extra_kwargs)
+            # }}}
 
-                # }}}
+            pot = eval_at(m2p, 1, m2_rscale)
 
-                pot = eval_at(m2p, 1, m2_rscale)
-                
-                evt, (pot_direct,) = p2p(
-                        queue,
-                        targets, sources, (strengths,),
-                        out_host=True, **extra_kwargs)
-                #if (i == 0):
-                #    m2m_vals.append(pot_direct)
-                #else:
-                #    m2m_vals.append(pot)
-                m2m_vals.append(pot)
+            evt, (pot_direct,) = p2p(
+                    queue,
+                    targets, sources, (strengths,),
+                    out_host=True, **extra_kwargs)
+            m2m_vals.append(pot)
 
-            err = la.norm(m2m_vals[1] - m2m_vals[0])/la.norm(m2m_vals[0])
-            print(err)
-            h_errs.append(abs(err))
-        a, b = np.polyfit(np.log(h_values), np.log(h_errs), 1)
-        plt.loglog(h_values, h_errs, label="order={}".format(order), marker='x')
-        plt.loglog(h_values, h_values**a / h_values[-3]**a * h_errs[-3], label="h**%.2f" % a)
-        plt.loglog(h_values, h_values**(-order-1) / h_values[-3]**(-order-1) * h_errs[-3], label="h**-%.2f" % (order+1))
-    plt.xlabel("h")
+        err = la.norm(m2m_vals[1] - m2m_vals[0])/la.norm(m2m_vals[1])
+        print(err)
+        errs.append(abs(err))
+
+    p1 = 5
+    distances = np.array(distances)
+    plt.loglog(distances, errs, label="order={}".format(order), marker='x')
+    plt.loglog(distances, distances**(order+1) / distances[p1]**(order+1) * errs[p1], label="h**%.2f" % (order+1))
+    plt.loglog(distances, distances**(order) / distances[p1]**(order) * errs[p1], label="h**%.2f" % (order))
+
+    plt.xlabel("Distance between furthest source and center")
     plt.ylabel("Error between reduced and full")
     plt.legend()
     plt.show()
 
 if __name__ == "__main__":
-    test_m2m(cl.create_some_context)
+    test_m2m(cl.create_some_context, 8)
 
 # vim: fdm=marker
