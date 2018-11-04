@@ -177,7 +177,8 @@ class SumpyTimingFuture(object):
                     stacklevel=3)
             return TimingResult(wall_elapsed=None)
 
-        pyopencl.wait_for_events(self.events)
+        if self.events:
+            pyopencl.wait_for_events(self.events)
 
         result = 0
         for event in self.events:
