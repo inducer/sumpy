@@ -61,8 +61,7 @@ CACHING_ENABLED = True
 
 CACHING_ENABLED = (
     "SUMPY_NO_CACHE" not in os.environ
-    and
-    "CG_NO_CACHE" not in os.environ)
+    and "CG_NO_CACHE" not in os.environ)
 
 
 def set_caching_enabled(flag):

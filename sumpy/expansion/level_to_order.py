@@ -131,7 +131,7 @@ class SimpleExpansionOrderFinder(object):
 
         laplace_order = int(np.ceil(
                 (np.log(self.tol) - np.log(self.err_const_laplace))
-                /
+                /  # noqa: W504
                 np.log(
                     np.sqrt(tree.dimensions)/3
                     ) - 1))

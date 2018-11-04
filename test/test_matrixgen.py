@@ -251,8 +251,8 @@ def test_p2p_direct(ctx_getter, exclude_self, factor, lpot_id):
 
         index_set = index_set.get(queue)
         for i in range(index_set.nblocks):
-            assert la.norm(index_set.block_take(blk, i) -
-                           index_set.take(mat, i)) < eps
+            assert la.norm(index_set.block_take(blk, i)
+                           - index_set.take(mat, i)) < eps
 
 
 # You can test individual routines by typing

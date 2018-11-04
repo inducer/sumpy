@@ -600,7 +600,7 @@ class StokesletKernel(ExpressionKernel):
             r = pymbolic_real_norm_2(d)
             expr = (
                 -var("log")(r)*(1 if icomp == jcomp else 0)
-                +
+                +  # noqa: W504
                 d[icomp]*d[jcomp]/r**2
                 )
             scaling = -1/(4*var("pi")*mu)
@@ -610,7 +610,7 @@ class StokesletKernel(ExpressionKernel):
             r = pymbolic_real_norm_2(d)
             expr = (
                 (1/r)*(1 if icomp == jcomp else 0)
-                +
+                +  # noqa: W504
                 d[icomp]*d[jcomp]/r**3
                 )
             scaling = -1/(8*var("pi")*mu)

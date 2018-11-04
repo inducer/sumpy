@@ -564,8 +564,7 @@ def combine_inner_outer(psource_inner, psource_outer, radius, center=None):
     ball_one = OneOnBallPotential(psource_inner.toy_ctx, center, radius)
     return (
             psource_inner * ball_one
-            +
-            psource_outer * (1 - ball_one))
+            + psource_outer * (1 - ball_one))
 
 
 def combine_halfspace(psource_pos, psource_neg, axis, center=None):
@@ -575,8 +574,7 @@ def combine_halfspace(psource_pos, psource_neg, axis, center=None):
     halfspace_one = HalfspaceOnePotential(psource_pos.toy_ctx, center, axis)
     return (
         psource_pos * halfspace_one
-        +
-        psource_neg * (1-halfspace_one))
+        + psource_neg * (1-halfspace_one))
 
 
 def combine_halfspace_and_outer(psource_pos, psource_neg, psource_outer,

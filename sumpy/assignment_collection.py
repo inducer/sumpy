@@ -51,7 +51,7 @@ class _SymbolGenerator(object):
     def _normalize(self, base):
         # Strip off any _N suffix, to avoid generating conflicting names.
         import re
-        base = re.split("_\d+$", base)[0]
+        base = re.split(r"_\d+$", base)[0]
         return base if base != "" else "expr"
 
     def __call__(self, base="expr"):
