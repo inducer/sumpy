@@ -112,11 +112,12 @@ if not have_unevaluated_expr:
 
 
 if USE_SYMENGINE:
-    def UnevaluatedPow(a, b):
-        return Pow(a, b)
+    def unevaluated_pow(a, b):
+        return sym.Pow(a, b)
 else:
-    def UnevaluatedPow(a, b):
-        return Pow(a, b, evaluate=False)
+    def unevaluated_pow(a, b):
+        return sym.Pow(a, b, evaluate=False)
+
 
 # {{{ debugging of sympy CSE via Maxima
 

@@ -60,8 +60,8 @@ def mi_power(vector, mi, evaluate=True):
     for mi_i, vec_i in zip(mi, vector):
         if evaluate:
             result *= vec_i**mi_i
-        else
-            result *= sym.UnevaluatedPow(vec_i, mi_i)
+        else:
+            result *= sym.unevaluated_pow(vec_i, mi_i)
     return result
 
 
