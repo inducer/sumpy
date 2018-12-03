@@ -130,7 +130,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         evaluated_coeffs = (
             self.derivative_wrangler.get_full_kernel_derivatives_from_stored(
                 coeffs, rscale))
-        bvec = bvec * rscale**-1
+        bvec = [sym.UnevaluatedExpr(b * rscale**-1) for b in bvec]
         result = sum(
                 coeff
                 * mi_power(bvec, mi)
