@@ -55,10 +55,13 @@ def mi_factorial(mi):
     return result
 
 
-def mi_power(vector, mi):
+def mi_power(vector, mi, evaluate=True):
     result = 1
     for mi_i, vec_i in zip(mi, vector):
-        result *= vec_i**mi_i
+        if evaluate:
+            result *= vec_i**mi_i
+        else
+            result *= sym.UnevaluatedPow(vec_i, mi_i)
     return result
 
 

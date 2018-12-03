@@ -111,6 +111,13 @@ if not have_unevaluated_expr:
         return x
 
 
+if USE_SYMENGINE:
+    def UnevaluatedPow(a, b):
+        return Pow(a, b)
+else:
+    def UnevaluatedPow(a, b):
+        return Pow(a, b, evaluate=False)
+
 # {{{ debugging of sympy CSE via Maxima
 
 class _DerivativeKiller(IdentityMapperBase):
