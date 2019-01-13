@@ -1,20 +1,3 @@
-Python 3.5 Titan X:
-  script:
-  - py_version=2.7
-  - export PYOPENCL_TEST=nvi:titan
-  - EXTRA_INSTALL="pybind11 numpy mako"
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project.sh
-  - ". ./build-and-test-py-project.sh"
-  tags:
-  - python3.5
-  - nvidia-titan-x
-  except:
-  - tags
-  allow_failure: True
-  artifacts:
-    reports:
-      junit: test/pytest.xml
-
 # Sumpy thus far is poorly parallelized (no workgroup-level parallelism), and
 # the Kepler has a tendency to hang as a result.
 #
@@ -50,22 +33,6 @@ Python 2.7 POCL:
     reports:
       junit: test/pytest.xml
 
-Python 3.5 POCL:
-  script:
-  - export PY_EXE=python3.5
-  - export PYOPENCL_TEST=portable
-  - export EXTRA_INSTALL="pybind11 numpy mako"
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project.sh
-  - ". ./build-and-test-py-project.sh"
-  tags:
-  - python3.5
-  - pocl
-  except:
-  - tags
-  artifacts:
-    reports:
-      junit: test/pytest.xml
-
 Python 3.6 POCL:
   script:
   - export PY_EXE=python3.6
@@ -78,6 +45,39 @@ Python 3.6 POCL:
   - pocl
   except:
   - tags
+  artifacts:
+    reports:
+      junit: test/pytest.xml
+
+Python 3.7 POCL:
+  script:
+  - export PY_EXE=python3.7
+  - export PYOPENCL_TEST=portable
+  - export EXTRA_INSTALL="pybind11 numpy mako"
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project.sh
+  - ". ./build-and-test-py-project.sh"
+  tags:
+  - python3.7
+  - pocl
+  except:
+  - tags
+  artifacts:
+    reports:
+      junit: test/pytest.xml
+
+Python 3.7 Titan X:
+  script:
+  - py_version=3.7
+  - export PYOPENCL_TEST=nvi:titan
+  - EXTRA_INSTALL="pybind11 numpy mako"
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project.sh
+  - ". ./build-and-test-py-project.sh"
+  tags:
+  - python3.7
+  - nvidia-titan-x
+  except:
+  - tags
+  allow_failure: True
   artifacts:
     reports:
       junit: test/pytest.xml
