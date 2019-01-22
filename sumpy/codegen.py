@@ -705,7 +705,7 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
         result = [
                 lp.Assignment(id=None,
                     assignee=name, expression=convert_expr(name, expr),
-                    temp_var_type=lp.Optional(None))
+                    temp_var_type=lp.auto)
                 for name, expr in assignments]
 
     logger.info("loopy instruction generation: done")

@@ -119,7 +119,7 @@ class E2PBase(KernelCacheWrapper):
                     assignee="kernel_scaling",
                     expression=sympy_conv(
                         self.expansion.kernel.get_global_scaling_const()),
-                    temp_var_type=lp.Optional(None))]
+                    temp_var_type=lp.auto)]
 
     def get_cache_key(self):
         return (type(self).__name__, self.expansion, tuple(self.kernels))
