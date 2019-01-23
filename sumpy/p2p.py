@@ -125,7 +125,7 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
 
         return [lp.Assignment(id=None,
                     assignee="pair_result_%d" % i, expression=expr,
-                    temp_var_type=lp.auto)
+                    temp_var_type=lp.Optional(None))
                 for i, expr in enumerate(exprs)]
 
     def get_default_src_tgt_arguments(self):
