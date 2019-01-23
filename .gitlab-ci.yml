@@ -82,7 +82,7 @@ Python 3.7 Titan X:
     reports:
       junit: test/pytest.xml
 
-Python 3.7 Conda:
+Python 3.6 Conda:
   script:
   # Disable caching to ensure SymEngine code generation is exercised.
   - export SUMPY_NO_CACHE=1
