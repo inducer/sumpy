@@ -33,15 +33,15 @@ Python 2.7 POCL:
     reports:
       junit: test/pytest.xml
 
-Python 3.6 POCL:
+Python 3 POCL:
   script:
-  - export PY_EXE=python3.6
+  - export PY_EXE=python3
   - export PYOPENCL_TEST=portable
   - export EXTRA_INSTALL="pybind11 numpy mako"
   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project.sh
   - ". ./build-and-test-py-project.sh"
   tags:
-  - python3.6
+  - python3
   - pocl
   except:
   - tags
@@ -49,31 +49,15 @@ Python 3.6 POCL:
     reports:
       junit: test/pytest.xml
 
-Python 3.7 POCL:
+Python 3 Titan X:
   script:
-  - export PY_EXE=python3.7
-  - export PYOPENCL_TEST=portable
-  - export EXTRA_INSTALL="pybind11 numpy mako"
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project.sh
-  - ". ./build-and-test-py-project.sh"
-  tags:
-  - python3.7
-  - pocl
-  except:
-  - tags
-  artifacts:
-    reports:
-      junit: test/pytest.xml
-
-Python 3.7 Titan X:
-  script:
-  - py_version=3.7
+  - py_version=3
   - export PYOPENCL_TEST=nvi:titan
   - EXTRA_INSTALL="pybind11 numpy mako"
   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project.sh
   - ". ./build-and-test-py-project.sh"
   tags:
-  - python3.7
+  - python3
   - nvidia-titan-x
   except:
   - tags
@@ -82,7 +66,7 @@ Python 3.7 Titan X:
     reports:
       junit: test/pytest.xml
 
-Python 3.5 Conda:
+Python 3.6 Conda:
   script:
   # Disable caching to ensure SymEngine code generation is exercised.
   - export SUMPY_NO_CACHE=1
@@ -105,7 +89,7 @@ Documentation:
   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-docs.sh
   - ". ./build-docs.sh"
   tags:
-  - python3.5
+  - python3
   only:
   - master
 
@@ -114,7 +98,7 @@ Flake8:
   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/prepare-and-run-flake8.sh
   - ". ./prepare-and-run-flake8.sh sumpy test"
   tags:
-  - python3.5
+  - python3
   except:
   - tags
 
