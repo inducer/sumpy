@@ -188,6 +188,7 @@ P2E2E2P_TEST_CASES = (
             expansion1=t.local_expand,
             expansion2=t.local_expand,
             conv_factor="norm(t-c1)/norm(s-c1)"),
+
         # multipole to multipole, 3D
         P2E2E2PTestCase(
             source=np.array([1., 1., 1.]),
@@ -197,6 +198,7 @@ P2E2E2P_TEST_CASES = (
             expansion1=t.multipole_expand,
             expansion2=t.multipole_expand,
             conv_factor="norm(s-c2)/norm(t-c2)"),
+
         # multipole to local, 3D
         P2E2E2PTestCase(
             source=np.array([-2., 2., 1.]),
@@ -246,8 +248,9 @@ def test_toy_p2e2e2p(ctx_getter, case):
         pot_p2e2e2p = expn2.eval(tgt).item()
         errors.append(np.abs(pot_actual - pot_p2e2e2p))
 
-    conv_factor = approx_convergence_factor(ORDERS_P2E2E2P, errors)
-    assert conv_factor < min(1, case.conv_factor * (1 + RTOL_P2E2E2P))
+    conv_factor = approx_convergence_factor(1 + np.array(ORDERS_P2E2E2P), errors)
+    assert conv_factor <= min(1, case.conv_factor * (1 + RTOL_P2E2E2P)), \
+        (conv_factor, case.conv_factor * (1 + RTOL_P2E2E2P))
 
 
 # You can test individual routines by typing
