@@ -706,7 +706,7 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
     ssg = SumSignGrouper()
     fck = FractionKiller()
     bik = BigIntegerKiller()
-    cmr  = ComplexRewriter()
+    cmr = ComplexRewriter()
 
     def convert_expr(name, expr):
         logger.debug("generate expression for: %s" % name)
