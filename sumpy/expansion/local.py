@@ -27,7 +27,7 @@ import sumpy.symbolic as sym
 
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
-    HelmholtzConformingVolumeTaylorExpansion)
+    HelmholtzConformingVolumeTaylorExpansion, StokesConformingVolumeTaylorExpansion)
 
 
 class LocalExpansionBase(ExpansionBase):
@@ -267,6 +267,16 @@ class HelmholtzConformingVolumeTaylorLocalExpansion(
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale)
         HelmholtzConformingVolumeTaylorExpansion.__init__(
+                self, kernel, order, use_rscale)
+
+
+class StokesConformingVolumeTaylorLocalExpansion(
+        StokesConformingVolumeTaylorExpansion,
+        VolumeTaylorLocalExpansionBase):
+
+    def __init__(self, kernel, order, use_rscale=None):
+        VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale)
+        StokesConformingVolumeTaylorExpansion.__init__(
                 self, kernel, order, use_rscale)
 
 # }}}

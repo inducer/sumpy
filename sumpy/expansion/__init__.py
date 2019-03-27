@@ -29,6 +29,7 @@ import logging
 from pytools import memoize_method
 import sumpy.symbolic as sym
 from collections import defaultdict
+from sumpy.tools import CoeffIdentifier, add_mi
 
 
 __doc__ = """
@@ -364,24 +365,23 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         from pytools import ProcessLogger
         plog = ProcessLogger(logger, "compute recurrence for Taylor coefficients")
 
-        pde_dict = self.get_pde_dict()
+        pdes, iexpr, nexpr = self.get_pdes()
         pde_mat = []
         mis = self.get_full_coefficient_identifiers()
         coeff_ident_enumerate_dict = dict((tuple(mi), i) for
                                             (i, mi) in enumerate(mis))
+        offset = len(mis)
 
         for mi in mis:
-            for pde_mi, coeff in iteritems(pde_dict):
-                diff = np.array(mi, dtype=int) - pde_mi
-                if (diff >= 0).all():
-                    eq = [0]*len(mis)
-                    for pde_mi2, coeff2 in iteritems(pde_dict):
-                        c = tuple(pde_mi2 + diff)
-                        if c not in coeff_ident_enumerate_dict:
-                            break
-                        eq[coeff_ident_enumerate_dict[c]] = coeff
-                    else:
-                        pde_mat.append(eq)
+            for pde_dict in pdes:
+                eq = [0]*(len(mis)*nexpr)
+                for ident, coeff in iteritems(pde_dict):
+                    c = tuple(add_mi(ident.mi, mi))
+                    if c not in coeff_ident_enumerate_dict:
+                        break
+                    eq[offset*ident.iexpr + coeff_ident_enumerate_dict[c]] = coeff
+                else:
+                    pde_mat.append(eq)
 
         if len(pde_mat) > 0:
             r"""
@@ -398,8 +398,9 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             :math:`S = N_{[r, :]}^{-T} N^T = N_{[r, :]}^{-T} N^T`.
             """
             n = nullspace(pde_mat)
+            n = n[offset*iexpr:offset*(iexpr+1), :]
             idx = self.get_reduced_coeffs(n)
-            assert len(idx) >= n.shape[1]
+            n = n[:,:len(idx)]
             s = solve_symbolic(n.T[:, idx], n.T)
             stored_identifiers = [mis[i] for i in idx]
         else:
@@ -422,10 +423,12 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         return stored_identifiers, coeff_matrix
 
-    def get_pde_dict(self):
+    def get_pdes(self):
         r"""
-        Returns the PDE as a dictionary of (mi, coeff) such that mi
-        is the multi-index of the derivative and the PDE is represented by,
+        Returns a list of PDEs, expression number, number of expressions.
+        A PDE is a dictionary of (ident, coeff) such that ident is a
+        namedtuple of (mi, iexpr) where mi is the multi-index of the
+        derivative, iexpr is the expression number and the PDE is represented by,
 
         .. math::
 
@@ -487,15 +490,16 @@ class LaplaceExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler)
     init_arg_names = ("order", "dim", "max_mi")
 
     def __init__(self, order, dim, max_mi=None):
-        super(LaplaceExpansionTermsWrangler, self).__init__(order, dim, 1, max_mi)
+        super(LaplaceExpansionTermsWrangler, self).__init__(order=order, dim=dim,
+            deriv_multiplier=1, max_mi=max_mi)
 
-    def get_pde_dict(self):
+    def get_pdes(self):
         pde_dict = {}
         for d in range(self.dim):
             mi = [0]*self.dim
             mi[d] = 2
-            pde_dict[tuple(mi)] = 1
-        return pde_dict
+            pde_dict[CoeffIdentifier(tuple(mi), 0)] = 1
+        return [pde_dict], 0, 1
 
     def _get_reduced_coeffs(self, nullspace):
         idx = []
@@ -515,17 +519,17 @@ class HelmholtzExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangle
         self.helmholtz_k_name = helmholtz_k_name
 
         multiplier = sym.Symbol(helmholtz_k_name)
-        super(HelmholtzExpansionTermsWrangler, self).__init__(order, dim, multiplier,
-                max_mi)
+        super(HelmholtzExpansionTermsWrangler, self).__init__(order=order, dim=dim,
+            deriv_multiplier=multiplier, max_mi=max_mi)
 
-    def get_pde_dict(self, **kwargs):
+    def get_pdes(self, **kwargs):
         pde_dict = {}
         for d in range(self.dim):
             mi = [0]*self.dim
             mi[d] = 2
-            pde_dict[tuple(mi)] = 1
-        pde_dict[tuple([0]*self.dim)] = 1
-        return pde_dict
+            pde_dict[CoeffIdentifier(tuple(mi), 0)] = 1
+        pde_dict[CoeffIdentifier(tuple([0]*self.dim), 0)] = 1
+        return [pde_dict], 0, 1
 
     def _get_reduced_coeffs(self, nullspace):
         idx = []
@@ -536,6 +540,46 @@ class HelmholtzExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangle
                 idx.append(i)
         return idx
 
+
+class StokesExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler):
+
+    init_arg_names = ("order", "dim", "icomp", "viscosity_mu_name", "max_mi")
+
+    def __init__(self, order, dim, icomp, viscosity_mu_name, max_mi=None):
+        self.viscosity_mu_name = viscosity_mu_name
+        self.icomp = icomp
+        multiplier = 1/sym.Symbol(viscosity_mu_name)
+        super(StokesExpansionTermsWrangler, self).__init__(order=order, dim=dim,
+            deriv_multiplier=multiplier, max_mi=max_mi)
+
+    def get_pdes(self, **kwargs):
+        pdes = []
+        # velocity
+        for eq in range(self.dim):
+            pde_dict = {}
+            for d in range(self.dim):
+                mi = [0]*self.dim
+                mi[d] = 2
+                pde_dict[CoeffIdentifier(tuple(mi), eq)] = 1
+            mi = [0]*self.dim
+            mi[eq] = 1
+            pde_dict[CoeffIdentifier(tuple(mi), self.dim)] = -1
+            pdes.append(pde_dict)
+        # pressure
+        pde_dict = {}
+        for d in range(self.dim):
+            mi = [0]*self.dim
+            mi[d] = 2
+            pde_dict[CoeffIdentifier(tuple(mi), self.dim)] = 1
+        pdes.append(pde_dict)
+        # divergence
+        pde_dict = {}
+        for d in range(self.dim):
+            mi = [0]*self.dim
+            mi[d] = 1
+            pde_dict[CoeffIdentifier(tuple(mi), d)] = 1
+        pdes.append(pde_dict)
+        return pdes, self.icomp, self.dim+1
 # }}}
 
 
@@ -611,6 +655,19 @@ class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
     def __init__(self, kernel, order, use_rscale):
         helmholtz_k_name = kernel.get_base_kernel().helmholtz_k_name
         self.expansion_terms_wrangler_key = (order, kernel.dim, helmholtz_k_name)
+
+
+class StokesConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
+
+    expansion_terms_wrangler_class = StokesExpansionTermsWrangler
+    expansion_terms_wrangler_cache = {}
+
+    # not user-facing, be strict about having to pass use_rscale
+    def __init__(self, kernel, order, use_rscale):
+        icomp = kernel.get_base_kernel().icomp
+        viscosity_mu_name = kernel.get_base_kernel().viscosity_mu_name
+        self.expansion_terms_wrangler_key = (order, kernel.dim,
+            icomp, viscosity_mu_name)
 
 # }}}
 

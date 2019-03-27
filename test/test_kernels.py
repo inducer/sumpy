@@ -37,13 +37,15 @@ from sumpy.expansion.multipole import (
         VolumeTaylorMultipoleExpansion, H2DMultipoleExpansion,
         VolumeTaylorMultipoleExpansionBase,
         LaplaceConformingVolumeTaylorMultipoleExpansion,
-        HelmholtzConformingVolumeTaylorMultipoleExpansion)
+        HelmholtzConformingVolumeTaylorMultipoleExpansion,
+        StokesConformingVolumeTaylorMultipoleExpansion)
 from sumpy.expansion.local import (
         VolumeTaylorLocalExpansion, H2DLocalExpansion,
         LaplaceConformingVolumeTaylorLocalExpansion,
-        HelmholtzConformingVolumeTaylorLocalExpansion)
+        HelmholtzConformingVolumeTaylorLocalExpansion,
+        StokesConformingVolumeTaylorLocalExpansion)
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, AxisTargetDerivative,
-        DirectionalSourceDerivative)
+        DirectionalSourceDerivative, StokesletKernel)
 from pytools.convergence import PConvergenceVerifier
 
 import logging
@@ -155,6 +157,8 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
             extra_kwargs["k"] = 0.2 * (0.707 + 0.707j)
         else:
             extra_kwargs["k"] = 0.2
+    if isinstance(base_knl, StokesletKernel):
+        extra_kwargs["mu"] = 0.2
 
     if with_source_derivative:
         knl = DirectionalSourceDerivative(base_knl, "dir_vec")
@@ -342,7 +346,10 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
     (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), HelmholtzConformingVolumeTaylorLocalExpansion,
      HelmholtzConformingVolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion)
+    (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion),
+    (StokesletKernel(2, 0, 0), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (StokesletKernel(2, 0, 0), StokesConformingVolumeTaylorLocalExpansion,
+     StokesConformingVolumeTaylorMultipoleExpansion),
     ])
 def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
     logging.basicConfig(level=logging.INFO)
@@ -363,6 +370,8 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
     extra_kwargs = {}
     if isinstance(knl, HelmholtzKernel):
         extra_kwargs["k"] = 0.05
+    if isinstance(knl, StokesletKernel):
+        extra_kwargs["mu"] = 0.05
 
     # Just to make sure things also work away from the origin
     origin = np.array([2, 1], np.float64)
@@ -404,7 +413,7 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
         # FIXME: Embarrassing--but we run out of memory for higher orders.
         orders = [2, 3]
     else:
-        orders = [2, 3, 4]
+        orders = [3, 4, 5]
     nboxes = centers.shape[-1]
 
     def eval_at(e2p, source_box_nr, rscale):

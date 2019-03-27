@@ -27,6 +27,7 @@ THE SOFTWARE.
 
 import six
 from six.moves import range, zip
+from collections import namedtuple
 from pytools import memoize_method, memoize_in
 import numpy as np
 import sumpy.symbolic as sym
@@ -728,5 +729,8 @@ def solve_symbolic(a, b):
         big = np.hstack((a, b))
     red = rref(big)[0]
     return red[:, big.shape[0]:]
+
+
+CoeffIdentifier = namedtuple('CoeffIdentifier', ['mi', 'iexpr'])
 
 # vim: fdm=marker
