@@ -400,7 +400,7 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             n = nullspace(pde_mat)
             n = n[offset*iexpr:offset*(iexpr+1), :]
             idx = self.get_reduced_coeffs(n)
-            n = n[:,:len(idx)]
+            n = n[:, :len(idx)]
             s = solve_symbolic(n.T[:, idx], n.T)
             stored_identifiers = [mis[i] for i in idx]
         else:
@@ -417,7 +417,7 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         plog.done()
 
-        logger.debug("number of Taylor coefficients was reduced from {orig} to {red}"
+        print("number of Taylor coefficients was reduced from {orig} to {red}"
                      .format(orig=len(self.get_full_coefficient_identifiers()),
                              red=len(stored_identifiers)))
 
