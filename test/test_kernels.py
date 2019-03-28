@@ -347,7 +347,8 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
     (HelmholtzKernel(2), HelmholtzConformingVolumeTaylorLocalExpansion,
      HelmholtzConformingVolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion),
-    (StokesletKernel(2, 0, 0), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (StokesletKernel(2, 0, 0), VolumeTaylorLocalExpansion,
+     VolumeTaylorMultipoleExpansion),
     (StokesletKernel(2, 0, 0), StokesConformingVolumeTaylorLocalExpansion,
      StokesConformingVolumeTaylorMultipoleExpansion),
     ])

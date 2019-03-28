@@ -88,7 +88,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             for i, mi in enumerate(coeff_identifiers):
                 result[i] /= (mi_factorial(mi) * rscale ** sum(mi))
         else:
-            avec = avec * rscale**-1
+            avec = [sym.UnevaluatedExpr(a * rscale**-1) for a in avec]
 
             result = [
                     mi_power(avec, mi) / mi_factorial(mi)

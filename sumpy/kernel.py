@@ -149,8 +149,7 @@ class Kernel(object):
     def __setstate__(self, state):
         # Can't use trivial pickling: hash_value cache must stay unset
         assert len(self.init_arg_names) == len(state)
-        for name, value in zip(self.init_arg_names, state):
-            setattr(self, name, value)
+        self.__init__(*state)
 
     # }}}
 
@@ -601,7 +600,7 @@ class StokesletKernel(ExpressionKernel):
             r = pymbolic_real_norm_2(d)
             expr = (
                 -var("log")(r)*(1 if icomp == jcomp else 0)
-                +
+                +  # noqa: W504
                 d[icomp]*d[jcomp]/r**2
                 )
             scaling = -1/(4*var("pi")*mu)
@@ -611,7 +610,7 @@ class StokesletKernel(ExpressionKernel):
             r = pymbolic_real_norm_2(d)
             expr = (
                 (1/r)*(1 if icomp == jcomp else 0)
-                +
+                +  # noqa: W504
                 d[icomp]*d[jcomp]/r**3
                 )
             scaling = -1/(8*var("pi")*mu)
@@ -797,6 +796,9 @@ class AxisTargetDerivative(DerivativeBase):
     def postprocess_at_target(self, expr, bvec):
         expr = self.inner_kernel.postprocess_at_target(expr, bvec)
         return expr.diff(bvec[self.axis])
+
+    def replace_inner_kernel(self, new_inner_kernel):
+        return type(self)(self.axis, new_inner_kernel)
 
     mapper_method = "map_axis_target_derivative"
 

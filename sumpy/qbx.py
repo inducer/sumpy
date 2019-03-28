@@ -143,7 +143,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
 
         return [lp.Assignment(id=None,
                     assignee="pair_result_%d" % i, expression=expr,
-                    temp_var_type=lp.auto)
+                    temp_var_type=lp.Optional(None))
                 for i, expr in enumerate(exprs)]
 
     def get_default_src_tgt_arguments(self):
@@ -158,8 +158,8 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                 lp.GlobalArg("expansion_radii",
                     None, shape="ntargets"),
                 lp.ValueArg("nsources", None),
-                lp.ValueArg("ntargets", None)] +
-                gather_loopy_source_arguments(self.kernels))
+                lp.ValueArg("ntargets", None)]
+                + gather_loopy_source_arguments(self.kernels))
 
     def get_kernel(self):
         raise NotImplementedError
@@ -201,11 +201,11 @@ class LayerPotential(LayerPotentialBase):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
         kernel_exprs = self.get_kernel_exprs(result_names)
         arguments = (
-            self.get_default_src_tgt_arguments() +
-            [lp.GlobalArg("strength_%d" % i,
+            self.get_default_src_tgt_arguments()
+            + [lp.GlobalArg("strength_%d" % i,
                 None, shape="nsources", order="C")
-            for i in range(self.strength_count)] +
-            [lp.GlobalArg("result_%d" % i,
+            for i in range(self.strength_count)]
+            + [lp.GlobalArg("result_%d" % i,
                 None, shape="ntargets", order="C")
             for i in range(len(self.kernels))])
 
@@ -275,8 +275,8 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
         kernel_exprs = self.get_kernel_exprs(result_names)
         arguments = (
-            self.get_default_src_tgt_arguments() +
-            [lp.GlobalArg("result_%d" % i,
+            self.get_default_src_tgt_arguments()
+            + [lp.GlobalArg("result_%d" % i,
                 dtype, shape="ntargets, nsources", order="C")
              for i, dtype in enumerate(self.value_dtypes)])
 
@@ -339,29 +339,30 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
         kernel_exprs = self.get_kernel_exprs(result_names)
         arguments = (
-            self.get_default_src_tgt_arguments() +
-            [
+            self.get_default_src_tgt_arguments()
+            + [
                 lp.GlobalArg("srcindices", None, shape="nresult"),
                 lp.GlobalArg("tgtindices", None, shape="nresult"),
                 lp.ValueArg("nresult", None)
-            ] +
-            [lp.GlobalArg("result_%d" % i, dtype, shape="nresult")
+            ]
+            + [lp.GlobalArg("result_%d" % i, dtype, shape="nresult")
              for i, dtype in enumerate(self.value_dtypes)])
 
         loopy_knl = lp.make_kernel([
             "{[imat, idim]: 0 <= imat < nresult and 0 <= idim < dim}"
             ],
             self.get_kernel_scaling_assignments()
+            # NOTE: itgt, isrc need to always be defined in case a statement
+            # in loopy_insns or kernel_exprs needs them (e.g. hardcoded in
+            # places like get_kernel_exprs)
             + ["""
                 for imat
                     <> itgt = tgtindices[imat]
                     <> isrc = srcindices[imat]
 
-                    <> a[idim] = center[idim, tgtindices[imat]] - \
-                                 src[idim, srcindices[imat]] {dup=idim}
-                    <> b[idim] = tgt[idim, tgtindices[imat]] - \
-                                 center[idim, tgtindices[imat]] {dup=idim}
-                    <> rscale = expansion_radii[tgtindices[imat]]
+                    <> a[idim] = center[idim, itgt] - src[idim, isrc] {dup=idim}
+                    <> b[idim] = tgt[idim, itgt] - center[idim, itgt] {dup=idim}
+                    <> rscale = expansion_radii[itgt]
             """]
             + loopy_insns + kernel_exprs
             + ["""

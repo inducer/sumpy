@@ -32,6 +32,8 @@ import pyopencl as cl  # noqa: F401
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 
+from pytools import Record
+
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel,
         BiharmonicKernel, YukawaKernel)
 
@@ -133,6 +135,122 @@ def test_order_finder(knl):
         ofind(knl, frozenset([("k", 5)]), tree, level)
         for level in range(30)]
     print(orders)
+
+
+# {{{ expansion toys p2e2e2p test cases
+
+def approx_convergence_factor(orders, errors):
+    poly = np.polyfit(orders, np.log(errors), deg=1)
+    return np.exp(poly[0])
+
+
+class P2E2E2PTestCase(Record):
+
+    @property
+    def dim(self):
+        return len(self.source)
+
+    @staticmethod
+    def eval(expr, source, center1, center2, target):
+        from pymbolic import parse, evaluate
+        context = {
+                "s": source,
+                "c1": center1,
+                "c2": center2,
+                "t": target,
+                "norm": la.norm}
+
+        return evaluate(parse(expr), context)
+
+    def __init__(self,
+            source, center1, center2, target, expansion1, expansion2, conv_factor):
+
+        if isinstance(conv_factor, str):
+            conv_factor = self.eval(conv_factor, source, center1, center2, target)
+
+        Record.__init__(self,
+                source=source,
+                center1=center1,
+                center2=center2,
+                target=target,
+                expansion1=expansion1,
+                expansion2=expansion2,
+                conv_factor=conv_factor)
+
+
+P2E2E2P_TEST_CASES = (
+        # local to local, 3D
+        P2E2E2PTestCase(
+            source=np.array([3., 4., 5.]),
+            center1=np.array([1., 0., 0.]),
+            center2=np.array([1., 3., 0.]),
+            target=np.array([1., 1., 1.]),
+            expansion1=t.local_expand,
+            expansion2=t.local_expand,
+            conv_factor="norm(t-c1)/norm(s-c1)"),
+
+        # multipole to multipole, 3D
+        P2E2E2PTestCase(
+            source=np.array([1., 1., 1.]),
+            center1=np.array([1., 0., 0.]),
+            center2=np.array([1., 0., 3.]),
+            target=np.array([3., 4., 5.]),
+            expansion1=t.multipole_expand,
+            expansion2=t.multipole_expand,
+            conv_factor="norm(s-c2)/norm(t-c2)"),
+
+        # multipole to local, 3D
+        P2E2E2PTestCase(
+            source=np.array([-2., 2., 1.]),
+            center1=np.array([-2., 5., 3.]),
+            center2=np.array([0., 0., 0.]),
+            target=np.array([0., 0., -1]),
+            expansion1=t.multipole_expand,
+            expansion2=t.local_expand,
+            conv_factor="norm(t-c2)/(norm(c2-c1)-norm(c1-s))"),
+)
+
+# }}}
+
+
+ORDERS_P2E2E2P = (3, 4, 5)
+RTOL_P2E2E2P = 1e-2
+
+
+@pytest.mark.parametrize("case", P2E2E2P_TEST_CASES)
+def test_toy_p2e2e2p(ctx_getter, case):
+    dim = case.dim
+
+    src = case.source.reshape(dim, -1)
+    tgt = case.target.reshape(dim, -1)
+
+    if not 0 <= case.conv_factor <= 1:
+        raise ValueError(
+                "convergence factor not in valid range: %e" % case.conv_factor)
+
+    from sumpy.expansion.local import VolumeTaylorLocalExpansion
+    from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansion
+
+    cl_ctx = ctx_getter()
+    ctx = t.ToyContext(cl_ctx,
+             LaplaceKernel(dim),
+             VolumeTaylorMultipoleExpansion,
+             VolumeTaylorLocalExpansion)
+
+    errors = []
+
+    src_pot = t.PointSources(ctx, src, weights=np.array([1.]))
+    pot_actual = src_pot.eval(tgt).item()
+
+    for order in ORDERS_P2E2E2P:
+        expn = case.expansion1(src_pot, case.center1, order=order)
+        expn2 = case.expansion2(expn, case.center2, order=order)
+        pot_p2e2e2p = expn2.eval(tgt).item()
+        errors.append(np.abs(pot_actual - pot_p2e2e2p))
+
+    conv_factor = approx_convergence_factor(1 + np.array(ORDERS_P2E2E2P), errors)
+    assert conv_factor <= min(1, case.conv_factor * (1 + RTOL_P2E2E2P)), \
+        (conv_factor, case.conv_factor * (1 + RTOL_P2E2E2P))
 
 
 # You can test individual routines by typing

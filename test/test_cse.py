@@ -134,8 +134,8 @@ def test_cse_not_possible():
     assert substs == []
     assert reduced == [x + y]
     # issue 6329
-    eq = (meijerg((1, 2), (y, 4), (5,), [], x) +
-          meijerg((1, 3), (y, 4), (5,), [], x))
+    eq = (meijerg((1, 2), (y, 4), (5,), [], x)
+          + meijerg((1, 3), (y, 4), (5,), [], x))
     assert cse(eq) == ([], [eq])
 
 
@@ -251,9 +251,9 @@ def test_issue_4499():
     from sympy import Tuple, S
     B = Function('B')  # noqa
     G = Function('G')  # noqa
-    t = Tuple(*
-        (a, a + S(1)/2, 2*a, b, 2*a - b + 1, (sqrt(z)/2)**(-2*a + 1)*B(2*a -
-        b, sqrt(z))*B(b - 1, sqrt(z))*G(b)*G(2*a - b + 1),
+    t = Tuple(
+        *(a, a + S(1)/2, 2*a, b, 2*a - b + 1, (sqrt(z)/2)**(-2*a + 1)*B(2*a
+        - b, sqrt(z))*B(b - 1, sqrt(z))*G(b)*G(2*a - b + 1),
         sqrt(z)*(sqrt(z)/2)**(-2*a + 1)*B(b, sqrt(z))*B(2*a - b,
         sqrt(z))*G(b)*G(2*a - b + 1), sqrt(z)*(sqrt(z)/2)**(-2*a + 1)*B(b - 1,
         sqrt(z))*B(2*a - b + 1, sqrt(z))*G(b)*G(2*a - b + 1),

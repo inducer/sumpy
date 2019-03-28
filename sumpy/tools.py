@@ -56,10 +56,15 @@ def mi_factorial(mi):
     return result
 
 
-def mi_power(vector, mi):
+def mi_power(vector, mi, evaluate=True):
     result = 1
     for mi_i, vec_i in zip(mi, vector):
-        result *= vec_i**mi_i
+        if mi_i == 1:
+            result *= vec_i
+        elif evaluate:
+            result *= vec_i**mi_i
+        else:
+            result *= sym.unevaluated_pow(vec_i, mi_i)
     return result
 
 
@@ -248,7 +253,7 @@ class KernelComputation(object):
                 lp.Assignment(id=None,
                     assignee="knl_%d_scaling" % i,
                     expression=sympy_conv(kernel.get_global_scaling_const()),
-                    temp_var_type=dtype)
+                    temp_var_type=lp.Optional(dtype))
                 for i, (kernel, dtype) in enumerate(
                     zip(self.kernels, self.value_dtypes))]
 

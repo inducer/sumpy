@@ -125,7 +125,7 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
 
         return [lp.Assignment(id=None,
                     assignee="pair_result_%d" % i, expression=expr,
-                    temp_var_type=lp.auto)
+                    temp_var_type=lp.Optional(None))
                 for i, expr in enumerate(exprs)]
 
     def get_default_src_tgt_arguments(self):
@@ -136,10 +136,10 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
                 lp.GlobalArg("targets", None,
                    shape=(self.dim, "ntargets")),
                 lp.ValueArg("nsources", None),
-                lp.ValueArg("ntargets", None)] +
-                ([lp.GlobalArg("target_to_source", None, shape=("ntargets",))]
-                    if self.exclude_self else []) +
-                gather_loopy_source_arguments(self.kernels))
+                lp.ValueArg("ntargets", None)]
+                + ([lp.GlobalArg("target_to_source", None, shape=("ntargets",))]
+                    if self.exclude_self else [])
+                + gather_loopy_source_arguments(self.kernels))
 
     def get_kernel(self):
         raise NotImplementedError
@@ -171,8 +171,8 @@ class P2P(P2PBase):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
         kernel_exprs = self.get_kernel_exprs(result_names)
         arguments = (
-            self.get_default_src_tgt_arguments() +
-            [
+            self.get_default_src_tgt_arguments()
+            + [
                 lp.GlobalArg("strength", None,
                     shape="nstrengths, nsources", dim_tags="sep,C"),
                 lp.GlobalArg("result", None,
@@ -241,8 +241,8 @@ class P2PMatrixGenerator(P2PBase):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
         kernel_exprs = self.get_kernel_exprs(result_names)
         arguments = (
-            self.get_default_src_tgt_arguments() +
-            [lp.GlobalArg("result_%d" % i, dtype,
+            self.get_default_src_tgt_arguments()
+            + [lp.GlobalArg("result_%d" % i, dtype,
                 shape="ntargets,nsources")
              for i, dtype in enumerate(self.value_dtypes)])
 
@@ -307,26 +307,30 @@ class P2PMatrixBlockGenerator(P2PBase):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
         kernel_exprs = self.get_kernel_exprs(result_names)
         arguments = (
-            self.get_default_src_tgt_arguments() +
-            [
+            self.get_default_src_tgt_arguments()
+            + [
                 lp.GlobalArg("srcindices", None, shape="nresult"),
                 lp.GlobalArg("tgtindices", None, shape="nresult"),
                 lp.ValueArg("nresult", None)
-            ] +
-            [lp.GlobalArg("result_%d" % i, dtype, shape="nresult")
+            ]
+            + [lp.GlobalArg("result_%d" % i, dtype, shape="nresult")
              for i, dtype in enumerate(self.value_dtypes)])
 
         loopy_knl = lp.make_kernel(
             "{[imat, idim]: 0 <= imat < nresult and 0 <= idim < dim}",
             self.get_kernel_scaling_assignments()
+            # NOTE: itgt, isrc need to always be defined in case a statement
+            # in loopy_insns or kernel_exprs needs them (e.g. hardcoded in
+            # places like get_kernel_exprs)
             + ["""
                 for imat
-                    <> d[idim] = targets[idim, tgtindices[imat]] - \
-                                 sources[idim, srcindices[imat]]
+                    <> itgt = tgtindices[imat]
+                    <> isrc = srcindices[imat]
+
+                    <> d[idim] = targets[idim, itgt] - sources[idim, isrc]
             """]
             + ["""
-                    <> is_self = (srcindices[imat] ==
-                                  target_to_source[tgtindices[imat]])
+                    <> is_self = (isrc == target_to_source[itgt])
                 """ if self.exclude_self else ""]
             + loopy_insns + kernel_exprs
             + ["""
@@ -411,8 +415,8 @@ class P2PFromCSR(P2PBase):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
         kernel_exprs = self.get_kernel_exprs(result_names)
         arguments = (
-            self.get_default_src_tgt_arguments() +
-            [
+            self.get_default_src_tgt_arguments()
+            + [
                 lp.GlobalArg("box_target_starts",
                     None, shape=None),
                 lp.GlobalArg("box_target_counts_nonchild",

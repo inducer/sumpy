@@ -133,7 +133,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         bvec = bvec * rscale**-1
         result = sum(
                 coeff
-                * mi_power(bvec, mi)
+                * mi_power(bvec, mi, evaluate=False)
                 / mi_factorial(mi)
                 for coeff, mi in zip(
                         evaluated_coeffs, self.get_full_coefficient_identifiers()))
