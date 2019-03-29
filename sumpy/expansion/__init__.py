@@ -398,11 +398,27 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             :math:`S = N_{[r, :]}^{-T} N^T = N_{[r, :]}^{-T} N^T`.
             """
             n = nullspace(pde_mat)
-            n = n[offset*iexpr:offset*(iexpr+1), :]
-            idx = self.get_reduced_coeffs(n)
-            n = n[:, :len(idx)]
-            s = solve_symbolic(n.T[:, idx], n.T)
-            stored_identifiers = [mis[i] for i in idx]
+
+            # Move the rows corresponding to this expression to the front
+            rearrange = list(range(offset*iexpr, offset*(iexpr+1)))
+            for i in range(nexpr*offset):
+                if i < offset*iexpr or i >= offset*(iexpr+1):
+                    rearrange.append(i)
+            n = n[rearrange, :]
+
+            # Get the indices of the reduced coefficients
+            idx_all_exprs = self.get_reduced_coeffs(n)
+
+            s = solve_symbolic(n.T[:, idx_all_exprs], n.T)
+
+            # Filter out coefficients belonging to this expression
+            indices = []
+            for idx in idx_all_exprs:
+                if idx >= offset*iexpr and idx < offset*(iexpr+1):
+                    indices.append(idx)
+            s = s[:len(indices), offset*iexpr:offset*(iexpr+1)]
+
+            stored_identifiers = [mis[i] for i in indices]
         else:
             s = np.eye(len(mis))
             stored_identifiers = mis

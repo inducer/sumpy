@@ -413,8 +413,6 @@ def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
            issubclass(local_expn_class, VolumeTaylorExpansionBase):
         # FIXME: Embarrassing--but we run out of memory for higher orders.
         orders = [2, 3]
-    elif isinstance(knl, StokesletKernel):
-        orders = [3, 4, 5]
     else:
         orders = [2, 3, 4]
     nboxes = centers.shape[-1]
