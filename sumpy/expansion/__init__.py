@@ -611,7 +611,9 @@ def process_pde(pde):
             new_eq[k] = v * multiplier**sum(k.mi)
             if i == 0:
                 val = new_eq[k]
-            new_eq[k] /= val
+            new_eq[k] /= sym.sympify(val)
+            if isinstance(new_eq[k], sym.Integer):
+                new_eq[k] = int(new_eq[k])
         eqs.append(new_eq)
     return PDE(pde.dim, eqs=eqs), multiplier
 
@@ -663,7 +665,8 @@ class HelmholtzExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangle
 
     def get_pdes(self, **kwargs):
         w = make_pde_syms(self.dim, 1)
-        return (w.laplacian() + w), 0, 1
+        k = sym.Symbol(self.helmholtz_k_name)
+        return (w.laplacian() + k**2 * w), 0, 1
 
     def _get_reduced_coeffs(self, nullspace):
         idx = []
