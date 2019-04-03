@@ -29,7 +29,7 @@ import logging
 from pytools import memoize_method
 import sumpy.symbolic as sym
 from collections import defaultdict
-from sumpy.tools import CoeffIdentifier, add_mi
+from sumpy.tools import CoeffIdentifier, add_mi, nth_root_assume_positive
 
 
 __doc__ = """
@@ -269,26 +269,19 @@ def _spmv(spmat, x, sparse_vectors):
 class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     """
     .. automethod:: __init__
-    .. automethod:: get_pde_dict
+    .. automethod:: get_pdes
     .. automethod:: get_reduced_coeffs
     """
 
-    init_arg_names = ("order", "dim", "deriv_multiplier", "max_mi")
+    init_arg_names = ("order", "dim", "max_mi")
 
-    def __init__(self, order, dim, deriv_multiplier, max_mi=None):
+    def __init__(self, order, dim, max_mi=None):
         r"""
         :param order: order of the expansion
         :param dim: number of dimensions
-        :param deriv_multiplier: a symbolic expression that is used to
-            'normalize out' constant coefficients in the PDE in
-            :func:`~LinearRecurrenceBasedExpansionTermsWrangler.get_pde_dict`, so
-            that the Taylor coefficient with multi-index :math:`\nu` as seen by
-            that representation of the PDE is :math:`\text{coeff} /
-            {\text{deriv\_multiplier}^{|\nu|}}`.
         """
         super(LinearRecurrenceBasedExpansionTermsWrangler, self).__init__(order, dim,
                 max_mi)
-        self.deriv_multiplier = deriv_multiplier
 
     def get_coefficient_identifiers(self):
         return self.stored_identifiers
@@ -339,6 +332,7 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         full_coeffs = self.get_full_coefficient_identifiers()
         matrix_rows = []
+        _, deriv_multiplier, _, _ = self._get_pdes()
         for irow, row in six.iteritems(coeff_matrix):
             # For eg: (u_xxx / rscale**3) = (u_yy / rscale**2) * coeff1 +
             #                               (u_xx / rscale**2) * coeff2
@@ -348,7 +342,7 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             matrix_row = []
             for icol, coeff in row:
                 diff = row_rscale - sum(stored_identifiers[icol])
-                mult = (rscale*self.deriv_multiplier)**diff
+                mult = (rscale*deriv_multiplier)**diff
                 matrix_row.append((icol, coeff * mult))
             matrix_rows.append((irow, matrix_row))
 
@@ -365,7 +359,7 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         from pytools import ProcessLogger
         plog = ProcessLogger(logger, "compute recurrence for Taylor coefficients")
 
-        pdes, iexpr, nexpr = self.get_pdes()
+        pdes, _, iexpr, nexpr = self._get_pdes()
         pde_mat = []
         mis = self.get_full_coefficient_identifiers()
         coeff_ident_enumerate_dict = dict((tuple(mi), i) for
@@ -444,7 +438,16 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         Returns a list of PDEs, expression number, number of expressions.
         A PDE is a dictionary of (ident, coeff) such that ident is a
         namedtuple of (mi, iexpr) where mi is the multi-index of the
-        derivative, iexpr is the expression number and the PDE is represented by,
+        derivative, iexpr is the expression number
+        """
+
+        raise NotImplementedError
+
+    @memoize_method
+    def _get_pdes(self):
+        r"""
+        Returns a list of `pde_dict`s, a multiplier, expression number,
+        number of expressions such that each PDE is represented by,
 
         .. math::
 
@@ -457,7 +460,7 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         where :math:`\mathbf\alpha` is a coefficient vector.
 
         Note that *coeff* should be a number (not symbolic) to enable use of
-        numeric linear algebra routines. *deriv_multiplier* can be symbolic
+        fast linear algebra routines. *deriv_multiplier* can be symbolic
         and should be used when the PDE has symbolic values as coefficients
         for the derivatives.
 
@@ -471,8 +474,9 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 \frac{(0, 2) \times 1}{k^{sum((0, 2))}} +
                 \frac{(0, 0) \times -1}{k^{sum((0, 0))}} = 0
         """
-
-        raise NotImplementedError
+        pde, iexpr, nexpr = self.get_pdes()
+        pde, multiplier = process_pde(pde)
+        return pde, multiplier, iexpr, nexpr
 
     def get_reduced_coeffs(self, nullspace):
         """
@@ -577,7 +581,42 @@ class PDE(object):
         return repr(self.eqs)
 
 
+def process_pde(pde):
+    """
+    Process a PDE object to return a PDE and a multiplier such that
+    the sum of multiplier ** order * derivative * coefficient gives the
+    original PDE `pde`.
+    """
+    multiplier = None
+    for eq in pde.eqs:
+        for ident1, val1 in eq.items():
+            for ident2, val2 in eq.items():
+                s1 = sum(ident1.mi)
+                s2 = sum(ident2.mi)
+                if s1 == s2:
+                    continue
+                m = nth_root_assume_positive(val1/val2, s2 - s1)
+                if multiplier is None:
+                    multiplier = m
+                elif multiplier != m:
+                    return pde, 1
+    eqs = []
+    for eq in pde.eqs:
+        new_eq = dict()
+        for i, (k, v) in enumerate(eq.items()):
+            new_eq[k] = v * multiplier**sum(k.mi)
+            if i == 0:
+                val = new_eq[k]
+            new_eq[k] /= val
+        eqs.append(new_eq)
+    return PDE(pde.dim, eqs=eqs), multiplier
+
+
 def make_pde_syms(dim, nexprs):
+    """
+    Returns a list of expressions of size `nexprs` to create a PDE
+    of dimension `dim`.
+    """
     eqs = []
     for iexpr in range(nexprs):
         mi = [0]*dim
@@ -593,7 +632,7 @@ class LaplaceExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler)
 
     def __init__(self, order, dim, max_mi=None):
         super(LaplaceExpansionTermsWrangler, self).__init__(order=order, dim=dim,
-            deriv_multiplier=1, max_mi=max_mi)
+            max_mi=max_mi)
 
     def get_pdes(self):
         w = make_pde_syms(self.dim, 1)
@@ -615,10 +654,8 @@ class HelmholtzExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangle
 
     def __init__(self, order, dim, helmholtz_k_name, max_mi=None):
         self.helmholtz_k_name = helmholtz_k_name
-
-        multiplier = sym.Symbol(helmholtz_k_name)
         super(HelmholtzExpansionTermsWrangler, self).__init__(order=order, dim=dim,
-            deriv_multiplier=multiplier, max_mi=max_mi)
+            max_mi=max_mi)
 
     def get_pdes(self, **kwargs):
         w = make_pde_syms(self.dim, 1)
@@ -641,15 +678,15 @@ class StokesExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler):
     def __init__(self, order, dim, icomp, viscosity_mu_name, max_mi=None):
         self.viscosity_mu_name = viscosity_mu_name
         self.icomp = icomp
-        multiplier = 1/sym.Symbol(viscosity_mu_name)
         super(StokesExpansionTermsWrangler, self).__init__(order=order, dim=dim,
-            deriv_multiplier=multiplier, max_mi=max_mi)
+            max_mi=max_mi)
 
     def get_pdes(self, **kwargs):
         w = make_pde_syms(self.dim, self.dim+1)
+        mu = sym.Symbol(self.viscosity_mu_name)
         u = w[:self.dim]
         p = w[-1]
-        pdes = (u.laplacian() - p.grad() | u.div())
+        pdes = (mu * u.laplacian() - p.grad() | u.div())
         return pdes, self.icomp, self.dim+1
 # }}}
 

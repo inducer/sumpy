@@ -738,4 +738,16 @@ def solve_symbolic(a, b):
 
 CoeffIdentifier = namedtuple('CoeffIdentifier', ['mi', 'iexpr'])
 
+
+def nth_root_assume_positive(expr, n):
+    """
+    Get the nth root of a symbolic expression assuming that
+    the symbols are positive.
+    """
+    expr = sym.sympify(expr)
+    if expr.is_Pow:
+        return expr.base ** (expr.exp / n)
+    else:
+        return expr ** (sym.Integer(1)/n)
+
 # vim: fdm=marker
