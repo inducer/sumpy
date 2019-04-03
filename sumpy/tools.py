@@ -746,7 +746,7 @@ def nth_root_assume_positive(expr, n):
     """
     expr = sym.sympify(expr)
     if expr.is_Pow:
-        return expr.base ** (expr.exp / sym.Integer(n))
+        return expr.args[0] ** (expr.args[1] / sym.Integer(n))
     else:
         return expr ** (sym.Integer(1)/n)
 
