@@ -511,10 +511,12 @@ class PDE(object):
         self.eqs = eqs
 
     def __mul__(self, param):
-        eqs = self.eqs[:]
-        for eq in eqs:
+        eqs = []
+        for eq in self.eqs:
+            new_eq = dict()
             for k, v in eq.items():
-                eq[k] = eq[k] * param
+                new_eq[k] = eq[k] * param
+            eqs.append(new_eq)
         return PDE(self.dim, eqs=eqs)
 
     __rmul__ = __mul__
