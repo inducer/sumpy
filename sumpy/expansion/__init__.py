@@ -514,7 +514,7 @@ class PDE(object):
         self.eqs = eqs
 
     def __mul__(self, param):
-        eqs = self.eqs.copy()
+        eqs = self.eqs[:]
         for eq in eqs:
             for k, v in eq.items():
                 eq[k] = eq[k] * param
