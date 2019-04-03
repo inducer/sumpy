@@ -600,6 +600,8 @@ def process_pde(pde):
                     multiplier = m
                 elif multiplier != m:
                     return pde, 1
+    if multiplier is None:
+        return pde, 1
     eqs = []
     for eq in pde.eqs:
         new_eq = dict()
