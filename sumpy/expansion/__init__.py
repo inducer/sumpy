@@ -541,17 +541,10 @@ class PDE(object):
         return self + (-1)*other_pde
 
     def laplacian(self):
-        eqs = []
-        for eq in self.eqs:
-            new_eq = defaultdict(lambda: 0)
-            for ident, v in eq.items():
-                for d in range(self.dim):
-                    mi = list(ident.mi)
-                    mi[d] += 2
-                    new_ident = CoeffIdentifier(tuple(mi), ident.iexpr)
-                    new_eq[new_ident] += v
-            eqs.append(dict(new_eq))
-        return PDE(self.dim, eqs=eqs)
+        p = PDE(self.dim, eqs=[])
+        for j in range(len(self.eqs)):
+            p = p | self[j].grad().div()
+        return p
 
     def __or__(self, other_pde):
         assert self.dim == other_pde.dim
