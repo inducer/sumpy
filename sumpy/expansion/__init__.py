@@ -373,7 +373,7 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         offset = len(mis)
 
         for mi in mis:
-            for pde_dict in pdes:
+            for pde_dict in pdes.eqs:
                 eq = [0]*(len(mis)*nexpr)
                 for ident, coeff in iteritems(pde_dict):
                     c = tuple(add_mi(ident.mi, mi))
@@ -501,6 +501,96 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         return rows
 
 
+class PDE(object):
+    def __init__(self, dim, nexprs=None, eqs=None):
+        if nexprs is not None:
+            eqs = []
+            for iexpr in range(nexprs):
+                mi = [0]*dim
+                eq = dict()
+                eq[CoeffIdentifier(tuple(mi), iexpr)] = 1
+                eqs.append(eq)
+        self.dim = dim
+        self.eqs = eqs
+
+    def __mul__(self, param):
+        eqs = self.eqs.copy()
+        for eq in eqs:
+            for k, v in eq.items():
+                eq[k] = eq[k] * param
+        return PDE(self.dim, eqs=eqs)
+
+    __rmul__ = __mul__
+
+    def __add__(self, other_pde):
+        assert self.dim == other_pde.dim
+        assert len(self.eqs) == len(other_pde.eqs)
+        eqs = []
+        for eq1, eq2 in zip(self.eqs, other_pde.eqs):
+            eq = defaultdict(lambda: 0)
+            for k, v in eq1.items():
+                eq[k] += v
+            for k, v in eq2.items():
+                eq[k] += v
+            eqs.append(dict(eq))
+        return PDE(self.dim, eqs=eqs)
+
+    __radd__ = __add__
+
+    def __sub__(self, other_pde):
+        return self + (-1)*other_pde
+
+    def laplacian(self):
+        eqs = []
+        for eq in self.eqs:
+            new_eq = defaultdict(lambda: 0)
+            for ident, v in eq.items():
+                for d in range(self.dim):
+                    mi = list(ident.mi)
+                    mi[d] += 2
+                    new_ident = CoeffIdentifier(tuple(mi), ident.iexpr)
+                    new_eq[new_ident] += v
+            eqs.append(dict(new_eq))
+        return PDE(self.dim, eqs=eqs)
+
+    def __or__(self, other_pde):
+        assert self.dim == other_pde.dim
+        eqs = self.eqs + other_pde.eqs
+        return PDE(self.dim, eqs=eqs)
+
+    def __getitem__(self, key):
+        eqs = self.eqs.__getitem__(key)
+        if not isinstance(eqs, list):
+            eqs = [eqs]
+        return PDE(self.dim, eqs=eqs)
+
+    def grad(self):
+        assert len(self.eqs) == 1
+        eqs = []
+        for d in range(self.dim):
+            new_eq = defaultdict(lambda: 0)
+            for ident, v in self.eqs[0].items():
+                mi = list(ident.mi)
+                mi[d] += 1
+                new_ident = CoeffIdentifier(tuple(mi), ident.iexpr)
+                new_eq[new_ident] += v
+            eqs.append(dict(new_eq))
+        return PDE(self.dim, eqs=eqs)
+
+    def div(self):
+        result = defaultdict(lambda: 0)
+        for d, eq in enumerate(self.eqs):
+            for ident, v in eq.items():
+                mi = list(ident.mi)
+                mi[d] += 1
+                new_ident = CoeffIdentifier(tuple(mi), ident.iexpr)
+                result[new_ident] += v
+        return PDE(self.dim, eqs=[dict(result)])
+
+    def __repr__(self):
+        return repr(self.eqs)
+
+
 class LaplaceExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler):
 
     init_arg_names = ("order", "dim", "max_mi")
@@ -510,12 +600,8 @@ class LaplaceExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler)
             deriv_multiplier=1, max_mi=max_mi)
 
     def get_pdes(self):
-        pde_dict = {}
-        for d in range(self.dim):
-            mi = [0]*self.dim
-            mi[d] = 2
-            pde_dict[CoeffIdentifier(tuple(mi), 0)] = 1
-        return [pde_dict], 0, 1
+        w = PDE(dim=self.dim, nexprs=1)
+        return w.laplacian(), 0, 1
 
     def _get_reduced_coeffs(self, nullspace):
         idx = []
@@ -539,13 +625,8 @@ class HelmholtzExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangle
             deriv_multiplier=multiplier, max_mi=max_mi)
 
     def get_pdes(self, **kwargs):
-        pde_dict = {}
-        for d in range(self.dim):
-            mi = [0]*self.dim
-            mi[d] = 2
-            pde_dict[CoeffIdentifier(tuple(mi), 0)] = 1
-        pde_dict[CoeffIdentifier(tuple([0]*self.dim), 0)] = 1
-        return [pde_dict], 0, 1
+        w = PDE(dim=self.dim, nexprs=1)
+        return (w.laplacian() + w), 0, 1
 
     def _get_reduced_coeffs(self, nullspace):
         idx = []
@@ -569,32 +650,10 @@ class StokesExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler):
             deriv_multiplier=multiplier, max_mi=max_mi)
 
     def get_pdes(self, **kwargs):
-        pdes = []
-        # velocity
-        for eq in range(self.dim):
-            pde_dict = {}
-            for d in range(self.dim):
-                mi = [0]*self.dim
-                mi[d] = 2
-                pde_dict[CoeffIdentifier(tuple(mi), eq)] = 1
-            mi = [0]*self.dim
-            mi[eq] = 1
-            pde_dict[CoeffIdentifier(tuple(mi), self.dim)] = -1
-            pdes.append(pde_dict)
-        # pressure
-        pde_dict = {}
-        for d in range(self.dim):
-            mi = [0]*self.dim
-            mi[d] = 2
-            pde_dict[CoeffIdentifier(tuple(mi), self.dim)] = 1
-        pdes.append(pde_dict)
-        # divergence
-        pde_dict = {}
-        for d in range(self.dim):
-            mi = [0]*self.dim
-            mi[d] = 1
-            pde_dict[CoeffIdentifier(tuple(mi), d)] = 1
-        pdes.append(pde_dict)
+        w = PDE(dim=self.dim, nexprs=self.dim+1)
+        u = w[:self.dim]
+        p = w[-1]
+        pdes = (u.laplacian() - p.grad() | u.div())
         return pdes, self.icomp, self.dim+1
 # }}}
 
