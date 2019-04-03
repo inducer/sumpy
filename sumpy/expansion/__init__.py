@@ -502,14 +502,7 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
 
 class PDE(object):
-    def __init__(self, dim, nexprs=None, eqs=None):
-        if nexprs is not None:
-            eqs = []
-            for iexpr in range(nexprs):
-                mi = [0]*dim
-                eq = dict()
-                eq[CoeffIdentifier(tuple(mi), iexpr)] = 1
-                eqs.append(eq)
+    def __init__(self, dim, eqs):
         self.dim = dim
         self.eqs = eqs
 
@@ -584,6 +577,16 @@ class PDE(object):
         return repr(self.eqs)
 
 
+def make_pde_syms(dim, nexprs):
+    eqs = []
+    for iexpr in range(nexprs):
+        mi = [0]*dim
+        eq = dict()
+        eq[CoeffIdentifier(tuple(mi), iexpr)] = 1
+        eqs.append(eq)
+    return PDE(dim, eqs=eqs)
+
+
 class LaplaceExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler):
 
     init_arg_names = ("order", "dim", "max_mi")
@@ -593,7 +596,7 @@ class LaplaceExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler)
             deriv_multiplier=1, max_mi=max_mi)
 
     def get_pdes(self):
-        w = PDE(dim=self.dim, nexprs=1)
+        w = make_pde_syms(self.dim, 1)
         return w.laplacian(), 0, 1
 
     def _get_reduced_coeffs(self, nullspace):
@@ -618,7 +621,7 @@ class HelmholtzExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangle
             deriv_multiplier=multiplier, max_mi=max_mi)
 
     def get_pdes(self, **kwargs):
-        w = PDE(dim=self.dim, nexprs=1)
+        w = make_pde_syms(self.dim, 1)
         return (w.laplacian() + w), 0, 1
 
     def _get_reduced_coeffs(self, nullspace):
@@ -643,7 +646,7 @@ class StokesExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler):
             deriv_multiplier=multiplier, max_mi=max_mi)
 
     def get_pdes(self, **kwargs):
-        w = PDE(dim=self.dim, nexprs=self.dim+1)
+        w = make_pde_syms(self.dim, self.dim+1)
         u = w[:self.dim]
         p = w[-1]
         pdes = (u.laplacian() - p.grad() | u.div())
