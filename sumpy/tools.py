@@ -663,7 +663,15 @@ def my_syntactic_subs(expr, subst_dict):
         return expr
 
 
-def rref(m):
+def reduced_row_echelon_form(m):
+    """Calculates a reduced row echelon form of a
+    matrix `m`.
+
+    :arg m: a 2D :class:`numpy.ndarray` or a list of lists or a sympy Matrix
+    :return: reduced row echelon form as a 2D :class:`numpy.ndarray`
+             and a list of pivots
+    """
+
     mat = np.array(m, dtype=object)
     index = 0
     nrows = mat.shape[0]
@@ -710,7 +718,12 @@ def rref(m):
 
 
 def nullspace(m):
-    mat, pivot_cols = rref(m)
+    """Calculates the nullspace of a matrix `m`.
+
+    :arg m: a 2D :class:`numpy.ndarray` or a list of lists or a sympy Matrix
+    :return: nullspace of `m` as a 2D :class:`numpy.ndarray`
+    """
+    mat, pivot_cols = reduced_row_echelon_form(m)
     pivot_cols = list(pivot_cols)
     cols = mat.shape[1]
 
@@ -727,12 +740,12 @@ def nullspace(m):
     return np.array(n, dtype=object).T
 
 
-def solve_symbolic(a, b):
-    if isinstance(a, sym.Matrix):
-        big = a.row_join(b)
+def solve_symbolic(A, b):  # noqa: N803
+    if isinstance(A, sym.Matrix):
+        big = A.row_join(b)
     else:
-        big = np.hstack((a, b))
-    red = rref(big)[0]
+        big = np.hstack((A, b))
+    red = reduced_row_echelon_form(big)[0]
     return red[:, big.shape[0]:]
 
 
