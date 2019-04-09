@@ -34,7 +34,7 @@ from sumpy.tools import CoeffIdentifier, add_mi, nth_root_assume_positive
 
 __doc__ = """
 .. autoclass:: ExpansionBase
-.. autoclass:: LinearRecurrenceBasedExpansionTermsWrangler
+.. autoclass:: LinearPDEBasedExpansionTermsWrangler
 
 Expansion Factories
 ^^^^^^^^^^^^^^^^^^^
@@ -266,7 +266,7 @@ def _spmv(spmat, x, sparse_vectors):
 # }}}
 
 
-class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
+class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     """
     .. automethod:: __init__
     .. automethod:: get_pdes
@@ -280,7 +280,7 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         :param order: order of the expansion
         :param dim: number of dimensions
         """
-        super(LinearRecurrenceBasedExpansionTermsWrangler, self).__init__(order, dim,
+        super(LinearPDEBasedExpansionTermsWrangler, self).__init__(order, dim,
                 max_mi)
 
     def get_coefficient_identifiers(self):
@@ -314,7 +314,7 @@ class LinearRecurrenceBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         Return a matrix that expresses every derivative in terms of a
         set of "stored" derivatives.
 
-        For example, for the recurrence::
+        For example, for the PDE::
 
             u_xx + u_yy + u_zz = 0
 
@@ -632,7 +632,7 @@ def make_pde_syms(dim, nexprs):
     return PDE(dim, eqs=eqs)
 
 
-class LaplaceExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler):
+class LaplaceExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
 
     init_arg_names = ("order", "dim", "max_mi")
 
@@ -654,7 +654,7 @@ class LaplaceExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler)
         return idx
 
 
-class HelmholtzExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler):
+class HelmholtzExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
 
     init_arg_names = ("order", "dim", "helmholtz_k_name", "max_mi")
 
@@ -678,7 +678,7 @@ class HelmholtzExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangle
         return idx
 
 
-class StokesExpansionTermsWrangler(LinearRecurrenceBasedExpansionTermsWrangler):
+class StokesExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
 
     init_arg_names = ("order", "dim", "icomp", "viscosity_mu_name", "max_mi")
 
