@@ -175,7 +175,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                                   self.get_coefficient_identifiers())
 
             # Create a expansion terms wrangler for derivatives up to order
-            # (tgt order)+(src order).
+            # (tgt order)+(src order) including a corresponding reduction matrix
             tgtplusderiv_exp_terms_wrangler = \
                 src_expansion.expansion_terms_wrangler.copy(
                         order=self.order + src_expansion.order, max_mi=tuple(max_mi))
