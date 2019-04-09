@@ -506,7 +506,24 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
 
 class PDE(object):
+    r"""
+    Represents a system of PDEs of dimension `dim`. It is represented by a
+    list of dictionaries with each dictionary representing a single PDE.
+    Each dictionary maps a :class:`CoeffIdentifier` object to a value,
+
+        .. math::
+
+            \sum_{(mi, ident), c \text{pde\_dict}}
+            \frac{\partial^{\sum(mi)}}{\partial u^mi} c = 0,
+
+        where :math:`u` is the solution vector of the PDE.
+    """
     def __init__(self, dim, eqs):
+        """
+        :arg dim: dimension of the PDE
+        :arg eqs: list of dictionaries mapping a :class:`CoeffIdentifier` to a
+                  value.
+        """
         self.dim = dim
         self.eqs = eqs
 
