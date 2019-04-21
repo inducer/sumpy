@@ -266,6 +266,19 @@ def _spmv(spmat, x, sparse_vectors):
 # }}}
 
 
+def _reconstruct(reconstruct_matrix, stored):
+    res = [0] * len(reconstruct_matrix)
+    stored_idx = 0
+    for row, deps in reconstruct_matrix:
+        if len(deps) == 0:
+            res[row] = stored[stored_idx]
+            stored_idx += 1
+            continue
+        for k, v in deps.items():
+            res[row] += res[k] * v
+    return res
+
+
 class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     """
     .. automethod:: __init__
@@ -288,15 +301,18 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
     def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
             rscale):
-        coeff_matrix = self.get_coefficient_matrix(rscale)
-        return _spmv(coeff_matrix, stored_kernel_derivatives,
+        coeff_matrix, reconstruct_matrix, use_reconstruct = \
+            self.get_coefficient_matrix(rscale)
+        if not use_reconstruct:
+            return _spmv(coeff_matrix, stored_kernel_derivatives,
                      sparse_vectors=False)
+        return _reconstruct(reconstruct_matrix, stored_kernel_derivatives)
 
     def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients,
             rscale):
         # = M^T x, where M = coeff matrix
 
-        coeff_matrix = self.get_coefficient_matrix(rscale)
+        coeff_matrix, _, _ = self.get_coefficient_matrix(rscale)
         result = [0] * len(self.stored_identifiers)
         for row, coeff in enumerate(full_mpole_coefficients):
             for col, val in coeff_matrix[row]:
@@ -305,7 +321,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
     @property
     def stored_identifiers(self):
-        stored_identifiers, coeff_matrix = self._get_stored_ids_and_coeff_mat()
+        stored_identifiers, coeff_matrix, _ = self.get_stored_ids_and_coeff_mat()
         return stored_identifiers
 
     @memoize_method
@@ -328,11 +344,13 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
             ^ rows = one for every derivative
         """
-        stored_identifiers, coeff_matrix = self._get_stored_ids_and_coeff_mat()
+        stored_identifiers, coeff_matrix, reconstruct_matrix = \
+            self.get_stored_ids_and_coeff_mat()
 
         full_coeffs = self.get_full_coefficient_identifiers()
         matrix_rows = []
         _, deriv_multiplier, _, _ = self._get_pdes()
+        count_nonzero_coeff = 0
         for irow, row in six.iteritems(coeff_matrix):
             # For eg: (u_xxx / rscale**3) = (u_yy / rscale**2) * coeff1 +
             #                               (u_xx / rscale**2) * coeff2
@@ -344,9 +362,37 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 diff = row_rscale - sum(stored_identifiers[icol])
                 mult = (rscale*deriv_multiplier)**diff
                 matrix_row.append((icol, coeff * mult))
+            count_nonzero_coeff += len(row)
             matrix_rows.append((irow, matrix_row))
 
-        return defaultdict(list, matrix_rows)
+        if reconstruct_matrix is None:
+            return defaultdict(list, matrix_rows), None, False
+
+        reconstruct_matrix_with_rscale = []
+        count_nonzero_reconstruct = 0
+        for row, deps in reconstruct_matrix:
+            # For eg: (u_xxx / rscale**3) = (u_yy / rscale**2) * coeff1 +
+            #                               (u_xx / rscale**2) * coeff2
+            # is converted to u_xxx = u_yy * (rscale * coeff1) +
+            #                         u_xx * (rscale * coeff2)
+            row_rscale = sum(full_coeffs[row])
+            matrix_row = []
+            deps_with_rscale = {}
+            for k, coeff in deps.items():
+                diff = row_rscale - sum(full_coeffs[k])
+                mult = (rscale*deriv_multiplier)**diff
+                deps_with_rscale[k] = coeff * mult
+            count_nonzero_reconstruct += len(deps)
+            reconstruct_matrix_with_rscale.append((row, deps_with_rscale))
+
+        use_reconstruct = count_nonzero_reconstruct < count_nonzero_coeff
+
+        return defaultdict(list, matrix_rows), reconstruct_matrix_with_rscale, \
+            use_reconstruct
+
+    @memoize_method
+    def get_stored_ids_and_coeff_mat(self):
+        return self._get_stored_ids_and_coeff_mat()[:3]
 
     @memoize_method
     def _get_stored_ids_and_coeff_mat(self):
@@ -357,7 +403,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         stored_identifiers = []
 
         from pytools import ProcessLogger
-        plog = ProcessLogger(logger, "compute recurrence for Taylor coefficients")
+        plog = ProcessLogger(logger, "compute PDE for Taylor coefficients")
 
         pdes, _, iexpr, nexpr = self._get_pdes()
         pde_mat = []
@@ -377,6 +423,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 else:
                     pde_mat.append(eq)
 
+        reconstruct_matrix = None
         if len(pde_mat) > 0:
             r"""
             Find a matrix :math:`s` such that :math:`K = S^T K_{[r]}`
@@ -404,15 +451,18 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             idx_all_exprs = self.get_reduced_coeffs(n)
 
             s = solve_symbolic(n.T[:, idx_all_exprs], n.T)
-
             # Filter out coefficients belonging to this expression
             indices = list(filter(lambda x: x < offset, idx_all_exprs))
             s = s[:len(indices), :offset]
 
             stored_identifiers = [mis[i] for i in indices]
+            if nexpr == 1:
+                reconstruct_matrix = self._get_reconstruct_matrix(pde_mat,
+                    indices)
         else:
             s = np.eye(len(mis))
             stored_identifiers = mis
+            idx_all_exprs = list(range(len(mis)))
 
         # coeff_matrix is a dictionary of lists. Each key in the dictionary
         # is a row number and the values are pairs of column number and value.
@@ -428,7 +478,35 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                      .format(orig=len(self.get_full_coefficient_identifiers()),
                              red=len(stored_identifiers)))
 
-        return stored_identifiers, coeff_matrix
+        return stored_identifiers, coeff_matrix, reconstruct_matrix, pde_mat, \
+                idx_all_exprs
+
+    def _get_reconstruct_matrix(self, pde_mat, stored):
+        constructed = [False]*len(pde_mat[0])
+        reconstruct = []
+        for i in stored:
+            reconstruct.append((i, dict()))
+            constructed[i] = True
+        found = True
+        while found:
+            found = False
+            for j in range(len(pde_mat)):
+                deps = np.nonzero(pde_mat[j])[0]
+                c = [not constructed[d] for d in deps]
+                if np.count_nonzero(c) == 1:
+                    new_index = deps[np.nonzero(c)[0]][0]
+                    recurrence = {}
+                    for d in deps:
+                        if not constructed[d]:
+                            assert d == new_index
+                            continue
+                        recurrence[d] = -pde_mat[j][d]/pde_mat[j][new_index]
+                    reconstruct.append((new_index, recurrence))
+                    constructed[new_index] = True
+                    found = True
+        if np.all(constructed):
+            return reconstruct
+        return None
 
     def get_pdes(self):
         r"""
