@@ -559,10 +559,13 @@ class MatrixBlockIndexRanges(object):
 # Author: Raymond Hettinger
 # License: MIT
 
-import collections
+try:
+    from collections.abc import MutableSet
+except ImportError:
+    from collections import MutableSet
 
 
-class OrderedSet(collections.MutableSet):
+class OrderedSet(MutableSet):
 
     def __init__(self, iterable=None):
         self.end = end = []
