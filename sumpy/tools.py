@@ -694,15 +694,17 @@ def reduced_row_echelon_form(m):
 
         pivot_cols.append(i)
         scale = mat[index, i]
-        t = mat[index, :]//scale
-        not_exact = (t * scale != mat[index, :])
+        if isinstance(scale, (int, sym.Integer)):
+            scale = int(scale)
 
-        if (np.any(not_exact)):
-            for j in range(ncols):
-                if not_exact[j]:
-                    t[j] = sym.sympify(mat[index, j])/scale
-
-        mat[index, :] = t
+        for j in range(mat.shape[1]):
+            elem = mat[index, j]
+            if isinstance(scale, int) and isinstance(elem, (int, sym.Integer)):
+                quo = int(elem) // scale
+                if quo * scale == elem:
+                    mat[index, j] = quo
+                    continue
+            mat[index, j] = sym.sympify(elem)/scale
 
         for j in range(nrows):
             if (j == index):
@@ -735,7 +737,10 @@ def nullspace(m):
         vec[free_var] = 1
         for piv_row, piv_col in enumerate(pivot_cols):
             for pos in pivot_cols[piv_row+1:] + [free_var]:
-                vec[piv_col] -= mat[piv_row, pos]
+                if isinstance(mat[piv_row, pos], sym.Integer):
+                    vec[piv_col] -= int(mat[piv_row, pos])
+                else:
+                    vec[piv_col] -= mat[piv_row, pos]
         n.append(vec)
     return np.array(n, dtype=object).T
 

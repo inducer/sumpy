@@ -406,11 +406,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             s = solve_symbolic(n.T[:, idx_all_exprs], n.T)
 
             # Filter out coefficients belonging to this expression
-            indices = []
-            for idx in idx_all_exprs:
-                if idx >= offset*iexpr and idx < offset*(iexpr+1):
-                    indices.append(idx)
-            s = s[:len(indices), offset*iexpr:offset*(iexpr+1)]
+            indices = list(filter(lambda x: x < offset, idx_all_exprs))
+            s = s[:len(indices), :offset]
 
             stored_identifiers = [mis[i] for i in indices]
         else:
@@ -586,6 +583,39 @@ class PDE(object):
             eqs.append(dict(new_eq))
         return PDE(self.dim, eqs=eqs)
 
+    def diff(self, mi):
+        eqs = []
+        for eq in self.eqs:
+            new_eq = defaultdict(lambda: 0)
+            for ident, v in eq.items():
+                new_mi = add_mi(ident.mi, mi)
+                new_ident = CoeffIdentifier(tuple(new_mi), ident.iexpr)
+                new_eq[new_ident] += v
+            eqs.append(dict(new_eq))
+        return PDE(self.dim, eqs=eqs)
+
+    def curl(self):
+        assert len(self.eqs) == self.dim
+        if self.dim == 2:
+            f1, f2 = self[0], self[1]
+            return f2.diff((1, 0)) - f1.diff((0, 1))
+
+        assert self.dim == 3
+        eqs = None
+        for d in range(3):
+            f1, f2 = self[(d+1) % 3], self[(d+2) % 3]
+            mi1 = [0, 0, 0]
+            mi1[(d+1) % 3] = 1
+            mi2 = [0, 0, 0]
+            mi2[(d+2) % 3] = 1
+            new_eqs = f2.diff(mi1) - f1.diff(mi2)
+            if eqs is None:
+                eqs = new_eqs
+            else:
+                eqs = eqs | new_eqs
+
+        return eqs
+
     def div(self):
         result = defaultdict(lambda: 0)
         for d, eq in enumerate(self.eqs):
@@ -615,10 +645,9 @@ def process_pde(pde):
                 if s1 == s2:
                     continue
                 m = nth_root_assume_positive(val1/val2, s2 - s1)
-                if multiplier is None:
+                if multiplier is None and not isinstance(m, (int, sym.Integer)):
                     multiplier = m
-                elif multiplier != m:
-                    return pde, 1
+
     if multiplier is None:
         return pde, 1
     eqs = []
