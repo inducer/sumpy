@@ -29,8 +29,9 @@ import logging
 from pytools import memoize_method
 import sumpy.symbolic as sym
 from collections import defaultdict
-from sumpy.tools import CoeffIdentifier, add_mi, nth_root_assume_positive
-
+from sumpy.tools import add_mi
+from .pde_utils import (make_pde_syms, process_pde, laplacian, div, curl, grad,
+    PDE)
 
 __doc__ = """
 .. autoclass:: ExpansionBase
@@ -399,7 +400,6 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         from six import iteritems
         from sumpy.tools import nullspace, solve_symbolic
 
-        tol = 1e-13
         stored_identifiers = []
 
         from pytools import ProcessLogger
@@ -469,7 +469,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         coeff_matrix = defaultdict(list)
         for i in range(s.shape[0]):
             for j in range(s.shape[1]):
-                if np.abs(s[i, j]) > tol:
+                if s[i, j] != 0:
                     coeff_matrix[j].append((i, s[i, j]))
 
         plog.done()
@@ -580,181 +580,6 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         return rows
 
 
-class PDE(object):
-    r"""
-    Represents a system of PDEs of dimension `dim`. It is represented by a
-    list of dictionaries with each dictionary representing a single PDE.
-    Each dictionary maps a :class:`CoeffIdentifier` object to a value,
-
-        .. math::
-
-            \sum_{(mi, ident), c \text{pde\_dict}}
-            \frac{\partial^{\sum(mi)}}{\partial u^mi} c = 0,
-
-        where :math:`u` is the solution vector of the PDE.
-    """
-    def __init__(self, dim, eqs):
-        """
-        :arg dim: dimension of the PDE
-        :arg eqs: list of dictionaries mapping a :class:`CoeffIdentifier` to a
-                  value.
-        """
-        self.dim = dim
-        self.eqs = eqs
-
-    def __mul__(self, param):
-        eqs = []
-        for eq in self.eqs:
-            new_eq = dict()
-            for k, v in eq.items():
-                new_eq[k] = eq[k] * param
-            eqs.append(new_eq)
-        return PDE(self.dim, eqs=eqs)
-
-    __rmul__ = __mul__
-
-    def __add__(self, other_pde):
-        assert self.dim == other_pde.dim
-        assert len(self.eqs) == len(other_pde.eqs)
-        eqs = []
-        for eq1, eq2 in zip(self.eqs, other_pde.eqs):
-            eq = defaultdict(lambda: 0)
-            for k, v in eq1.items():
-                eq[k] += v
-            for k, v in eq2.items():
-                eq[k] += v
-            eqs.append(dict(eq))
-        return PDE(self.dim, eqs=eqs)
-
-    __radd__ = __add__
-
-    def __sub__(self, other_pde):
-        return self + (-1)*other_pde
-
-    def laplacian(self):
-        p = PDE(self.dim, eqs=[])
-        for j in range(len(self.eqs)):
-            p = p | self[j].grad().div()
-        return p
-
-    def __or__(self, other_pde):
-        assert self.dim == other_pde.dim
-        eqs = self.eqs + other_pde.eqs
-        return PDE(self.dim, eqs=eqs)
-
-    def __getitem__(self, key):
-        eqs = self.eqs.__getitem__(key)
-        if not isinstance(eqs, list):
-            eqs = [eqs]
-        return PDE(self.dim, eqs=eqs)
-
-    def grad(self):
-        assert len(self.eqs) == 1
-        eqs = []
-        for d in range(self.dim):
-            new_eq = defaultdict(lambda: 0)
-            for ident, v in self.eqs[0].items():
-                mi = list(ident.mi)
-                mi[d] += 1
-                new_ident = CoeffIdentifier(tuple(mi), ident.iexpr)
-                new_eq[new_ident] += v
-            eqs.append(dict(new_eq))
-        return PDE(self.dim, eqs=eqs)
-
-    def diff(self, mi):
-        eqs = []
-        for eq in self.eqs:
-            new_eq = defaultdict(lambda: 0)
-            for ident, v in eq.items():
-                new_mi = add_mi(ident.mi, mi)
-                new_ident = CoeffIdentifier(tuple(new_mi), ident.iexpr)
-                new_eq[new_ident] += v
-            eqs.append(dict(new_eq))
-        return PDE(self.dim, eqs=eqs)
-
-    def curl(self):
-        assert len(self.eqs) == self.dim
-        if self.dim == 2:
-            f1, f2 = self[0], self[1]
-            return f2.diff((1, 0)) - f1.diff((0, 1))
-
-        assert self.dim == 3
-        eqs = None
-        for d in range(3):
-            f1, f2 = self[(d+1) % 3], self[(d+2) % 3]
-            mi1 = [0, 0, 0]
-            mi1[(d+1) % 3] = 1
-            mi2 = [0, 0, 0]
-            mi2[(d+2) % 3] = 1
-            new_eqs = f2.diff(mi1) - f1.diff(mi2)
-            if eqs is None:
-                eqs = new_eqs
-            else:
-                eqs = eqs | new_eqs
-
-        return eqs
-
-    def div(self):
-        result = defaultdict(lambda: 0)
-        for d, eq in enumerate(self.eqs):
-            for ident, v in eq.items():
-                mi = list(ident.mi)
-                mi[d] += 1
-                new_ident = CoeffIdentifier(tuple(mi), ident.iexpr)
-                result[new_ident] += v
-        return PDE(self.dim, eqs=[dict(result)])
-
-    def __repr__(self):
-        return repr(self.eqs)
-
-
-def process_pde(pde):
-    """
-    Process a PDE object to return a PDE and a multiplier such that
-    the sum of multiplier ** order * derivative * coefficient gives the
-    original PDE `pde`.
-    """
-    multiplier = None
-    for eq in pde.eqs:
-        for ident1, val1 in eq.items():
-            for ident2, val2 in eq.items():
-                s1 = sum(ident1.mi)
-                s2 = sum(ident2.mi)
-                if s1 == s2:
-                    continue
-                m = nth_root_assume_positive(val1/val2, s2 - s1)
-                if multiplier is None and not isinstance(m, (int, sym.Integer)):
-                    multiplier = m
-
-    if multiplier is None:
-        return pde, 1
-    eqs = []
-    for eq in pde.eqs:
-        new_eq = dict()
-        for i, (k, v) in enumerate(eq.items()):
-            new_eq[k] = v * multiplier**sum(k.mi)
-            if i == 0:
-                val = new_eq[k]
-            new_eq[k] /= sym.sympify(val)
-            if isinstance(new_eq[k], sym.Integer):
-                new_eq[k] = int(new_eq[k])
-        eqs.append(new_eq)
-    return PDE(pde.dim, eqs=eqs), multiplier
-
-
-def make_pde_syms(dim, nexprs):
-    """
-    Returns a list of expressions of size `nexprs` to create a PDE
-    of dimension `dim`.
-    """
-    eqs = []
-    for iexpr in range(nexprs):
-        mi = [0]*dim
-        eq = dict()
-        eq[CoeffIdentifier(tuple(mi), iexpr)] = 1
-        eqs.append(eq)
-    return PDE(dim, eqs=eqs)
-
 
 class LaplaceExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
 
@@ -766,7 +591,7 @@ class LaplaceExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
 
     def get_pdes(self):
         w = make_pde_syms(self.dim, 1)
-        return w.laplacian(), 0, 1
+        return laplacian(w), 0, 1
 
     def _get_reduced_coeffs(self, nullspace):
         idx = []
@@ -790,7 +615,7 @@ class HelmholtzExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
     def get_pdes(self, **kwargs):
         w = make_pde_syms(self.dim, 1)
         k = sym.Symbol(self.helmholtz_k_name)
-        return (w.laplacian() + k**2 * w), 0, 1
+        return (laplacian(w) + k**2 * w), 0, 1
 
     def _get_reduced_coeffs(self, nullspace):
         idx = []
@@ -817,7 +642,7 @@ class StokesExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
         mu = sym.Symbol(self.viscosity_mu_name)
         u = w[:self.dim]
         p = w[-1]
-        pdes = (mu * u.laplacian() - p.grad() | u.div())
+        pdes = PDE(self.dim, mu * laplacian(u) - grad(p), div(u))
         return pdes, self.icomp, self.dim+1
 # }}}
 
