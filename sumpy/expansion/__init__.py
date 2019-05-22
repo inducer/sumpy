@@ -30,7 +30,7 @@ from pytools import memoize_method
 import sumpy.symbolic as sym
 from collections import defaultdict
 from sumpy.tools import add_mi
-from .pde_utils import (make_pde_syms, process_pde, laplacian, div, curl, grad,
+from .pde_utils import (make_pde_syms, process_pde, laplacian, div, grad,
     PDE)
 
 __doc__ = """
@@ -578,7 +578,6 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             for j in range(i+1, nrows):
                 mat[j, :] = mat[i, col]*mat[j, :] - mat[i, :]*mat[j, col]
         return rows
-
 
 
 class LaplaceExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):

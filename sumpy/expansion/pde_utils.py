@@ -26,6 +26,7 @@ from collections import defaultdict
 from sumpy.tools import CoeffIdentifier, add_mi, nth_root_assume_positive
 import sumpy.symbolic as sym
 
+
 class PDE(object):
     r"""
     Represents a system of PDEs of dimension `dim`. It is represented by a
@@ -93,10 +94,10 @@ class PDE(object):
 
 
 def laplacian(pde):
-    p = PDE(pde.dim)
+    eqs = []
     for j in range(len(pde.eqs)):
-        p.eqs.append(div(grad(pde[j])).eqs[0])
-    return p
+        eqs.append(div(grad(pde[j])).eqs[0])
+    return PDE(pde.dim, *eqs)
 
 
 def diff(pde, mi):
@@ -197,4 +198,3 @@ def make_pde_syms(dim, nexprs):
         eq[CoeffIdentifier(tuple(mi), iexpr)] = 1
         eqs.append(eq)
     return PDE(dim, *eqs)
-
