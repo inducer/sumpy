@@ -96,7 +96,7 @@ class PDE(object):
 def laplacian(pde):
     eqs = []
     for j in range(len(pde.eqs)):
-        eqs.append(div(grad(pde[j])).eqs[0])
+        eqs.append(div(grad(pde[j])))
     return PDE(pde.dim, *eqs)
 
 
@@ -118,7 +118,7 @@ def grad(pde):
     for d in range(pde.dim):
         mi = [0]*pde.dim
         mi[d] += 1
-        eqs.append(diff(pde, mi).eqs[0])
+        eqs.append(diff(pde, mi))
     return PDE(pde.dim, *eqs)
 
 
