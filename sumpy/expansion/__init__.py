@@ -30,7 +30,7 @@ from pytools import memoize_method
 import sumpy.symbolic as sym
 from collections import defaultdict
 from sumpy.tools import add_mi, find_linear_independent_row, CoeffIdentifier
-from .pde_utils import (make_pde_syms, process_pde, laplacian, div, grad,
+from .pde_utils import (make_pde_syms, laplacian, div, grad,
     PDE)
 
 __doc__ = """
@@ -485,7 +485,6 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         from sumpy.tools import nullspace
 
         pdes, iexpr, nexpr = self.get_pdes()
-        pdes, multiplier = process_pde(pdes)
         if nexpr == 1:
             return pdes
 
@@ -523,11 +522,9 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             indep_row = find_linear_independent_row(n)
             if len(indep_row) > 0:
                 pde_dict = {}
-                min_order = min(sum(mis[k]) for k in indep_row.keys())
+                mult = indep_row[max(indep_row.keys())]
                 for k, v in indep_row.items():
-                    mi = mis[k]
-                    mult = multiplier**(sum(mi)-min_order)
-                    pde_dict[CoeffIdentifier(mi, 0)] = v * mult
+                    pde_dict[CoeffIdentifier(mis[k], 0)] = v / mult
                 plog.done()
                 return PDE(self.dim, pde_dict)
 

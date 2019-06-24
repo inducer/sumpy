@@ -23,8 +23,7 @@ THE SOFTWARE.
 """
 
 from collections import defaultdict
-from sumpy.tools import CoeffIdentifier, add_mi, nth_root_assume_positive
-import sumpy.symbolic as sym
+from sumpy.tools import CoeffIdentifier, add_mi
 
 
 class PDE(object):
@@ -150,40 +149,6 @@ def div(pde):
             new_ident = CoeffIdentifier(tuple(mi), ident.iexpr)
             result[new_ident] += v
     return PDE(pde.dim, dict(result))
-
-
-def process_pde(pde):
-    """
-    Process a PDE object to return a PDE and a multiplier such that
-    the sum of multiplier ** order * derivative * coefficient gives the
-    original PDE `pde`.
-    """
-    multiplier = None
-    for eq in pde.eqs:
-        for ident1, val1 in eq.items():
-            for ident2, val2 in eq.items():
-                s1 = sum(ident1.mi)
-                s2 = sum(ident2.mi)
-                if s1 == s2:
-                    continue
-                m = nth_root_assume_positive(val1/val2, s2 - s1)
-                if multiplier is None and not isinstance(m, (int, sym.Integer)):
-                    multiplier = m
-
-    if multiplier is None:
-        return pde, 1
-    eqs = []
-    for eq in pde.eqs:
-        new_eq = dict()
-        for i, (k, v) in enumerate(eq.items()):
-            new_eq[k] = v * multiplier**sum(k.mi)
-            if i == 0:
-                val = new_eq[k]
-            new_eq[k] /= sym.sympify(val)
-            if isinstance(new_eq[k], sym.Integer):
-                new_eq[k] = int(new_eq[k])
-        eqs.append(new_eq)
-    return PDE(pde.dim, *eqs), multiplier
 
 
 def make_pde_syms(dim, nexprs):

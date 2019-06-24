@@ -757,18 +757,6 @@ def solve_symbolic(A, b):  # noqa: N803
 CoeffIdentifier = namedtuple('CoeffIdentifier', ['mi', 'iexpr'])
 
 
-def nth_root_assume_positive(expr, n):
-    """
-    Get the nth root of a symbolic expression assuming that
-    the symbols are positive.
-    """
-    expr = sym.sympify(expr)
-    if expr.is_Pow:
-        return expr.args[0] ** (expr.args[1] / sym.Integer(n))
-    else:
-        return expr ** (sym.Integer(1)/n)
-
-
 def find_linear_independent_row(nullspace):
     """
     This method does elementary row operations to figure out the first row
