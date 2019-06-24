@@ -29,7 +29,7 @@ import logging
 from pytools import memoize_method
 import sumpy.symbolic as sym
 from collections import defaultdict
-from sumpy.tools import add_mi
+from sumpy.tools import add_mi, find_linear_independent_row, CoeffIdentifier
 from .pde_utils import (make_pde_syms, process_pde, laplacian, div, grad,
     PDE)
 
@@ -350,7 +350,6 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         full_coeffs = self.get_full_coefficient_identifiers()
         matrix_rows = []
-        _, deriv_multiplier, _, _ = self._get_pdes()
         count_nonzero_coeff = 0
         for irow, row in six.iteritems(coeff_matrix):
             # For eg: (u_xxx / rscale**3) = (u_yy / rscale**2) * coeff1 +
@@ -361,7 +360,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             matrix_row = []
             for icol, coeff in row:
                 diff = row_rscale - sum(stored_identifiers[icol])
-                mult = (rscale*deriv_multiplier)**diff
+                mult = rscale**diff
                 matrix_row.append((icol, coeff * mult))
             count_nonzero_coeff += len(row)
             matrix_rows.append((irow, matrix_row))
@@ -381,7 +380,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             deps_with_rscale = {}
             for k, coeff in deps.items():
                 diff = row_rscale - sum(full_coeffs[k])
-                mult = (rscale*deriv_multiplier)**diff
+                mult = rscale**diff
                 deps_with_rscale[k] = coeff * mult
             count_nonzero_reconstruct += len(deps)
             reconstruct_matrix_with_rscale.append((row, deps_with_rscale))
@@ -393,19 +392,13 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
     @memoize_method
     def get_stored_ids_and_coeff_mat(self):
-        return self._get_stored_ids_and_coeff_mat()[:3]
-
-    @memoize_method
-    def _get_stored_ids_and_coeff_mat(self):
         from six import iteritems
         from sumpy.tools import nullspace, solve_symbolic
-
-        stored_identifiers = []
 
         from pytools import ProcessLogger
         plog = ProcessLogger(logger, "compute PDE for Taylor coefficients")
 
-        pdes, _, iexpr, nexpr = self._get_pdes()
+        pdes, iexpr, nexpr = self.get_pdes()
         pde_mat = []
         mis = self.get_full_coefficient_identifiers()
         coeff_ident_enumerate_dict = dict((tuple(mi), i) for
@@ -423,7 +416,6 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 else:
                     pde_mat.append(eq)
 
-        reconstruct_matrix = None
         if len(pde_mat) > 0:
             r"""
             Find a matrix :math:`s` such that :math:`K = S^T K_{[r]}`
@@ -456,9 +448,6 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             s = s[:len(indices), :offset]
 
             stored_identifiers = [mis[i] for i in indices]
-            if nexpr == 1:
-                reconstruct_matrix = self._get_reconstruct_matrix(pde_mat,
-                    indices)
         else:
             s = np.eye(len(mis))
             stored_identifiers = mis
@@ -478,35 +467,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                      .format(orig=len(self.get_full_coefficient_identifiers()),
                              red=len(stored_identifiers)))
 
-        return stored_identifiers, coeff_matrix, reconstruct_matrix, pde_mat, \
-                idx_all_exprs
-
-    def _get_reconstruct_matrix(self, pde_mat, stored):
-        constructed = [False]*len(pde_mat[0])
-        reconstruct = []
-        for i in stored:
-            reconstruct.append((i, dict()))
-            constructed[i] = True
-        found = True
-        while found:
-            found = False
-            for j in range(len(pde_mat)):
-                deps = np.nonzero(pde_mat[j])[0]
-                c = [not constructed[d] for d in deps]
-                if np.count_nonzero(c) == 1:
-                    new_index = deps[np.nonzero(c)[0]][0]
-                    recurrence = {}
-                    for d in deps:
-                        if not constructed[d]:
-                            assert d == new_index
-                            continue
-                        recurrence[d] = -pde_mat[j][d]/pde_mat[j][new_index]
-                    reconstruct.append((new_index, recurrence))
-                    constructed[new_index] = True
-                    found = True
-        if np.all(constructed):
-            return reconstruct
-        return None
+        return stored_identifiers, coeff_matrix, pde_mat
 
     def get_pdes(self):
         r"""
@@ -519,65 +480,59 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         raise NotImplementedError
 
     @memoize_method
-    def _get_pdes(self):
-        r"""
-        Returns a list of `pde_dict`s, a multiplier, expression number,
-        number of expressions such that each PDE is represented by,
+    def get_single_pde(self):
+        from six import iteritems
+        from sumpy.tools import nullspace
 
-        .. math::
+        pdes, iexpr, nexpr = self.get_pdes()
+        pdes, multiplier = process_pde(pdes)
+        if nexpr == 1:
+            return pdes
 
-            \sum_{\nu,c_\nu\in \text{pde\_dict}}
-            \frac{c_\nu\cdot \alpha_\nu}
-            {\text{deriv\_multiplier}^{
-                \sum \text{mi}
-            }} = 0,
+        from pytools import ProcessLogger
+        plog = ProcessLogger(logger, "computing single PDE for multiple PDEs")
 
-        where :math:`\mathbf\alpha` is a coefficient vector.
+        from pytools import (
+                generate_nonnegative_integer_tuples_summing_to_at_most
+                as gnitstam)
 
-        Note that *coeff* should be a number (not symbolic) to enable use of
-        fast linear algebra routines. *deriv_multiplier* can be symbolic
-        and should be used when the PDE has symbolic values as coefficients
-        for the derivatives.
+        for order in range(1, 100):
+            mis = sorted(gnitstam(order, self.dim), key=sum)
 
-        :Example:
+            pde_mat = []
+            coeff_ident_enumerate_dict = dict((tuple(mi), i) for
+                                                (i, mi) in enumerate(mis))
+            offset = len(mis)
 
-            :math:`\Delta u - k^2 u = 0` for 2D can be written as,
+            for mi in mis:
+                for pde_dict in pdes.eqs:
+                    eq = [0]*(len(mis)*nexpr)
+                    for ident, coeff in iteritems(pde_dict):
+                        c = tuple(add_mi(ident.mi, mi))
+                        if c not in coeff_ident_enumerate_dict:
+                            break
+                        idx = offset*ident.iexpr + coeff_ident_enumerate_dict[c]
+                        eq[idx] = coeff
+                    else:
+                        pde_mat.append(eq)
 
-            .. math::
-
-                \frac{(2, 0) \times 1}{k^{sum((2, 0))}} +
-                \frac{(0, 2) \times 1}{k^{sum((0, 2))}} +
-                \frac{(0, 0) \times -1}{k^{sum((0, 0))}} = 0
-        """
-        pde, iexpr, nexpr = self.get_pdes()
-        pde, multiplier = process_pde(pde)
-        return pde, multiplier, iexpr, nexpr
-
-    def get_reduced_coeffs(self, nullspace):
-        """
-        Returns the indices of the reduced set of derivatives which are stored.
-        Override this method if the reduced set is known analytically.
-
-        This method does elementary row operations to figure out which rows are
-        linearly dependent on the previous rows. Partial pivoting is not done
-        to preserve the order so that a row is not linearly dependent on a row
-        that came after in the original row order.
-        """
-        mat = nullspace.copy()
-        nrows = mat.shape[0]
-        ncols = mat.shape[1]
-        rows = []
-        for i in range(nrows):
-            for j in range(ncols):
-                if mat[i, j] != 0:
-                    col = j
-                    break
-            else:
+            if len(pde_mat) == 0:
                 continue
-            rows.append(i)
-            for j in range(i+1, nrows):
-                mat[j, :] = mat[i, col]*mat[j, :] - mat[i, :]*mat[j, col]
-        return rows
+
+            n = nullspace(pde_mat)[offset*iexpr:offset*(iexpr+1), :]
+            indep_row = find_linear_independent_row(n)
+            if len(indep_row) > 0:
+                pde_dict = {}
+                min_order = min(sum(mis[k]) for k in indep_row.keys())
+                for k, v in indep_row.items():
+                    mi = mis[k]
+                    mult = multiplier**(sum(mi)-min_order)
+                    pde_dict[CoeffIdentifier(mi, 0)] = v * mult
+                plog.done()
+                return PDE(self.dim, pde_dict)
+
+        plog.done()
+        assert False
 
 
 class LaplaceExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
@@ -591,15 +546,6 @@ class LaplaceExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
     def get_pdes(self):
         w = make_pde_syms(self.dim, 1)
         return laplacian(w), 0, 1
-
-    def _get_reduced_coeffs(self, nullspace):
-        idx = []
-        for i, mi in enumerate(self.get_full_coefficient_identifiers()):
-            # Return only the derivatives with the order of the last dimension
-            # 0 or 1. Higher order derivatives can be reduced down to these.
-            if mi[-1] < 2:
-                idx.append(i)
-        return idx
 
 
 class HelmholtzExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
@@ -615,15 +561,6 @@ class HelmholtzExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
         w = make_pde_syms(self.dim, 1)
         k = sym.Symbol(self.helmholtz_k_name)
         return (laplacian(w) + k**2 * w), 0, 1
-
-    def _get_reduced_coeffs(self, nullspace):
-        idx = []
-        for i, mi in enumerate(self.get_full_coefficient_identifiers()):
-            # Return only the derivatives with the order of the last dimension
-            # 0 or 1. Higher order derivatives can be reduced down to these.
-            if mi[-1] < 2:
-                idx.append(i)
-        return idx
 
 
 class StokesExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):

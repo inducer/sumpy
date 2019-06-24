@@ -768,4 +768,30 @@ def nth_root_assume_positive(expr, n):
     else:
         return expr ** (sym.Integer(1)/n)
 
+
+def find_linear_independent_row(nullspace):
+    """
+    This method does elementary row operations to figure out the first row
+    which is linearly dependent on the previous rows. Partial pivoting is not done
+    to find the row with the lowest degree.
+    """
+    ncols = nullspace.shape[1]
+    nrows = min(nullspace.shape[0], ncols+1)
+    augment = np.eye(nrows, nrows, dtype=nullspace.dtype)
+    mat = np.hstack((nullspace[:nrows, :], augment))
+    for i in range(nrows):
+        for j in range(ncols):
+            if mat[i, j] != 0:
+                col = j
+                break
+        else:
+            pde_dict = {}
+            for col in range(ncols, ncols+nrows):
+                if mat[i, col] != 0:
+                    pde_dict[col-ncols] = mat[i, col]
+            return pde_dict
+        for j in range(i+1, nrows):
+            mat[j, :] = mat[j, :]*mat[i, col] - mat[i, :]*mat[j, col]
+    return {}
+
 # vim: fdm=marker
