@@ -24,7 +24,6 @@ THE SOFTWARE.
 
 from six.moves import range
 import six
-import numpy as np
 import logging
 from pytools import memoize_method
 import sumpy.symbolic as sym
@@ -393,73 +392,61 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     @memoize_method
     def get_stored_ids_and_coeff_mat(self):
         from six import iteritems
-        from sumpy.tools import nullspace, solve_symbolic
 
         from pytools import ProcessLogger
         plog = ProcessLogger(logger, "compute PDE for Taylor coefficients")
 
         pdes, iexpr, nexpr = self.get_pdes()
-        pde_mat = []
         mis = self.get_full_coefficient_identifiers()
         coeff_ident_enumerate_dict = dict((tuple(mi), i) for
                                             (i, mi) in enumerate(mis))
-        offset = len(mis)
 
-        for mi in mis:
-            for pde_dict in pdes.eqs:
-                eq = [0]*(len(mis)*nexpr)
-                for ident, coeff in iteritems(pde_dict):
-                    c = tuple(add_mi(ident.mi, mi))
-                    if c not in coeff_ident_enumerate_dict:
-                        break
-                    eq[offset*ident.iexpr + coeff_ident_enumerate_dict[c]] = coeff
-                else:
-                    pde_mat.append(eq)
+        pde = self.get_single_pde()
+        assert len(pde.eqs) == 1
+        pde_dict = pde.eqs[0]
+        max_mi_idx = max(coeff_ident_enumerate_dict[ident.mi] for
+                            ident in pde_dict.keys())
+        max_mi = mis[max_mi_idx]
+        max_mi_coeff = pde_dict[CoeffIdentifier(max_mi, 0)]
+        max_mi_mult = -1/sym.sympify(max_mi_coeff)
 
-        if len(pde_mat) > 0:
-            r"""
-            Find a matrix :math:`s` such that :math:`K = S^T K_{[r]}`
-            where :math:`r` is the indices of the  reduced coefficients and
-            :math:`K` is a column vector of coefficients. Let :math:`P` be the
-            PDE matrix, i.e. the matrix obtained by applying the PDE
-            as an identity to each of the Taylor coefficients.
-            (Realize that those, as functions of space, each still satisfy the PDE.)
-            As a result, if :math:`\mathbf\alpha` is a vector of Taylor coefficients,
-            one would expect :math:`P\mathbf\alpha = \mathbf 0`.
-            Further, let :math:`N` be the nullspace of :math:`P`.
-            Then, :math:`S^T = N * N_{[r, :]}^{-1}` which implies,
-            :math:`S = N_{[r, :]}^{-T} N^T = N_{[r, :]}^{-T} N^T`.
+        def is_stored(mi):
             """
-            n = nullspace(pde_mat)
+            A multi_index mi is not stored if mi >= max_mi
+            """
+            return any(mi[d] < max_mi[d] for d in range(self.dim))
 
-            # Move the rows corresponding to this expression to the front
-            rearrange = list(range(offset*iexpr, offset*(iexpr+1)))
-            for i in range(nexpr*offset):
-                if i < offset*iexpr or i >= offset*(iexpr+1):
-                    rearrange.append(i)
-            n = n[rearrange, :]
+        stored_identifiers = [mi for mi in mis if is_stored(mi)]
+        stored_ident_enumerate_dict = dict((tuple(mi), i) for
+                                            (i, mi) in enumerate(stored_identifiers))
 
-            # Get the indices of the reduced coefficients
-            idx_all_exprs = self.get_reduced_coeffs(n)
-
-            s = solve_symbolic(n.T[:, idx_all_exprs], n.T)
-            # Filter out coefficients belonging to this expression
-            indices = list(filter(lambda x: x < offset, idx_all_exprs))
-            s = s[:len(indices), :offset]
-
-            stored_identifiers = [mis[i] for i in indices]
-        else:
-            s = np.eye(len(mis))
-            stored_identifiers = mis
-            idx_all_exprs = list(range(len(mis)))
+        coeff_matrix_dict = defaultdict(lambda: defaultdict(lambda: 0))
+        reconstruct_matrix = defaultdict(list)
+        for i, mi in enumerate(mis):
+            if is_stored(mi):
+                coeff_matrix_dict[i][stored_ident_enumerate_dict[mi]] = 1
+                continue
+            diff = [mi[d] - max_mi[d] for d in range(self.dim)]
+            for other_mi, coeff in iteritems(pde_dict):
+                j = coeff_ident_enumerate_dict[add_mi(other_mi.mi, diff)]
+                if i == j:
+                    continue
+                # PDE might not have max_mi_coeff = -1, divide by -max_mi_coeff
+                # to get a relation of the form, u_zz = - u_xx - u_yy for Laplace 3D.
+                reconstruct_matrix[i].append((j, coeff*max_mi_mult))
+                # j can be a stored or a non-stored multi-index
+                # Look at the coeff_matrix of j to get the j as a linear combination
+                # of stored coefficients.
+                for dep, other_coeff in iteritems(coeff_matrix_dict[j]):
+                    coeff_matrix_dict[i][dep] += other_coeff*coeff*max_mi_mult
 
         # coeff_matrix is a dictionary of lists. Each key in the dictionary
         # is a row number and the values are pairs of column number and value.
         coeff_matrix = defaultdict(list)
-        for i in range(s.shape[0]):
-            for j in range(s.shape[1]):
-                if s[i, j] != 0:
-                    coeff_matrix[j].append((i, s[i, j]))
+        for row, deps in iteritems(coeff_matrix_dict):
+            for col, val in iteritems(deps):
+                if val != 0:
+                    coeff_matrix[row].append((col, val))
 
         plog.done()
 
@@ -467,7 +454,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                      .format(orig=len(self.get_full_coefficient_identifiers()),
                              red=len(stored_identifiers)))
 
-        return stored_identifiers, coeff_matrix, pde_mat
+        return stored_identifiers, coeff_matrix, None
 
     def get_pdes(self):
         r"""
