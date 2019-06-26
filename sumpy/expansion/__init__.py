@@ -266,16 +266,18 @@ def _spmv(spmat, x, sparse_vectors):
 # }}}
 
 
-def _reconstruct(reconstruct_matrix, stored):
+def _fast_spmv(reconstruct_matrix, stored, sac):
     res = [0] * len(reconstruct_matrix)
     stored_idx = 0
     for row, deps in reconstruct_matrix:
         if len(deps) == 0:
             res[row] = stored[stored_idx]
             stored_idx += 1
-            continue
-        for k, v in deps.items():
-            res[row] += res[k] * v
+        else:
+            for k, v in deps.items():
+                res[row] += res[k] * v
+        new_sym = sym.Symbol(sac.assign_unique("expr", res[row]))
+        res[row] = new_sym
     return res
 
 
@@ -300,18 +302,17 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         return self.stored_identifiers
 
     def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
-            rscale):
+            rscale, sac=None):
         coeff_matrix, reconstruct_matrix, use_reconstruct = \
             self.get_coefficient_matrix(rscale)
-        if not use_reconstruct:
+        if not use_reconstruct or sac is None:
             return _spmv(coeff_matrix, stored_kernel_derivatives,
                      sparse_vectors=False)
-        return _reconstruct(reconstruct_matrix, stored_kernel_derivatives)
+        return _fast_spmv(reconstruct_matrix, stored_kernel_derivatives, sac)
 
     def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients,
             rscale):
         # = M^T x, where M = coeff matrix
-
         coeff_matrix, _, _ = self.get_coefficient_matrix(rscale)
         result = [0] * len(self.stored_identifiers)
         for row, coeff in enumerate(full_mpole_coefficients):
@@ -369,7 +370,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         reconstruct_matrix_with_rscale = []
         count_nonzero_reconstruct = 0
-        for row, deps in reconstruct_matrix:
+        for row, deps in six.iteritems(reconstruct_matrix):
             # For eg: (u_xxx / rscale**3) = (u_yy / rscale**2) * coeff1 +
             #                               (u_xx / rscale**2) * coeff2
             # is converted to u_xxx = u_yy * (rscale * coeff1) +
@@ -377,7 +378,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             row_rscale = sum(full_coeffs[row])
             matrix_row = []
             deps_with_rscale = {}
-            for k, coeff in deps.items():
+            for k, coeff in deps:
                 diff = row_rscale - sum(full_coeffs[k])
                 mult = rscale**diff
                 deps_with_rscale[k] = coeff * mult
@@ -454,7 +455,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                      .format(orig=len(self.get_full_coefficient_identifiers()),
                              red=len(stored_identifiers)))
 
-        return stored_identifiers, coeff_matrix, None
+        return stored_identifiers, coeff_matrix, reconstruct_matrix
 
     def get_pdes(self):
         r"""
