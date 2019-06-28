@@ -284,7 +284,7 @@ def _fast_spmv(reconstruct_matrix, vec, sac, transpose=False):
         return res
     else:
         res = []
-        expr_all = vec.copy()
+        expr_all = list(vec)
         for row, deps in reversed(list(enumerate(reconstruct_matrix))):
             if len(deps) == 0:
                 res.append(expr_all[row])
