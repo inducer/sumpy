@@ -422,8 +422,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         pde = self.get_single_pde()
         assert len(pde.eqs) == 1
         pde_dict = pde.eqs[0]
-        max_mi_idx = max(coeff_ident_enumerate_dict[ident.mi] for
-                            ident in pde_dict.keys())
+        max_mi_idx = max(coeff_ident_enumerate_dict[ident.mi] for ident in
+                        pde_dict.keys() if ident.mi in coeff_ident_enumerate_dict)
         max_mi = mis[max_mi_idx]
         max_mi_coeff = pde_dict[CoeffIdentifier(max_mi, 0)]
         max_mi_mult = -1/sym.sympify(max_mi_coeff)
