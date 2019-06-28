@@ -115,12 +115,14 @@ class ExpansionBase(object):
         """
         raise NotImplementedError
 
-    def coefficients_from_source(self, avec, bvec, rscale):
+    def coefficients_from_source(self, avec, bvec, rscale, sac=None):
         """Form an expansion from a source point.
 
         :arg avec: vector from source to center.
         :arg bvec: vector from center to target. Not usually necessary,
             except for line-Taylor expansion.
+        :arg sac: a symbolic assignment collection where temporary
+            expressions are stored.
 
         :returns: a list of :mod:`sympy` expressions representing
             the coefficients of the expansion.
@@ -174,11 +176,11 @@ class ExpansionTermsWrangler(object):
         raise NotImplementedError
 
     def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
-            rscale):
+            rscale, sac=None):
         raise NotImplementedError
 
     def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients,
-            rscale):
+            rscale, sac=None):
         raise NotImplementedError
 
     @memoize_method
@@ -224,7 +226,7 @@ class FullExpansionTermsWrangler(ExpansionTermsWrangler):
             ExpansionTermsWrangler.get_full_coefficient_identifiers)
 
     def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
-            rscale):
+            rscale, sac=None):
         return stored_kernel_derivatives
 
     get_stored_mpole_coefficients_from_full = (
@@ -283,7 +285,7 @@ def _fast_spmv(reconstruct_matrix, vec, sac, transpose=False):
     else:
         res = []
         expr_all = vec.copy()
-        for row, deps in reversed(enumerate(reconstruct_matrix)):
+        for row, deps in reversed(list(enumerate(reconstruct_matrix))):
             if len(deps) == 0:
                 res.append(expr_all[row])
                 continue
@@ -335,7 +337,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                     result[col] += coeff * val
             return result
         return _fast_spmv(reconstruct_matrix, full_mpole_coefficients, sac,
-                tranpose=True)
+                transpose=True)
 
     @property
     def stored_identifiers(self):
@@ -367,7 +369,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         full_coeffs = self.get_full_coefficient_identifiers()
         matrix_rows = []
-        count_nonzero_coeff = 0
+        count_nonzero_coeff = -len(stored_identifiers)
         for irow, row in six.iteritems(coeff_matrix):
             # For eg: (u_xxx / rscale**3) = (u_yy / rscale**2) * coeff1 +
             #                               (u_xx / rscale**2) * coeff2
@@ -422,8 +424,17 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         pde = self.get_single_pde()
         assert len(pde.eqs) == 1
         pde_dict = pde.eqs[0]
-        max_mi_idx = max(coeff_ident_enumerate_dict[ident.mi] for ident in
-                        pde_dict.keys() if ident.mi in coeff_ident_enumerate_dict)
+        for ident in pde_dict.keys():
+            if ident.mi not in coeff_ident_enumerate_dict:
+                coeff_matrix = defaultdict(list)
+                reconstruct_matrix = []
+                for i in range(len(mis)):
+                    coeff_matrix[i] = [(i, 1)]
+                    reconstruct_matrix.append([])
+                return mis, coeff_matrix, reconstruct_matrix
+
+        max_mi_idx = max(coeff_ident_enumerate_dict[ident.mi] for
+                         ident in pde_dict.keys())
         max_mi = mis[max_mi_idx]
         max_mi_coeff = pde_dict[CoeffIdentifier(max_mi, 0)]
         max_mi_mult = -1/sym.sympify(max_mi_coeff)
