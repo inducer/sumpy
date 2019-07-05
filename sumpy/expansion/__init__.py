@@ -421,7 +421,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         coeff_ident_enumerate_dict = dict((tuple(mi), i) for
                                             (i, mi) in enumerate(mis))
 
-        pde = self.get_single_pde()
+        pde = self.get_scalar_pde()
         assert len(pde.eqs) == 1
         pde_dict = pde.eqs[0]
         for ident in pde_dict.keys():
@@ -497,7 +497,10 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         raise NotImplementedError
 
     @memoize_method
-    def get_single_pde(self):
+    def get_scalar_pde(self):
+        r"""
+        Returns a scalar PDE corresponding to the component `iexpr`.
+        """
         from six import iteritems
         from sumpy.tools import nullspace
 
