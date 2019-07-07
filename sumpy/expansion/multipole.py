@@ -113,7 +113,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         else:
             return (rscale**nderivatives_for_scaling * expr)
 
-    def evaluate(self, coeffs, bvec, rscale):
+    def evaluate(self, coeffs, bvec, rscale, sac=None):
         if not self.use_rscale:
             rscale = 1
 
@@ -262,7 +262,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
                     avec)
                 for l in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec, rscale):
+    def evaluate(self, coeffs, bvec, rscale, sac=None):
         if not self.use_rscale:
             rscale = 1
 

@@ -98,7 +98,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
                     .subs("tau", 0)
                     for i in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec, rscale):
+    def evaluate(self, coeffs, bvec, rscale, sac=None):
         # no point in heeding rscale here--just ignore it
         from pytools import factorial
         return sym.Add(*(
@@ -125,11 +125,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 taker.diff(mi) * rscale ** sum(mi)
                 for mi in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec, rscale):
+    def evaluate(self, coeffs, bvec, rscale, sac=None):
         from sumpy.tools import mi_power, mi_factorial
         evaluated_coeffs = (
             self.expansion_terms_wrangler.get_full_kernel_derivatives_from_stored(
-                coeffs, rscale))
+                coeffs, rscale, sac=sac))
         bvec = bvec * rscale**-1
         result = sum(
                 coeff
@@ -309,7 +309,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                     * sym.exp(sym.I * l * source_angle_rel_center), avec)
                     for l in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec, rscale):
+    def evaluate(self, coeffs, bvec, rscale, sac=None):
         if not self.use_rscale:
             rscale = 1
 

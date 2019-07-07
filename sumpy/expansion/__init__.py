@@ -129,7 +129,7 @@ class ExpansionBase(object):
         """
         raise NotImplementedError
 
-    def evaluate(self, coeffs, bvec, rscale):
+    def evaluate(self, coeffs, bvec, rscale, sac=None):
         """
         :return: a :mod:`sympy` expression corresponding
             to the evaluated expansion with the coefficients
