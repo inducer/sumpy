@@ -23,73 +23,61 @@ THE SOFTWARE.
 """
 
 __doc__ = """
-.. autofunction:: h2d_level_to_order_lookup
-.. autofunction:: l2d_level_to_order_lookup
-
+.. autoclass:: FMMLibExpansionOrderFinder
 .. autoclass:: SimpleExpansionOrderFinder
 """
 
 import numpy as np
 
 
-def h2d_level_to_order_lookup(tree, helmholtz_k, epsilon):
-    """
-    Compute a mapping from level number to expansion order,
-    Helmholtz 2D case.
-
-    This wraps the function *h2dterms* from :mod:`pyfmmlib`.
-
-    :arg tree: An instance of :class:`boxtree.Tree`.
-    :arg helmholtz_k: Helmholtz parameter
-    :arg epsilon: Precision
-
-    :return: A :class:`numpy.array` of length `tree.nlevels`
+class FMMLibExpansionOrderFinder(object):
+    r"""Return expansion orders that meet the tolerance for a given level
+    using routines wrapped from :mod:`pyfmmlib`.
     """
 
-    if tree.dimensions != 2:
-        raise ValueError("tree must be 2d")
+    def __init__(self, tol, extra_order=0):
+        """
+        :arg tol: error tolerance
+        :arg extra_order: order increase to accommodate, say, the taking of
+            derivatives of the FMM expansions.
+        """
+        self.tol = tol
+        self.extra_order = extra_order
 
-    orders = np.empty(tree.nlevels, dtype=int)
-    bbox_area = np.max(
-        tree.bounding_box[1] - tree.bounding_box[0]) ** 2
+    def __call__(self, kernel, kernel_args, tree, level):
+        import pyfmmlib
 
-    from pyfmmlib import h2dterms
-    for level in range(tree.nlevels):
-        nterms, ier = h2dterms(bbox_area / 2 ** level, helmholtz_k, epsilon)
-        if ier != 0:
-            raise RuntimeError(
-                "h2dterms returned error code {ier}".format(ier=ier))
-        orders[level] = nterms
+        from sumpy.kernel import LaplaceKernel, HelmholtzKernel
 
-    return orders
+        assert isinstance(kernel, (LaplaceKernel, HelmholtzKernel))
+        assert tree.dimensions in (2, 3)
 
+        if isinstance(kernel, LaplaceKernel):
+            if tree.dimensions == 2:
+                nterms, ier = pyfmmlib.l2dterms(self.tol)
+                if ier:
+                    raise RuntimeError("l2dterms returned error code '%d'" % ier)
 
-def l2d_level_to_order_lookup(tree, epsilon):
-    """
-    Compute a mapping from level number to expansion order,
-    Laplace 2D case.
+            elif tree.dimensions == 3:
+                nterms, ier = pyfmmlib.l3dterms(self.tol)
+                if ier:
+                    raise RuntimeError("l3dterms returned error code '%d'" % ier)
 
-    This wraps the function *l2dterms* from :mod:`pyfmmlib`.
+        elif isinstance(kernel, HelmholtzKernel):
+            helmholtz_k = dict(kernel_args)[kernel.helmholtz_k_name]
+            size = tree.root_extent / 2 ** level
 
-    :arg tree: An instance of :class:`boxtree.Tree`.
-    :arg epsilon: Precision
+            if tree.dimensions == 2:
+                nterms, ier = pyfmmlib.h2dterms(size, helmholtz_k, self.tol)
+                if ier:
+                    raise RuntimeError("h2dterms returned error code '%d'" % ier)
 
-    :return: A :class:`numpy.array` of length `tree.nlevels`
-    """
+            elif tree.dimensions == 3:
+                nterms, ier = pyfmmlib.h3dterms(size, helmholtz_k, self.tol)
+                if ier:
+                    raise RuntimeError("h3dterms returned error code '%d'" % ier)
 
-    if tree.dimensions != 2:
-        raise ValueError("tree must be 2d")
-
-    from pyfmmlib import l2dterms
-    nterms, ier = l2dterms(epsilon)
-    if ier != 0:
-        raise RuntimeError(
-            "l2dterms returned error code {ier}".format(ier=ier))
-
-    orders = np.empty(tree.nlevels, dtype=int)
-    orders.fill(nterms)
-
-    return orders
+        return nterms + self.extra_order
 
 
 class SimpleExpansionOrderFinder(object):
@@ -114,7 +102,7 @@ class SimpleExpansionOrderFinder(object):
             extra_order=1):
         """
         :arg extra_order: order increase to accommodate, say, the taking of
-            oderivatives f the FMM expansions.
+            derivatives of the FMM expansions.
         """
         self.tol = tol
 
