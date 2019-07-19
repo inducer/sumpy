@@ -42,10 +42,6 @@ from sumpy.expansion.local import (
     LaplaceConformingVolumeTaylorLocalExpansion,
     HelmholtzConformingVolumeTaylorLocalExpansion)
 
-from sumpy.expansion.level_to_order import (
-    h2d_level_to_order_lookup,
-    l2d_level_to_order_lookup)
-
 import pytest
 
 import logging
@@ -58,35 +54,6 @@ except ImportError:
     pass
 else:
     faulthandler.enable()
-
-
-@pytest.mark.parametrize("lookup_func, extra_args", [
-    (h2d_level_to_order_lookup, (100,)),
-    (l2d_level_to_order_lookup, ()),
-    ])
-def test_level_to_order_lookup(ctx_getter, lookup_func, extra_args):
-    pytest.importorskip("pyfmmlib")
-    ctx = ctx_getter()
-    queue = cl.CommandQueue(ctx)
-
-    nsources = 500
-    dtype = np.float64
-    epsilon = 1e-9
-
-    from boxtree.tools import (
-            make_normal_particle_array as p_normal)
-
-    sources = p_normal(queue, nsources, 2, dtype, seed=15)
-    from boxtree import TreeBuilder
-    tb = TreeBuilder(ctx)
-
-    tree, _ = tb(queue, sources, max_particles_in_box=30, debug=True)
-
-    levels = lookup_func(tree, *(extra_args + (epsilon,)))
-
-    assert len(levels) == tree.nlevels
-    # Should be monotonically nonincreasing.
-    assert all(levels[i] >= levels[i+1] for i in range(tree.nlevels - 1))
 
 
 @pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class", [
