@@ -5,4 +5,4 @@ git+https://github.com/inducer/islpy
 git+https://github.com/inducer/pyopencl
 git+https://gitlab.tiker.net/inducer/boxtree
 git+https://github.com/inducer/loopy
-git+https://gitlab.tiker.net/inducer/pyfmmlib@l3dterms-and-h3dterms
+git+https://github.com/inducer/pyfmmlib
