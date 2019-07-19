@@ -124,11 +124,29 @@ class FakeTree:
         self.stick_out_factor = stick_out_factor
 
 
-@pytest.mark.parametrize("knl", [LaplaceKernel(2), HelmholtzKernel(2)])
+@pytest.mark.parametrize("knl", [
+        LaplaceKernel(2), HelmholtzKernel(2),
+        LaplaceKernel(3), HelmholtzKernel(3)])
 def test_order_finder(knl):
     from sumpy.expansion.level_to_order import SimpleExpansionOrderFinder
 
     ofind = SimpleExpansionOrderFinder(1e-5)
+
+    tree = FakeTree(knl.dim, 200, 0.5)
+    orders = [
+        ofind(knl, frozenset([("k", 5)]), tree, level)
+        for level in range(30)]
+    print(orders)
+
+
+@pytest.mark.parametrize("knl", [
+        LaplaceKernel(2), HelmholtzKernel(2),
+        LaplaceKernel(3), HelmholtzKernel(3)])
+def test_fmmlib_order_finder(knl):
+    pytest.importorskip("pyfmmlib")
+    from sumpy.expansion.level_to_order import FMMLibExpansionOrderFinder
+
+    ofind = FMMLibExpansionOrderFinder(1e-5)
 
     tree = FakeTree(knl.dim, 200, 0.5)
     orders = [
