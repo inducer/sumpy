@@ -138,6 +138,9 @@ def test_order_finder(knl):
         for level in range(30)]
     print(orders)
 
+    # Order should not increase with level
+    assert (np.diff(orders) <= 0).all()
+
 
 @pytest.mark.parametrize("knl", [
         LaplaceKernel(2), HelmholtzKernel(2),
@@ -153,6 +156,9 @@ def test_fmmlib_order_finder(knl):
         ofind(knl, frozenset([("k", 5)]), tree, level)
         for level in range(30)]
     print(orders)
+
+    # Order should not increase with level
+    assert (np.diff(orders) <= 0).all()
 
 
 # {{{ expansion toys p2e2e2p test cases
