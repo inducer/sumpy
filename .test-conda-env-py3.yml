@@ -14,6 +14,7 @@ dependencies:
 - python=3
 - symengine=0.3.0
 - python-symengine=0.3.0
+- pyfmmlib
 
 - pip
 - pip:
