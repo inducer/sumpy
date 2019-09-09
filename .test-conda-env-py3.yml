@@ -11,7 +11,7 @@ dependencies:
 - pocl
 - islpy
 - pyopencl
-- python=3.6
+- python=3
 - symengine=0.3.0
 - python-symengine=0.3.0
 
