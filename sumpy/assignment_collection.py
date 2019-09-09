@@ -145,7 +145,7 @@ class SymbolicAssignmentCollection(object):
         return result
 
     def add_assignment(self, name, expr, root_name=None, wrt_set=None):
-        assert isinstance(name, str)
+        assert isinstance(name, six.string_types)
         assert name not in self.assignments
 
         if wrt_set is None:
