@@ -148,7 +148,8 @@ class SymbolicAssignmentCollection(object):
         assert isinstance(name, six.string_types)
         assert name not in self.assignments
 
-        if six.PY2 and isinstance(name, unicode):
+        # coerce name onto non-unicode for Py2
+        if six.PY2 and isinstance(name, unicode):  # noqa: F821
             name = name.encode("us-ascii")
 
         if wrt_set is None:
