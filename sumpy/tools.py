@@ -299,7 +299,7 @@ class KernelComputation(object):
                 lp.Assignment(id=None,
                     assignee="knl_%d_scaling" % i,
                     expression=sympy_conv(kernel.get_global_scaling_const()),
-                    temp_var_type=dtype)
+                    temp_var_type=lp.Optional(dtype))
                 for i, (kernel, dtype) in enumerate(
                     zip(self.kernels, self.value_dtypes))]
 
@@ -559,10 +559,13 @@ class MatrixBlockIndexRanges(object):
 # Author: Raymond Hettinger
 # License: MIT
 
-import collections
+try:
+    from collections.abc import MutableSet
+except ImportError:
+    from collections import MutableSet
 
 
-class OrderedSet(collections.MutableSet):
+class OrderedSet(MutableSet):
 
     def __init__(self, iterable=None):
         self.end = end = []

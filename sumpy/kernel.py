@@ -431,13 +431,14 @@ class BiharmonicKernel(ExpressionKernel):
     init_arg_names = ("dim",)
 
     def __init__(self, dim=None):
+        # See https://arxiv.org/abs/1202.1811
         r = pymbolic_real_norm_2(make_sym_vector("d", dim))
         if dim == 2:
-            expr = r**2 * var("log")(r)
-            scaling = 1/(8*var("pi"))
+            expr = r**2 * (var("log")(r) - 1)
+            scaling = -1/(8*var("pi"))
         elif dim == 3:
             expr = r
-            scaling = 1  # FIXME: Unknown
+            scaling = 1/(8*var("pi"))
         else:
             raise RuntimeError("unsupported dimensionality")
 
