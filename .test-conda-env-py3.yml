@@ -11,8 +11,8 @@ dependencies:
 - islpy
 - pyopencl
 - python=3.7
-- symengine=0.4.0
-- python-symengine=0.4.0
+- symengine=0.5.0
+- python-symengine=0.5.0
 
 # things not in here: loopy boxtree pymbolic pyfmmlib
 # (see .test-conda-env-py3-requirements.txt)
