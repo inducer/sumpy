@@ -12,8 +12,8 @@ dependencies:
 - islpy
 - pyopencl
 - python=3
-- symengine=0.3.0
-- python-symengine=0.3.0
+- symengine=0.5.0
+- python-symengine=0.5.0
 - pyfmmlib
 
 - pip
