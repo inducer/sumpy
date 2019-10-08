@@ -94,11 +94,12 @@ class KernelArgument(object):
         return self.loopy_arg.name
 
     def __eq__(self, other):
-        return isinstance(other, KernelArgument) and \
-            self.loopy_arg == other.loopy_arg
+        if not isinstance(other, KernelArgument):
+            return NotImplemented
+        return self.loopy_arg == other.loopy_arg
 
     def __hash__(self):
-        return (self.loopy_arg,)
+        return (type(self), self.loopy_arg)
 
 
 # {{{ basic kernel interface
