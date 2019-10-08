@@ -100,7 +100,7 @@ class KernelArgument(object):
             return NotImplemented
         return self.loopy_arg == other.loopy_arg
 
-    def __neq__(self, other):
+    def __ne__(self, other):
         # Needed for python2
         return not self == other
 
