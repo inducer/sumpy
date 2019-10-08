@@ -209,9 +209,10 @@ def gather_arguments(kernel_likes):
     result = {}
     for knl in kernel_likes:
         for arg in knl.get_args():
-            result[arg.name] = arg
-            # FIXME: possibly check that arguments match before overwriting
-
+            # Check for strict equality until there's a usecase
+            if result.setdefault(arg.name, arg) != arg:
+                raise ValueError("Merging two different kernel arguments with"
+                    "the same name {}".format(arg.name))
     return sorted(six.itervalues(result), key=lambda arg: arg.name)
 
 
@@ -219,8 +220,10 @@ def gather_source_arguments(kernel_likes):
     result = {}
     for knl in kernel_likes:
         for arg in knl.get_args() + knl.get_source_args():
-            result[arg.name] = arg
-            # FIXME: possibly check that arguments match before overwriting
+            # Check for strict equality until there's a usecase
+            if result.setdefault(arg.name, arg) != arg:
+                raise ValueError("Merging two different kernel arguments with"
+                    "the same name {}".format(arg.name))
 
     return sorted(six.itervalues(result), key=lambda arg: arg.name)
 
