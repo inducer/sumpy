@@ -94,7 +94,9 @@ class KernelArgument(object):
         return self.loopy_arg.name
 
     def __eq__(self, other):
-        if not isinstance(other, KernelArgument):
+        if not type(self) == KernelArgument:
+            return NotImplemented
+        if not type(other) == KernelArgument:
             return NotImplemented
         return self.loopy_arg == other.loopy_arg
 
