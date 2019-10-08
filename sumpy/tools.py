@@ -208,10 +208,8 @@ def vector_from_device(queue, vec):
 def _merge_kernel_arguments(dictionary, arg):
     # Check for strict equality until there's a usecase
     if dictionary.setdefault(arg.name, arg) != arg:
-        raise ValueError(
-            "Merging two different kernel arguments {} {} with".format(
-                arg.loopy_arg, dictionary[arg].loopy_arg) + \
-            "the same name {}".format(arg.name))
+        msg = "Merging two different kernel arguments {} and {} with the same name"
+        raise ValueError(msg.format(arg.loopy_arg, dictionary[arg].loopy_arg))
 
 
 def gather_arguments(kernel_likes):
