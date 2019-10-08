@@ -853,17 +853,6 @@ class DirectionalDerivative(DerivativeBase):
                 self.inner_kernel,
                 self.dir_vec_name)
 
-    def get_source_args(self):
-        return [
-                KernelArgument(
-                    loopy_arg=lp.GlobalArg(
-                        self.dir_vec_name,
-                        None,
-                        shape=(self.dim, "nsources"),
-                        dim_tags="sep,C"),
-                    )
-                    ] + self.inner_kernel.get_source_args()
-
 
 class DirectionalTargetDerivative(DirectionalDerivative):
     directional_kind = "tgt"
@@ -891,6 +880,17 @@ class DirectionalTargetDerivative(DirectionalDerivative):
         # bvec = tgt-center
         return sum(dir_vec[axis]*expr.diff(bvec[axis])
                 for axis in range(dim))
+
+    def get_source_args(self):
+        return [
+                KernelArgument(
+                    loopy_arg=lp.GlobalArg(
+                        self.dir_vec_name,
+                        None,
+                        shape=(self.dim, "ntargets"),
+                        dim_tags="sep,C"),
+                    )
+                    ] + self.inner_kernel.get_source_args()
 
     mapper_method = "map_directional_target_derivative"
 
@@ -922,6 +922,17 @@ class DirectionalSourceDerivative(DirectionalDerivative):
         # avec = center-src -> minus sign from chain rule
         return sum(-dir_vec[axis]*expr.diff(avec[axis])
                 for axis in range(dimensions))
+
+    def get_source_args(self):
+        return [
+                KernelArgument(
+                    loopy_arg=lp.GlobalArg(
+                        self.dir_vec_name,
+                        None,
+                        shape=(self.dim, "nsources"),
+                        dim_tags="sep,C"),
+                    )
+                    ] + self.inner_kernel.get_source_args()
 
     mapper_method = "map_directional_source_derivative"
 
