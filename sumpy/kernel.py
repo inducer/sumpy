@@ -100,6 +100,10 @@ class KernelArgument(object):
             return NotImplemented
         return self.loopy_arg == other.loopy_arg
 
+    def __neq__(self, other):
+        # Needed for python2
+        return not self == other
+
     def __hash__(self):
         return (type(self), self.loopy_arg)
 
