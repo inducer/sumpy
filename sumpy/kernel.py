@@ -93,6 +93,22 @@ class KernelArgument(object):
     def name(self):
         return self.loopy_arg.name
 
+    def __eq__(self, other):
+        if id(self) == id(other):
+            return True
+        if not type(self) == KernelArgument:
+            return NotImplemented
+        if not type(other) == KernelArgument:
+            return NotImplemented
+        return self.loopy_arg == other.loopy_arg
+
+    def __ne__(self, other):
+        # Needed for python2
+        return not self == other
+
+    def __hash__(self):
+        return (type(self), self.loopy_arg)
+
 
 # {{{ basic kernel interface
 
@@ -853,17 +869,6 @@ class DirectionalDerivative(DerivativeBase):
                 self.inner_kernel,
                 self.dir_vec_name)
 
-    def get_source_args(self):
-        return [
-                KernelArgument(
-                    loopy_arg=lp.GlobalArg(
-                        self.dir_vec_name,
-                        None,
-                        shape=(self.dim, "nsources"),
-                        dim_tags="sep,C"),
-                    )
-                    ] + self.inner_kernel.get_source_args()
-
 
 class DirectionalTargetDerivative(DirectionalDerivative):
     directional_kind = "tgt"
@@ -891,6 +896,17 @@ class DirectionalTargetDerivative(DirectionalDerivative):
         # bvec = tgt-center
         return sum(dir_vec[axis]*expr.diff(bvec[axis])
                 for axis in range(dim))
+
+    def get_source_args(self):
+        return [
+                KernelArgument(
+                    loopy_arg=lp.GlobalArg(
+                        self.dir_vec_name,
+                        None,
+                        shape=(self.dim, "ntargets"),
+                        dim_tags="sep,C"),
+                    )
+                    ] + self.inner_kernel.get_source_args()
 
     mapper_method = "map_directional_target_derivative"
 
@@ -922,6 +938,17 @@ class DirectionalSourceDerivative(DirectionalDerivative):
         # avec = center-src -> minus sign from chain rule
         return sum(-dir_vec[axis]*expr.diff(avec[axis])
                 for axis in range(dimensions))
+
+    def get_source_args(self):
+        return [
+                KernelArgument(
+                    loopy_arg=lp.GlobalArg(
+                        self.dir_vec_name,
+                        None,
+                        shape=(self.dim, "nsources"),
+                        dim_tags="sep,C"),
+                    )
+                    ] + self.inner_kernel.get_source_args()
 
     mapper_method = "map_directional_source_derivative"
 
