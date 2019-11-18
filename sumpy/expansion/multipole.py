@@ -29,6 +29,7 @@ from sumpy.symbolic import vector_xreplace
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
     HelmholtzConformingVolumeTaylorExpansion)
+from pytools import cartesian_product
 
 import logging
 logger = logging.getLogger(__name__)
@@ -45,17 +46,6 @@ __doc__ = """
 
 class MultipoleExpansionBase(ExpansionBase):
     pass
-
-
-def cartesian_product(*args):
-    if len(args) == 1:
-        for arg in args[0]:
-            yield (arg,)
-        return
-    first = args[:-1]
-    for prod in cartesian_product(*first):
-        for i in args[-1]:
-            yield prod + (i,)
 
 
 # {{{ volume taylor
