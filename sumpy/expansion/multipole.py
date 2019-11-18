@@ -47,6 +47,17 @@ class MultipoleExpansionBase(ExpansionBase):
     pass
 
 
+def cartesian_product(*args):
+    if len(args) == 1:
+        for arg in args[0]:
+            yield (arg,)
+        return
+    first = args[:-1]
+    for prod in cartesian_product(*first):
+        for i in args[-1]:
+            yield prod + (i,)
+
+
 # {{{ volume taylor
 
 class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
@@ -64,27 +75,33 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             rscale = 1
 
         if isinstance(kernel, DirectionalSourceDerivative):
-            if kernel.get_base_kernel() is not kernel.inner_kernel:
-                raise NotImplementedError("more than one source derivative "
-                        "not supported at present")
-
             from sumpy.symbolic import make_sym_vector
-            dir_vec = make_sym_vector(kernel.dir_vec_name, kernel.dim)
+
+            dir_vecs = []
+            tmp_kernel = kernel
+            while isinstance(tmp_kernel, DirectionalSourceDerivative):
+                dir_vecs.append(make_sym_vector(tmp_kernel.dir_vec_name, kernel.dim))
+                tmp_kernel = tmp_kernel.inner_kernel
+
+            if kernel.get_base_kernel() is not tmp_kernel:
+                raise NotImplementedError("Unknown kernel wrapper.")
+
+            nderivs = len(dir_vecs)
 
             coeff_identifiers = self.get_full_coefficient_identifiers()
             result = [0] * len(coeff_identifiers)
 
-            for idim in range(kernel.dim):
-                for i, mi in enumerate(coeff_identifiers):
-                    if mi[idim] == 0:
+            for i, mi in enumerate(coeff_identifiers):
+                for value in cartesian_product(*[range(kernel.dim)]*nderivs):
+                    prod = 1
+                    derivative_mi = list(mi)
+                    for nderivative, deriv_dim in enumerate(value):
+                        prod *= -derivative_mi[deriv_dim]*dir_vecs[nderivative][deriv_dim]
+                        derivative_mi[deriv_dim] -= 1
+                    if any(v < 0 for v in derivative_mi):
                         continue
+                    result[i] += mi_power(avec, derivative_mi) * prod
 
-                    derivative_mi = tuple(mi_i - 1 if iaxis == idim else mi_i
-                            for iaxis, mi_i in enumerate(mi))
-
-                    result[i] += (
-                        - mi_power(avec, derivative_mi) * mi[idim]
-                        * dir_vec[idim])
             for i, mi in enumerate(coeff_identifiers):
                 result[i] /= (mi_factorial(mi) * rscale ** sum(mi))
         else:
