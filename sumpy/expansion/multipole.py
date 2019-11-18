@@ -86,7 +86,8 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                     prod = 1
                     derivative_mi = list(mi)
                     for nderivative, deriv_dim in enumerate(value):
-                        prod *= -derivative_mi[deriv_dim]*dir_vecs[nderivative][deriv_dim]
+                        prod *= -derivative_mi[deriv_dim]
+                        prod *= dir_vecs[nderivative][deriv_dim]
                         derivative_mi[deriv_dim] -= 1
                     if any(v < 0 for v in derivative_mi):
                         continue
