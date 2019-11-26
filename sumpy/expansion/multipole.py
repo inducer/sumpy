@@ -82,10 +82,15 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             result = [0] * len(coeff_identifiers)
 
             for i, mi in enumerate(coeff_identifiers):
-                for value in cartesian_product(*[range(kernel.dim)]*nderivs):
+                # One source derivative is the dot product of the gradient and
+                # directional vector.
+                # For multiple derivatives, gradient of gradients is taken.
+                # For eg: in 3D, 2 source derivatives gives 9 terms and
+                # cartesian_product below enumerates these 9 terms.
+                for deriv_terms in cartesian_product(*[range(kernel.dim)]*nderivs):
                     prod = 1
                     derivative_mi = list(mi)
-                    for nderivative, deriv_dim in enumerate(value):
+                    for nderivative, deriv_dim in enumerate(deriv_terms):
                         prod *= -derivative_mi[deriv_dim]
                         prod *= dir_vecs[nderivative][deriv_dim]
                         derivative_mi[deriv_dim] -= 1
