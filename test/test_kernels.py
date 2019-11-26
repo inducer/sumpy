@@ -37,13 +37,15 @@ from sumpy.expansion.multipole import (
         VolumeTaylorMultipoleExpansion, H2DMultipoleExpansion,
         VolumeTaylorMultipoleExpansionBase,
         LaplaceConformingVolumeTaylorMultipoleExpansion,
-        HelmholtzConformingVolumeTaylorMultipoleExpansion)
+        HelmholtzConformingVolumeTaylorMultipoleExpansion,
+        BiharmonicConformingVolumeTaylorMultipoleExpansion)
 from sumpy.expansion.local import (
         VolumeTaylorLocalExpansion, H2DLocalExpansion,
         LaplaceConformingVolumeTaylorLocalExpansion,
-        HelmholtzConformingVolumeTaylorLocalExpansion)
+        HelmholtzConformingVolumeTaylorLocalExpansion,
+        BiharmonicConformingVolumeTaylorLocalExpansion)
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, AxisTargetDerivative,
-        DirectionalSourceDerivative)
+        DirectionalSourceDerivative, BiharmonicKernel)
 from pytools.convergence import PConvergenceVerifier
 
 import logging
@@ -121,6 +123,15 @@ def test_p2p(ctx_getter, exclude_self):
     (HelmholtzKernel(2), H2DLocalExpansion),
     (HelmholtzKernel(2), H2DMultipoleExpansion),
 
+    (DirectionalSourceDerivative(BiharmonicKernel(2), "dir_vec"),
+        VolumeTaylorMultipoleExpansion),
+    (DirectionalSourceDerivative(BiharmonicKernel(2), "dir_vec"),
+        VolumeTaylorLocalExpansion),
+    (DirectionalSourceDerivative(BiharmonicKernel(2), "dir_vec"),
+        BiharmonicConformingVolumeTaylorMultipoleExpansion),
+    (DirectionalSourceDerivative(BiharmonicKernel(2), "dir_vec"),
+        BiharmonicConformingVolumeTaylorLocalExpansion),
+
     (HelmholtzKernel(2, allow_evanescent=True), VolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2, allow_evanescent=True), VolumeTaylorLocalExpansion),
     (HelmholtzKernel(2, allow_evanescent=True),
@@ -193,7 +204,7 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
     box_source_counts_nonchild = np.array([nsources], dtype=np.int32)
 
     extra_source_kwargs = extra_kwargs.copy()
-    if with_source_derivative:
+    if isinstance(knl, DirectionalSourceDerivative):
         alpha = np.linspace(0, 2*np.pi, nsources, np.float64)
         dir_vec = np.vstack([np.cos(alpha), np.sin(alpha)])
         extra_source_kwargs["dir_vec"] = dir_vec
@@ -319,6 +330,10 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
             grad_slack += 1
 
     if isinstance(knl, DirectionalSourceDerivative):
+        slack += 1
+        grad_slack += 2
+
+    if isinstance(base_knl, DirectionalSourceDerivative):
         slack += 1
         grad_slack += 2
 
