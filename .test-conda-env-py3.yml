@@ -18,6 +18,7 @@ dependencies:
 
 - pip
 - pip:
+    - git+https://github.com/inducer/pytools
     - git+https://gitlab.tiker.net/inducer/boxtree
     - git+https://github.com/inducer/pymbolic
     - git+https://github.com/inducer/loopy
