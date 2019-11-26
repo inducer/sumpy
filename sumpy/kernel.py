@@ -450,8 +450,8 @@ class BiharmonicKernel(ExpressionKernel):
         r = pymbolic_real_norm_2(make_sym_vector("d", dim))
         if dim == 2:
             # Ref: Farkas, Peter. Mathematical foundations for fast algorithms
-            # for the biharmonic equation. Diss. University of Chicago,
-            # Dept. of Mathematics, 1989.
+            # for the biharmonic equation. Technical Report 765,
+            # Department of Computer Science, Yale University, 1990.
             expr = r**2 * var("log")(r)
             scaling = 1/(8*var("pi"))
         elif dim == 3:
