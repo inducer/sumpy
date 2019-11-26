@@ -37,13 +37,11 @@ from sumpy.expansion.multipole import (
         VolumeTaylorMultipoleExpansion, H2DMultipoleExpansion,
         VolumeTaylorMultipoleExpansionBase,
         LaplaceConformingVolumeTaylorMultipoleExpansion,
-        HelmholtzConformingVolumeTaylorMultipoleExpansion,
-        BiharmonicConformingVolumeTaylorMultipoleExpansion)
+        HelmholtzConformingVolumeTaylorMultipoleExpansion)
 from sumpy.expansion.local import (
         VolumeTaylorLocalExpansion, H2DLocalExpansion,
         LaplaceConformingVolumeTaylorLocalExpansion,
-        HelmholtzConformingVolumeTaylorLocalExpansion,
-        BiharmonicConformingVolumeTaylorLocalExpansion)
+        HelmholtzConformingVolumeTaylorLocalExpansion)
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, AxisTargetDerivative,
         DirectionalSourceDerivative, BiharmonicKernel)
 from pytools.convergence import PConvergenceVerifier
@@ -127,10 +125,6 @@ def test_p2p(ctx_getter, exclude_self):
         VolumeTaylorMultipoleExpansion),
     (DirectionalSourceDerivative(BiharmonicKernel(2), "dir_vec"),
         VolumeTaylorLocalExpansion),
-    (DirectionalSourceDerivative(BiharmonicKernel(2), "dir_vec"),
-        BiharmonicConformingVolumeTaylorMultipoleExpansion),
-    (DirectionalSourceDerivative(BiharmonicKernel(2), "dir_vec"),
-        BiharmonicConformingVolumeTaylorLocalExpansion),
 
     (HelmholtzKernel(2, allow_evanescent=True), VolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2, allow_evanescent=True), VolumeTaylorLocalExpansion),
