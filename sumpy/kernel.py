@@ -455,11 +455,12 @@ class BiharmonicKernel(ExpressionKernel):
             expr = r**2 * var("log")(r)
             scaling = 1/(8*var("pi"))
         elif dim == 3:
+            # Ref: Jiang, Shidong, Bo Ren, Paul Tsuji, and Lexing Ying.
+            # "Second kind integral equations for the first kind Dirichlet problem
+            #  of the biharmonic equation in three dimensions."
+            # Journal of Computational Physics 230, no. 19 (2011): 7488-7501.
             expr = r
-            scaling = 1  # FIXME: Unknown
-            from warnings import warn
-            warn("scaling factor for Biharmonic 3D is unknown.",
-                    stacklevel=2)
+            scaling = -1/(8*var("pi"))
         else:
             raise RuntimeError("unsupported dimensionality")
 
