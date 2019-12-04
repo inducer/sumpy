@@ -165,6 +165,9 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         src_mi_to_index = dict((mi, i) for i, mi in enumerate(
             src_expansion.get_coefficient_identifiers()))
 
+        tgt_mi_to_index = dict((mi, i) for i, mi in enumerate(
+            self.get_full_coefficient_identifiers()))
+
         for i, mi in enumerate(src_expansion.get_coefficient_identifiers()):
             src_coeff_exprs[i] *= mi_factorial(mi)
 
@@ -185,6 +188,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         reused for different M2M coefficients and costs $`p`$ per variable.
         Total cost for calculating $`T_{m, n}`$ is $`p^3`$ and similar for $`B_{m, n}`$
         """
+        mi_to_index = src_mi_to_index
         for d in range(self.dim):
             result = [0] * len(self.get_full_coefficient_identifiers())
             for i, tgt_mi in enumerate(
@@ -198,7 +202,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
                 for src_mi in src_mis_per_dim:
                     try:
-                        src_index = src_mi_to_index[src_mi]
+                        src_index = mi_to_index[src_mi]
                     except KeyError:
                         # Omitted coefficients: not life-threatening
                         continue
@@ -221,6 +225,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                     result[i] /= mi_factorial(tgt_mi)
 
             src_coeff_exprs = result[:]
+            mi_to_index = tgt_mi_to_index
 
         logger.info("building translation operator: done")
         return (
