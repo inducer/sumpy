@@ -168,8 +168,10 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         tgt_mi_to_index = dict((mi, i) for i, mi in enumerate(
             self.get_full_coefficient_identifiers()))
 
+        src_coeff_exprs = list(src_coeff_exprs)
         for i, mi in enumerate(src_expansion.get_coefficient_identifiers()):
-            src_coeff_exprs[i] *= mi_factorial(mi)
+            src_coeff_exprs[i] *= mi_factorial(mi) * \
+                sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(mi)
 
         result = [0] * len(self.get_full_coefficient_identifiers())
 
@@ -177,16 +179,18 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         This algorithm uses the observation that M2M coefficients
         have the following form in 2D,
 
-        $`B_{m, n} = \sum_{i\le m, j\le n} A_{i, j} d_x^i d_y^j \binom{m}{i} \binom{n}{j}`$
+        $B_{m, n} = \sum_{i\le m, j\le n} A_{i, j}
+                    d_x^i d_y^j \binom{m}{i} \binom{n}{j}$
         and can be rewritten as follows.
 
-        Let $`T_{m, n} = \sum_{i\le m} A_{i, n} d_x^i \binom{m}{i}`$.
+        Let $T_{m, n} = \sum_{i\le m} A_{i, n} d_x^i \binom{m}{i}$.
 
-        Then, $`B_{m, n} = \sum_{j\le n} T_{m, j} d_y^j \binom{n}{j}`$.
+        Then, $B_{m, n} = \sum_{j\le n} T_{m, j} d_y^j \binom{n}{j}$.
 
-        $`T_{m, n}`$ are $`p^2`$ number of temporary variables that are
-        reused for different M2M coefficients and costs $`p`$ per variable.
-        Total cost for calculating $`T_{m, n}`$ is $`p^3`$ and similar for $`B_{m, n}`$
+        $T_{m, n}$ are $p^2$ number of temporary variables that are
+        reused for different M2M coefficients and costs $p$ per variable.
+        Total cost for calculating $T_{m, n}$ is $p^3$ and similar
+        for $B_{m, n}$
         """
         mi_to_index = src_mi_to_index
         for d in range(self.dim):
@@ -217,9 +221,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                         contrib *= (binomial(n, k)
                                 * sym.UnevaluatedExpr(dvec[idim]/tgt_rscale)**(n-k))
 
-                    result[i] += (
-                            contrib
-                            * sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(src_mi))
+                    result[i] += contrib
 
                 if d == self.dim-1:
                     result[i] /= mi_factorial(tgt_mi)
