@@ -175,23 +175,30 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
         result = [0] * len(self.get_full_coefficient_identifiers())
 
-        r"""
-        This algorithm uses the observation that M2M coefficients
-        have the following form in 2D,
+        # This algorithm uses the observation that M2M coefficients
+        # have the following form in 2D
+        #
+        # $B_{m, n} = \sum_{i\le m, j\le n} A_{i, j}
+        #             d_x^i d_y^j \binom{m}{i} \binom{n}{j}$
+        # and can be rewritten as follows.
+        #
+        # Let $T_{m, n} = \sum_{i\le m} A_{i, n} d_x^i \binom{m}{i}$.
+        #
+        # Then, $B_{m, n} = \sum_{j\le n} T_{m, j} d_y^j \binom{n}{j}$.
+        #
+        # $T_{m, n}$ are $p^2$ number of temporary variables that are
+        # reused for different M2M coefficients and costs $p$ per variable.
+        # Total cost for calculating $T_{m, n}$ is $p^3$ and similar
+        # for $B_{m, n}$
 
-        $B_{m, n} = \sum_{i\le m, j\le n} A_{i, j}
-                    d_x^i d_y^j \binom{m}{i} \binom{n}{j}$
-        and can be rewritten as follows.
+        # In other words, we're better off computing the translation
+        # one dimension at a time. This is realized here by using
+        # the output from one dimension as the input to the next.
+        # per_dim_coeffs_to_translate serves as the array of input
+        # coefficients for each dimension's translation.
 
-        Let $T_{m, n} = \sum_{i\le m} A_{i, n} d_x^i \binom{m}{i}$.
+        dim_coeffs_to_translate = src_coeff_exprs
 
-        Then, $B_{m, n} = \sum_{j\le n} T_{m, j} d_y^j \binom{n}{j}$.
-
-        $T_{m, n}$ are $p^2$ number of temporary variables that are
-        reused for different M2M coefficients and costs $p$ per variable.
-        Total cost for calculating $T_{m, n}$ is $p^3$ and similar
-        for $B_{m, n}$
-        """
         mi_to_index = src_mi_to_index
         for d in range(self.dim):
             result = [0] * len(self.get_full_coefficient_identifiers())
@@ -211,7 +218,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                         # Omitted coefficients: not life-threatening
                         continue
 
-                    contrib = src_coeff_exprs[src_index]
+                    contrib = dim_coeffs_to_translate[src_index]
 
                     for idim in range(self.dim):
                         n = tgt_mi[idim]
@@ -223,10 +230,11 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
                     result[i] += contrib
 
+                # Defer division by target factorial until the very end
                 if d == self.dim-1:
                     result[i] /= mi_factorial(tgt_mi)
 
-            src_coeff_exprs = result[:]
+            dim_coeffs_to_translate = result[:]
             mi_to_index = tgt_mi_to_index
 
         logger.info("building translation operator: done")
