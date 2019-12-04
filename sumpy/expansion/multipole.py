@@ -169,35 +169,58 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             src_coeff_exprs[i] *= mi_factorial(mi)
 
         result = [0] * len(self.get_full_coefficient_identifiers())
-        from pytools import generate_nonnegative_integer_tuples_below as gnitb
 
-        for i, tgt_mi in enumerate(
-                self.get_full_coefficient_identifiers()):
+        r"""
+        This algorithm uses the observation that M2M coefficients
+        have the following form in 2D,
 
-            tgt_mi_plus_one = tuple(mi_i + 1 for mi_i in tgt_mi)
+        $`B_{m, n} = \sum_{i\le m, j\le n} A_{i, j} d_x^i d_y^j \binom{m}{i} \binom{n}{j}`$
+        and can be rewritten as follows.
 
-            for src_mi in gnitb(tgt_mi_plus_one):
-                try:
-                    src_index = src_mi_to_index[src_mi]
-                except KeyError:
-                    # Omitted coefficients: not life-threatening
-                    continue
+        Let $`T_{m, n} = \sum_{i\le m} A_{i, n} d_x^i \binom{m}{i}`$.
 
-                contrib = src_coeff_exprs[src_index]
+        Then, $`B_{m, n} = \sum_{j\le n} T_{m, j} d_y^j \binom{n}{j}`$.
 
-                for idim in range(self.dim):
-                    n = tgt_mi[idim]
-                    k = src_mi[idim]
-                    assert n >= k
-                    from sympy import binomial
-                    contrib *= (binomial(n, k)
-                            * sym.UnevaluatedExpr(dvec[idim]/tgt_rscale)**(n-k))
+        $`T_{m, n}`$ are $`p^2`$ number of temporary variables that are
+        reused for different M2M coefficients and costs $`p`$ per variable.
+        Total cost for calculating $`T_{m, n}`$ is $`p^3`$ and similar for $`B_{m, n}`$
+        """
+        for d in range(self.dim):
+            result = [0] * len(self.get_full_coefficient_identifiers())
+            for i, tgt_mi in enumerate(
+                    self.get_full_coefficient_identifiers()):
 
-                result[i] += (
-                        contrib
-                        * sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(src_mi))
+                src_mis_per_dim = []
+                for mi_i in range(tgt_mi[d]+1):
+                    new_mi = list(tgt_mi)
+                    new_mi[d] = mi_i
+                    src_mis_per_dim.append(tuple(new_mi))
 
-            result[i] /= mi_factorial(tgt_mi)
+                for src_mi in src_mis_per_dim:
+                    try:
+                        src_index = src_mi_to_index[src_mi]
+                    except KeyError:
+                        # Omitted coefficients: not life-threatening
+                        continue
+
+                    contrib = src_coeff_exprs[src_index]
+
+                    for idim in range(self.dim):
+                        n = tgt_mi[idim]
+                        k = src_mi[idim]
+                        assert n >= k
+                        from sympy import binomial
+                        contrib *= (binomial(n, k)
+                                * sym.UnevaluatedExpr(dvec[idim]/tgt_rscale)**(n-k))
+
+                    result[i] += (
+                            contrib
+                            * sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(src_mi))
+
+                if d == self.dim-1:
+                    result[i] /= mi_factorial(tgt_mi)
+
+            src_coeff_exprs = result[:]
 
         logger.info("building translation operator: done")
         return (
