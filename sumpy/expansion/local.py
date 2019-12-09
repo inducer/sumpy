@@ -226,13 +226,13 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # dvec divided by rscale below moves the two cancelling "rscales"
             # closer to each other at the end in the hope of helping
             # with that.
-            dvec = [d/src_rscale for d in dvec]
             expr = src_expansion.evaluate(src_coeff_exprs, dvec,
                         rscale=sym.Integer(1))
+            replace_dict = dict((d, d/src_rscale) for d in dvec)
             taker = MiDerivativeTaker(expr, dvec)
             rscale_ratio = sym.UnevaluatedExpr(tgt_rscale/src_rscale)
             result = [
-                    (taker.diff(mi) * rscale_ratio**sum(mi))
+                    (taker.diff(mi).xreplace(replace_dict) * rscale_ratio**sum(mi))
                     for mi in self.get_coefficient_identifiers()]
 
         logger.info("building translation operator: done")
