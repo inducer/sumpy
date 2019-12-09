@@ -126,19 +126,52 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 for mi in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec, rscale):
-        from sumpy.tools import mi_power, mi_factorial
+        from pytools import factorial
         evaluated_coeffs = (
             self.derivative_wrangler.get_full_kernel_derivatives_from_stored(
                 coeffs, rscale))
         bvec = [b*rscale**-1 for b in bvec]
+        mi_to_index = dict((mi, i) for i, mi in
+                        enumerate(self.get_full_coefficient_identifiers()))
+        sorted_mis = sorted(self.get_full_coefficient_identifiers())
+        dim = self.dim
 
-        result = sum(
-                coeff
-                * mi_power(bvec, mi, evaluate=False)
-                / mi_factorial(mi)
-                for coeff, mi in zip(
-                        evaluated_coeffs, self.get_full_coefficient_identifiers()))
-        return result
+        # Start with a previously unseen multi-index
+        seen_mi = [-1]*dim
+        # Local sum keep the sum of the terms that differ by that dimension
+        local_sum = [0]*dim
+        # Local multiplier keep the scalar that the sum has to be multiplied by
+        # when adding to the sum of the previous dimension.
+        local_multiplier = [0]*dim
+
+        for mi in sorted_mis:
+            # Iterate in reverse order as the mis are sorted in row-major order
+            for d in reversed(range(dim-1)):
+                if seen_mi[d] != mi[d]:
+                    # If the dimension d of mi changed from the previous value
+                    # then the sum for dimension d+1 is complete, add it to
+                    # dimension d after multiplying and restart
+                    local_sum[d] += local_sum[d+1]*local_multiplier[d+1]
+                    local_sum[d+1] = 0
+                    local_multiplier[d+1] = bvec[d]**mi[d] / factorial(mi[d])
+            local_sum[dim-1] += evaluated_coeffs[mi_to_index[mi]] * \
+                                    bvec[dim-1]**mi[dim-1] / factorial(mi[dim-1])
+            seen_mi = mi
+
+        for d in reversed(range(dim-1)):
+            local_sum[d] += local_sum[d+1]*local_multiplier[d+1]
+
+        # Above code is functionally equivalent to the following
+        #
+        # from sumpy.tools import mi_power, mi_factorial
+        # result = sum(
+        #        coeff
+        #        * mi_power(bvec, mi, evaluate=False)
+        #        / mi_factorial(mi)
+        #        for coeff, mi in zip(
+        #                evaluated_coeffs, self.get_full_coefficient_identifiers()))
+
+        return local_sum[0]
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale):
@@ -194,10 +227,12 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # closer to each other at the end in the hope of helping
             # with that.
             dvec = [d/src_rscale for d in dvec]
-            expr = src_expansion.evaluate(src_coeff_exprs, dvec, rscale=sym.Integer(1))
+            expr = src_expansion.evaluate(src_coeff_exprs, dvec,
+                        rscale=sym.Integer(1))
             taker = MiDerivativeTaker(expr, dvec)
+            rscale_ratio = sym.UnevaluatedExpr(tgt_rscale/src_rscale)
             result = [
-                    (taker.diff(mi) * sym.UnevaluatedExpr(tgt_rscale/src_rscale)**sum(mi))
+                    (taker.diff(mi) * rscale_ratio**sum(mi))
                     for mi in self.get_coefficient_identifiers()]
 
         logger.info("building translation operator: done")
