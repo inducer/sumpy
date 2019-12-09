@@ -130,7 +130,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         evaluated_coeffs = (
             self.derivative_wrangler.get_full_kernel_derivatives_from_stored(
                 coeffs, rscale))
-        bvec = bvec * rscale**-1
+        bvec = [b*rscale**-1 for b in bvec]
+
         result = sum(
                 coeff
                 * mi_power(bvec, mi, evaluate=False)
@@ -186,16 +187,17 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 result.append(sym.Add(*local_result))
         else:
             from sumpy.tools import MiDerivativeTaker
-            expr = src_expansion.evaluate(src_coeff_exprs, dvec, rscale=src_rscale)
-            taker = MiDerivativeTaker(expr, dvec)
-
             # Rscale/operand magnitude is fairly sensitive to the order of
             # operations--which is something we don't have fantastic control
-            # over at the symbolic level. The '.expand()' below moves the two
-            # canceling "rscales" closer to each other in the hope of helping
+            # over at the symbolic level. Using rscale=1 when evaluating with
+            # dvec divided by rscale below moves the two cancelling "rscales"
+            # closer to each other at the end in the hope of helping
             # with that.
+            dvec = [d/src_rscale for d in dvec]
+            expr = src_expansion.evaluate(src_coeff_exprs, dvec, rscale=sym.Integer(1))
+            taker = MiDerivativeTaker(expr, dvec)
             result = [
-                    (taker.diff(mi) * tgt_rscale**sum(mi)).expand()
+                    (taker.diff(mi) * sym.UnevaluatedExpr(tgt_rscale/src_rscale)**sum(mi))
                     for mi in self.get_coefficient_identifiers()]
 
         logger.info("building translation operator: done")
