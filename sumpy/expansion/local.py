@@ -133,7 +133,9 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         bvec = [b*rscale**-1 for b in bvec]
         mi_to_index = dict((mi, i) for i, mi in
                         enumerate(self.get_full_coefficient_identifiers()))
-        sorted_mis = sorted(self.get_full_coefficient_identifiers())
+        
+        # Sort multi-indices so that last dimension varies fastest
+        sorted_target_mis = sorted(self.get_full_coefficient_identifiers())
         dim = self.dim
 
         # Start with a previously unseen multi-index
@@ -144,8 +146,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         # when adding to the sum of the previous dimension.
         local_multiplier = [0]*dim
 
-        for mi in sorted_mis:
-            # Iterate in reverse order as the mis are sorted in row-major order
+        for mi in sorted_target_mis:
+            # Iterate in reverse order as the mis are sorted last-varies-fastest
             for d in reversed(range(dim-1)):
                 if seen_mi[d] != mi[d]:
                     # If the dimension d of mi changed from the previous value
