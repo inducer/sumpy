@@ -146,6 +146,25 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         # when adding to the sum of the previous dimension.
         local_multiplier = [0]*dim
 
+        # For the multi-indices for 3D, local_sum, looks like below
+        #
+        # Multi-index | coef | local_sum                              | local_mult
+        # (0, 0, 0)   |  c0  | 0, 0,                c0                | 0, 1, 1
+        # (0, 0, 1)   |  c1  | 0, 0,                c0+c1*dz          | 0, 1, 1
+        # (0, 0, 2)   |  c2  | 0, 0,                c0+c1*dz+c2*dz^2  | 0, 1, 1
+        # (0, 1, 0)   |  c3  | 0, c0+c1*dz+c2*dz^2, c3                | 0, 1, dy
+        # (0, 1, 1)   |  c4  | 0, c0+c1*dz+c2*dz^2, c3+c4*dz          | 0, 1, dy
+        # (0, 1, 2)   |  c5  | 0, c0+c1*dz+c2*dz^2, c3+c4*dz+c5*dz^2  | 0, 1, dy
+        # (0, 2, 0)   |  c6  | 0, c0+c1*dz+c2*dz^2, c6                | 0, 1, dy^2
+        #             |      |    +dy*(c3+c4*dz+c5*dz^2)              |
+        # (0, 2, 1)   |  c7  | 0, c0+c1*dz+c2*dz^2, c6+c7*dz          | 0, 1, dy^2
+        #             |      |    +dy*(c3+c4*dz+c5*dz^2)              |
+        # (0, 2, 2)   |  c8  | 0, c0+c1*dz+c2*dz^2, c6+c7*dz+x8*dz^2  | 0, 1, dy^2
+        #             |      |    +dy*(c3+c4*dz+c5*dz^2)              |
+        # (1, 0, 0)   |  c8  | c0+c1*dz+c2*dz^2,         0, 0         | 0, dx, 1
+        #             |      |  +dy*(c3+c4*dz+c5*dz^2)                |
+        #             |      |  +dy^2*(c6+c7*dz+c8*dz^2)              |
+
         for mi in sorted_target_mis:
             # Iterate in reverse order as the mis are sorted last-varies-fastest
             for d in reversed(range(dim-1)):
