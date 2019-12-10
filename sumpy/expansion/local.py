@@ -222,12 +222,14 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             from sumpy.tools import MiDerivativeTaker
             # Rscale/operand magnitude is fairly sensitive to the order of
             # operations--which is something we don't have fantastic control
-            # over at the symbolic level. Using rscale=1 when evaluating with
-            # dvec divided by rscale below moves the two cancelling "rscales"
-            # closer to each other at the end in the hope of helping
-            # with that.
-            expr = src_expansion.evaluate(src_coeff_exprs, dvec,
-                        rscale=sym.Integer(1))
+            # over at the symbolic level. Scaling dvec, then differentiating,
+            # and finally rescaling dvec leaves the expression needing a scaling
+            # to compensate for differentiating which is done at the end.
+            # This moves the two cancelling "rscales" closer to each other at
+            # the end in the hope of helping rscale magnitude.
+            dvec_scaled = [d*src_rscale for d in dvec]
+            expr = src_expansion.evaluate(src_coeff_exprs, dvec_scaled,
+                        rscale=src_rscale)
             replace_dict = dict((d, d/src_rscale) for d in dvec)
             taker = MiDerivativeTaker(expr, dvec)
             rscale_ratio = sym.UnevaluatedExpr(tgt_rscale/src_rscale)
