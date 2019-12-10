@@ -133,7 +133,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         bvec = [b*rscale**-1 for b in bvec]
         mi_to_index = dict((mi, i) for i, mi in
                         enumerate(self.get_full_coefficient_identifiers()))
-        
+
         # Sort multi-indices so that last dimension varies fastest
         sorted_target_mis = sorted(self.get_full_coefficient_identifiers())
         dim = self.dim
