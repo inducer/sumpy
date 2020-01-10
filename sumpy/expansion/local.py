@@ -127,9 +127,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
     def evaluate(self, coeffs, bvec, rscale):
         from pytools import factorial
+
         evaluated_coeffs = (
             self.derivative_wrangler.get_full_kernel_derivatives_from_stored(
                 coeffs, rscale))
+
         bvec = [b*rscale**-1 for b in bvec]
         mi_to_index = dict((mi, i) for i, mi in
                         enumerate(self.get_full_coefficient_identifiers()))
@@ -138,15 +140,15 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         sorted_target_mis = sorted(self.get_full_coefficient_identifiers())
         dim = self.dim
 
-        # Start with a previously unseen multi-index
+        # Start with an invalid "seen" multi-index
         seen_mi = [-1]*dim
-        # Local sum keep the sum of the terms that differ by that dimension
+        # Local sum keep the sum of the terms that differ by each dimension
         local_sum = [0]*dim
         # Local multiplier keep the scalar that the sum has to be multiplied by
-        # when adding to the sum of the previous dimension.
+        # when adding to the sum of the preceding dimension.
         local_multiplier = [0]*dim
 
-        # For the multi-indices for 3D, local_sum, looks like below
+        # For the multi-indices in 3D, local_sum looks like this:
         #
         # Multi-index | coef | local_sum                              | local_mult
         # (0, 0, 0)   |  c0  | 0, 0,                c0                | 0, 1, 1
@@ -166,15 +168,26 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         #             |      |  +dy^2*(c6+c7*dz+c8*dz^2)              |
 
         for mi in sorted_target_mis:
-            # Iterate in reverse order as the mis are sorted last-varies-fastest
+
+            # {{{ handle the case where a not-last dimension "clicked over"
+
+            # (where d will be that not-last dimension)
+
+            # Iterate in reverse order of dimensions to properly handle a
+            # "double click-over".
+
             for d in reversed(range(dim-1)):
                 if seen_mi[d] != mi[d]:
                     # If the dimension d of mi changed from the previous value
                     # then the sum for dimension d+1 is complete, add it to
-                    # dimension d after multiplying and restart
+                    # dimension d after multiplying and restart.
+
                     local_sum[d] += local_sum[d+1]*local_multiplier[d+1]
                     local_sum[d+1] = 0
                     local_multiplier[d+1] = bvec[d]**mi[d] / factorial(mi[d])
+
+            # }}}
+
             local_sum[dim-1] += evaluated_coeffs[mi_to_index[mi]] * \
                                     bvec[dim-1]**mi[dim-1] / factorial(mi[dim-1])
             seen_mi = mi
@@ -182,15 +195,19 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         for d in reversed(range(dim-1)):
             local_sum[d] += local_sum[d+1]*local_multiplier[d+1]
 
-        # Above code is functionally equivalent to the following
-        #
-        # from sumpy.tools import mi_power, mi_factorial
-        # result = sum(
-        #        coeff
-        #        * mi_power(bvec, mi, evaluate=False)
-        #        / mi_factorial(mi)
-        #        for coeff, mi in zip(
-        #                evaluated_coeffs, self.get_full_coefficient_identifiers()))
+        # {{{ simpler, functionally equivalent code
+
+        if 0:
+            from sumpy.tools import mi_power, mi_factorial
+
+            return sum(
+                coeff
+                * mi_power(bvec, mi, evaluate=False)
+                / mi_factorial(mi)
+                for coeff, mi in zip(
+                        evaluated_coeffs, self.get_full_coefficient_identifiers()))
+
+        # }}}
 
         return local_sum[0]
 
