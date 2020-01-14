@@ -602,6 +602,8 @@ class ComplexRewriter(CSECachingMapperMixin, IdentityMapper):
 
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
+# }}}
+
 
 # {{{ vector component rewriter
 
