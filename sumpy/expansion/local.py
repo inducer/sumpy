@@ -125,7 +125,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 taker.diff(mi) * rscale ** sum(mi)
                 for mi in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec, rscale):
+    def evaluate(self, coeffs, bvec, rscale, sac=None):
         from pytools import factorial
 
         evaluated_coeffs = (
