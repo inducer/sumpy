@@ -2,9 +2,14 @@ sumpy: n-body kernels and translation operators
 ===============================================
 
 .. image:: https://gitlab.tiker.net/inducer/sumpy/badges/master/pipeline.svg
-   :target: https://gitlab.tiker.net/inducer/sumpy/commits/master
+    :alt: Gitlab Build Status
+    :target: https://gitlab.tiker.net/inducer/sumpy/commits/master
+.. image:: https://dev.azure.com/ak-spam/inducer/_apis/build/status/inducer.sumpy?branchName=master
+    :alt: Azure Build Status
+    :target: https://dev.azure.com/ak-spam/inducer/_build/latest?definitionId=17&branchName=master
 .. image:: https://badge.fury.io/py/sumpy.png
-    :target: http://pypi.python.org/pypi/sumpy
+    :alt: Python Package Index Release Page
+    :target: https://pypi.org/project/sumpy/
 
 Sumpy is mainly a 'scaffolding' package for Fast Multipole and quadrature methods.
 If you're building one of those and need code generation for the required Multipole

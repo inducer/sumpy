@@ -159,12 +159,18 @@ def vector_from_device(queue, vec):
     return with_object_array_or_scalar(from_dev, vec)
 
 
+def _merge_kernel_arguments(dictionary, arg):
+    # Check for strict equality until there's a usecase
+    if dictionary.setdefault(arg.name, arg) != arg:
+        msg = "Merging two different kernel arguments {} and {} with the same name"
+        raise ValueError(msg.format(arg.loopy_arg, dictionary[arg].loopy_arg))
+
+
 def gather_arguments(kernel_likes):
     result = {}
     for knl in kernel_likes:
         for arg in knl.get_args():
-            result[arg.name] = arg
-            # FIXME: possibly check that arguments match before overwriting
+            _merge_kernel_arguments(result, arg)
 
     return sorted(six.itervalues(result), key=lambda arg: arg.name)
 
@@ -173,8 +179,7 @@ def gather_source_arguments(kernel_likes):
     result = {}
     for knl in kernel_likes:
         for arg in knl.get_args() + knl.get_source_args():
-            result[arg.name] = arg
-            # FIXME: possibly check that arguments match before overwriting
+            _merge_kernel_arguments(result, arg)
 
     return sorted(six.itervalues(result), key=lambda arg: arg.name)
 
@@ -513,10 +518,13 @@ class MatrixBlockIndexRanges(object):
 # Author: Raymond Hettinger
 # License: MIT
 
-import collections
+try:
+    from collections.abc import MutableSet
+except ImportError:
+    from collections import MutableSet
 
 
-class OrderedSet(collections.MutableSet):
+class OrderedSet(MutableSet):
 
     def __init__(self, iterable=None):
         self.end = end = []

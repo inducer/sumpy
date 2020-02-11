@@ -1,5 +1,6 @@
 numpy
 sympy==1.1.1
+git+https://github.com/inducer/pytools
 git+https://github.com/inducer/pymbolic
 git+https://github.com/inducer/islpy
 git+https://github.com/inducer/pyopencl
