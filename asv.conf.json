@@ -68,7 +68,7 @@
     // },
     "matrix": {
         "numpy" : [""],
-        "sympy" : ["1.0"],
+        "sympy" : ["1.4"],
         "pyopencl" : [""],
         "islpy" : [""],
         "pocl" : [""],
