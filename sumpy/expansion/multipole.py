@@ -28,7 +28,8 @@ import sumpy.symbolic as sym  # noqa
 from sumpy.symbolic import vector_xreplace
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
-    HelmholtzConformingVolumeTaylorExpansion, StokesConformingVolumeTaylorExpansion)
+    HelmholtzConformingVolumeTaylorExpansion,
+    BiharmonicConformingVolumeTaylorExpansion)
 from pytools import cartesian_product
 
 import logging
@@ -272,13 +273,13 @@ class HelmholtzConformingVolumeTaylorMultipoleExpansion(
                 self, kernel, order, use_rscale)
 
 
-class StokesConformingVolumeTaylorMultipoleExpansion(
-        StokesConformingVolumeTaylorExpansion,
+class BiharmonicConformingVolumeTaylorMultipoleExpansion(
+        BiharmonicConformingVolumeTaylorExpansion,
         VolumeTaylorMultipoleExpansionBase):
 
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
-        StokesConformingVolumeTaylorExpansion.__init__(
+        BiharmonicConformingVolumeTaylorExpansion.__init__(
                 self, kernel, order, use_rscale)
 
 # }}}

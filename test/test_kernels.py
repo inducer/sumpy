@@ -36,12 +36,12 @@ from sumpy.expansion.multipole import (
         VolumeTaylorMultipoleExpansionBase,
         LaplaceConformingVolumeTaylorMultipoleExpansion,
         HelmholtzConformingVolumeTaylorMultipoleExpansion,
-        StokesConformingVolumeTaylorMultipoleExpansion)
+        BiharmonicConformingVolumeTaylorMultipoleExpansion)
 from sumpy.expansion.local import (
         VolumeTaylorLocalExpansion, H2DLocalExpansion,
         LaplaceConformingVolumeTaylorLocalExpansion,
         HelmholtzConformingVolumeTaylorLocalExpansion,
-        StokesConformingVolumeTaylorLocalExpansion)
+        BiharmonicConformingVolumeTaylorLocalExpansion)
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, AxisTargetDerivative,
         DirectionalSourceDerivative, BiharmonicKernel, StokesletKernel)
 from pytools.convergence import PConvergenceVerifier
@@ -356,8 +356,8 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
     (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion),
     (StokesletKernel(2, 0, 0), VolumeTaylorLocalExpansion,
      VolumeTaylorMultipoleExpansion),
-    (StokesletKernel(2, 0, 0), StokesConformingVolumeTaylorLocalExpansion,
-     StokesConformingVolumeTaylorMultipoleExpansion),
+    (StokesletKernel(2, 0, 0), BiharmonicConformingVolumeTaylorLocalExpansion,
+     BiharmonicConformingVolumeTaylorMultipoleExpansion),
     ])
 def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
     logging.basicConfig(level=logging.INFO)

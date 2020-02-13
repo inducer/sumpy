@@ -27,7 +27,6 @@ THE SOFTWARE.
 
 import six
 from six.moves import range, zip
-from collections import namedtuple
 from pytools import memoize_method, memoize_in
 import numpy as np
 import sumpy.symbolic as sym
@@ -760,34 +759,5 @@ def solve_symbolic(A, b):  # noqa: N803
         big = np.hstack((A, b))
     red = reduced_row_echelon_form(big)[0]
     return red[:, big.shape[0]:]
-
-
-CoeffIdentifier = namedtuple('CoeffIdentifier', ['mi', 'iexpr'])
-
-
-def find_linear_independent_row(nullspace):
-    """
-    This method does elementary row operations to figure out the first row
-    which is linearly dependent on the previous rows. Partial pivoting is not done
-    to find the row with the lowest degree.
-    """
-    ncols = nullspace.shape[1]
-    nrows = min(nullspace.shape[0], ncols+1)
-    augment = np.eye(nrows, nrows, dtype=nullspace.dtype)
-    mat = np.hstack((nullspace[:nrows, :], augment))
-    for i in range(nrows):
-        for j in range(ncols):
-            if mat[i, j] != 0:
-                col = j
-                break
-        else:
-            pde_dict = {}
-            for col in range(ncols, ncols+nrows):
-                if mat[i, col] != 0:
-                    pde_dict[col-ncols] = mat[i, col]
-            return pde_dict
-        for j in range(i+1, nrows):
-            mat[j, :] = mat[j, :]*mat[i, col] - mat[i, :]*mat[j, col]
-    return {}
 
 # vim: fdm=marker

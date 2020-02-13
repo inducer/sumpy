@@ -28,9 +28,8 @@ import logging
 from pytools import memoize_method
 import sumpy.symbolic as sym
 from collections import defaultdict
-from sumpy.tools import add_mi, find_linear_independent_row, CoeffIdentifier
-from .pde_utils import (make_pde_syms, laplacian, div, grad,
-    PDE)
+from sumpy.tools import add_mi
+from .pde_utils import make_pde_sym, laplacian
 
 __doc__ = """
 .. autoclass:: ExpansionBase
@@ -299,7 +298,7 @@ def _fast_spmv(reconstruct_matrix, vec, sac, transpose=False):
 class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     """
     .. automethod:: __init__
-    .. automethod:: get_pdes
+    .. automethod:: get_pde
     .. automethod:: get_reduced_coeffs
     """
 
@@ -416,16 +415,13 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         from pytools import ProcessLogger
         plog = ProcessLogger(logger, "compute PDE for Taylor coefficients")
 
-        pdes, iexpr, nexpr = self.get_pdes()
         mis = self.get_full_coefficient_identifiers()
         coeff_ident_enumerate_dict = dict((tuple(mi), i) for
                                             (i, mi) in enumerate(mis))
 
-        pde = self.get_scalar_pde()
-        assert len(pde.eqs) == 1
-        pde_dict = pde.eqs[0]
+        pde_dict = self.get_pde().eq
         for ident in pde_dict.keys():
-            if ident.mi not in coeff_ident_enumerate_dict:
+            if ident not in coeff_ident_enumerate_dict:
                 coeff_matrix = defaultdict(list)
                 reconstruct_matrix = []
                 for i in range(len(mis)):
@@ -433,10 +429,10 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                     reconstruct_matrix.append([])
                 return mis, coeff_matrix, reconstruct_matrix
 
-        max_mi_idx = max(coeff_ident_enumerate_dict[ident.mi] for
+        max_mi_idx = max(coeff_ident_enumerate_dict[ident] for
                          ident in pde_dict.keys())
         max_mi = mis[max_mi_idx]
-        max_mi_coeff = pde_dict[CoeffIdentifier(max_mi, 0)]
+        max_mi_coeff = pde_dict[max_mi]
         max_mi_mult = -1/sym.sympify(max_mi_coeff)
 
         def is_stored(mi):
@@ -458,7 +454,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 continue
             diff = [mi[d] - max_mi[d] for d in range(self.dim)]
             for other_mi, coeff in iteritems(pde_dict):
-                j = coeff_ident_enumerate_dict[add_mi(other_mi.mi, diff)]
+                j = coeff_ident_enumerate_dict[add_mi(other_mi, diff)]
                 if i == j:
                     continue
                 # PDE might not have max_mi_coeff = -1, divide by -max_mi_coeff
@@ -486,70 +482,14 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         return stored_identifiers, coeff_matrix, reconstruct_matrix
 
-    def get_pdes(self):
+    def get_pde(self):
         r"""
-        Returns a list of PDEs, expression number, number of expressions.
-        A PDE is a dictionary of (ident, coeff) such that ident is a
-        namedtuple of (mi, iexpr) where mi is the multi-index of the
-        derivative, iexpr is the expression number
+        Returns a PDE. A PDE stores a dictionary of (mi, coeff)
+        where mi is the multi-index of the  derivative and coeff is the
+        coefficient
         """
 
         raise NotImplementedError
-
-    @memoize_method
-    def get_scalar_pde(self):
-        r"""
-        Returns a scalar PDE corresponding to the component `iexpr`.
-        """
-        from six import iteritems
-        from sumpy.tools import nullspace
-
-        pdes, iexpr, nexpr = self.get_pdes()
-        if nexpr == 1:
-            return pdes
-
-        from pytools import ProcessLogger
-        plog = ProcessLogger(logger, "computing single PDE for multiple PDEs")
-
-        from pytools import (
-                generate_nonnegative_integer_tuples_summing_to_at_most
-                as gnitstam)
-
-        for order in range(1, 100):
-            mis = sorted(gnitstam(order, self.dim), key=sum)
-
-            pde_mat = []
-            coeff_ident_enumerate_dict = dict((tuple(mi), i) for
-                                                (i, mi) in enumerate(mis))
-            offset = len(mis)
-
-            for mi in mis:
-                for pde_dict in pdes.eqs:
-                    eq = [0]*(len(mis)*nexpr)
-                    for ident, coeff in iteritems(pde_dict):
-                        c = tuple(add_mi(ident.mi, mi))
-                        if c not in coeff_ident_enumerate_dict:
-                            break
-                        idx = offset*ident.iexpr + coeff_ident_enumerate_dict[c]
-                        eq[idx] = coeff
-                    else:
-                        pde_mat.append(eq)
-
-            if len(pde_mat) == 0:
-                continue
-
-            n = nullspace(pde_mat)[offset*iexpr:offset*(iexpr+1), :]
-            indep_row = find_linear_independent_row(n)
-            if len(indep_row) > 0:
-                pde_dict = {}
-                mult = indep_row[max(indep_row.keys())]
-                for k, v in indep_row.items():
-                    pde_dict[CoeffIdentifier(mis[k], 0)] = v / mult
-                plog.done()
-                return PDE(self.dim, pde_dict)
-
-        plog.done()
-        assert False
 
 
 class LaplaceExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
@@ -560,9 +500,9 @@ class LaplaceExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
         super(LaplaceExpansionTermsWrangler, self).__init__(order=order, dim=dim,
             max_mi=max_mi)
 
-    def get_pdes(self):
-        w = make_pde_syms(self.dim, 1)
-        return laplacian(w), 0, 1
+    def get_pde(self):
+        w = make_pde_sym(self.dim)
+        return laplacian(w)
 
 
 class HelmholtzExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
@@ -574,29 +514,23 @@ class HelmholtzExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
         super(HelmholtzExpansionTermsWrangler, self).__init__(order=order, dim=dim,
             max_mi=max_mi)
 
-    def get_pdes(self, **kwargs):
-        w = make_pde_syms(self.dim, 1)
+    def get_pde(self, **kwargs):
+        w = make_pde_sym(self.dim)
         k = sym.Symbol(self.helmholtz_k_name)
-        return (laplacian(w) + k**2 * w), 0, 1
+        return (laplacian(w) + k**2 * w)
 
 
-class StokesExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
+class BiharmonicExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
 
-    init_arg_names = ("order", "dim", "icomp", "viscosity_mu_name", "max_mi")
+    init_arg_names = ("order", "dim", "max_mi")
 
-    def __init__(self, order, dim, icomp, viscosity_mu_name, max_mi=None):
-        self.viscosity_mu_name = viscosity_mu_name
-        self.icomp = icomp
-        super(StokesExpansionTermsWrangler, self).__init__(order=order, dim=dim,
+    def __init__(self, order, dim, max_mi=None):
+        super(BiharmonicExpansionTermsWrangler, self).__init__(order=order, dim=dim,
             max_mi=max_mi)
 
-    def get_pdes(self, **kwargs):
-        w = make_pde_syms(self.dim, self.dim+1)
-        mu = sym.Symbol(self.viscosity_mu_name)
-        u = w[:self.dim]
-        p = w[-1]
-        pdes = PDE(self.dim, mu * laplacian(u) - grad(p), div(u))
-        return pdes, self.icomp, self.dim+1
+    def get_pde(self, **kwargs):
+        w = make_pde_sym(self.dim)
+        return laplacian(laplacian(w))
 # }}}
 
 
@@ -674,17 +608,14 @@ class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
         self.expansion_terms_wrangler_key = (order, kernel.dim, helmholtz_k_name)
 
 
-class StokesConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
+class BiharmonicConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
 
-    expansion_terms_wrangler_class = StokesExpansionTermsWrangler
+    expansion_terms_wrangler_class = BiharmonicExpansionTermsWrangler
     expansion_terms_wrangler_cache = {}
 
     # not user-facing, be strict about having to pass use_rscale
     def __init__(self, kernel, order, use_rscale):
-        icomp = kernel.get_base_kernel().icomp
-        viscosity_mu_name = kernel.get_base_kernel().viscosity_mu_name
-        self.expansion_terms_wrangler_key = (order, kernel.dim,
-            icomp, viscosity_mu_name)
+        self.expansion_terms_wrangler_key = (order, kernel.dim)
 
 # }}}
 
@@ -734,49 +665,58 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
     def get_local_expansion_class(self, base_kernel):
         """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
-        from sumpy.kernel import HelmholtzKernel, LaplaceKernel, YukawaKernel
+        from sumpy.kernel import (HelmholtzKernel, LaplaceKernel, YukawaKernel,
+                BiharmonicKernel, StokesletKernel, StressletKernel)
+
+        from sumpy.expansion.local import (H2DLocalExpansion, Y2DLocalExpansion,
+                HelmholtzConformingVolumeTaylorLocalExpansion,
+                LaplaceConformingVolumeTaylorLocalExpansion,
+                BiharmonicConformingVolumeTaylorLocalExpansion,
+                VolumeTaylorLocalExpansion)
+
         if (isinstance(base_kernel.get_base_kernel(), HelmholtzKernel)
                 and base_kernel.dim == 2):
-            from sumpy.expansion.local import H2DLocalExpansion
             return H2DLocalExpansion
         elif (isinstance(base_kernel.get_base_kernel(), YukawaKernel)
                 and base_kernel.dim == 2):
-            from sumpy.expansion.local import Y2DLocalExpansion
             return Y2DLocalExpansion
         elif isinstance(base_kernel.get_base_kernel(), HelmholtzKernel):
-            from sumpy.expansion.local import \
-                    HelmholtzConformingVolumeTaylorLocalExpansion
             return HelmholtzConformingVolumeTaylorLocalExpansion
         elif isinstance(base_kernel.get_base_kernel(), LaplaceKernel):
-            from sumpy.expansion.local import \
-                    LaplaceConformingVolumeTaylorLocalExpansion
             return LaplaceConformingVolumeTaylorLocalExpansion
+        elif isinstance(base_kernel.get_base_kernel(),
+                (BiharmonicKernel, StokesletKernel, StressletKernel)):
+            return BiharmonicConformingVolumeTaylorLocalExpansion
         else:
-            from sumpy.expansion.local import VolumeTaylorLocalExpansion
             return VolumeTaylorLocalExpansion
 
     def get_multipole_expansion_class(self, base_kernel):
         """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
-        from sumpy.kernel import HelmholtzKernel, LaplaceKernel, YukawaKernel
+        from sumpy.kernel import (HelmholtzKernel, LaplaceKernel, YukawaKernel,
+                BiharmonicKernel, StokesletKernel, StressletKernel)
+
+        from sumpy.expansion.multipole import (H2DMultipoleExpansion,
+                Y2DMultipoleExpansion,
+                LaplaceConformingVolumeTaylorMultipoleExpansion,
+                HelmholtzConformingVolumeTaylorMultipoleExpansion,
+                BiharmonicConformingVolumeTaylorMultipoleExpansion,
+                VolumeTaylorMultipoleExpansion)
+
         if (isinstance(base_kernel.get_base_kernel(), HelmholtzKernel)
                 and base_kernel.dim == 2):
-            from sumpy.expansion.multipole import H2DMultipoleExpansion
             return H2DMultipoleExpansion
         elif (isinstance(base_kernel.get_base_kernel(), YukawaKernel)
                 and base_kernel.dim == 2):
-            from sumpy.expansion.multipole import Y2DMultipoleExpansion
             return Y2DMultipoleExpansion
         elif isinstance(base_kernel.get_base_kernel(), LaplaceKernel):
-            from sumpy.expansion.multipole import (
-                    LaplaceConformingVolumeTaylorMultipoleExpansion)
             return LaplaceConformingVolumeTaylorMultipoleExpansion
         elif isinstance(base_kernel.get_base_kernel(), HelmholtzKernel):
-            from sumpy.expansion.multipole import (
-                    HelmholtzConformingVolumeTaylorMultipoleExpansion)
             return HelmholtzConformingVolumeTaylorMultipoleExpansion
+        elif isinstance(base_kernel.get_base_kernel(),
+                (BiharmonicKernel, StokesletKernel, StressletKernel)):
+            return BiharmonicConformingVolumeTaylorMultipoleExpansion
         else:
-            from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansion
             return VolumeTaylorMultipoleExpansion
 
 # }}}
