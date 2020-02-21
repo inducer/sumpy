@@ -295,8 +295,67 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                     lexp_mi_terms.append(
                             coeff * kernel_deriv * tgt_rscale**sum(lexp_mi))
                 result.append(sym.Add(*lexp_mi_terms))
+            logger.info("building translation operator: done")
+            return result
 
-        else:
+        rscale_ratio = sym.UnevaluatedExpr(tgt_rscale/src_rscale)
+
+        from sumpy.tools import MiDerivativeTaker
+        from math import factorial
+        src_coeffs = (
+            src_expansion.expansion_terms_wrangler.get_full_kernel_derivatives_from_stored(
+                src_coeff_exprs, src_rscale))
+        src_mis = \
+            src_expansion.expansion_terms_wrangler.get_full_coefficient_identifiers()
+
+        src_mi_to_index = dict((mi, i) for i, mi in enumerate(src_mis))
+
+        tgt_mis_all = \
+            self.expansion_terms_wrangler.get_coefficient_identifiers()
+        tgt_mi_to_index = dict((mi, i) for i, mi in enumerate(tgt_mis_all))
+
+        tgt_split = self.expansion_terms_wrangler._get_coeff_identifier_split()
+
+        p = max(sum(mi) for mi in src_mis)
+        Y = src_coeffs
+        result = [0] * len(tgt_mis_all)
+
+        # O(1) iterations
+        for const_dim in set(d for d, _ in tgt_split):
+            # Use the const_dim as the first dimension to vary so that the below
+            # algorithm is O(p^{d+1}) for full and O(p^{d}) for compressed
+            dims = [const_dim] + list(range(const_dim)) + \
+                    list(range(const_dim+1, self.dim))
+            # Start with source coefficients
+            Y = src_coeffs
+            # O(1) iterations
+            for d in dims:
+                C = Y
+                Y = [0] * len(src_mis)
+                # Only O(p^{d-1}) operations are used in compressed
+                # All of them are used in full.
+                for i, s in enumerate(src_mis):
+                    # O(p) iterations
+                    for q in range(p+1-sum(s)):
+                        src_mi = list(s)
+                        src_mi[d] += q
+                        src_mi = tuple(src_mi)
+                        if src_mi in src_mi_to_index:
+                            Y[i] += (dvec[d]/src_rscale) ** q * \
+                                    C[src_mi_to_index[src_mi]] / factorial(q)
+
+            # This is O(p) in full and O(1) in compressed
+            for d, tgt_mis in tgt_split:
+                if d != const_dim:
+                    continue
+                # O(p^{d-1}) iterations
+                for mi in tgt_mis:
+                    if mi not in src_mi_to_index:
+                        continue
+                    result[tgt_mi_to_index[mi]] = Y[src_mi_to_index[mi]] * rscale_ratio ** sum(mi)
+
+        # {{{ simpler, functionally equivalent code
+        if 0:
             from sumpy.tools import MiDerivativeTaker
             # Rscale/operand magnitude is fairly sensitive to the order of
             # operations--which is something we don't have fantastic control
@@ -314,7 +373,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             result = [
                     (taker.diff(mi).xreplace(replace_dict) * rscale_ratio**sum(mi))
                     for mi in self.get_coefficient_identifiers()]
-
+        # }}}
         logger.info("building translation operator: done")
         return result
 
