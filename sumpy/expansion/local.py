@@ -134,83 +134,14 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 coeffs, rscale))
 
         bvec = [b*rscale**-1 for b in bvec]
-        mi_to_index = dict((mi, i) for i, mi in
-                        enumerate(self.get_full_coefficient_identifiers()))
+        from sumpy.tools import mi_power, mi_factorial
 
-        # Sort multi-indices so that last dimension varies fastest
-        sorted_target_mis = sorted(self.get_full_coefficient_identifiers())
-        dim = self.dim
-
-        # Start with an invalid "seen" multi-index
-        seen_mi = [-1]*dim
-        # Local sum keep the sum of the terms that differ by each dimension
-        local_sum = [0]*dim
-        # Local multiplier keep the scalar that the sum has to be multiplied by
-        # when adding to the sum of the preceding dimension.
-        local_multiplier = [0]*dim
-
-        # For the multi-indices in 3D, local_sum looks like this:
-        #
-        # Multi-index | coef | local_sum                              | local_mult
-        # (0, 0, 0)   |  c0  | 0, 0,                c0                | 0, 1, 1
-        # (0, 0, 1)   |  c1  | 0, 0,                c0+c1*dz          | 0, 1, 1
-        # (0, 0, 2)   |  c2  | 0, 0,                c0+c1*dz+c2*dz^2  | 0, 1, 1
-        # (0, 1, 0)   |  c3  | 0, c0+c1*dz+c2*dz^2, c3                | 0, 1, dy
-        # (0, 1, 1)   |  c4  | 0, c0+c1*dz+c2*dz^2, c3+c4*dz          | 0, 1, dy
-        # (0, 1, 2)   |  c5  | 0, c0+c1*dz+c2*dz^2, c3+c4*dz+c5*dz^2  | 0, 1, dy
-        # (0, 2, 0)   |  c6  | 0, c0+c1*dz+c2*dz^2, c6                | 0, 1, dy^2
-        #             |      |    +dy*(c3+c4*dz+c5*dz^2)              |
-        # (0, 2, 1)   |  c7  | 0, c0+c1*dz+c2*dz^2, c6+c7*dz          | 0, 1, dy^2
-        #             |      |    +dy*(c3+c4*dz+c5*dz^2)              |
-        # (0, 2, 2)   |  c8  | 0, c0+c1*dz+c2*dz^2, c6+c7*dz+x8*dz^2  | 0, 1, dy^2
-        #             |      |    +dy*(c3+c4*dz+c5*dz^2)              |
-        # (1, 0, 0)   |  c8  | c0+c1*dz+c2*dz^2,         0, 0         | 0, dx, 1
-        #             |      |  +dy*(c3+c4*dz+c5*dz^2)                |
-        #             |      |  +dy^2*(c6+c7*dz+c8*dz^2)              |
-
-        for mi in sorted_target_mis:
-
-            # {{{ handle the case where a not-last dimension "clicked over"
-
-            # (where d will be that not-last dimension)
-
-            # Iterate in reverse order of dimensions to properly handle a
-            # "double click-over".
-
-            for d in reversed(range(dim-1)):
-                if seen_mi[d] != mi[d]:
-                    # If the dimension d of mi changed from the previous value
-                    # then the sum for dimension d+1 is complete, add it to
-                    # dimension d after multiplying and restart.
-
-                    local_sum[d] += local_sum[d+1]*local_multiplier[d+1]
-                    local_sum[d+1] = 0
-                    local_multiplier[d+1] = bvec[d]**mi[d] / factorial(mi[d])
-
-            # }}}
-
-            local_sum[dim-1] += evaluated_coeffs[mi_to_index[mi]] * \
-                                    bvec[dim-1]**mi[dim-1] / factorial(mi[dim-1])
-            seen_mi = mi
-
-        for d in reversed(range(dim-1)):
-            local_sum[d] += local_sum[d+1]*local_multiplier[d+1]
-
-        # {{{ simpler, functionally equivalent code
-
-        if 0:
-            from sumpy.tools import mi_power, mi_factorial
-
-            return sum(
-                coeff
-                * mi_power(bvec, mi, evaluate=False)
-                / mi_factorial(mi)
-                for coeff, mi in zip(
-                        evaluated_coeffs, self.get_full_coefficient_identifiers()))
-
-        # }}}
-
-        return local_sum[0]
+        return sum(
+            coeff
+            * mi_power(bvec, mi, evaluate=False)
+            / mi_factorial(mi)
+            for coeff, mi in zip(
+                    evaluated_coeffs, self.get_full_coefficient_identifiers()))
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale):
