@@ -254,8 +254,8 @@ class ExpansionTermsWrangler(object):
         for d in range(self.dim):
             filtered_mis = [mi for mi in mis if mi[d] < max_mi[d]]
             for i in range(max_mi[d]):
-                new_mis = [mi for mi in filtered_mis if mi[d] == i and \
-                           mi not in seen_mis]
+                new_mis = [mi for mi in filtered_mis if mi[d] == i
+                             and mi not in seen_mis]
                 seen_mis.update(new_mis)
                 res.append((d, new_mis))
         return res
@@ -272,6 +272,7 @@ class FullExpansionTermsWrangler(ExpansionTermsWrangler):
 
     get_stored_mpole_coefficients_from_full = (
             get_full_kernel_derivatives_from_stored)
+
 
 # {{{ sparse matrix-vector multiplication
 

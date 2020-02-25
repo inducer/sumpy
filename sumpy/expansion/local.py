@@ -127,8 +127,6 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 for mi in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec, rscale, sac=None):
-        from pytools import factorial
-
         evaluated_coeffs = (
             self.expansion_terms_wrangler.get_full_kernel_derivatives_from_stored(
                 coeffs, rscale))
@@ -233,8 +231,9 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         from sumpy.tools import MiDerivativeTaker
         from math import factorial
+        src_wrangler = src_expansion.expansion_terms_wrangler
         src_coeffs = (
-            src_expansion.expansion_terms_wrangler.get_full_kernel_derivatives_from_stored(
+            src_wrangler.get_full_kernel_derivatives_from_stored(
                 src_coeff_exprs, src_rscale))
         src_mis = \
             src_expansion.expansion_terms_wrangler.get_full_coefficient_identifiers()
@@ -283,11 +282,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 for mi in tgt_mis:
                     if mi not in src_mi_to_index:
                         continue
-                    result[tgt_mi_to_index[mi]] = Y[src_mi_to_index[mi]] * rscale_ratio ** sum(mi)
+                    result[tgt_mi_to_index[mi]] = Y[src_mi_to_index[mi]] \
+                                                    * rscale_ratio ** sum(mi)
 
         # {{{ simpler, functionally equivalent code
         if 0:
-            from sumpy.tools import MiDerivativeTaker
             # Rscale/operand magnitude is fairly sensitive to the order of
             # operations--which is something we don't have fantastic control
             # over at the symbolic level. Scaling dvec, then differentiating,

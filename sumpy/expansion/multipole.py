@@ -242,7 +242,8 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                             k = src_mi[idim]
                             assert n >= k
                             contrib /= mi_factorial((n-k,))
-                            contrib *= sym.UnevaluatedExpr(dvec[idim]/tgt_rscale)**(n-k)
+                            contrib *= \
+                                sym.UnevaluatedExpr(dvec[idim]/tgt_rscale)**(n-k)
 
                         temp[i] += contrib
 
@@ -274,7 +275,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                         # Omitted coefficients: not life-threatening
                         continue
 
-                    contrib = src_coeff_exprs2[src_index]
+                    contrib = src_coeff_exprs[src_index]
 
                     for idim in range(self.dim):
                         n = tgt_mi[idim]
@@ -284,9 +285,8 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                         contrib *= (binomial(n, k)
                                 * sym.UnevaluatedExpr(dvec[idim]/tgt_rscale)**(n-k))
 
-                    result[i] += (
-                            contrib
-                            * sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(src_mi))
+                    result[i] += (contrib
+                        * sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(src_mi))
 
                 result[i] /= mi_factorial(tgt_mi)
         # }}}
