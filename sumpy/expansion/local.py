@@ -247,7 +247,6 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         tgt_split = self.expansion_terms_wrangler._get_coeff_identifier_split()
 
         p = max(sum(mi) for mi in src_mis)
-        Y = src_coeffs
         result = [0] * len(tgt_mis_all)
 
         # O(1) iterations
@@ -257,11 +256,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             dims = [const_dim] + list(range(const_dim)) + \
                     list(range(const_dim+1, self.dim))
             # Start with source coefficients
-            Y = src_coeffs
+            Y = src_coeffs   # noqa: N806
             # O(1) iterations
             for d in dims:
-                C = Y
-                Y = [0] * len(src_mis)
+                C = Y        # noqa: N806
+                Y = [0] * len(src_mis)   # noqa: N806
                 # Only O(p^{d-1}) operations are used in compressed
                 # All of them are used in full.
                 for i, s in enumerate(src_mis):
