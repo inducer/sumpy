@@ -176,8 +176,6 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             src_coeff_exprs_full[src_mi_to_index[mi]] = src_coeff_exprs[i] * \
                 sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(mi)
 
-        result = [0] * len(self.get_full_coefficient_identifiers())
-
         # This algorithm uses the observation that M2M coefficients
         # have the following form in 2D
         #
@@ -251,7 +249,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                 dim_coeffs_to_translate = temp[:]
 
             for i, mi in enumerate(src_expansion.get_full_coefficient_identifiers()):
-                result[tgt_mi_to_index[mi]] = dim_coeffs_to_translate[i]
+                result[tgt_mi_to_index[mi]] += dim_coeffs_to_translate[i]
 
         logger.info("building translation operator: done")
         return (
