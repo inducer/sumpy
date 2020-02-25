@@ -251,7 +251,8 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             for i, mi in enumerate(src_expansion.get_full_coefficient_identifiers()):
                 result[tgt_mi_to_index[mi]] += dim_coeffs_to_translate[i]
 
-        if 0:  # NOQA
+        # {{{ simpler, functionally equivalent code
+        if 0:
             src_mi_to_index = dict((mi, i) for i, mi in enumerate(
                 src_expansion.get_coefficient_identifiers()))
             result = [0] * len(self.get_full_coefficient_identifiers())
@@ -288,6 +289,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                             * sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(src_mi))
 
                 result[i] /= mi_factorial(tgt_mi)
+        # }}}
 
         logger.info("building translation operator: done")
         return (
