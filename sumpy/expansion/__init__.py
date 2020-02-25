@@ -221,11 +221,10 @@ class ExpansionTermsWrangler(object):
     @memoize_method
     def _get_coeff_identifier_split(self):
         """
-        This splits the coefficients into a O(p) number of sets
+        This splits the coefficients into a O(p) number of disjoint sets
         so that for each set, all the identifiers have the form,
         (m_1, m_2, ..., m_{j-1}, c, m_{j+1}, ... , m_d)
-        where c is a constant. The intersection of two sets might
-        not be empty.
+        where c is a constant.
 
         If this is an instance of LinearPDEBasedExpansionTermsWrangler,
         then the number of sets will be O(1).
@@ -251,10 +250,14 @@ class ExpansionTermsWrangler(object):
         if max_mi is None:
             max_mi = [max(mi[d] for mi in mis) for d in range(self.dim)]
 
+        seen_mis = set()
         for d in range(self.dim):
             filtered_mis = [mi for mi in mis if mi[d] < max_mi[d]]
             for i in range(max_mi[d]):
-                res.append((d, [mi for mi in filtered_mis if mi[d] == i]))
+                new_mis = [mi for mi in filtered_mis if mi[d] == i and \
+                           mi not in seen_mis]
+                seen_mis.update(new_mis)
+                res.append((d, new_mis))
         return res
 
 
