@@ -251,6 +251,44 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             for i, mi in enumerate(src_expansion.get_full_coefficient_identifiers()):
                 result[tgt_mi_to_index[mi]] += dim_coeffs_to_translate[i]
 
+        if 0:  # NOQA
+            src_mi_to_index = dict((mi, i) for i, mi in enumerate(
+                src_expansion.get_coefficient_identifiers()))
+            result = [0] * len(self.get_full_coefficient_identifiers())
+
+            for i, mi in enumerate(src_expansion.get_coefficient_identifiers()):
+                src_coeff_exprs[i] *= mi_factorial(mi)
+
+            from pytools import generate_nonnegative_integer_tuples_below as gnitb
+
+            for i, tgt_mi in enumerate(
+                    self.get_full_coefficient_identifiers()):
+
+                tgt_mi_plus_one = tuple(mi_i + 1 for mi_i in tgt_mi)
+
+                for src_mi in gnitb(tgt_mi_plus_one):
+                    try:
+                        src_index = src_mi_to_index[src_mi]
+                    except KeyError:
+                        # Omitted coefficients: not life-threatening
+                        continue
+
+                    contrib = src_coeff_exprs2[src_index]
+
+                    for idim in range(self.dim):
+                        n = tgt_mi[idim]
+                        k = src_mi[idim]
+                        assert n >= k
+                        from sympy import binomial
+                        contrib *= (binomial(n, k)
+                                * sym.UnevaluatedExpr(dvec[idim]/tgt_rscale)**(n-k))
+
+                    result[i] += (
+                            contrib
+                            * sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(src_mi))
+
+                result[i] /= mi_factorial(tgt_mi)
+
         logger.info("building translation operator: done")
         return (
             self.expansion_terms_wrangler.get_stored_mpole_coefficients_from_full(
