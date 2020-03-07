@@ -101,7 +101,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             for i, mi in enumerate(coeff_identifiers):
                 result[i] /= (mi_factorial(mi) * rscale ** sum(mi))
         else:
-            avec = [sym.make_cse(a * rscale**-1) for a in avec]
+            avec = [sym.UnevaluatedExpr(a * rscale**-1) for a in avec]
 
             result = [
                     mi_power(avec, mi) / mi_factorial(mi)
@@ -170,7 +170,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
         src_coeff_exprs = list(src_coeff_exprs)
         for i, mi in enumerate(src_expansion.get_coefficient_identifiers()):
-            src_coeff_exprs[i] *= sym.make_cse(src_rscale/tgt_rscale)**sum(mi)
+            src_coeff_exprs[i] *= sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(mi)
 
         result = [0] * len(self.get_full_coefficient_identifiers())
 
@@ -223,7 +223,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                         k = src_mi[idim]
                         assert n >= k
                         contrib /= mi_factorial((n-k,))
-                        contrib *= sym.make_cse(dvec[idim]/tgt_rscale)**(n-k)
+                        contrib *= sym.UnevaluatedExpr(dvec[idim]/tgt_rscale)**(n-k)
 
                     result[i] += contrib
 
