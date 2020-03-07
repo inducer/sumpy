@@ -67,10 +67,6 @@ class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
     def not_supported(self, expr):
         if isinstance(expr, int):
             return expr
-        elif getattr(expr, "is_Function", False):
-            func_name = SympyToPymbolicMapperBase.function_name(self, expr)
-            return prim.Variable(func_name)(
-                    *tuple(self.rec(arg) for arg in expr.args))
         else:
             return SympyToPymbolicMapperBase.not_supported(self, expr)
 

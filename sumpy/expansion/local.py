@@ -270,7 +270,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                         rscale=src_rscale)
             replace_dict = dict((d, d/src_rscale) for d in dvec)
             taker = MiDerivativeTaker(expr, dvec)
-            rscale_ratio = sym.UnevaluatedExpr(tgt_rscale/src_rscale)
+            rscale_ratio = sym.make_cse(tgt_rscale/src_rscale)
             result = [
                     (taker.diff(mi).xreplace(replace_dict) * rscale_ratio**sum(mi))
                     for mi in self.get_coefficient_identifiers()]

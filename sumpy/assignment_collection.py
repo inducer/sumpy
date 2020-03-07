@@ -185,15 +185,19 @@ class SymbolicAssignmentCollection(object):
         new_assignments, new_exprs = cse(assign_exprs + extra_exprs,
                 symbols=self.symbol_generator)
 
+        xreplace_dict = {}
+        for name, value in new_assignments:
+            new_value = sym.make_cse(value.xreplace(xreplace_dict))
+            xreplace_dict[name] = new_value
+
+        for i in range(len(new_exprs)):
+            new_exprs[i] = new_exprs[i].xreplace(xreplace_dict)
+
         new_assign_exprs = new_exprs[:len(assign_exprs)]
         new_extra_exprs = new_exprs[len(assign_exprs):]
 
         for name, new_expr in zip(assign_names, new_assign_exprs):
             self.assignments[name] = new_expr
-
-        for name, value in new_assignments:
-            assert isinstance(name, sym.Symbol)
-            self.add_assignment(name.name, value)
 
         logger.info("common subexpression elimination: done after {dur:.2f} s"
                     .format(dur=time.time() - start_time))

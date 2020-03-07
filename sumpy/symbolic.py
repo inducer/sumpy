@@ -80,13 +80,15 @@ Derivative Integer Matrix Subs I pi functions""".split()
 
 if USE_SYMENGINE:
     import symengine as sym
-    from pymbolic.interop.symengine import (
+    from pymbolic.interop.symengine import (                    # noqa: F401
         PymbolicToSymEngineMapper as PymbolicToSympyMapper,
-        SymEngineToPymbolicMapper as SympyToPymbolicMapper)
+        SymEngineToPymbolicMapper as SympyToPymbolicMapper,
+        make_cse)
 else:
     import sympy as sym
-    from pymbolic.interop.sympy import (
-        PymbolicToSympyMapper, SympyToPymbolicMapper)
+    from pymbolic.interop.sympy import (                        # noqa: F401
+        PymbolicToSympyMapper, SympyToPymbolicMapper,
+        make_cse)
 
 for _apifunc in SYMBOLIC_API:
     globals()[_apifunc] = getattr(sym, _apifunc)
