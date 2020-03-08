@@ -114,21 +114,19 @@ class ExpansionBase(object):
         """
         raise NotImplementedError
 
-    def coefficients_from_source(self, avec, bvec, rscale, sac=None):
+    def coefficients_from_source(self, avec, bvec, rscale):
         """Form an expansion from a source point.
 
         :arg avec: vector from source to center.
         :arg bvec: vector from center to target. Not usually necessary,
             except for line-Taylor expansion.
-        :arg sac: a symbolic assignment collection where temporary
-            expressions are stored.
 
         :returns: a list of :mod:`sympy` expressions representing
             the coefficients of the expansion.
         """
         raise NotImplementedError
 
-    def evaluate(self, coeffs, bvec, rscale, sac=None):
+    def evaluate(self, coeffs, bvec, rscale):
         """
         :return: a :mod:`sympy` expression corresponding
             to the evaluated expansion with the coefficients
@@ -175,11 +173,11 @@ class ExpansionTermsWrangler(object):
         raise NotImplementedError
 
     def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
-            rscale, sac=None):
+            rscale):
         raise NotImplementedError
 
     def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients,
-            rscale, sac=None):
+            rscale):
         raise NotImplementedError
 
     @memoize_method
@@ -267,7 +265,7 @@ class FullExpansionTermsWrangler(ExpansionTermsWrangler):
             ExpansionTermsWrangler.get_full_coefficient_identifiers)
 
     def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
-            rscale, sac=None):
+            rscale):
         return stored_kernel_derivatives
 
     get_stored_mpole_coefficients_from_full = (
@@ -309,7 +307,7 @@ def _spmv(spmat, x, sparse_vectors):
 # }}}
 
 
-def _fast_spmv(reconstruct_matrix, vec, sac, transpose=False):
+def _fast_spmv(reconstruct_matrix, vec, transpose=False):
     if not transpose:
         res = [0] * len(reconstruct_matrix)
         stored_idx = 0
@@ -320,8 +318,7 @@ def _fast_spmv(reconstruct_matrix, vec, sac, transpose=False):
             else:
                 for k, v in deps:
                     res[row] += res[k] * v
-            new_sym = sym.Symbol(sac.assign_unique("expr", res[row]))
-            res[row] = new_sym
+            res[row] = sym.UnevaluatedExpr(res[row])
         return res
     else:
         res = []
@@ -330,7 +327,7 @@ def _fast_spmv(reconstruct_matrix, vec, sac, transpose=False):
             if len(deps) == 0:
                 res.append(expr_all[row])
                 continue
-            new_sym = sym.Symbol(sac.assign_unique("expr", expr_all[row]))
+            new_sym = sym.UnevaluatedExpr(expr_all[row])
             for k, v in deps:
                 expr_all[k] += new_sym * v
         res.reverse()
@@ -358,26 +355,26 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         return self.stored_identifiers
 
     def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
-            rscale, sac=None):
+            rscale):
         coeff_matrix, reconstruct_matrix, use_reconstruct = \
             self.get_coefficient_matrix(rscale)
-        if not use_reconstruct or sac is None:
+        if not use_reconstruct:
             return _spmv(coeff_matrix, stored_kernel_derivatives,
                      sparse_vectors=False)
-        return _fast_spmv(reconstruct_matrix, stored_kernel_derivatives, sac)
+        return _fast_spmv(reconstruct_matrix, stored_kernel_derivatives)
 
     def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients,
-            rscale, sac=None):
+            rscale):
         # = M^T x, where M = coeff matrix
         coeff_matrix, reconstruct_matrix, use_reconstruct = \
             self.get_coefficient_matrix(rscale)
-        if not use_reconstruct or sac is None:
+        if not use_reconstruct:
             result = [0] * len(self.stored_identifiers)
             for row, coeff in enumerate(full_mpole_coefficients):
                 for col, val in coeff_matrix[row]:
                     result[col] += coeff * val
             return result
-        return _fast_spmv(reconstruct_matrix, full_mpole_coefficients, sac,
+        return _fast_spmv(reconstruct_matrix, full_mpole_coefficients,
                 transpose=True)
 
     @property

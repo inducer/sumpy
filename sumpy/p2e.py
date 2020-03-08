@@ -88,7 +88,7 @@ class P2EBase(KernelCacheWrapper):
         coeff_names = [
             sac.assign_unique("coeff%d" % i, coeff_i)
             for i, coeff_i in enumerate(
-                self.expansion.coefficients_from_source(avec, None, rscale, sac))]
+                self.expansion.coefficients_from_source(avec, None, rscale))]
 
         sac.run_global_cse()
 

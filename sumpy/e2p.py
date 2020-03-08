@@ -91,7 +91,7 @@ class E2PBase(KernelCacheWrapper):
 
         coeff_exprs = [sym.Symbol("coeff%d" % i)
                 for i in range(len(self.expansion.get_coefficient_identifiers()))]
-        value = self.expansion.evaluate(coeff_exprs, bvec, rscale, sac=sac)
+        value = self.expansion.evaluate(coeff_exprs, bvec, rscale)
 
         result_names = [
             sac.assign_unique("result_%d_p" % i,

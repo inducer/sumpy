@@ -58,7 +58,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
     def get_coefficient_identifiers(self):
         return list(range(self.order+1))
 
-    def coefficients_from_source(self, avec, bvec, rscale, sac=None):
+    def coefficients_from_source(self, avec, bvec, rscale):
         # no point in heeding rscale here--just ignore it
         if bvec is None:
             raise RuntimeError("cannot use line-Taylor expansions in a setting "
@@ -99,7 +99,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
                     .subs("tau", 0)
                     for i in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec, rscale, sac=None):
+    def evaluate(self, coeffs, bvec, rscale):
         # no point in heeding rscale here--just ignore it
         from pytools import factorial
         return sym.Add(*(
@@ -116,7 +116,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
     Coefficients represent derivative values of the kernel.
     """
 
-    def coefficients_from_source(self, avec, bvec, rscale, sac=None):
+    def coefficients_from_source(self, avec, bvec, rscale):
         from sumpy.tools import MiDerivativeTaker
         ppkernel = self.kernel.postprocess_at_source(
                 self.kernel.get_expression(avec), avec)
@@ -126,7 +126,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 taker.diff(mi) * rscale ** sum(mi)
                 for mi in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec, rscale, sac=None):
+    def evaluate(self, coeffs, bvec, rscale):
         evaluated_coeffs = (
             self.expansion_terms_wrangler.get_full_kernel_derivatives_from_stored(
                 coeffs, rscale))
@@ -357,7 +357,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
     def get_coefficient_identifiers(self):
         return list(range(-self.order, self.order+1))
 
-    def coefficients_from_source(self, avec, bvec, rscale, sac=None):
+    def coefficients_from_source(self, avec, bvec, rscale):
         if not self.use_rscale:
             rscale = 1
 
@@ -375,7 +375,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                     * sym.exp(sym.I * l * source_angle_rel_center), avec)
                     for l in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec, rscale, sac=None):
+    def evaluate(self, coeffs, bvec, rscale):
         if not self.use_rscale:
             rscale = 1
 

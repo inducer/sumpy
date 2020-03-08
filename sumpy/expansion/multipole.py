@@ -56,7 +56,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
     Coefficients represent the terms in front of the kernel derivatives.
     """
 
-    def coefficients_from_source(self, avec, bvec, rscale, sac=None):
+    def coefficients_from_source(self, avec, bvec, rscale):
         from sumpy.kernel import DirectionalSourceDerivative
         kernel = self.kernel
 
@@ -109,7 +109,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                     for mi in self.get_full_coefficient_identifiers()]
         return (
             self.expansion_terms_wrangler.get_stored_mpole_coefficients_from_full(
-                result, rscale, sac=sac))
+                result, rscale))
 
     def get_scaled_multipole(self, expr, bvec, rscale, nderivatives,
             nderivatives_for_scaling=None):
@@ -127,7 +127,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         else:
             return (rscale**nderivatives_for_scaling * expr)
 
-    def evaluate(self, coeffs, bvec, rscale, sac=None):
+    def evaluate(self, coeffs, bvec, rscale):
         if not self.use_rscale:
             rscale = 1
 
@@ -347,7 +347,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
     def get_coefficient_identifiers(self):
         return list(range(-self.order, self.order+1))
 
-    def coefficients_from_source(self, avec, bvec, rscale, sac=None):
+    def coefficients_from_source(self, avec, bvec, rscale):
         if not self.use_rscale:
             rscale = 1
 
@@ -367,7 +367,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
                     avec)
                 for l in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec, rscale, sac=None):
+    def evaluate(self, coeffs, bvec, rscale):
         if not self.use_rscale:
             rscale = 1
 
