@@ -751,6 +751,9 @@ def get_loopy_domain(loop_domains):
             domain_names += ", "
             conditions += " and "
 
-    return "{[" + domain_names + "]:" + conditions + "}"
+    if domain_names == "" and conditions == "":
+        return []
+    else:
+        return ["{[" + domain_names + "]:" + conditions + "}"]
 
 # vim: fdm=marker
