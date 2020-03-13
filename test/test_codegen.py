@@ -25,6 +25,10 @@ THE SOFTWARE.
 
 import sys
 
+import pyopencl as cl
+from pyopencl.tools import (  # noqa
+        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
+
 import logging
 logger = logging.getLogger(__name__)
 
@@ -103,6 +107,48 @@ def test_line_taylor_coeff_growth():
     indices = np.arange(1, order + 2)
     max_order = 2
     assert np.polyfit(np.log(indices), np.log(counts), deg=1)[0] < max_order
+
+
+def test_sym_sum(ctx_getter):
+    ctx = ctx_getter()
+    queue = cl.CommandQueue(ctx)
+
+    import six
+    from sumpy.assignment_collection import SymbolicAssignmentCollection
+    sac = SymbolicAssignmentCollection()
+
+    from sympy.abc import j
+    from sympy import Sum
+    sac.add_assignment("tmp", Sum(j, (j, 1, 10)))
+
+    from sumpy.codegen import to_loopy_insns
+    insn, additional_loop_domain = to_loopy_insns(
+        six.iteritems(sac.assignments),
+        retain_names=["tmp"]
+    )
+
+    from sumpy.tools import get_loopy_domain
+    domain = get_loopy_domain(
+        [("i", 0, 5)]
+        + additional_loop_domain
+    )
+
+    import loopy as lp
+    knl = lp.make_kernel(
+        domain,
+        insn + [lp.Assignment("a[i]", "tmp")],
+        lang_version=(2018, 2)
+    )
+
+    _, result = knl(queue)
+    result = result[0].get()
+
+    import numpy as np
+    ref_sol = np.ones(5, dtype=np.int32)
+    ref_sol = ref_sol * 45
+
+    assert result.shape == (5,)
+    assert np.allclose(result, ref_sol)
 
 
 # You can test individual routines by typing

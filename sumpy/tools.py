@@ -717,4 +717,40 @@ def my_syntactic_subs(expr, subst_dict):
         return expr
 
 
+def get_loopy_domain(loop_domains):
+    """Helper function to get the loopy domain to pass to `loopy.make_kernel`.
+
+    :arg loop_domains: a list of domains. Each domain is a tuple. If the tuple has 3
+        elements (name, low, high), it represents iname "name" has range [low, high).
+        If the tuple has 2 elements (name, duplicate_name), it represents iname
+        "name" has the same range as "duplicate_name", where the domain of
+        "duplicate_name" must be represented by 3-element tuples.
+    """
+    domain_to_range = {}
+
+    for domain in loop_domains:
+        if len(domain) == 3:
+            name, low, high = domain
+            assert name not in domain_to_range
+            domain_to_range[name] = (low, high)
+
+    for idx, domain in enumerate(loop_domains):
+        if len(domain) == 2:
+            name, duplicate_name = domain
+            low, high = domain_to_range[duplicate_name]
+            loop_domains[idx] = (name, low, high)
+
+    domain_names = ""
+    conditions = ""
+
+    for idx, (name, low, high) in enumerate(loop_domains):
+        domain_names += f"{name}"
+        conditions += f"{low} <= {name} < {high}"
+
+        if idx + 1 != len(loop_domains):
+            domain_names += ", "
+            conditions += " and "
+
+    return "{[" + domain_names + "]:" + conditions + "}"
+
 # vim: fdm=marker

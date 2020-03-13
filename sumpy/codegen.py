@@ -32,7 +32,7 @@ import loopy as lp
 import six
 import re
 
-from pymbolic.mapper import IdentityMapper, WalkMapper, CSECachingMapperMixin
+from pymbolic.mapper import CSECachingMapperMixin
 import pymbolic.primitives as prim
 
 from loopy.types import NumpyType
@@ -40,6 +40,7 @@ from loopy.types import NumpyType
 from pytools import memoize_method
 
 from sumpy.symbolic import (SympyToPymbolicMapper as SympyToPymbolicMapperBase)
+from sumpy.symbolic import Series, IdentityMapper, WalkMapper, SubstitutionMapper
 
 import logging
 logger = logging.getLogger(__name__)
@@ -63,6 +64,18 @@ _SPECIAL_FUNCTION_NAMES = frozenset(dir(sym.functions))
 
 
 class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
+
+    def map_Sum(self, expr):
+        if len(expr.limits) != 1:
+            raise NotImplementedError
+
+        name, low, high = expr.limits[0]
+
+        # TODO: name, low, high need recursion?
+        low = int(low)
+        high = int(high)
+
+        return Series(self.rec(expr.function), self.rec(name), low, high)
 
     def not_supported(self, expr):
         if isinstance(expr, int):
@@ -129,7 +142,7 @@ def make_one_step_subst(assignments):
 
     for name in toposort:
         value = assignments[name]
-        value = substitute(value, result)
+        value = substitute(value, result, mapper=SubstitutionMapper)
         used_name_to_var.update(
             (used_name, prim.Variable(used_name))
             for used_name in get_dependencies(value)
@@ -175,7 +188,7 @@ def kill_trivial_assignments(assignments, retain_names=set()):
     result = []
     from pymbolic import substitute
     for name, expr in approved_assignments:
-        r = substitute(expr, unsubst_rej)
+        r = substitute(expr, unsubst_rej, mapper=SubstitutionMapper)
         result.append((name, r))
 
     logger.info(
@@ -673,6 +686,32 @@ class MathConstantRewriter(CSECachingMapperMixin, IdentityMapper):
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
 
+# {{{ convert pymbolic "Series" class to loopy reduction
+
+class SeriesRewritter(CSECachingMapperMixin, IdentityMapper):
+
+    def __init__(self):
+        self.additional_loop_domain = []
+
+    def map_series(self, expr):
+        function = self.rec(expr.function)
+
+        # TODO: recursion on low, high and name?
+        low = expr.low
+        high = expr.high
+        name = str(expr.name)
+
+        self.additional_loop_domain.append(
+            (name, low, high)
+        )
+
+        return lp.Reduction("sum", name, function)
+
+    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+
+# }}}
+
+
 def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
                    complex_dtype=None, retain_names=set()):
     logger.info("loopy instruction generation: start")
@@ -699,6 +738,7 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
 
     # do the rest of the conversion
     bessel_sub = BesselSubstitutor(BesselGetter(btog.bessel_j_arg_to_top_order))
+    sr = SeriesRewritter()
     vcr = VectorComponentRewriter(vector_names)
     pwr = PowerRewriter()
     ssg = SumSignGrouper()
@@ -708,6 +748,7 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
 
     def convert_expr(name, expr):
         logger.debug("generate expression for: %s" % name)
+        expr = sr(expr)
         expr = bdr(expr)
         expr = bessel_sub(expr)
         expr = vcr(expr)
@@ -731,6 +772,6 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
                 for name, expr in assignments]
 
     logger.info("loopy instruction generation: done")
-    return result
+    return result, sr.additional_loop_domain
 
 # vim: fdm=marker
