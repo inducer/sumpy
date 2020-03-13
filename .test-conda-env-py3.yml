@@ -19,5 +19,5 @@ dependencies:
 - pip:
     - git+https://github.com/inducer/pytools
     - git+https://gitlab.tiker.net/inducer/boxtree
-    - git+https://gitlab.tiker.net/inducer/pymbolic
+    - git+https://github.com/gaohao95/pymbolic@substitute-mapper
     - git+https://github.com/inducer/loopy
