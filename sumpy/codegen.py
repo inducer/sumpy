@@ -41,6 +41,7 @@ from pytools import memoize_method
 
 from sumpy.symbolic import (SympyToPymbolicMapper as SympyToPymbolicMapperBase)
 from sumpy.symbolic import Series, IdentityMapper, WalkMapper, SubstitutionMapper
+from pymbolic.mapper.substitutor import make_subst_func
 
 import logging
 logger = logging.getLogger(__name__)
@@ -132,8 +133,6 @@ def make_one_step_subst(assignments):
 
     # {{{ make substitution
 
-    from pymbolic import substitute
-
     result = {}
     used_name_to_var = {}
     from pymbolic import evaluate
@@ -142,7 +141,7 @@ def make_one_step_subst(assignments):
 
     for name in toposort:
         value = assignments[name]
-        value = substitute(value, result, mapper=SubstitutionMapper)
+        value = SubstitutionMapper(make_subst_func(result))(value)
         used_name_to_var.update(
             (used_name, prim.Variable(used_name))
             for used_name in get_dependencies(value)
@@ -186,9 +185,8 @@ def kill_trivial_assignments(assignments, retain_names=set()):
     unsubst_rej = make_one_step_subst(rejected_assignments)
 
     result = []
-    from pymbolic import substitute
     for name, expr in approved_assignments:
-        r = substitute(expr, unsubst_rej, mapper=SubstitutionMapper)
+        r = SubstitutionMapper(make_subst_func(unsubst_rej))(expr)
         result.append((name, r))
 
     logger.info(
