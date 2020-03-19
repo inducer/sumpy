@@ -3,6 +3,8 @@ from __future__ import division, absolute_import
 __copyright__ = """
 Copyright (C) 2012 Andreas Kloeckner
 Copyright (C) 2018 Alexandru Fikl
+Copyright (C) 2006-2019 SymPy Development Team
+Copyright (C) 2020 Isuru Fernando
 """
 
 __license__ = """
@@ -30,6 +32,8 @@ from six.moves import range, zip
 from pytools import memoize_method, memoize_in
 import numpy as np
 import sumpy.symbolic as sym
+import numbers
+import math
 
 import pyopencl as cl
 import pyopencl.array  # noqa
@@ -670,6 +674,8 @@ def my_syntactic_subs(expr, subst_dict):
         return expr
 
 
+# {{{ matrices
+
 def reduced_row_echelon_form(m):
     """Calculates a reduced row echelon form of a
     matrix `m`.
@@ -759,5 +765,99 @@ def solve_symbolic(A, b):  # noqa: N803
         big = np.hstack((A, b))
     red = reduced_row_echelon_form(big)[0]
     return red[:, big.shape[0]:]
+
+# }}}
+
+
+# {{{ FFT
+
+def _fft_uneval_expr(expr):
+    """
+    Creates a CSE node if the expr is not a numeric type
+    """
+    if isinstance(expr, (numbers.Number, sym.Number, int, float, complex)):
+        return expr
+    # UnevaluatedExpr is not implemented in SymEngine, but that's fine
+    # as SymEngine doesn't distribute 2*(a+b) to 2*a + 2*b.
+    # SymPy distributes which destroys the complexity.
+    return sym.UnevaluatedExpr(expr)
+
+
+def _complex_tuple_mul(a, b):
+    """
+    Multiply the two complex numbers represented as a tuple
+    for real and imaginary parts
+    """
+    return (_fft_uneval_expr((a[0]*b[0])-(a[1]*b[1])),
+            _fft_uneval_expr((a[0]*b[1])+(a[1]*b[0])))
+
+
+def _binary_reverse(n, bits):
+    # Returns the reverse of the number n in binary form with bits
+    # number of bits
+    b = bin(n)[2:].rjust(bits, "0")
+    return int(b[::-1], 2)
+
+
+def fft(seq, inverse=False):
+    """
+    Return the discrete fourier transform of the sequence seq.
+    seq should be a python iterable with tuples of length 2
+    corresponding to the real part and imaginary part.
+    """
+
+    a = seq
+    n = len(a)
+    if n < 2:
+        return a
+
+    b = n.bit_length() - 1
+    if n & (n - 1):  # not a power of 2
+        b += 1
+        n = 2**b
+
+    a += [(0, 0)]*(n - len(a))
+    for i in range(1, n):
+        j = _binary_reverse(i, b)
+        if i < j:
+            a[i], a[j] = a[j], a[i]
+    ang = -2*math.pi/n if inverse else 2*math.pi/n
+
+    w = [(math.cos(ang*i), math.sin(ang*i)) for i in range(n // 2)]
+    for i in range(len(w)):
+        if abs(w[i][0]) == 1.0:
+            w[i] = (int(w[i][0]), 0)
+        if abs(w[i][1]) == 1.0:
+            w[i] = (0, int(w[i][1]))
+
+    h = 2
+    while h <= n:
+        hf, ut = h // 2, n // h
+        for i in range(0, n, h):
+            for j in range(hf):
+                u, v = a[i + j], _complex_tuple_mul(a[i + j + hf], w[ut * j])
+                a[i + j] = (u[0] + v[0], u[1] + v[1])
+                a[i + j + hf] = (u[0] - v[0], u[1] - v[1])
+        h *= 2
+
+    if inverse:
+        a = [(x[0]/n, x[1]/n) for x in a]
+
+    return a
+
+
+def toeplitz(v, x):
+    """
+    Returns the matvec of the Toeplitz matrix given by
+    the Toeplitz vector v and the vector x using a Fourier transform
+    """
+    assert len(v) == len(x)
+    v_fft = fft([(a, 0) for a in v])
+    x_fft = fft([(a, 0) for a in x])
+    res_fft = [_complex_tuple_mul(a, b) for a, b in zip(v_fft, x_fft)]
+    res = fft(res_fft, inverse=True)
+    return [a for a, _ in res]
+
+# }}}
 
 # vim: fdm=marker
