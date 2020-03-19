@@ -202,13 +202,7 @@ class LayerPotential(LayerPotentialBase):
             self.get_loopy_insns_and_result_names()
 
         from sumpy.tools import get_loopy_domain
-        domain = get_loopy_domain(
-            [
-                ("itgt", 0, "ntargets"),
-                ("isrc", 0, "nsources"),
-                ("idim", 0, "dim")
-            ] + additional_domain
-        )
+        additional_domain = get_loopy_domain(additional_domain)
 
         kernel_exprs = self.get_kernel_exprs(result_names)
         arguments = (
@@ -220,8 +214,12 @@ class LayerPotential(LayerPotentialBase):
                 None, shape="ntargets", order="C")
             for i in range(len(self.kernels))])
 
-        loopy_knl = lp.make_kernel(
-            domain,
+        loopy_knl = lp.make_kernel(["""
+            {[itgt, isrc, idim]: \
+                0 <= itgt < ntargets and \
+                0 <= isrc < nsources and \
+                0 <= idim < dim}
+            """] + additional_domain,
             self.get_kernel_scaling_assignments()
             + ["for itgt, isrc"]
             + ["<> a[idim] = center[idim, itgt] - src[idim, isrc] {dup=idim}"]
@@ -283,13 +281,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
             self.get_loopy_insns_and_result_names()
 
         from sumpy.tools import get_loopy_domain
-        domain = get_loopy_domain(
-            [
-                ("itgt", 0, "ntargets"),
-                ("isrc", 0, "nsources"),
-                ("idim", 0, "dim")
-            ] + additional_domain
-        )
+        additional_domain = get_loopy_domain(additional_domain)
 
         kernel_exprs = self.get_kernel_exprs(result_names)
         arguments = (
@@ -298,8 +290,12 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
                 dtype, shape="ntargets, nsources", order="C")
              for i, dtype in enumerate(self.value_dtypes)])
 
-        loopy_knl = lp.make_kernel(
-            domain,
+        loopy_knl = lp.make_kernel(["""
+            {[itgt, isrc, idim]: \
+                0 <= itgt < ntargets and \
+                0 <= isrc < nsources and \
+                0 <= idim < dim}
+            """] + additional_domain,
             self.get_kernel_scaling_assignments()
             + ["for itgt, isrc"]
             + ["<> a[idim] = center[idim, itgt] - src[idim, isrc] {dup=idim}"]
@@ -354,12 +350,7 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
             self.get_loopy_insns_and_result_names()
 
         from sumpy.tools import get_loopy_domain
-        domain = get_loopy_domain(
-            [
-                ("imat", 0, "nresult"),
-                ("idim", 0, "dim")
-            ] + additional_domain
-        )
+        additional_domain = get_loopy_domain(additional_domain)
 
         kernel_exprs = self.get_kernel_exprs(result_names)
         arguments = (
@@ -372,8 +363,9 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
             + [lp.GlobalArg("result_%d" % i, dtype, shape="nresult")
              for i, dtype in enumerate(self.value_dtypes)])
 
-        loopy_knl = lp.make_kernel(
-            domain,
+        loopy_knl = lp.make_kernel([
+            "{[imat, idim]: 0 <= imat < nresult and 0 <= idim < dim}"
+            ] + additional_domain,
             self.get_kernel_scaling_assignments()
             # NOTE: itgt, isrc need to always be defined in case a statement
             # in loopy_insns or kernel_exprs needs them (e.g. hardcoded in

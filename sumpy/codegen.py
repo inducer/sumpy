@@ -66,7 +66,7 @@ _SPECIAL_FUNCTION_NAMES = frozenset(dir(sym.functions))
 
 class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
 
-    def map_Sum(self, expr):
+    def map_Sum(self, expr):  # noqa
         pymbolic_limits = []
         for name, low, high in expr.limits:
             pymbolic_limits.append((name, self.rec(low), self.rec(high)))

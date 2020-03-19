@@ -173,13 +173,7 @@ class P2P(P2PBase):
             self.get_loopy_insns_and_result_names()
 
         from sumpy.tools import get_loopy_domain
-        domain = get_loopy_domain(
-            [
-                ("itgt", 0, "ntargets"),
-                ("isrc", 0, "nsources"),
-                ("idim", 0, "dim")
-            ] + additional_domain
-        )
+        additional_domain = get_loopy_domain(additional_domain)
 
         kernel_exprs = self.get_kernel_exprs(result_names)
         arguments = (
@@ -191,8 +185,12 @@ class P2P(P2PBase):
                     shape="nresults, ntargets", dim_tags="sep,C")
             ])
 
-        loopy_knl = lp.make_kernel(
-            domain,
+        loopy_knl = lp.make_kernel(["""
+            {[itgt, isrc, idim]: \
+                0 <= itgt < ntargets and \
+                0 <= isrc < nsources and \
+                0 <= idim < dim}
+            """] + additional_domain,
             self.get_kernel_scaling_assignments()
             + ["for itgt, isrc"]
             + ["<> d[idim] = targets[idim, itgt] - sources[idim, isrc]"]
@@ -250,13 +248,7 @@ class P2PMatrixGenerator(P2PBase):
             self.get_loopy_insns_and_result_names()
 
         from sumpy.tools import get_loopy_domain
-        domain = get_loopy_domain(
-            [
-                ("itgt", 0, "ntargets"),
-                ("isrc", 0, "nsources"),
-                ("idim", 0, "dim")
-            ] + additional_domain
-        )
+        additional_domain = get_loopy_domain(additional_domain)
 
         kernel_exprs = self.get_kernel_exprs(result_names)
         arguments = (
@@ -265,8 +257,12 @@ class P2PMatrixGenerator(P2PBase):
                 shape="ntargets,nsources")
              for i, dtype in enumerate(self.value_dtypes)])
 
-        loopy_knl = lp.make_kernel(
-            domain,
+        loopy_knl = lp.make_kernel(["""
+            {[itgt, isrc, idim]: \
+                0 <= itgt < ntargets and \
+                0 <= isrc < nsources and \
+                0 <= idim < dim}
+            """] + additional_domain,
             self.get_kernel_scaling_assignments()
             + ["for itgt, isrc"]
             + ["<> d[idim] = targets[idim, itgt] - sources[idim, isrc]"]
@@ -323,12 +319,7 @@ class P2PMatrixBlockGenerator(P2PBase):
             self.get_loopy_insns_and_result_names()
 
         from sumpy.tools import get_loopy_domain
-        domain = get_loopy_domain(
-            [
-                ("imat", 0, "nresult"),
-                ("idim", 0, "dim")
-            ] + additional_domain
-        )
+        additional_domain = get_loopy_domain(additional_domain)
 
         kernel_exprs = self.get_kernel_exprs(result_names)
         arguments = (
@@ -342,7 +333,8 @@ class P2PMatrixBlockGenerator(P2PBase):
              for i, dtype in enumerate(self.value_dtypes)])
 
         loopy_knl = lp.make_kernel(
-            domain,
+            ["{[imat, idim]: 0 <= imat < nresult and 0 <= idim < dim}"]
+            + additional_domain,
             self.get_kernel_scaling_assignments()
             # NOTE: itgt, isrc need to always be defined in case a statement
             # in loopy_insns or kernel_exprs needs them (e.g. hardcoded in

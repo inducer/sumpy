@@ -28,6 +28,7 @@ import sys
 import pyopencl as cl
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
+import pytest
 
 import logging
 logger = logging.getLogger(__name__)
@@ -110,10 +111,13 @@ def test_line_taylor_coeff_growth():
 
 
 def test_sym_sum(ctx_getter):
+    from sumpy.symbolic import USE_SYMENGINE
+    if USE_SYMENGINE:
+        pytest.xfail("Symengine does not support symbolic sum yet")
+
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
 
-    import six
     from sumpy.assignment_collection import SymbolicAssignmentCollection
     sac = SymbolicAssignmentCollection()
 
@@ -121,6 +125,7 @@ def test_sym_sum(ctx_getter):
     from sympy import Sum
     sac.add_assignment("tmp", Sum(j, (j, 0, i)))
 
+    import six
     from sumpy.codegen import to_loopy_insns
     insn, additional_loop_domain = to_loopy_insns(
         six.iteritems(sac.assignments),
@@ -149,10 +154,13 @@ def test_sym_sum(ctx_getter):
 
 
 def test_sym_nested_sum(ctx_getter):
+    from sumpy.symbolic import USE_SYMENGINE
+    if USE_SYMENGINE:
+        pytest.xfail("Symengine does not support symbolic sum yet")
+
     ctx = ctx_getter()
     queue = cl.CommandQueue(ctx)
 
-    import six
     from sumpy.assignment_collection import SymbolicAssignmentCollection
     sac = SymbolicAssignmentCollection()
 
@@ -160,6 +168,7 @@ def test_sym_nested_sum(ctx_getter):
     from sympy import Sum
     sac.add_assignment("tmp", Sum(i*j, (i, 0, 5), (j, 0, 3)))
 
+    import six
     from sumpy.codegen import to_loopy_insns
     insn, additional_loop_domain = to_loopy_insns(
         six.iteritems(sac.assignments),
@@ -187,7 +196,6 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
     else:
-        from pytest import main
-        main([__file__])
+        pytest.main([__file__])
 
 # vim: fdm=marker
