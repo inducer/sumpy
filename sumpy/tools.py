@@ -740,20 +740,14 @@ def get_loopy_domain(loop_domains):
             low, high = domain_to_range[duplicate_name]
             loop_domains[idx] = (name, low, high)
 
-    domain_names = ""
-    conditions = ""
-
+    domains = []
     for idx, (name, low, high) in enumerate(loop_domains):
-        domain_names += f"{name}"
-        conditions += f"{low} <= {name} < {high}"
+        domains.append(
+            "{{ [{name}]: {low} <= {name} < {high} }}".format(
+                name=name, low=low, high=high
+            )
+        )
 
-        if idx + 1 != len(loop_domains):
-            domain_names += ", "
-            conditions += " and "
-
-    if domain_names == "" and conditions == "":
-        return []
-    else:
-        return ["{[" + domain_names + "]:" + conditions + "}"]
+    return domains
 
 # vim: fdm=marker

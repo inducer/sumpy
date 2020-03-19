@@ -117,9 +117,9 @@ def test_sym_sum(ctx_getter):
     from sumpy.assignment_collection import SymbolicAssignmentCollection
     sac = SymbolicAssignmentCollection()
 
-    from sympy.abc import j
+    from sympy.abc import i, j
     from sympy import Sum
-    sac.add_assignment("tmp", Sum(j, (j, 1, 10)))
+    sac.add_assignment("tmp", Sum(j, (j, 0, i)))
 
     from sumpy.codegen import to_loopy_insns
     insn, additional_loop_domain = to_loopy_insns(
@@ -128,15 +128,13 @@ def test_sym_sum(ctx_getter):
     )
 
     from sumpy.tools import get_loopy_domain
-    domain = get_loopy_domain(
-        [("i", 0, 5)]
-        + additional_loop_domain
-    )
-
     import loopy as lp
     knl = lp.make_kernel(
-        domain,
-        insn + [lp.Assignment("a[i]", "tmp")],
+        ["{[i]: 0<=i<=5}"] + get_loopy_domain(additional_loop_domain),
+        ["for i"]
+        + insn
+        + [lp.Assignment("a[i]", "tmp")]
+        + ["end"],
         lang_version=(2018, 2)
     )
 
@@ -144,11 +142,42 @@ def test_sym_sum(ctx_getter):
     result = result[0].get()
 
     import numpy as np
-    ref_sol = np.ones(5, dtype=np.int32)
-    ref_sol = ref_sol * 45
+    ref_sol = np.array([0, 1, 3, 6, 10, 15], dtype=np.int32)
 
-    assert result.shape == (5,)
+    assert result.shape == (6,)
     assert np.allclose(result, ref_sol)
+
+
+def test_sym_nested_sum(ctx_getter):
+    ctx = ctx_getter()
+    queue = cl.CommandQueue(ctx)
+
+    import six
+    from sumpy.assignment_collection import SymbolicAssignmentCollection
+    sac = SymbolicAssignmentCollection()
+
+    from sympy.abc import i, j
+    from sympy import Sum
+    sac.add_assignment("tmp", Sum(i*j, (i, 0, 5), (j, 0, 3)))
+
+    from sumpy.codegen import to_loopy_insns
+    insn, additional_loop_domain = to_loopy_insns(
+        six.iteritems(sac.assignments),
+        retain_names=["tmp"]
+    )
+
+    from sumpy.tools import get_loopy_domain
+    import loopy as lp
+    knl = lp.make_kernel(
+        get_loopy_domain(additional_loop_domain),
+        insn + [lp.Assignment("a", "tmp")],
+        lang_version=(2018, 2)
+    )
+
+    _, result = knl(queue)
+    result = result[0].get()
+
+    assert result == 90
 
 
 # You can test individual routines by typing

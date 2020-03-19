@@ -254,32 +254,33 @@ class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):
 # {{{ Series
 
 class Series(prim.Expression):
-    def __init__(self, function, name, low, high):
+    def __init__(self, function, limits):
         self.function = function
-        self.name = name
-        self.low = low
-        self.high = high
+        self.limits = limits
 
     mapper_method = "map_series"
 
     def __getinitargs__(self):
-        return self.function, self.name, self.low, self.high
+        return self.function, self.limits
 
 
 class IdentityMapper(IdentityMapperBase):
     def map_series(self, expr):
-        return Series(
-            self.rec(expr.function),
-            expr.name,
-            expr.low,
-            expr.high
-        )
+        new_limits = []
+        for name, low, high in expr.limits:
+            new_limits.append((name, self.rec(low), self.rec(high)))
+
+        return Series(self.rec(expr.function), new_limits)
 
 
 class WalkMapper(WalkMapperBase):
     def map_series(self, expr, *args, **kwargs):
         if not self.visit(expr, *args, **kwargs):
             return
+
+        for name, low, high in expr.limits:
+            self.rec(low, *args, **kwargs)
+            self.rec(high, *args, **kwargs)
 
         self.rec(expr.function, *args, **kwargs)
 

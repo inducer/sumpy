@@ -67,16 +67,11 @@ _SPECIAL_FUNCTION_NAMES = frozenset(dir(sym.functions))
 class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
 
     def map_Sum(self, expr):
-        if len(expr.limits) != 1:
-            raise NotImplementedError
+        pymbolic_limits = []
+        for name, low, high in expr.limits:
+            pymbolic_limits.append((name, self.rec(low), self.rec(high)))
 
-        name, low, high = expr.limits[0]
-
-        # TODO: name, low, high need recursion?
-        low = int(low)
-        high = int(high)
-
-        return Series(self.rec(expr.function), self.rec(name), low, high)
+        return Series(self.rec(expr.function), pymbolic_limits)
 
     def not_supported(self, expr):
         if isinstance(expr, int):
@@ -693,17 +688,20 @@ class SeriesRewritter(CSECachingMapperMixin, IdentityMapper):
 
     def map_series(self, expr):
         function = self.rec(expr.function)
+        inames = []
 
-        # TODO: recursion on low, high and name?
-        low = expr.low
-        high = expr.high
-        name = str(expr.name)
+        for name, low, high in expr.limits:
+            low = self.rec(low)
+            high = self.rec(high)
+            name = str(name)
 
-        self.additional_loop_domain.append(
-            (name, low, high)
-        )
+            inames.append(name)
+            self.additional_loop_domain.append(
+                # +1 is used for converting the closed bound in sympy to open bound
+                (name, low + 1, high + 1)
+            )
 
-        return lp.Reduction("sum", name, function)
+        return lp.Reduction("sum", tuple(inames), function)
 
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
