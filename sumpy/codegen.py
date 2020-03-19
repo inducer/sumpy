@@ -69,7 +69,7 @@ class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
     def map_Sum(self, expr):  # noqa
         pymbolic_limits = []
         for name, low, high in expr.limits:
-            pymbolic_limits.append((name, self.rec(low), self.rec(high)))
+            pymbolic_limits.append((self.rec(name), self.rec(low), self.rec(high)))
 
         return Series(self.rec(expr.function), pymbolic_limits)
 
