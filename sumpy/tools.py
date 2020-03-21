@@ -846,17 +846,34 @@ def fft(seq, inverse=False):
     return a
 
 
-def toeplitz(v, x):
+def fft_toeplitz_upper_triangular(first_row, x):
     """
     Returns the matvec of the Toeplitz matrix given by
-    the Toeplitz vector v and the vector x using a Fourier transform
+    the first row and the vector x using a Fourier transform
     """
-    assert len(v) == len(x)
+    assert len(first_row) == len(x)
+    n = len(first_row)
+    v = list(first_row)
+    v += [0]*(n-1)
+
+    x = list(reversed(x))
+    x += [0]*(n-1)
+
     v_fft = fft([(a, 0) for a in v])
     x_fft = fft([(a, 0) for a in x])
     res_fft = [_complex_tuple_mul(a, b) for a, b in zip(v_fft, x_fft)]
     res = fft(res_fft, inverse=True)
-    return [a for a, _ in res]
+    return [a for a, _ in reversed(res[:n])]
+
+
+def matvec_toeplitz_upper_triangular(first_row, vector):
+    n = len(first_row)
+    assert len(vector) == n
+    output = [0]*n
+    for row in range(n):
+        for col in range(row, n):
+            output[row] += first_row[col-row]*vector[col]
+    return output
 
 # }}}
 

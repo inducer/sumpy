@@ -141,6 +141,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             for coeff, mi in zip(
                     evaluated_coeffs, self.get_full_coefficient_identifiers()))
 
+
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale):
         logger.info("building translation operator: %s(%d) -> %s(%d): start"
@@ -168,6 +169,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             taker = src_expansion.get_kernel_derivative_taker(dvec)
 
             from sumpy.tools import add_mi
+            from pytools import generate_nonnegative_integer_tuples_below as gnitb
 
             max_mi = [0]*self.dim
             for i in range(self.dim):
@@ -176,54 +178,64 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 max_mi[i] += max(mi[i] for mi in
                                   self.get_coefficient_identifiers())
 
+            toeplitz_matrix_coeffs = list(gnitb([m + 1 for m in max_mi]))
+            toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
+                                enumerate(toeplitz_matrix_coeffs))
+
             # Create a expansion terms wrangler for derivatives up to order
             # (tgt order)+(src order) including a corresponding reduction matrix
+            # For eg: 2D full Taylor Laplace, this is (n, m),
+            # n+m<=2*p, n<=2*p, m<=2*p
             tgtplusderiv_exp_terms_wrangler = \
                 src_expansion.expansion_terms_wrangler.copy(
                         order=self.order + src_expansion.order, max_mi=tuple(max_mi))
-            tgtplusderiv_coeff_ids = \
-                tgtplusderiv_exp_terms_wrangler.get_coefficient_identifiers()
             tgtplusderiv_full_coeff_ids = \
                 tgtplusderiv_exp_terms_wrangler.get_full_coefficient_identifiers()
-
             tgtplusderiv_ident_to_index = dict((ident, i) for i, ident in
                                 enumerate(tgtplusderiv_full_coeff_ids))
 
+            # The vector has the kernel derivatives and depends only on the distance
+            # between the two centers
+            taker = src_expansion.get_kernel_derivative_taker(dvec)
+            vector_stored = []
+            # Calculate the kernel derivatives for the compressed set
+            for term in tgtplusderiv_exp_terms_wrangler.get_coefficient_identifiers():
+                kernel_deriv = taker.diff(term)
+                vector_stored.append(kernel_deriv)
+            # Calculate the kernel derivatives for the full set
+            vector_full = tgtplusderiv_exp_terms_wrangler.get_full_kernel_derivatives_from_stored(
+                            vector_stored, src_rscale)
+
+            from sumpy.tools import add_mi
+            needed_vector_terms = set([])
+            # For eg: 2D full Taylor Laplace, we only need kernel derivatives
+            # (n1+n2, m1+m2), n1+m1<=p, n2+m2<=p
+            for tgt_deriv in self.get_coefficient_identifiers():
+                for src_deriv in src_expansion.get_coefficient_identifiers():
+                    needed = add_mi(src_deriv, tgt_deriv)
+                    needed_vector_terms.add(needed)
+
+            vector = [0]*len(toeplitz_matrix_coeffs)
+            for i, term in enumerate(toeplitz_matrix_coeffs):
+                if term in tgtplusderiv_ident_to_index:
+                    vector[i] = vector_full[tgtplusderiv_ident_to_index[term]]
+
+            # Calculate the first row of the upper triangular Toeplitz matrix
+            toeplitz_first_row = [0] * len(toeplitz_matrix_coeffs)
+            for coeff, term in zip(
+                    src_coeff_exprs,
+                    src_expansion.get_coefficient_identifiers()):
+                toeplitz_first_row[toeplitz_matrix_ident_to_index[term]] = coeff * src_rscale**sum(term)
+
+            # Do the matvec
+            output = matvec_toeplitz_upper_triangular(toeplitz_first_row, vector)
+
+            # Filter out the dummy rows and scale them for target
             result = []
-            for lexp_mi in self.get_coefficient_identifiers():
-                lexp_mi_terms = []
+            for term in self.get_coefficient_identifiers():
+                index = toeplitz_matrix_ident_to_index[term]
+                result.append(output[index]*tgt_rscale**sum(term))
 
-                # Embed the source coefficients in the coefficient array
-                # for the (tgt order)+(src order) wrangler, offset by lexp_mi.
-                embedded_coeffs = [0] * len(tgtplusderiv_full_coeff_ids)
-                for coeff, term in zip(
-                        src_coeff_exprs,
-                        src_expansion.get_coefficient_identifiers()):
-                    embedded_coeffs[
-                            tgtplusderiv_ident_to_index[add_mi(lexp_mi, term)]] \
-                                    = coeff
-
-                # Compress the embedded coefficient set
-                stored_coeffs = tgtplusderiv_exp_terms_wrangler \
-                        .get_stored_mpole_coefficients_from_full(
-                                embedded_coeffs, src_rscale)
-
-                # Sum the embedded coefficient set
-                for i, coeff in enumerate(stored_coeffs):
-                    if coeff == 0:
-                        continue
-                    nderivatives_for_scaling = \
-                            sum(tgtplusderiv_coeff_ids[i])-sum(lexp_mi)
-                    kernel_deriv = (
-                            src_expansion.get_scaled_multipole(
-                                taker.diff(tgtplusderiv_coeff_ids[i]),
-                                dvec, src_rscale,
-                                nderivatives=sum(tgtplusderiv_coeff_ids[i]),
-                                nderivatives_for_scaling=nderivatives_for_scaling))
-
-                    lexp_mi_terms.append(
-                            coeff * kernel_deriv * tgt_rscale**sum(lexp_mi))
-                result.append(sym.Add(*lexp_mi_terms))
             logger.info("building translation operator: done")
             return result
 
