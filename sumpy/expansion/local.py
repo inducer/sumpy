@@ -30,6 +30,9 @@ from sumpy.expansion import (
     HelmholtzConformingVolumeTaylorExpansion,
     BiharmonicConformingVolumeTaylorExpansion)
 
+from sumpy.tools import (matvec_toeplitz_upper_triangular,
+    fft_toeplitz_upper_triangular)
+
 
 class LocalExpansionBase(ExpansionBase):
     pass
@@ -141,9 +144,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             for coeff, mi in zip(
                     evaluated_coeffs, self.get_full_coefficient_identifiers()))
 
-
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale):
+            dvec, tgt_rscale, use_fft=False):
         logger.info("building translation operator: %s(%d) -> %s(%d): start"
                 % (type(src_expansion).__name__,
                     src_expansion.order,
@@ -186,27 +188,28 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # (tgt order)+(src order) including a corresponding reduction matrix
             # For eg: 2D full Taylor Laplace, this is (n, m),
             # n+m<=2*p, n<=2*p, m<=2*p
-            tgtplusderiv_exp_terms_wrangler = \
+            srcplusderiv_terms_wrangler = \
                 src_expansion.expansion_terms_wrangler.copy(
                         order=self.order + src_expansion.order, max_mi=tuple(max_mi))
-            tgtplusderiv_full_coeff_ids = \
-                tgtplusderiv_exp_terms_wrangler.get_full_coefficient_identifiers()
-            tgtplusderiv_ident_to_index = dict((ident, i) for i, ident in
-                                enumerate(tgtplusderiv_full_coeff_ids))
+            srcplusderiv_full_coeff_ids = \
+                srcplusderiv_terms_wrangler.get_full_coefficient_identifiers()
+            srcplusderiv_ident_to_index = dict((ident, i) for i, ident in
+                                enumerate(srcplusderiv_full_coeff_ids))
 
             # The vector has the kernel derivatives and depends only on the distance
             # between the two centers
             taker = src_expansion.get_kernel_derivative_taker(dvec)
             vector_stored = []
             # Calculate the kernel derivatives for the compressed set
-            for term in tgtplusderiv_exp_terms_wrangler.get_coefficient_identifiers():
+            for term in \
+                    srcplusderiv_terms_wrangler.get_coefficient_identifiers():
                 kernel_deriv = taker.diff(term)
                 vector_stored.append(kernel_deriv)
             # Calculate the kernel derivatives for the full set
-            vector_full = tgtplusderiv_exp_terms_wrangler.get_full_kernel_derivatives_from_stored(
+            vector_full = \
+                srcplusderiv_terms_wrangler.get_full_kernel_derivatives_from_stored(
                             vector_stored, src_rscale)
 
-            from sumpy.tools import add_mi
             needed_vector_terms = set([])
             # For eg: 2D full Taylor Laplace, we only need kernel derivatives
             # (n1+n2, m1+m2), n1+m1<=p, n2+m2<=p
@@ -217,18 +220,22 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
             vector = [0]*len(toeplitz_matrix_coeffs)
             for i, term in enumerate(toeplitz_matrix_coeffs):
-                if term in tgtplusderiv_ident_to_index:
-                    vector[i] = vector_full[tgtplusderiv_ident_to_index[term]]
+                if term in srcplusderiv_ident_to_index:
+                    vector[i] = vector_full[srcplusderiv_ident_to_index[term]]
 
             # Calculate the first row of the upper triangular Toeplitz matrix
             toeplitz_first_row = [0] * len(toeplitz_matrix_coeffs)
             for coeff, term in zip(
                     src_coeff_exprs,
                     src_expansion.get_coefficient_identifiers()):
-                toeplitz_first_row[toeplitz_matrix_ident_to_index[term]] = coeff * src_rscale**sum(term)
+                toeplitz_first_row[toeplitz_matrix_ident_to_index[term]] = \
+                    coeff * src_rscale**sum(term)
 
             # Do the matvec
-            output = matvec_toeplitz_upper_triangular(toeplitz_first_row, vector)
+            if use_fft:
+                output = fft_toeplitz_upper_triangular(toeplitz_first_row, vector)
+            else:
+                output = matvec_toeplitz_upper_triangular(toeplitz_first_row, vector)
 
             # Filter out the dummy rows and scale them for target
             result = []
