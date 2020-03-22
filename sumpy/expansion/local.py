@@ -203,7 +203,12 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # Calculate the kernel derivatives for the compressed set
             for term in \
                     srcplusderiv_terms_wrangler.get_coefficient_identifiers():
-                kernel_deriv = taker.diff(term) * src_rscale**sum(term)
+                kernel_deriv = src_expansion.get_scaled_multipole(
+                    taker.diff(term),
+                    dvec, src_rscale,
+                    nderivatives=sum(term),
+                    nderivatives_for_scaling=sum(term),
+                )
                 vector_stored.append(kernel_deriv)
             # Calculate the kernel derivatives for the full set
             vector_full = \
