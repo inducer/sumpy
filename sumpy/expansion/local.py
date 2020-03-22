@@ -243,9 +243,10 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
             # Filter out the dummy rows and scale them for target
             result = []
+            rscale_ratio = sym.UnevaluatedExpr(tgt_rscale/src_rscale)
             for term in self.get_coefficient_identifiers():
                 index = toeplitz_matrix_ident_to_index[term]
-                result.append(output[index]*(tgt_rscale/src_rscale)**sum(term))
+                result.append(output[index]*rscale_ratio**sum(term))
 
             logger.info("building translation operator: done")
             return result
