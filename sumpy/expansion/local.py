@@ -203,7 +203,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # Calculate the kernel derivatives for the compressed set
             for term in \
                     srcplusderiv_terms_wrangler.get_coefficient_identifiers():
-                kernel_deriv = taker.diff(term)
+                kernel_deriv = taker.diff(term) * src_rscale**sum(term)
                 vector_stored.append(kernel_deriv)
             # Calculate the kernel derivatives for the full set
             vector_full = \
@@ -228,8 +228,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             for coeff, term in zip(
                     src_coeff_exprs,
                     src_expansion.get_coefficient_identifiers()):
-                toeplitz_first_row[toeplitz_matrix_ident_to_index[term]] = \
-                    coeff * src_rscale**sum(term)
+                toeplitz_first_row[toeplitz_matrix_ident_to_index[term]] = coeff
 
             # Do the matvec
             if use_fft:
@@ -241,7 +240,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             result = []
             for term in self.get_coefficient_identifiers():
                 index = toeplitz_matrix_ident_to_index[term]
-                result.append(output[index]*tgt_rscale**sum(term))
+                result.append(output[index]*(tgt_rscale/src_rscale)**sum(term))
 
             logger.info("building translation operator: done")
             return result
