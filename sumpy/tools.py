@@ -25,6 +25,36 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
+
+=============================================================================
+Copyright (c) 2006-2019 SymPy Development Team
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+  a. Redistributions of source code must retain the above copyright notice,
+     this list of conditions and the following disclaimer.
+  b. Redistributions in binary form must reproduce the above copyright
+     notice, this list of conditions and the following disclaimer in the
+     documentation and/or other materials provided with the distribution.
+  c. Neither the name of SymPy nor the names of its contributors
+     may be used to endorse or promote products derived from this software
+     without specific prior written permission.
+
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+DAMAGE.
 """
 
 import six
@@ -823,12 +853,16 @@ def fft(seq, inverse=False):
             a[i], a[j] = a[j], a[i]
     ang = -2*math.pi/n if inverse else 2*math.pi/n
 
-    w = [(math.cos(ang*i), math.sin(ang*i)) for i in range(n // 2)]
-    for i in range(len(w)):
-        if abs(w[i][0]) == 1.0:
-            w[i] = (int(w[i][0]), 0)
-        if abs(w[i][1]) == 1.0:
-            w[i] = (0, int(w[i][1]))
+    ang = 2*math.pi/n
+    # Rewrite cosines and sines using cosines of angle in the first quadrant
+    # This is to reduce duplicate of floating point numbers with 1 ULP difference
+    # and also make sure quantities like cos(pi/2) - sin(pi/2) produces 0 exactly.
+    w = [(math.cos(ang*i), math.cos(ang*(n/4.0 - i))) for i in range((n + 3)//4)]
+    w[0] = (1, 0)
+    w += [(-math.cos(ang*(n/2 - i)), math.cos(ang*(i - n/4.0))) for
+            i in range((n + 3)//4, n//2)]
+    if inverse:
+        w = [(a[0], -a[1]) for a in w]
 
     h = 2
     while h <= n:
