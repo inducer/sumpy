@@ -859,7 +859,7 @@ def fft(seq, inverse=False):
     w[0] = (1, 0)
     w += [(-math.cos(ang*(n/2 - i)), math.cos(ang*(i - n/4.0))) for
             i in range((n + 3)//4, n//2)]
-    if n%4 == 0:
+    if n % 4 == 0:
         w[n//4] = (0, 1)
     if inverse:
         w = [(a[0], -a[1]) for a in w]

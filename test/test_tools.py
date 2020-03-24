@@ -30,6 +30,7 @@ from sumpy.tools import (fft_toeplitz_upper_triangular,
     matvec_toeplitz_upper_triangular)
 import numpy as np
 
+
 def test_fft():
     k = 5
     v = np.random.rand(k)
