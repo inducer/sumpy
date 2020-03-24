@@ -862,7 +862,7 @@ def fft(seq, inverse=False):
     if n % 4 == 0:
         w[n//4] = (0, 1)
     if inverse:
-        w = [(a[0], -a[1]) for a in w]
+        w = [(x[0], -x[1]) for x in w]
     h = 2
     while h <= n:
         hf, ut = h // 2, n // h
