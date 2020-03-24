@@ -851,8 +851,6 @@ def fft(seq, inverse=False):
         j = _binary_reverse(i, b)
         if i < j:
             a[i], a[j] = a[j], a[i]
-    ang = -2*math.pi/n if inverse else 2*math.pi/n
-
     ang = 2*math.pi/n
     # Rewrite cosines and sines using cosines of angle in the first quadrant
     # This is to reduce duplicate of floating point numbers with 1 ULP difference
@@ -861,9 +859,10 @@ def fft(seq, inverse=False):
     w[0] = (1, 0)
     w += [(-math.cos(ang*(n/2 - i)), math.cos(ang*(i - n/4.0))) for
             i in range((n + 3)//4, n//2)]
+    if n%4 == 0:
+        w[n//4] = (0, 1)
     if inverse:
         w = [(a[0], -a[1]) for a in w]
-
     h = 2
     while h <= n:
         hf, ut = h // 2, n // h
