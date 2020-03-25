@@ -45,6 +45,7 @@ from sumpy.expansion.local import (
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, AxisTargetDerivative,
         DirectionalSourceDerivative, BiharmonicKernel, StokesletKernel)
 from pytools.convergence import PConvergenceVerifier
+import sumpy.symbolic as sym
 
 import logging
 logger = logging.getLogger(__name__)
@@ -345,6 +346,75 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
     assert eoc_rec_pot.order_estimate() > tgt_order - slack
     assert eoc_rec_grad_x.order_estimate() > tgt_order_grad - grad_slack
 
+# {{{ test toeplitz
+
+def _m2l_translate_simple(tgt_expansion, src_expansion, src_coeff_exprs, src_rscale,
+                           dvec, tgt_rscale):
+
+    if not tgt_expansion.use_rscale:
+        src_rscale = 1
+        tgt_rscale = 1
+
+    from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansionBase
+    if not isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
+        return 1
+
+    # We know the general form of the multipole expansion is:
+    #
+    #    coeff0 * diff(kernel, mi0) + coeff1 * diff(kernel, mi1) + ...
+    #
+    # To get the local expansion coefficients, we take derivatives of
+    # the multipole expansion.
+    taker = src_expansion.get_kernel_derivative_taker(dvec)
+
+    from sumpy.tools import add_mi
+
+    result = []
+    for deriv in tgt_expansion.get_coefficient_identifiers():
+        local_result = []
+        for coeff, term in zip(
+                src_coeff_exprs,
+                src_expansion.get_coefficient_identifiers()):
+
+            kernel_deriv = (
+                    src_expansion.get_scaled_multipole(
+                        taker.diff(add_mi(deriv, term)),
+                        dvec, src_rscale,
+                        nderivatives=sum(deriv) + sum(term),
+                        nderivatives_for_scaling=sum(term)))
+
+            local_result.append(
+                    coeff * kernel_deriv * tgt_rscale**sum(deriv))
+        result.append(sym.Add(*local_result))
+    return result
+
+
+def test_m2l_toeplitz(ctx_getter):
+    dim = 3
+    knl = LaplaceKernel(dim)
+    local_expn_class = LaplaceConformingVolumeTaylorLocalExpansion
+    mpole_expn_class = LaplaceConformingVolumeTaylorMultipoleExpansion
+
+    local_expn = local_expn_class(knl, order=5)
+    mpole_expn = mpole_expn_class(knl, order=5)
+
+    dvec = sym.make_sym_vector("d", dim)
+    src_coeff_exprs = list(1 + np.random.randn(len(mpole_expn)))
+    src_rscale = 2.0
+    tgt_rscale = 1.0
+
+    expected_output = _m2l_translate_simple(local_expn, mpole_expn, src_coeff_exprs,
+                                           src_rscale, dvec, tgt_rscale)
+    actual_output = local_expn.translate_from(mpole_expn, src_coeff_exprs,
+                                              src_rscale, dvec, tgt_rscale)
+
+    replace_dict = dict((d, np.random.rand(1)[0]) for d in dvec)
+    for sym_a, sym_b in zip(expected_output, actual_output):
+        num_a = sym_a.xreplace(replace_dict)
+        num_b = sym_b.xreplace(replace_dict)
+        assert abs(num_a - num_b)/abs(num_a) < 1e-13
+
+# }}}
 
 @pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class", [
     (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
