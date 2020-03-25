@@ -170,7 +170,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
             taker = src_expansion.get_kernel_derivative_taker(dvec)
 
-            from sumpy.tools import add_mi
+            from sumpy.tools import add_mi, _fft_uneval_expr
             from pytools import generate_nonnegative_integer_tuples_below as gnitb
 
             max_mi = [0]*self.dim
@@ -243,7 +243,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
             # Filter out the dummy rows and scale them for target
             result = []
-            rscale_ratio = sym.UnevaluatedExpr(tgt_rscale/src_rscale)
+            rscale_ratio = _fft_uneval_expr(tgt_rscale/src_rscale)
             for term in self.get_coefficient_identifiers():
                 index = toeplitz_matrix_ident_to_index[term]
                 result.append(output[index]*rscale_ratio**sum(term))
