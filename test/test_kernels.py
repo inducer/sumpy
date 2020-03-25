@@ -346,6 +346,7 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
     assert eoc_rec_pot.order_estimate() > tgt_order - slack
     assert eoc_rec_grad_x.order_estimate() > tgt_order_grad - grad_slack
 
+
 # {{{ test toeplitz
 
 def _m2l_translate_simple(tgt_expansion, src_expansion, src_coeff_exprs, src_rscale,
@@ -412,7 +413,8 @@ def test_m2l_toeplitz(ctx_getter):
     for sym_a, sym_b in zip(expected_output, actual_output):
         num_a = sym_a.xreplace(replace_dict)
         num_b = sym_b.xreplace(replace_dict)
-        assert abs(num_a - num_b)/abs(num_a) < 1e-13
+        assert abs(num_a - num_b)/abs(num_a) < 1e-10
+
 
 # }}}
 
