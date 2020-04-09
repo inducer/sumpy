@@ -170,8 +170,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
         src_coeff_exprs = list(src_coeff_exprs)
         for i, mi in enumerate(src_expansion.get_coefficient_identifiers()):
-            src_coeff_exprs[i] *= mi_factorial(mi) * \
-                sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(mi)
+            src_coeff_exprs[i] *= sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(mi)
 
         result = [0] * len(self.get_full_coefficient_identifiers())
 
@@ -219,20 +218,14 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                         continue
 
                     contrib = dim_coeffs_to_translate[src_index]
-
                     for idim in range(self.dim):
                         n = tgt_mi[idim]
                         k = src_mi[idim]
                         assert n >= k
-                        from sympy import binomial
-                        contrib *= (binomial(n, k)
-                                * sym.UnevaluatedExpr(dvec[idim]/tgt_rscale)**(n-k))
+                        contrib /= mi_factorial((n-k,))
+                        contrib *= sym.UnevaluatedExpr(dvec[idim]/tgt_rscale)**(n-k)
 
                     result[i] += contrib
-
-                # Defer division by target factorial until the very end
-                if d == self.dim-1:
-                    result[i] /= mi_factorial(tgt_mi)
 
             dim_coeffs_to_translate = result[:]
             mi_to_index = tgt_mi_to_index
