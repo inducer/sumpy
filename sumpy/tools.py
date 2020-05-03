@@ -140,6 +140,55 @@ class MiDerivativeTaker(object):
                 if (np.array(mi) >= np.array(other_mi)).all()),
             key=lambda other_mi: sum(self.mi_dist(mi, other_mi)))
 
+
+class Laplace3DDerivativeTaker(MiDerivativeTaker):
+
+    def __init__(self, expr, var_list):
+        super(Laplace3DDerivativeTaker, self).__init__(expr, var_list)
+        self.r = sym.sqrt(sum(v**2 for v in var_list))
+
+    def diff(self, mi):
+        # Return zero for negative values. Makes the algorithm readable.
+        if min(mi) < 0:
+            return 0
+        try:
+            expr = self.cache_by_mi[mi]
+        except KeyError:
+            order = sum(mi)
+            if max(mi) == 1:
+                return MiDerivativeTaker.diff(self, mi)
+            d = -1:
+            for i in range(3):
+                if mi[i] >= 2:
+                    d = i
+                    break
+            assert d >= 0
+            expr = 0
+            for i in range(3):
+                mi_minus_one = tuple(mi)
+                mi_minus_one[i] -= 1
+                mi_minus_two = tuple(mi)
+                mi_minus_two[i] -= 2
+                if i == d:
+                    expr -= (2*mi[i]-1)*var_list[i]*self.diff(mi_minus_one)
+                    expr -= (mi[i]-1)**2*self.diff(mi_minus_two)
+                else:
+                    expr -= (2*mi[i])*var_list[i]*self.diff(mi_minus_one)
+                    expr -= mi[i]*(mi[i]-1)*self.diff(mi_minus_two)
+            expr /= self.r**2
+            expr = sym.UnevaluatedExpr(expr)
+            self.cache_by_mi[mi] = expr
+            return expr
+
+
+class MiDerivativeTakerWrapper(object):
+    def __init__(self, taker, initial_mi):
+        self.taker = taker
+        self.initial_mi = initial_mi
+
+    def diff(self, mi):
+        return self.taker.diff(add_mi(mi, self.initial_mi))
+
 # }}}
 
 
