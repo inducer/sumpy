@@ -142,10 +142,10 @@ class MiDerivativeTaker(object):
             key=lambda other_mi: sum(self.mi_dist(mi, other_mi)))
 
 
-class Laplace3DDerivativeTaker(MiDerivativeTaker):
+class LaplaceDerivativeTaker(MiDerivativeTaker):
 
     def __init__(self, expr, var_list):
-        super(Laplace3DDerivativeTaker, self).__init__(expr, var_list)
+        super(LaplaceDerivativeTaker, self).__init__(expr, var_list)
         self.r = sym.sqrt(sum(v**2 for v in var_list))
 
     def diff(self, mi):
@@ -155,7 +155,7 @@ class Laplace3DDerivativeTaker(MiDerivativeTaker):
         try:
             expr = self.cache_by_mi[mi]
         except KeyError:
-            if max(mi) == 1:
+            if max(mi) == 1 or len(self.var_list) == 2:
                 return MiDerivativeTaker.diff(self, mi)
             d = -1
             for i in range(3):
@@ -170,10 +170,12 @@ class Laplace3DDerivativeTaker(MiDerivativeTaker):
                 mi_minus_two = list(mi)
                 mi_minus_two[i] -= 2
                 if i == d:
-                    expr -= (2*mi[i]-1)*self.var_list[i]*self.diff(tuple(mi_minus_one))
+                    expr -= (2*mi[i]-1)*self.var_list[i]*self.diff(
+                                tuple(mi_minus_one))
                     expr -= (mi[i]-1)**2*self.diff(tuple(mi_minus_two))
                 else:
-                    expr -= (2*mi[i])*self.var_list[i]*self.diff(tuple(mi_minus_one))
+                    expr -= (2*mi[i])*self.var_list[i]*self.diff(
+                                tuple(mi_minus_one))
                     expr -= mi[i]*(mi[i]-1)*self.diff(tuple(mi_minus_two))
             expr /= self.r**2
             self.cache_by_mi[mi] = expr

@@ -82,11 +82,11 @@ if USE_SYMENGINE:
     import symengine as sym
     from pymbolic.interop.symengine import (
         PymbolicToSymEngineMapper as PymbolicToSympyMapper,
-        SymEngineToPymbolicMapper as SympyToPymbolicMapper, make_cse)
+        SymEngineToPymbolicMapper as SympyToPymbolicMapper)
 else:
     import sympy as sym
     from pymbolic.interop.sympy import (
-        PymbolicToSympyMapper, SympyToPymbolicMapper, make_cse)
+        PymbolicToSympyMapper, SympyToPymbolicMapper)
 
 for _apifunc in SYMBOLIC_API:
     globals()[_apifunc] = getattr(sym, _apifunc)

@@ -57,6 +57,7 @@ class ExpansionBase(object):
     .. automethod:: translate_from
     .. automethod:: __eq__
     .. automethod:: __ne__
+    .. automethod:: get_kernel_derivative_taker
     """
 
     def __init__(self, kernel, order, use_rscale=None):
@@ -154,6 +155,13 @@ class ExpansionBase(object):
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+    def get_kernel_derivative_taker(self, dvec):
+        """Return a MiDerivativeTaker instance that supports taking
+        derivatives of the kernel with respect to dvec
+        """
+        from sumpy.tools import MiDerivativeTaker
+        return MiDerivativeTaker(self.kernel.get_expression(dvec), dvec)
 
 # }}}
 

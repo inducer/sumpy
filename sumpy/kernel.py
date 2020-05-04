@@ -127,7 +127,6 @@ class Kernel(object):
     .. automethod:: adjust_for_kernel_scaling
     .. automethod:: postprocess_at_source
     .. automethod:: postprocess_at_target
-    .. automethod:: get_derivative_taker
     .. automethod:: get_global_scaling_const
     .. automethod:: get_args
     .. automethod:: get_source_args
@@ -356,13 +355,6 @@ class Kernel(object):
         """
         return []
 
-    def get_derivative_taker(self, dvec):
-        """Return a MiDerivativeTaker instance that supports taking the
-        derivatives of this kernel
-        """
-        from sumpy.tools import MiDerivativeTaker
-        return MiDerivativeTaker(self.get_expression(dvec), dvec)
-
 # }}}
 
 
@@ -496,13 +488,6 @@ class LaplaceKernel(ExpressionKernel):
 
     def __repr__(self):
         return "LapKnl%dD" % self.dim
-
-    def get_derivative_taker(self, dvec):
-        from sumpy.tools import Laplace3DDerivativeTaker, MiDerivativeTaker
-        if self.dim == 3:
-            return Laplace3DDerivativeTaker(self.get_expression(dvec), dvec)
-        else:
-            return MiDerivativeTaker(self.get_expression(dvec), dvec)
 
     mapper_method = "map_laplace_kernel"
 

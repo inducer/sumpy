@@ -104,7 +104,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         if knl is None:
             knl = self.kernel
 
-        taker = knl.get_derivative_taker(bvec)
+        taker = self.get_kernel_derivative_taker(bvec)
         expr_dict = {(0,)*self.dim: 1}
         expr_dict = knl.get_derivative_transformation_at_target(expr_dict)
         pp_nderivatives = single_valued(sum(mi) for mi in expr_dict.keys())

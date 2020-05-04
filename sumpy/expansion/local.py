@@ -123,7 +123,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         from sumpy.tools import MiDerivativeTakerWrapper
 
         result = []
-        taker = self.kernel.get_derivative_taker(avec)
+        taker = self.get_kernel_derivative_taker(avec)
         for mi in self.get_coefficient_identifiers():
             wrapper = MiDerivativeTakerWrapper(taker, mi)
             mi_expr = self.kernel.postprocess_at_source(wrapper, avec)
@@ -175,7 +175,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # This code speeds up derivative taking by caching all kernel
             # derivatives.
 
-            taker = src_expansion.kernel.get_derivative_taker(dvec)
+            taker = src_expansion.get_kernel_derivative_taker(dvec)
 
             from sumpy.tools import add_mi, _fft_uneval_expr
             from pytools import generate_nonnegative_integer_tuples_below as gnitb
@@ -205,7 +205,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
             # The vector has the kernel derivatives and depends only on the distance
             # between the two centers
-            taker = src_expansion.kernel.get_derivative_taker(dvec)
+            taker = src_expansion.get_kernel_derivative_taker(dvec)
             vector_stored = []
             # Calculate the kernel derivatives for the compressed set
             for term in \
