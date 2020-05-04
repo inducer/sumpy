@@ -64,6 +64,7 @@ import numpy as np
 import sumpy.symbolic as sym
 import numbers
 import math
+from collections import namedtuple
 
 import pyopencl as cl
 import pyopencl.array  # noqa
@@ -157,7 +158,7 @@ class Laplace3DDerivativeTaker(MiDerivativeTaker):
             order = sum(mi)
             if max(mi) == 1:
                 return MiDerivativeTaker.diff(self, mi)
-            d = -1:
+            d = -1
             for i in range(3):
                 if mi[i] >= 2:
                     d = i
@@ -181,13 +182,8 @@ class Laplace3DDerivativeTaker(MiDerivativeTaker):
             return expr
 
 
-class MiDerivativeTakerWrapper(object):
-    def __init__(self, taker, initial_mi):
-        self.taker = taker
-        self.initial_mi = initial_mi
-
-    def diff(self, mi):
-        return self.taker.diff(add_mi(mi, self.initial_mi))
+MiDerivativeTakerWrapper = namedtuple('MiDerivativeTakerWrapper',
+                                      ['taker', 'initial_mi'])
 
 # }}}
 

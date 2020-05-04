@@ -127,6 +127,7 @@ class Kernel(object):
     .. automethod:: adjust_for_kernel_scaling
     .. automethod:: postprocess_at_source
     .. automethod:: postprocess_at_target
+    .. automethod:: get_derivative_taker
     .. automethod:: get_global_scaling_const
     .. automethod:: get_args
     .. automethod:: get_source_args
@@ -264,6 +265,21 @@ class Kernel(object):
 
         raise NotImplementedError
 
+    def _diff(self, expr, vec, mi):
+        """Take the derivative of an expression or a MiDerivativeTakerWrapper
+        """
+        from sumpy.tools import MiDerivativeTakerWrapper, add_mi
+        if isinstance(expr, MiDerivativeTakerWrapper):
+            taker, init_mi = expr
+            return taker.diff(add_mi(mi, init_mi))
+        else:
+            for i in range(self.dim):
+                if mi[i] == 0:
+                    continue
+                expr = expr.diff(vec[i], mi[i])
+            return expr
+
+
     def postprocess_at_source(self, expr, avec):
         """Transform a kernel evaluation or expansion expression in a place
         where the vector a (something - source) is known. ("something" may be
@@ -273,11 +289,11 @@ class Kernel(object):
         derivatives to the kernel.
         """
         expr_dict = {(0,)*self.dim: 1}
-        expr_dict = self.get_derivative_transformation_at_source(expr_dict, bvec)
+        expr_dict = self.get_derivative_transformation_at_source(expr_dict)
         result = 0
         for mi, coeff in expr_dict.items():
-            result += coeff * expr.diff(mi)
-        return expr
+            result += coeff * self._diff(expr, avec, mi)
+        return result
 
     def postprocess_at_target(self, expr, bvec):
         """Transform a kernel evaluation or expansion expression in a place
@@ -288,11 +304,11 @@ class Kernel(object):
         derivatives to the kernel.
         """
         expr_dict = {(0,)*self.dim: 1}
-        expr_dict = self.get_derivative_transformation_at_target(expr_dict, bvec)
+        expr_dict = self.get_derivative_transformation_at_target(expr_dict)
         result = 0
         for mi, coeff in expr_dict.items():
-            result += coeff * expr.diff(mi)
-        return expr
+            result += coeff * self._diff(expr, bvec, mi)
+        return result
 
     def get_derivative_transformation_at_source(self, expr_dict):
         r"""Get the derivative transformation of the expression at source
@@ -340,6 +356,13 @@ class Kernel(object):
         from point sources.
         """
         return []
+
+    def get_derivative_taker(self, dvec):
+        """Return a MiDerivativeTaker instance that supports taking the
+        derivatives of this kernel
+        """
+        from sumpy.tools import MiDerivativeTaker
+        return MiDerivativeTaker(self.get_expression(dvec), dvec)
 
 # }}}
 
@@ -474,6 +497,13 @@ class LaplaceKernel(ExpressionKernel):
 
     def __repr__(self):
         return "LapKnl%dD" % self.dim
+
+    def get_derivative_taker(self, dvec):
+        from sumpy.tools import Laplace3DDerivativeTaker
+        if self.dim == 3:
+            return Laplace3DDerivativeTaker(self.get_expression(dvec), dvec)
+        else:
+            return MiDerivativeTaker(self.get_expression(dvec), dvec)
 
     mapper_method = "map_laplace_kernel"
 

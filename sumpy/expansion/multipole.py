@@ -66,44 +66,12 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             rscale = 1
 
         if isinstance(kernel, DirectionalSourceDerivative):
-            from sumpy.symbolic import make_sym_vector
-
-            dir_vecs = []
-            tmp_kernel = kernel
-            while isinstance(tmp_kernel, DirectionalSourceDerivative):
-                dir_vecs.append(make_sym_vector(tmp_kernel.dir_vec_name, kernel.dim))
-                tmp_kernel = tmp_kernel.inner_kernel
-
-            if kernel.get_base_kernel() is not tmp_kernel:
-                raise NotImplementedError("Unknown kernel wrapper.")
-
-            nderivs = len(dir_vecs)
-
-            coeff_identifiers = self.get_full_coefficient_identifiers()
             result = [0] * len(coeff_identifiers)
-
             for i, mi in enumerate(coeff_identifiers):
-                # One source derivative is the dot product of the gradient and
-                # directional vector.
-                # For multiple derivatives, gradient of gradients is taken.
-                # For eg: in 3D, 2 source derivatives gives 9 terms and
-                # cartesian_product below enumerates these 9 terms.
-                for deriv_terms in cartesian_product(*[range(kernel.dim)]*nderivs):
-                    prod = 1
-                    derivative_mi = list(mi)
-                    for nderivative, deriv_dim in enumerate(deriv_terms):
-                        prod *= -derivative_mi[deriv_dim]
-                        prod *= dir_vecs[nderivative][deriv_dim]
-                        derivative_mi[deriv_dim] -= 1
-                    if any(v < 0 for v in derivative_mi):
-                        continue
-                    result[i] += mi_power(avec, derivative_mi) * prod
-
-            for i, mi in enumerate(coeff_identifiers):
+                result[i] = self.kernel.postprocess_at_source(mi_power(avec, mi))
                 result[i] /= (mi_factorial(mi) * rscale ** sum(mi))
         else:
             avec = [sym.UnevaluatedExpr(a * rscale**-1) for a in avec]
-
             result = [
                     mi_power(avec, mi) / mi_factorial(mi)
                     for mi in self.get_full_coefficient_identifiers()]
@@ -128,21 +96,20 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             return (rscale**nderivatives_for_scaling * expr)
 
     def evaluate(self, coeffs, bvec, rscale):
+        from sumpy.tools import MiDerivativeTakerWrapper
         if not self.use_rscale:
             rscale = 1
 
-        taker = self.get_kernel_derivative_taker(bvec)
+        taker = self.kernel.get_derivative_taker(bvec)
 
-        result = sym.Add(*tuple(
-                coeff
-                * self.get_scaled_multipole(taker.diff(mi), bvec, rscale, sum(mi))
-                for coeff, mi in zip(coeffs, self.get_coefficient_identifiers())))
+        result = []
+        for coeff, mi in zip(coeffs, self.get_coefficient_identifiers()):
+            mi_expr = self.kernel.postprocess_at_target(
+                MiDerivativeTakerWrapper(taker, mi), bvec)
+            expr = coeff * self.get_scaled_multipole(mi_expr, bvec, rscale, sum(mi))
+            result.append(expr)
 
-        return result
-
-    def get_kernel_derivative_taker(self, bvec):
-        from sumpy.tools import MiDerivativeTaker
-        return MiDerivativeTaker(self.kernel.get_expression(bvec), bvec)
+        return sym.Add(*tuple(result))
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale):
