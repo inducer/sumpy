@@ -30,7 +30,6 @@ from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
     HelmholtzConformingVolumeTaylorExpansion,
     BiharmonicConformingVolumeTaylorExpansion)
-from pytools import cartesian_product
 
 import logging
 logger = logging.getLogger(__name__)
@@ -65,16 +64,18 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         if not self.use_rscale:
             rscale = 1
 
+        coeff_identifiers = self.get_full_coefficient_identifiers()
         if isinstance(kernel, DirectionalSourceDerivative):
             result = [0] * len(coeff_identifiers)
             for i, mi in enumerate(coeff_identifiers):
-                result[i] = self.kernel.postprocess_at_source(mi_power(avec, mi))
+                result[i] = self.kernel.postprocess_at_source(
+                        mi_power(avec, mi), avec)
                 result[i] /= (mi_factorial(mi) * rscale ** sum(mi))
         else:
             avec = [sym.UnevaluatedExpr(a * rscale**-1) for a in avec]
             result = [
                     mi_power(avec, mi) / mi_factorial(mi)
-                    for mi in self.get_full_coefficient_identifiers()]
+                    for mi in coeff_identifiers]
         return (
             self.expansion_terms_wrangler.get_stored_mpole_coefficients_from_full(
                 result, rscale))
@@ -95,21 +96,30 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         else:
             return (rscale**nderivatives_for_scaling * expr)
 
-    def evaluate(self, coeffs, bvec, rscale):
+    def evaluate(self, coeffs, bvec, rscale, knl=None):
         from sumpy.tools import MiDerivativeTakerWrapper
+        from pytools import single_valued
         if not self.use_rscale:
             rscale = 1
+        if knl is None:
+            knl = self.kernel
 
-        taker = self.kernel.get_derivative_taker(bvec)
+        taker = knl.get_derivative_taker(bvec)
+        expr_dict = {(0,)*self.dim: 1}
+        expr_dict = knl.get_derivative_transformation_at_target(expr_dict)
+        pp_nderivatives = single_valued(sum(mi) for mi in expr_dict.keys())
 
         result = []
         for coeff, mi in zip(coeffs, self.get_coefficient_identifiers()):
-            mi_expr = self.kernel.postprocess_at_target(
-                MiDerivativeTakerWrapper(taker, mi), bvec)
-            expr = coeff * self.get_scaled_multipole(mi_expr, bvec, rscale, sum(mi))
+            wrapper = MiDerivativeTakerWrapper(taker, mi)
+            mi_expr = knl.postprocess_at_target(wrapper, bvec)
+            expr = coeff * self.get_scaled_multipole(mi_expr, bvec, rscale,
+                    sum(mi) + pp_nderivatives, sum(mi))
             result.append(expr)
 
-        return sym.Add(*tuple(result))
+        result = sym.Add(*tuple(result))
+        #return knl.postprocess_at_target(result, bvec)
+        return result
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale):
@@ -334,9 +344,11 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
                     avec)
                 for l in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec, rscale):
+    def evaluate(self, coeffs, bvec, rscale, knl=None):
         if not self.use_rscale:
             rscale = 1
+        if knl is None:
+            knl = self.kernel
 
         from sumpy.symbolic import sym_real_norm_2
         hankel_1 = sym.Function("hankel_1")
@@ -346,7 +358,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
         arg_scale = self.get_bessel_arg_scaling()
 
         return sum(coeffs[self.get_storage_index(l)]
-                   * self.kernel.postprocess_at_target(
+                   * knl.postprocess_at_target(
                        hankel_1(l, arg_scale * bvec_len)
                        * rscale ** abs(l)
                        * sym.exp(sym.I * l * target_angle_rel_center), bvec)

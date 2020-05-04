@@ -155,7 +155,6 @@ class Laplace3DDerivativeTaker(MiDerivativeTaker):
         try:
             expr = self.cache_by_mi[mi]
         except KeyError:
-            order = sum(mi)
             if max(mi) == 1:
                 return MiDerivativeTaker.diff(self, mi)
             d = -1
@@ -166,20 +165,19 @@ class Laplace3DDerivativeTaker(MiDerivativeTaker):
             assert d >= 0
             expr = 0
             for i in range(3):
-                mi_minus_one = tuple(mi)
+                mi_minus_one = list(mi)
                 mi_minus_one[i] -= 1
-                mi_minus_two = tuple(mi)
+                mi_minus_two = list(mi)
                 mi_minus_two[i] -= 2
                 if i == d:
-                    expr -= (2*mi[i]-1)*var_list[i]*self.diff(mi_minus_one)
-                    expr -= (mi[i]-1)**2*self.diff(mi_minus_two)
+                    expr -= (2*mi[i]-1)*self.var_list[i]*self.diff(tuple(mi_minus_one))
+                    expr -= (mi[i]-1)**2*self.diff(tuple(mi_minus_two))
                 else:
-                    expr -= (2*mi[i])*var_list[i]*self.diff(mi_minus_one)
-                    expr -= mi[i]*(mi[i]-1)*self.diff(mi_minus_two)
+                    expr -= (2*mi[i])*self.var_list[i]*self.diff(tuple(mi_minus_one))
+                    expr -= mi[i]*(mi[i]-1)*self.diff(tuple(mi_minus_two))
             expr /= self.r**2
-            expr = sym.UnevaluatedExpr(expr)
             self.cache_by_mi[mi] = expr
-            return expr
+        return expr
 
 
 MiDerivativeTakerWrapper = namedtuple('MiDerivativeTakerWrapper',

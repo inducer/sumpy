@@ -279,7 +279,6 @@ class Kernel(object):
                 expr = expr.diff(vec[i], mi[i])
             return expr
 
-
     def postprocess_at_source(self, expr, avec):
         """Transform a kernel evaluation or expansion expression in a place
         where the vector a (something - source) is known. ("something" may be
@@ -499,7 +498,7 @@ class LaplaceKernel(ExpressionKernel):
         return "LapKnl%dD" % self.dim
 
     def get_derivative_taker(self, dvec):
-        from sumpy.tools import Laplace3DDerivativeTaker
+        from sumpy.tools import Laplace3DDerivativeTaker, MiDerivativeTaker
         if self.dim == 3:
             return Laplace3DDerivativeTaker(self.get_expression(dvec), dvec)
         else:
@@ -971,9 +970,9 @@ class DirectionalTargetDerivative(DirectionalDerivative):
         # bvec = tgt - center
         result = defaultdict(lambda: 0)
         for mi, coeff in expr_dict.items():
-            for axis in range(dim):
+            for axis in range(self.dim):
                 new_mi = list(mi)
-                new_mi[self.axis] += 1
+                new_mi[axis] += 1
                 result[tuple(new_mi)] += coeff * dir_vec[axis]
         return result
 
@@ -1016,9 +1015,9 @@ class DirectionalSourceDerivative(DirectionalDerivative):
         # avec = center-src -> minus sign from chain rule
         result = defaultdict(lambda: 0)
         for mi, coeff in expr_dict.items():
-            for axis in range(dim):
+            for axis in range(self.dim):
                 new_mi = list(mi)
-                new_mi[self.axis] += 1
+                new_mi[axis] += 1
                 result[tuple(new_mi)] += -coeff * dir_vec[axis]
         return result
 

@@ -102,7 +102,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
                     .subs("tau", 0)
                     for i in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec, rscale):
+    def evaluate(self, coeffs, bvec, rscale, knl=None):
         # no point in heeding rscale here--just ignore it
         from pytools import factorial
         return sym.Add(*(
@@ -132,22 +132,24 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         return result
 
-    def evaluate(self, coeffs, bvec, rscale):
+    def evaluate(self, coeffs, bvec, rscale, knl=None):
         evaluated_coeffs = (
             self.expansion_terms_wrangler.get_full_kernel_derivatives_from_stored(
                 coeffs, rscale))
 
-        bvec = [b*rscale**-1 for b in bvec]
+        bvec_scaled = [b*rscale**-1 for b in bvec]
         from sumpy.tools import mi_power, mi_factorial
 
         result = sum(
             coeff
-            * mi_power(bvec, mi, evaluate=False)
+            * mi_power(bvec_scaled, mi, evaluate=False)
             / mi_factorial(mi)
             for coeff, mi in zip(
                     evaluated_coeffs, self.get_full_coefficient_identifiers()))
 
-        return self.kernel.postprocess_at_target(result, bvec)
+        if knl is None:
+            knl = self.kernel
+        return knl.postprocess_at_target(result, bvec)
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, use_fft=False):
@@ -404,9 +406,11 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                     * sym.exp(sym.I * l * source_angle_rel_center), avec)
                     for l in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec, rscale):
+    def evaluate(self, coeffs, bvec, rscale, knl=None):
         if not self.use_rscale:
             rscale = 1
+        if knl is None:
+            knl = self.kernel
 
         from sumpy.symbolic import sym_real_norm_2
         bessel_j = sym.Function("bessel_j")
@@ -416,7 +420,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         arg_scale = self.get_bessel_arg_scaling()
 
         return sum(coeffs[self.get_storage_index(l)]
-                   * self.kernel.postprocess_at_target(
+                   * knl.postprocess_at_target(
                        bessel_j(l, arg_scale * bvec_len)
                        / rscale ** abs(l)
                        * sym.exp(sym.I * l * -target_angle_rel_center), bvec)

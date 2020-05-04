@@ -91,12 +91,12 @@ class E2PBase(KernelCacheWrapper):
 
         coeff_exprs = [sym.Symbol("coeff%d" % i)
                 for i in range(len(self.expansion.get_coefficient_identifiers()))]
-        value = self.expansion.evaluate(coeff_exprs, bvec, rscale)
 
-        result_names = [
-            sac.assign_unique("result_%d_p" % i, value)
-            for i, knl in enumerate(self.kernels)
-            ]
+        result_names = []
+        for i, knl in enumerate(self.kernels):
+            value = self.expansion.evaluate(coeff_exprs, bvec, rscale, knl=knl)
+            name = sac.assign_unique("result_%d_p" % i, value)
+            result_names.append(name)
 
         sac.run_global_cse()
 
