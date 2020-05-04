@@ -155,28 +155,33 @@ class LaplaceDerivativeTaker(MiDerivativeTaker):
         try:
             expr = self.cache_by_mi[mi]
         except KeyError:
-            if max(mi) == 1 or len(self.var_list) == 2:
+            if max(mi) == 1:
                 return MiDerivativeTaker.diff(self, mi)
             d = -1
-            for i in range(3):
+            dim = len(self.var_list)
+            for i in range(dim):
                 if mi[i] >= 2:
                     d = i
                     break
             assert d >= 0
             expr = 0
-            for i in range(3):
+            for i in range(dim):
                 mi_minus_one = list(mi)
                 mi_minus_one[i] -= 1
                 mi_minus_two = list(mi)
                 mi_minus_two[i] -= 2
+                x = self.var_list[i]
+                n = mi[i]
                 if i == d:
-                    expr -= (2*mi[i]-1)*self.var_list[i]*self.diff(
-                                tuple(mi_minus_one))
-                    expr -= (mi[i]-1)**2*self.diff(tuple(mi_minus_two))
+                    if dim == 3:
+                        expr -= (2*n-1)*x*self.diff(tuple(mi_minus_one))
+                        expr -= (n-1)**2*self.diff(tuple(mi_minus_two))
+                    else:
+                        expr -= 2*x*(n-1)*self.diff(tuple(mi_minus_one))
+                        expr -= (n-1)*(n-2)*self.diff(tuple(mi_minus_two))
                 else:
-                    expr -= (2*mi[i])*self.var_list[i]*self.diff(
-                                tuple(mi_minus_one))
-                    expr -= mi[i]*(mi[i]-1)*self.diff(tuple(mi_minus_two))
+                    expr -= 2*n*x*self.diff(tuple(mi_minus_one))
+                    expr -= n*(n-1)*self.diff(tuple(mi_minus_two))
             expr /= self.r**2
             self.cache_by_mi[mi] = expr
         return expr
