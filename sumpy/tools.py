@@ -155,10 +155,10 @@ class LaplaceDerivativeTaker(MiDerivativeTaker):
         try:
             expr = self.cache_by_mi[mi]
         except KeyError:
+            dim = len(self.var_list)
             if max(mi) == 1:
                 return MiDerivativeTaker.diff(self, mi)
             d = -1
-            dim = len(self.var_list)
             for i in range(dim):
                 if mi[i] >= 2:
                     d = i
@@ -179,6 +179,8 @@ class LaplaceDerivativeTaker(MiDerivativeTaker):
                     else:
                         expr -= 2*x*(n-1)*self.diff(tuple(mi_minus_one))
                         expr -= (n-1)*(n-2)*self.diff(tuple(mi_minus_two))
+                        if n == 2 and sum(mi) == 2:
+                            expr += 1
                 else:
                     expr -= 2*n*x*self.diff(tuple(mi_minus_one))
                     expr -= n*(n-1)*self.diff(tuple(mi_minus_two))
