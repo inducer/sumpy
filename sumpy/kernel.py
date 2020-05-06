@@ -123,8 +123,6 @@ class Kernel(object):
     .. automethod:: prepare_loopy_kernel
     .. automethod:: get_code_transformer
     .. automethod:: get_expression
-    .. attribute:: has_efficient_scale_adjustment
-    .. automethod:: adjust_for_kernel_scaling
     .. automethod:: postprocess_at_source
     .. automethod:: postprocess_at_target
     .. automethod:: get_global_scaling_const
@@ -191,77 +189,6 @@ class Kernel(object):
 
     def get_expression(self, dist_vec):
         r"""Return a :mod:`sympy` expression for the kernel."""
-        raise NotImplementedError
-
-    has_efficient_scale_adjustment = False
-
-    def adjust_for_kernel_scaling(self, expr, rscale, nderivatives):
-        r"""
-        Consider a Taylor multipole expansion:
-
-        .. math::
-
-            f (x - y) = \sum_{i = 0}^{\infty} (\partial_y^i f) (x - y) \big|_{y = c}
-           \frac{(y - c)^i}{i!} .
-
-        Now suppose we would like to use a scaled version :math:`g` of the
-        kernel :math:`f`:
-
-        .. math::
-
-            \begin{eqnarray*}
-              f (x) & = & g (x / \alpha),\\
-              f^{(i)} (x) & = & \frac{1}{\alpha^i} g^{(i)} (x / \alpha) .
-            \end{eqnarray*}
-
-        where :math:`\alpha` is chosen to be on a length scale similar to
-        :math:`x` (for example by choosing :math:`\alpha` proporitional to the
-        size of the box for which the expansion is intended) so that :math:`x /
-        \alpha` is roughly of unit magnitude, to avoid arithmetic issues with
-        small arguments. This yields
-
-        .. math::
-
-            f (x - y) = \sum_{i = 0}^{\infty} (\partial_y^i g)
-            \left( \frac{x - y}{\alpha} \right) \Bigg|_{y = c}
-            \cdot
-            \frac{(y - c)^i}{\alpha^i \cdot i!}.
-
-        Observe that the :math:`(y - c)` term is now scaled to unit magnitude,
-        as is the argument of :math:`g`.
-
-        With :math:`\xi = x / \alpha`, we find
-
-        .. math::
-
-            \begin{eqnarray*}
-              g (\xi) & = & f (\alpha \xi),\\
-              g^{(i)} (\xi) & = & \alpha^i f^{(i)} (\alpha \xi) .
-            \end{eqnarray*}
-
-        Generically for all kernels, :math:`f^{(i)} (\alpha \xi)` is computable
-        by taking a sufficient number of symbolic derivatives of :math:`f` and
-        providing :math:`\alpha \xi = x` as the argument.
-
-        Now, for some kernels, like :math:`f (x) = C \log x`, the powers of
-        :math:`\alpha^i` from the chain rule cancel with the ones from the
-        argument substituted into the kernel derivative:
-
-        .. math::
-
-            g^{(i)} (\xi) = \alpha^i f^{(i)} (\alpha \xi) = C' \cdot \alpha^i \cdot
-            \frac{1}{(\alpha x)^i} \quad (i > 0),
-
-        making them what you might call *scale-invariant*. In this case, one
-        may set :attr:`has_efficient_scale_adjustment`. For these kernels only,
-        :meth:`adjust_for_kernel_scaling` provides a shortcut for scaled kernel
-        derivative computation. Given :math:`f^{(i)}` as *expr*, it directly
-        returns an expression for :math:`g^{(i)}`, where :math:`i` is given
-        as *nderivatives*.
-
-        :arg rscale: The scaling parameter :math:`\alpha` above.
-        """
-
         raise NotImplementedError
 
     def _diff(self, expr, vec, mi):
@@ -466,22 +393,6 @@ class LaplaceKernel(ExpressionKernel):
                 expression=expr,
                 global_scaling_const=scaling,
                 is_complex_valued=False)
-
-    has_efficient_scale_adjustment = True
-
-    def adjust_for_kernel_scaling(self, expr, rscale, nderivatives):
-        if self.dim == 2:
-            if nderivatives == 0:
-                import sumpy.symbolic as sp
-                return (expr + sp.log(rscale))
-            else:
-                return expr
-
-        elif self.dim == 3:
-            return expr / rscale
-
-        else:
-            raise NotImplementedError("unsupported dimensionality")
 
     def __getinitargs__(self):
         return (self.dim,)
@@ -813,14 +724,6 @@ class KernelWrapper(Kernel):
 
     def get_expression(self, scaled_dist_vec):
         return self.inner_kernel.get_expression(scaled_dist_vec)
-
-    @property
-    def has_efficient_scale_adjustment(self):
-        return self.inner_kernel.has_efficient_scale_adjustment
-
-    def adjust_for_kernel_scaling(self, expr, rscale, nderivatives):
-        return self.inner_kernel.adjust_for_kernel_scaling(
-                expr, rscale, nderivatives)
 
     def get_derivative_transformation_at_source(self, expr_dict):
         return self.inner_kernel.get_derivative_transformation_at_source(expr_dict)

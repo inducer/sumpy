@@ -104,11 +104,77 @@ def mi_power(vector, mi, evaluate=True):
 
 class MiDerivativeTaker(object):
 
-    def __init__(self, expr, var_list):
+    def __init__(self, expr, var_list, rscale=1):
+        r"""
+        A class to take scaled derivatives of the symbolic expression
+        expr w.r.t. variables var_list and the scaling parameter rscale.
+
+        Consider a Taylor multipole expansion:
+
+        .. math::
+
+            f (x - y) = \sum_{i = 0}^{\infty} (\partial_y^i f) (x - y) \big|_{y = c}
+           \frac{(y - c)^i}{i!} .
+
+        Now suppose we would like to use a scaled version :math:`g` of the
+        kernel :math:`f`:
+
+        .. math::
+
+            \begin{eqnarray*}
+              f (x) & = & g (x / \alpha),\\
+              f^{(i)} (x) & = & \frac{1}{\alpha^i} g^{(i)} (x / \alpha) .
+            \end{eqnarray*}
+
+        where :math:`\alpha` is chosen to be on a length scale similar to
+        :math:`x` (for example by choosing :math:`\alpha` proporitional to the
+        size of the box for which the expansion is intended) so that :math:`x /
+        \alpha` is roughly of unit magnitude, to avoid arithmetic issues with
+        small arguments. This yields
+
+        .. math::
+
+            f (x - y) = \sum_{i = 0}^{\infty} (\partial_y^i g)
+            \left( \frac{x - y}{\alpha} \right) \Bigg|_{y = c}
+            \cdot
+            \frac{(y - c)^i}{\alpha^i \cdot i!}.
+
+        Observe that the :math:`(y - c)` term is now scaled to unit magnitude,
+        as is the argument of :math:`g`.
+
+        With :math:`\xi = x / \alpha`, we find
+
+        .. math::
+
+            \begin{eqnarray*}
+              g (\xi) & = & f (\alpha \xi),\\
+              g^{(i)} (\xi) & = & \alpha^i f^{(i)} (\alpha \xi) .
+            \end{eqnarray*}
+
+        Generically for all kernels, :math:`f^{(i)} (\alpha \xi)` is computable
+        by taking a sufficient number of symbolic derivatives of :math:`f` and
+        providing :math:`\alpha \xi = x` as the argument.
+
+        Now, for some kernels, like :math:`f (x) = C \log x`, the powers of
+        :math:`\alpha^i` from the chain rule cancel with the ones from the
+        argument substituted into the kernel derivatives:
+
+        .. math::
+
+            g^{(i)} (\xi) = \alpha^i f^{(i)} (\alpha \xi) = C' \cdot \alpha^i \cdot
+            \frac{1}{(\alpha x)^i} \quad (i > 0),
+
+        making them what you might call *scale-invariant*.
+
+        This derivative taker returns :math:`g^{(i)}(\xi) = \alpha^i f^{(i)}`
+        given :math:`f^{(0)}` as *expr* and :math:`\alpha` as *rscale*.
+        """
+
         assert isinstance(expr, sym.Basic)
         self.var_list = var_list
         empty_mi = (0,) * len(var_list)
         self.cache_by_mi = {empty_mi: expr}
+        self.rscale = rscale
 
     def mi_dist(self, a, b):
         return np.array(a, dtype=int) - np.array(b, dtype=int)
@@ -122,7 +188,7 @@ class MiDerivativeTaker(object):
 
             for next_deriv, next_mi in self.get_derivative_taking_sequence(
                     current_mi, mi):
-                expr = expr.diff(next_deriv)
+                expr = expr.diff(next_deriv) * self.rscale
                 self.cache_by_mi[next_mi] = expr
 
         return expr
@@ -144,9 +210,10 @@ class MiDerivativeTaker(object):
 
 class LaplaceDerivativeTaker(MiDerivativeTaker):
 
-    def __init__(self, expr, var_list):
-        super(LaplaceDerivativeTaker, self).__init__(expr, var_list)
+    def __init__(self, expr, var_list, rscale=1):
+        super(LaplaceDerivativeTaker, self).__init__(expr, var_list, rscale)
         self.r = sym.sqrt(sum(v**2 for v in var_list))
+        self.scaled_r = sym.sqrt(sum((v/rscale)**2 for v in var_list))
 
     def diff(self, mi):
         # Return zero for negative values. Makes the algorithm readable.
@@ -174,17 +241,17 @@ class LaplaceDerivativeTaker(MiDerivativeTaker):
                 n = mi[i]
                 if i == d:
                     if dim == 3:
-                        expr -= (2*n-1)*x*self.diff(tuple(mi_minus_one))
+                        expr -= (2*n-1)*(x/self.rscale)*self.diff(tuple(mi_minus_one))
                         expr -= (n-1)**2*self.diff(tuple(mi_minus_two))
                     else:
-                        expr -= 2*x*(n-1)*self.diff(tuple(mi_minus_one))
+                        expr -= 2*(x/self.rscale)*(n-1)*self.diff(tuple(mi_minus_one))
                         expr -= (n-1)*(n-2)*self.diff(tuple(mi_minus_two))
                         if n == 2 and sum(mi) == 2:
                             expr += 1
                 else:
-                    expr -= 2*n*x*self.diff(tuple(mi_minus_one))
+                    expr -= 2*n*(x/self.rscale)*self.diff(tuple(mi_minus_one))
                     expr -= n*(n-1)*self.diff(tuple(mi_minus_two))
-            expr /= self.r**2
+            expr /= self.scaled_r**2
             self.cache_by_mi[mi] = expr
         return expr
 

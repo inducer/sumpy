@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 from six.moves import range, zip
 import sumpy.symbolic as sym
+from pytools import single_valued
 
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
@@ -123,11 +124,22 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         from sumpy.tools import MiDerivativeTakerWrapper
 
         result = []
-        taker = self.get_kernel_derivative_taker(avec)
+        taker = self.get_kernel_derivative_taker(avec, rscale)
+        expr_dict = {(0,)*self.dim: 1}
+        expr_dict = self.kernel.get_derivative_transformation_at_source(expr_dict)
+        pp_nderivatives = single_valued(sum(mi) for mi in expr_dict.keys())
+
         for mi in self.get_coefficient_identifiers():
             wrapper = MiDerivativeTakerWrapper(taker, mi)
             mi_expr = self.kernel.postprocess_at_source(wrapper, avec)
-            expr = mi_expr * rscale ** sum(mi)
+            # By passing `rscale` to the derivative taker we are taking a scaled
+            # version of the derivative which is `expr.diff(mi)*rscale**sum(mi)`
+            # which might be implemented efficiently for kernels like Laplace.
+            # One caveat is that `postprocess_at_source` might take more
+            # derivatives which would multiply the expression by more `rscale`s
+            # than necessary as the derivative taker does not know about
+            # `postprocess_at_source`. This is corrected by dividing by `rscale`.
+            expr = mi_expr / rscale ** pp_nderivatives
             result.append(expr)
 
         return result
@@ -175,8 +187,6 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # This code speeds up derivative taking by caching all kernel
             # derivatives.
 
-            taker = src_expansion.get_kernel_derivative_taker(dvec)
-
             from sumpy.tools import add_mi, _fft_uneval_expr
             from pytools import generate_nonnegative_integer_tuples_below as gnitb
 
@@ -205,17 +215,12 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
             # The vector has the kernel derivatives and depends only on the distance
             # between the two centers
-            taker = src_expansion.get_kernel_derivative_taker(dvec)
+            taker = src_expansion.get_kernel_derivative_taker(dvec, src_rscale)
             vector_stored = []
             # Calculate the kernel derivatives for the compressed set
             for term in \
                     srcplusderiv_terms_wrangler.get_coefficient_identifiers():
-                kernel_deriv = src_expansion.get_scaled_multipole(
-                    taker.diff(term),
-                    dvec, src_rscale,
-                    nderivatives=sum(term),
-                    nderivatives_for_scaling=sum(term),
-                )
+                kernel_deriv = taker.diff(term)
                 vector_stored.append(kernel_deriv)
             # Calculate the kernel derivatives for the full set
             vector_full = \
