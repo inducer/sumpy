@@ -643,6 +643,10 @@ class LaplaceConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
     def __init__(self, kernel, order, use_rscale):
         self.expansion_terms_wrangler_key = (order, kernel.dim)
 
+    def get_kernel_derivative_taker(self, dvec):
+        from sumpy.tools import LaplaceDerivativeTaker
+        return LaplaceDerivativeTaker(self.kernel.get_expression(dvec), dvec)
+
 
 class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
 
