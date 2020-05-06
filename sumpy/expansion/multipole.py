@@ -55,7 +55,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
     Coefficients represent the terms in front of the kernel derivatives.
     """
 
-    def coefficients_from_source(self, avec, bvec, rscale):
+    def coefficients_from_source(self, avec, bvec, rscale, sac):
         from sumpy.kernel import DirectionalSourceDerivative
         kernel = self.kernel
 
@@ -96,7 +96,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         else:
             return (rscale**nderivatives_for_scaling * expr)
 
-    def evaluate(self, coeffs, bvec, rscale, knl=None):
+    def evaluate(self, coeffs, bvec, rscale, sac, knl=None):
         from sumpy.tools import MiDerivativeTakerWrapper
         from pytools import single_valued
         if not self.use_rscale:
@@ -122,7 +122,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         return result
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale):
+            dvec, tgt_rscale, sac):
         if not isinstance(src_expansion, type(self)):
             raise RuntimeError("do not know how to translate %s to "
                     "Taylor multipole expansion"
@@ -324,7 +324,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
     def get_coefficient_identifiers(self):
         return list(range(-self.order, self.order+1))
 
-    def coefficients_from_source(self, avec, bvec, rscale):
+    def coefficients_from_source(self, avec, bvec, rscale, sac):
         if not self.use_rscale:
             rscale = 1
 
@@ -344,7 +344,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
                     avec)
                 for l in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec, rscale, knl=None):
+    def evaluate(self, coeffs, bvec, rscale, sac, knl=None):
         if not self.use_rscale:
             rscale = 1
         if knl is None:

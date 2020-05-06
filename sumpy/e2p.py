@@ -94,7 +94,7 @@ class E2PBase(KernelCacheWrapper):
 
         result_names = []
         for i, knl in enumerate(self.kernels):
-            value = self.expansion.evaluate(coeff_exprs, bvec, rscale, knl=knl)
+            value = self.expansion.evaluate(coeff_exprs, bvec, rscale, sac, knl=knl)
             name = sac.assign_unique("result_%d_p" % i, value)
             result_names.append(name)
 

@@ -407,7 +407,7 @@ def test_m2l_toeplitz(ctx_getter):
     expected_output = _m2l_translate_simple(local_expn, mpole_expn, src_coeff_exprs,
                                            src_rscale, dvec, tgt_rscale)
     actual_output = local_expn.translate_from(mpole_expn, src_coeff_exprs,
-                                              src_rscale, dvec, tgt_rscale)
+                                              src_rscale, dvec, tgt_rscale, sac=None)
 
     replace_dict = dict((d, np.random.rand(1)[0]) for d in dvec)
     for sym_a, sym_b in zip(expected_output, actual_output):

@@ -115,20 +115,25 @@ class ExpansionBase(object):
         """
         raise NotImplementedError
 
-    def coefficients_from_source(self, avec, bvec, rscale):
+    def coefficients_from_source(self, avec, bvec, rscale, sac):
         """Form an expansion from a source point.
 
         :arg avec: vector from source to center.
         :arg bvec: vector from center to target. Not usually necessary,
             except for line-Taylor expansion.
+        :arg sac: A SymbolicAssignmentCollction used for storing
+            temporary expressions.
 
         :returns: a list of :mod:`sympy` expressions representing
             the coefficients of the expansion.
         """
         raise NotImplementedError
 
-    def evaluate(self, coeffs, bvec, rscale):
+    def evaluate(self, coeffs, bvec, rscale, sac):
         """
+        :arg sac: A SymbolicAssignmentCollction used for storing
+            temporary expressions.
+
         :return: a :mod:`sympy` expression corresponding
             to the evaluated expansion with the coefficients
             in *coeffs*.
@@ -137,7 +142,7 @@ class ExpansionBase(object):
         raise NotImplementedError
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale):
+            dvec, tgt_rscale, sac):
         raise NotImplementedError
 
     def update_persistent_hash(self, key_hash, key_builder):

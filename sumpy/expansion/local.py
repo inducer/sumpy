@@ -61,7 +61,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
     def get_coefficient_identifiers(self):
         return list(range(self.order+1))
 
-    def coefficients_from_source(self, avec, bvec, rscale):
+    def coefficients_from_source(self, avec, bvec, rscale, sac):
         # no point in heeding rscale here--just ignore it
         if bvec is None:
             raise RuntimeError("cannot use line-Taylor expansions in a setting "
@@ -102,7 +102,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
                     .subs("tau", 0)
                     for i in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec, rscale, knl=None):
+    def evaluate(self, coeffs, bvec, rscale, sac, knl=None):
         # no point in heeding rscale here--just ignore it
         from pytools import factorial
         return sym.Add(*(
@@ -119,7 +119,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
     Coefficients represent derivative values of the kernel.
     """
 
-    def coefficients_from_source(self, avec, bvec, rscale):
+    def coefficients_from_source(self, avec, bvec, rscale, sac):
         from sumpy.tools import MiDerivativeTakerWrapper
 
         result = []
@@ -132,7 +132,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         return result
 
-    def evaluate(self, coeffs, bvec, rscale, knl=None):
+    def evaluate(self, coeffs, bvec, rscale, sac, knl=None):
         evaluated_coeffs = (
             self.expansion_terms_wrangler.get_full_kernel_derivatives_from_stored(
                 coeffs, rscale))
@@ -152,7 +152,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         return knl.postprocess_at_target(result, bvec)
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale, use_fft=False):
+            dvec, tgt_rscale, sac, use_fft=False):
         logger.info("building translation operator: %s(%d) -> %s(%d): start"
                 % (type(src_expansion).__name__,
                     src_expansion.order,
@@ -326,7 +326,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # the end in the hope of helping rscale magnitude.
             dvec_scaled = [d*src_rscale for d in dvec]
             expr = src_expansion.evaluate(src_coeff_exprs, dvec_scaled,
-                        rscale=src_rscale)
+                        rscale=src_rscale, sac=sac)
             replace_dict = dict((d, d/src_rscale) for d in dvec)
             taker = MiDerivativeTaker(expr, dvec)
             rscale_ratio = sym.UnevaluatedExpr(tgt_rscale/src_rscale)
@@ -388,7 +388,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
     def get_coefficient_identifiers(self):
         return list(range(-self.order, self.order+1))
 
-    def coefficients_from_source(self, avec, bvec, rscale):
+    def coefficients_from_source(self, avec, bvec, rscale, sac):
         if not self.use_rscale:
             rscale = 1
 
@@ -406,7 +406,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                     * sym.exp(sym.I * l * source_angle_rel_center), avec)
                     for l in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec, rscale, knl=None):
+    def evaluate(self, coeffs, bvec, rscale, sac, knl=None):
         if not self.use_rscale:
             rscale = 1
         if knl is None:
@@ -427,7 +427,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                 for l in self.get_coefficient_identifiers())
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale):
+            dvec, tgt_rscale, sac):
         from sumpy.symbolic import sym_real_norm_2
 
         if not self.use_rscale:
