@@ -161,12 +161,13 @@ class ExpansionBase(object):
     def __ne__(self, other):
         return not self.__eq__(other)
 
-    def get_kernel_derivative_taker(self, dvec, rscale=1):
+    def get_kernel_derivative_taker(self, dvec, rscale, sac):
         """Return a MiDerivativeTaker instance that supports taking
         derivatives of the kernel with respect to dvec
         """
         from sumpy.tools import MiDerivativeTaker
-        return MiDerivativeTaker(self.kernel.get_expression(dvec), dvec, rscale)
+        return MiDerivativeTaker(self.kernel.get_expression(dvec), dvec, rscale,
+                sac)
 
 # }}}
 
@@ -648,9 +649,10 @@ class LaplaceConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
     def __init__(self, kernel, order, use_rscale):
         self.expansion_terms_wrangler_key = (order, kernel.dim)
 
-    def get_kernel_derivative_taker(self, dvec, rscale=1):
+    def get_kernel_derivative_taker(self, dvec, rscale, sac):
         from sumpy.tools import LaplaceDerivativeTaker
-        return LaplaceDerivativeTaker(self.kernel.get_expression(dvec), dvec, rscale)
+        return LaplaceDerivativeTaker(self.kernel.get_expression(dvec), dvec,
+                rscale, sac)
 
 
 class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):

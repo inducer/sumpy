@@ -124,7 +124,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         from sumpy.tools import MiDerivativeTakerWrapper
 
         result = []
-        taker = self.get_kernel_derivative_taker(avec, rscale)
+        taker = self.get_kernel_derivative_taker(avec, rscale, sac)
         expr_dict = {(0,)*self.dim: 1}
         expr_dict = self.kernel.get_derivative_transformation_at_source(expr_dict)
         pp_nderivatives = single_valued(sum(mi) for mi in expr_dict.keys())
@@ -215,7 +215,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
             # The vector has the kernel derivatives and depends only on the distance
             # between the two centers
-            taker = src_expansion.get_kernel_derivative_taker(dvec, src_rscale)
+            taker = src_expansion.get_kernel_derivative_taker(dvec, src_rscale, sac)
             vector_stored = []
             # Calculate the kernel derivatives for the compressed set
             for term in \

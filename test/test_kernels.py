@@ -366,7 +366,7 @@ def _m2l_translate_simple(tgt_expansion, src_expansion, src_coeff_exprs, src_rsc
     #
     # To get the local expansion coefficients, we take derivatives of
     # the multipole expansion.
-    taker = src_expansion.get_kernel_derivative_taker(dvec, src_rscale)
+    taker = src_expansion.get_kernel_derivative_taker(dvec, src_rscale, sac=None)
 
     from sumpy.tools import add_mi
 

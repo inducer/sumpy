@@ -25,7 +25,6 @@ THE SOFTWARE.
 from six.moves import range, zip
 import sumpy.symbolic as sym  # noqa
 
-from sumpy.symbolic import vector_xreplace
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
     HelmholtzConformingVolumeTaylorExpansion,
@@ -88,7 +87,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         if knl is None:
             knl = self.kernel
 
-        taker = self.get_kernel_derivative_taker(bvec, rscale)
+        taker = self.get_kernel_derivative_taker(bvec, rscale, sac)
         expr_dict = {(0,)*self.dim: 1}
         expr_dict = knl.get_derivative_transformation_at_target(expr_dict)
         pp_nderivatives = single_valued(sum(mi) for mi in expr_dict.keys())

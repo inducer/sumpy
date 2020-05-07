@@ -104,7 +104,7 @@ def mi_power(vector, mi, evaluate=True):
 
 class MiDerivativeTaker(object):
 
-    def __init__(self, expr, var_list, rscale=1):
+    def __init__(self, expr, var_list, rscale=1, sac=None):
         r"""
         A class to take scaled derivatives of the symbolic expression
         expr w.r.t. variables var_list and the scaling parameter rscale.
@@ -175,6 +175,7 @@ class MiDerivativeTaker(object):
         empty_mi = (0,) * len(var_list)
         self.cache_by_mi = {empty_mi: expr}
         self.rscale = rscale
+        self.sac = sac
 
     def mi_dist(self, a, b):
         return np.array(a, dtype=int) - np.array(b, dtype=int)
@@ -207,13 +208,21 @@ class MiDerivativeTaker(object):
                 if (np.array(mi) >= np.array(other_mi)).all()),
             key=lambda other_mi: sum(self.mi_dist(mi, other_mi)))
 
+    def add_to_sac(self, expr):
+        import sumpy.symbolic as sym
+        if self.sac is not None:
+            return sym.Symbol(self.sac.assign_unique("temp", expr))
+        else:
+            return expr
+
 
 class LaplaceDerivativeTaker(MiDerivativeTaker):
 
-    def __init__(self, expr, var_list, rscale=1):
-        super(LaplaceDerivativeTaker, self).__init__(expr, var_list, rscale)
-        self.r = sym.sqrt(sum(v**2 for v in var_list))
-        self.scaled_r = sym.sqrt(sum((v/rscale)**2 for v in var_list))
+    def __init__(self, expr, var_list, rscale=1, sac=None):
+        super(LaplaceDerivativeTaker, self).__init__(expr, var_list, rscale, sac)
+        self.scaled_var_list = [self.add_to_sac(v/rscale) for v in var_list]
+        self.scaled_r = self.add_to_sac(
+                sym.sqrt(sum(v**2 for v in self.scaled_var_list)))
 
     def diff(self, mi):
         # Return zero for negative values. Makes the algorithm readable.
@@ -235,22 +244,24 @@ class LaplaceDerivativeTaker(MiDerivativeTaker):
             for i in range(dim):
                 mi_minus_one = list(mi)
                 mi_minus_one[i] -= 1
+                mi_minus_one = tuple(mi_minus_one)
                 mi_minus_two = list(mi)
                 mi_minus_two[i] -= 2
-                x = self.var_list[i]
+                mi_minus_two = tuple(mi_minus_two)
+                x = self.scaled_var_list[i]
                 n = mi[i]
                 if i == d:
                     if dim == 3:
-                        expr -= (2*n-1)*(x/self.rscale)*self.diff(tuple(mi_minus_one))
-                        expr -= (n-1)**2*self.diff(tuple(mi_minus_two))
+                        expr -= (2*n - 1) * x * self.diff(mi_minus_one)
+                        expr -= (n - 1)**2 * self.diff(mi_minus_two)
                     else:
-                        expr -= 2*(x/self.rscale)*(n-1)*self.diff(tuple(mi_minus_one))
-                        expr -= (n-1)*(n-2)*self.diff(tuple(mi_minus_two))
+                        expr -= 2 * x * (n - 1) * self.diff(mi_minus_one)
+                        expr -= (n - 1) * (n - 2) * self.diff(mi_minus_two)
                         if n == 2 and sum(mi) == 2:
                             expr += 1
                 else:
-                    expr -= 2*n*(x/self.rscale)*self.diff(tuple(mi_minus_one))
-                    expr -= n*(n-1)*self.diff(tuple(mi_minus_two))
+                    expr -= 2 * n * x * self.diff(mi_minus_one)
+                    expr -= n * (n - 1) * self.diff(mi_minus_two)
             expr /= self.scaled_r**2
             self.cache_by_mi[mi] = expr
         return expr
