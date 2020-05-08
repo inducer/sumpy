@@ -32,7 +32,7 @@ from sumpy.expansion import (
     BiharmonicConformingVolumeTaylorExpansion)
 
 from sumpy.tools import (matvec_toeplitz_upper_triangular,
-    fft_toeplitz_upper_triangular)
+    fft_toeplitz_upper_triangular, add_to_sac)
 
 
 class LocalExpansionBase(ExpansionBase):
@@ -238,14 +238,16 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             vector = [0]*len(toeplitz_matrix_coeffs)
             for i, term in enumerate(toeplitz_matrix_coeffs):
                 if term in srcplusderiv_ident_to_index:
-                    vector[i] = vector_full[srcplusderiv_ident_to_index[term]]
+                    vector[i] = add_to_sac(sac,
+                            vector_full[srcplusderiv_ident_to_index[term]])
 
             # Calculate the first row of the upper triangular Toeplitz matrix
             toeplitz_first_row = [0] * len(toeplitz_matrix_coeffs)
             for coeff, term in zip(
                     src_coeff_exprs,
                     src_expansion.get_coefficient_identifiers()):
-                toeplitz_first_row[toeplitz_matrix_ident_to_index[term]] = coeff
+                toeplitz_first_row[toeplitz_matrix_ident_to_index[term]] = \
+                        add_to_sac(sac, coeff)
 
             # Do the matvec
             if use_fft:
@@ -263,7 +265,9 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             logger.info("building translation operator: done")
             return result
 
-        rscale_ratio = sym.UnevaluatedExpr(tgt_rscale/src_rscale)
+        rscale_ratio = tgt_rscale/src_rscale
+        if sac is not None:
+            rscale_ratio = sym.Symbol(sac.assign_unique("temp"), rscale_ratio)
 
         from sumpy.tools import MiDerivativeTaker
         from math import factorial

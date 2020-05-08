@@ -102,6 +102,14 @@ def mi_power(vector, mi, evaluate=True):
     return result
 
 
+def add_to_sac(sac, expr):
+    import sumpy.symbolic as sym
+    if sac is not None:
+        return sym.Symbol(sac.assign_unique("temp", expr))
+    else:
+        return expr
+
+
 class MiDerivativeTaker(object):
 
     def __init__(self, expr, var_list, rscale=1, sac=None):
@@ -208,20 +216,13 @@ class MiDerivativeTaker(object):
                 if (np.array(mi) >= np.array(other_mi)).all()),
             key=lambda other_mi: sum(self.mi_dist(mi, other_mi)))
 
-    def add_to_sac(self, expr):
-        import sumpy.symbolic as sym
-        if self.sac is not None:
-            return sym.Symbol(self.sac.assign_unique("temp", expr))
-        else:
-            return expr
-
 
 class LaplaceDerivativeTaker(MiDerivativeTaker):
 
     def __init__(self, expr, var_list, rscale=1, sac=None):
         super(LaplaceDerivativeTaker, self).__init__(expr, var_list, rscale, sac)
-        self.scaled_var_list = [self.add_to_sac(v/rscale) for v in var_list]
-        self.scaled_r = self.add_to_sac(
+        self.scaled_var_list = [add_to_sac(self.sac, v/rscale) for v in var_list]
+        self.scaled_r = add_to_sac(self.sac,
                 sym.sqrt(sum(v**2 for v in self.scaled_var_list)))
 
     def diff(self, mi):
@@ -263,7 +264,7 @@ class LaplaceDerivativeTaker(MiDerivativeTaker):
                     expr -= 2 * n * x * self.diff(mi_minus_one)
                     expr -= n * (n - 1) * self.diff(mi_minus_two)
             expr /= self.scaled_r**2
-            self.cache_by_mi[mi] = expr
+            self.cache_by_mi[mi] = add_to_sac(self.sac, expr)
         return expr
 
 
@@ -1034,8 +1035,8 @@ def matvec_toeplitz_upper_triangular(first_row, vector):
     assert len(vector) == n
     output = [0]*n
     for row in range(n):
-        for col in range(row, n):
-            output[row] += first_row[col-row]*vector[col]
+        terms = tuple(first_row[col-row]*vector[col] for col in range(row, n))
+        output[row] = sym.Add(*terms)
     return output
 
 # }}}
