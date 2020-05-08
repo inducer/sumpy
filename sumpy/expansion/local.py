@@ -267,7 +267,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         rscale_ratio = tgt_rscale/src_rscale
         if sac is not None:
-            rscale_ratio = sym.Symbol(sac.assign_unique("temp"), rscale_ratio)
+            rscale_ratio = sym.Symbol(sac.assign_unique("temp", rscale_ratio))
 
         from sumpy.tools import MiDerivativeTaker
         from math import factorial
