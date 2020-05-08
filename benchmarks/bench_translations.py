@@ -83,7 +83,7 @@ class TranslationBenchmarkSuite:
         return sum([counter.rec(insn.expression)+1 for insn in insns])
 
     track_m2l_op_count.unit = "ops"
-    track_m2l_op_count.timeout = 200.0
+    track_m2l_op_count.timeout = 300.0
 
 
 class LaplaceVolumeTaylorTranslation(TranslationBenchmarkSuite):
