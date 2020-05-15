@@ -286,7 +286,8 @@ class RadialDerivativeTaker(MiDerivativeTaker):
         self.cache_by_mi_q = {(empty_mi, 0): expr}
         self.r = sym.sqrt(sum(v**2 for v in var_list))
         rsym = sym.Symbol("_r")
-        self.is_radial = expr.xreplace({self.r**2: rsym**2}).free_symbols == {rsym}
+        r_expr = expr.xreplace({self.r**2: rsym**2})
+        self.is_radial = not any(r_expr.has(v) for v in var_list)
 
     def diff(self, mi, q=0):
         """
