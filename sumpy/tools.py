@@ -184,21 +184,24 @@ class MiDerivativeTaker(object):
         self.cache_by_mi = {empty_mi: expr}
         self.rscale = rscale
         self.sac = sac
+        self.dim = len(self.var_list)
 
     def mi_dist(self, a, b):
         return np.array(a, dtype=int) - np.array(b, dtype=int)
 
     def diff(self, mi):
         try:
-            expr = self.cache_by_mi[mi]
+            return self.cache_by_mi[mi]
         except KeyError:
-            current_mi = self.get_closest_cached_mi(mi)
-            expr = self.cache_by_mi[current_mi]
+            pass
 
-            for next_deriv, next_mi in self.get_derivative_taking_sequence(
-                    current_mi, mi):
-                expr = expr.diff(next_deriv) * self.rscale
-                self.cache_by_mi[next_mi] = expr
+        current_mi = self.get_closest_cached_mi(mi)
+        expr = self.cache_by_mi[current_mi]
+
+        for next_deriv, next_mi in self.get_derivative_taking_sequence(
+                current_mi, mi):
+            expr = expr.diff(next_deriv) * self.rscale
+            self.cache_by_mi[next_mi] = expr
 
         return expr
 
@@ -230,41 +233,106 @@ class LaplaceDerivativeTaker(MiDerivativeTaker):
         if min(mi) < 0:
             return 0
         try:
-            expr = self.cache_by_mi[mi]
+            return self.cache_by_mi[mi]
         except KeyError:
-            dim = len(self.var_list)
-            if max(mi) == 1:
-                return MiDerivativeTaker.diff(self, mi)
-            d = -1
-            for i in range(dim):
-                if mi[i] >= 2:
-                    d = i
-                    break
-            assert d >= 0
-            expr = 0
-            for i in range(dim):
+            pass
+
+        dim = self.dim
+        if max(mi) == 1:
+            return MiDerivativeTaker.diff(self, mi)
+        d = -1
+        for i in range(dim):
+            if mi[i] >= 2:
+                d = i
+                break
+        assert d >= 0
+        expr = 0
+        for i in range(dim):
+            mi_minus_one = list(mi)
+            mi_minus_one[i] -= 1
+            mi_minus_one = tuple(mi_minus_one)
+            mi_minus_two = list(mi)
+            mi_minus_two[i] -= 2
+            mi_minus_two = tuple(mi_minus_two)
+            x = self.scaled_var_list[i]
+            n = mi[i]
+            if i == d:
+                if dim == 3:
+                    expr -= (2*n - 1) * x * self.diff(mi_minus_one)
+                    expr -= (n - 1)**2 * self.diff(mi_minus_two)
+                else:
+                    expr -= 2 * x * (n - 1) * self.diff(mi_minus_one)
+                    expr -= (n - 1) * (n - 2) * self.diff(mi_minus_two)
+                    if n == 2 and sum(mi) == 2:
+                        expr += 1
+            else:
+                expr -= 2 * n * x * self.diff(mi_minus_one)
+                expr -= n * (n - 1) * self.diff(mi_minus_two)
+        expr /= self.scaled_r**2
+        expr = add_to_sac(self.sac, expr)
+        self.cache_by_mi[mi] = expr
+        return expr
+
+
+class RadialDerivativeTaker(MiDerivativeTaker):
+
+    def __init__(self, expr, var_list, rscale=1, sac=None):
+        """
+        Takes the derivatives of a radial function.
+        """
+        import sumpy.symbolic as sym
+        super(RadialDerivativeTaker, self).__init__(expr, var_list, rscale, sac)
+        empty_mi = (0,) * len(var_list)
+        self.cache_by_mi_q = {(empty_mi, 0): expr}
+        self.r = sym.sqrt(sum(v**2 for v in var_list))
+
+    def diff(self, mi, q=0):
+        """
+        See [1] for the algorithm
+
+        [1]: Tausch, J., 2003. The fast multipole method for arbitrary Green's
+             functions. Contemporary Mathematics, 329, pp.307-314.
+        """
+        try:
+            return self.cache_by_mi_q[(mi, q)]
+        except KeyError:
+            pass
+
+        for i in range(self.dim):
+            if mi[i] == 1:
+                mi_minus_one = list(mi)
+                mi_minus_one[i] = 0
+                mi_minus_one = tuple(mi_minus_one)
+                expr = self.var_list[i] * self.diff(mi_minus_one, q=q+1)
+                expr *= self.rscale
+                self.cache_by_mi_q[(mi, q)] = expr
+                return expr
+
+        for i in range(self.dim):
+            if mi[i] >= 2:
                 mi_minus_one = list(mi)
                 mi_minus_one[i] -= 1
                 mi_minus_one = tuple(mi_minus_one)
                 mi_minus_two = list(mi)
                 mi_minus_two[i] -= 2
                 mi_minus_two = tuple(mi_minus_two)
-                x = self.scaled_var_list[i]
-                n = mi[i]
-                if i == d:
-                    if dim == 3:
-                        expr -= (2*n - 1) * x * self.diff(mi_minus_one)
-                        expr -= (n - 1)**2 * self.diff(mi_minus_two)
-                    else:
-                        expr -= 2 * x * (n - 1) * self.diff(mi_minus_one)
-                        expr -= (n - 1) * (n - 2) * self.diff(mi_minus_two)
-                        if n == 2 and sum(mi) == 2:
-                            expr += 1
-                else:
-                    expr -= 2 * n * x * self.diff(mi_minus_one)
-                    expr -= n * (n - 1) * self.diff(mi_minus_two)
-            expr /= self.scaled_r**2
-            self.cache_by_mi[mi] = add_to_sac(self.sac, expr)
+                expr = (mi[i]-1)*self.diff(mi_minus_two, q=q+1) * self.rscale
+                expr += self.var_list[i] * self.diff(mi_minus_one, q=q+1)
+                expr *= self.rscale
+                expr = add_to_sac(self.sac, expr)
+                self.cache_by_mi_q[(mi, q)] = expr
+                return expr
+
+        assert mi == (0,)*self.dim
+        assert q > 0
+
+        prev_expr = self.diff(mi, q=q-1)
+        # Need to get expr.diff(r)/r, but we can only do expr.diff(x)
+        # Use expr.diff(x) = expr.diff(r) * x / r
+        expr = prev_expr.diff(self.var_list[0])/self.var_list[0]
+        # We need to distribute the division above
+        expr = expr.expand(deep=False)
+        self.cache_by_mi_q[(mi, q)] = expr
         return expr
 
 
