@@ -185,6 +185,7 @@ class MiDerivativeTaker(object):
         self.rscale = rscale
         self.sac = sac
         self.dim = len(self.var_list)
+        self.orig_expr = expr
 
     def mi_dist(self, a, b):
         return np.array(a, dtype=int) - np.array(b, dtype=int)
@@ -339,6 +340,34 @@ class RadialDerivativeTaker(MiDerivativeTaker):
         expr = prev_expr.diff(self.var_list[0])/self.var_list[0]
         # We need to distribute the division above
         expr = expr.expand(deep=False)
+        self.cache_by_mi_q[(mi, q)] = expr
+        return expr
+
+
+class HelmholtzDerivativeTaker(RadialDerivativeTaker):
+
+    def diff(self, mi, q=0):
+        import sumpy.symbolic as sym
+        if q < 2 or mi != (0,)*self.dim:
+            return RadialDerivativeTaker.diff(self, mi, q)
+        try:
+            return self.cache_by_mi_q[(mi, q)]
+        except KeyError:
+            pass
+
+        if self.dim == 2:
+            # See https://dlmf.nist.gov/10.6.E6
+            # and https://dlmf.nist.gov/10.6#E1
+            k = self.orig_expr.args[1] / self.r
+            print("k", k)
+            expr = -  2 * (q - 1) * self.diff(mi, q - 1)
+            expr += - k**2 * self.diff(mi, q - 2)
+            expr /= self.r**2
+        else:
+            # See reference [1] in RadialDerivativeTaker.diff
+            k = (self.orig_expr * self.r).args[-1] / sym.I / self.r
+            expr = -(2*q - 1)/self.r**2 * self.diff(mi, q - 1)
+            expr += -k**2 / self.r * self.diff(mi, q - 2)
         self.cache_by_mi_q[(mi, q)] = expr
         return expr
 
