@@ -665,6 +665,11 @@ class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
         helmholtz_k_name = kernel.get_base_kernel().helmholtz_k_name
         self.expansion_terms_wrangler_key = (order, kernel.dim, helmholtz_k_name)
 
+    def get_kernel_derivative_taker(self, dvec, rscale, sac):
+        from sumpy.tools import RadialDerivativeTaker
+        return RadialDerivativeTaker(self.kernel.get_expression(dvec), dvec,
+                rscale, sac)
+
 
 class BiharmonicConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
 
@@ -674,6 +679,11 @@ class BiharmonicConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
     # not user-facing, be strict about having to pass use_rscale
     def __init__(self, kernel, order, use_rscale):
         self.expansion_terms_wrangler_key = (order, kernel.dim)
+
+    def get_kernel_derivative_taker(self, dvec, rscale, sac):
+        from sumpy.tools import RadialDerivativeTaker
+        return RadialDerivativeTaker(self.kernel.get_expression(dvec), dvec,
+                rscale, sac)
 
 # }}}
 
