@@ -285,6 +285,8 @@ class RadialDerivativeTaker(MiDerivativeTaker):
         empty_mi = (0,) * len(var_list)
         self.cache_by_mi_q = {(empty_mi, 0): expr}
         self.r = sym.sqrt(sum(v**2 for v in var_list))
+        rsym = sym.Symbol("_r")
+        self.is_radial = expr.xreplace({self.r**2: rsym**2}).free_symbols == {rsym}
 
     def diff(self, mi, q=0):
         """
@@ -293,6 +295,10 @@ class RadialDerivativeTaker(MiDerivativeTaker):
         [1]: Tausch, J., 2003. The fast multipole method for arbitrary Green's
              functions. Contemporary Mathematics, 329, pp.307-314.
         """
+        if not self.is_radial:
+            assert q == 0
+            return MiDerivativeTaker.diff(self, mi)
+
         try:
             return self.cache_by_mi_q[(mi, q)]
         except KeyError:
