@@ -115,10 +115,10 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
     # {{{ plot tree
 
     if 0:
-        host_tree = tree.get()
-        host_trav = trav.get()
+        host_tree = tree.get(queue)
+        host_trav = trav.get(queue)
 
-        if 1:
+        if 0:
             print("src_box", host_tree.find_box_nr_for_source(403))
             print("tgt_box", host_tree.find_box_nr_for_target(28))
             print(list(host_trav.target_or_target_parent_boxes).index(37))

@@ -666,8 +666,8 @@ class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
         self.expansion_terms_wrangler_key = (order, kernel.dim, helmholtz_k_name)
 
     def get_kernel_derivative_taker(self, dvec, rscale, sac):
-        from sumpy.tools import HelmholtzDerivativeTaker, RadialDerivativeTaker
-        return HelmholtzDerivativeTaker(self.kernel.get_expression(dvec), dvec,
+        from sumpy.tools import HelmholtzYukawaDerivativeTaker
+        return HelmholtzYukawaDerivativeTaker(self.kernel.get_expression(dvec), dvec,
                 rscale, sac)
 
 

@@ -104,10 +104,11 @@ def mi_power(vector, mi, evaluate=True):
 
 def add_to_sac(sac, expr):
     import sumpy.symbolic as sym
-    if sac is not None:
-        return sym.Symbol(sac.assign_unique("temp", expr))
-    else:
+    numeric_types = (numbers.Number, sym.Number, int, float, complex)
+    if sac is None or isinstance(expr, numeric_types):
         return expr
+    else:
+        return sym.Symbol(sac.assign_unique("temp", expr))
 
 
 class MiDerivativeTaker(object):
@@ -344,7 +345,7 @@ class RadialDerivativeTaker(MiDerivativeTaker):
         return expr
 
 
-class HelmholtzDerivativeTaker(RadialDerivativeTaker):
+class HelmholtzYukawaDerivativeTaker(RadialDerivativeTaker):
 
     def diff(self, mi, q=0):
         import sumpy.symbolic as sym
@@ -359,7 +360,6 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
             # See https://dlmf.nist.gov/10.6.E6
             # and https://dlmf.nist.gov/10.6#E1
             k = self.orig_expr.args[1] / self.r
-            print("k", k)
             expr = -  2 * (q - 1) * self.diff(mi, q - 1)
             expr += - k**2 * self.diff(mi, q - 2)
             expr /= self.r**2
@@ -1036,25 +1036,13 @@ def solve_symbolic(A, b):  # noqa: N803
 
 # {{{ FFT
 
-def _fft_uneval_expr(expr):
-    """
-    Creates a CSE node if the expr is not a numeric type
-    """
-    if isinstance(expr, (numbers.Number, sym.Number, int, float, complex)):
-        return expr
-    # UnevaluatedExpr is not implemented in SymEngine, but that's fine
-    # as SymEngine doesn't distribute 2*(a+b) to 2*a + 2*b.
-    # SymPy distributes which destroys the complexity.
-    return sym.UnevaluatedExpr(expr)
-
-
-def _complex_tuple_mul(a, b):
+def _complex_tuple_mul(a, b, sac):
     """
     Multiply the two complex numbers represented as a tuple
     for real and imaginary parts
     """
-    return (_fft_uneval_expr((a[0]*b[0])-(a[1]*b[1])),
-            _fft_uneval_expr((a[0]*b[1])+(a[1]*b[0])))
+    return (add_to_sac(sac, (a[0]*b[0])-(a[1]*b[1])),
+            add_to_sac(sac, (a[0]*b[1])+(a[1]*b[0])))
 
 
 def _binary_reverse(n, bits):
@@ -1064,7 +1052,7 @@ def _binary_reverse(n, bits):
     return int(b[::-1], 2)
 
 
-def fft(seq, inverse=False):
+def fft(seq, inverse=False, sac=None):
     """
     Return the discrete fourier transform of the sequence seq.
     seq should be a python iterable with tuples of length 2
@@ -1103,7 +1091,8 @@ def fft(seq, inverse=False):
         hf, ut = h // 2, n // h
         for i in range(0, n, h):
             for j in range(hf):
-                u, v = a[i + j], _complex_tuple_mul(a[i + j + hf], w[ut * j])
+                u, v = a[i + j], _complex_tuple_mul(a[i + j + hf], w[ut * j],
+                                                    sac=sac)
                 a[i + j] = (u[0] + v[0], u[1] + v[1])
                 a[i + j + hf] = (u[0] - v[0], u[1] - v[1])
         h *= 2
@@ -1114,7 +1103,7 @@ def fft(seq, inverse=False):
     return a
 
 
-def fft_toeplitz_upper_triangular(first_row, x):
+def fft_toeplitz_upper_triangular(first_row, x, sac=None):
     """
     Returns the matvec of the Toeplitz matrix given by
     the first row and the vector x using a Fourier transform
@@ -1127,10 +1116,10 @@ def fft_toeplitz_upper_triangular(first_row, x):
     x = list(reversed(x))
     x += [0]*(n-1)
 
-    v_fft = fft([(a, 0) for a in v])
-    x_fft = fft([(a, 0) for a in x])
-    res_fft = [_complex_tuple_mul(a, b) for a, b in zip(v_fft, x_fft)]
-    res = fft(res_fft, inverse=True)
+    v_fft = fft([(a, 0) for a in v], sac)
+    x_fft = fft([(a, 0) for a in x], sac)
+    res_fft = [_complex_tuple_mul(a, b, sac) for a, b in zip(v_fft, x_fft)]
+    res = fft(res_fft, inverse=True, sac)
     return [a for a, _ in reversed(res[:n])]
 
 

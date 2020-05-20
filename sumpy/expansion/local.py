@@ -187,7 +187,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # This code speeds up derivative taking by caching all kernel
             # derivatives.
 
-            from sumpy.tools import add_mi, _fft_uneval_expr
+            from sumpy.tools import add_mi
             from pytools import generate_nonnegative_integer_tuples_below as gnitb
 
             max_mi = [0]*self.dim
@@ -251,13 +251,14 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
             # Do the matvec
             if use_fft:
-                output = fft_toeplitz_upper_triangular(toeplitz_first_row, vector)
+                output = fft_toeplitz_upper_triangular(toeplitz_first_row, vector,
+                                                       sac=sac)
             else:
                 output = matvec_toeplitz_upper_triangular(toeplitz_first_row, vector)
 
             # Filter out the dummy rows and scale them for target
             result = []
-            rscale_ratio = _fft_uneval_expr(tgt_rscale/src_rscale)
+            rscale_ratio = add_to_sac(sac, tgt_rscale/src_rscale)
             for term in self.get_coefficient_identifiers():
                 index = toeplitz_matrix_ident_to_index[term]
                 result.append(output[index]*rscale_ratio**sum(term))
@@ -266,8 +267,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             return result
 
         rscale_ratio = tgt_rscale/src_rscale
-        if sac is not None:
-            rscale_ratio = sym.Symbol(sac.assign_unique("temp", rscale_ratio))
+        rscale_ratio = add_to_sac(sac, rscale_ratio)
 
         from sumpy.tools import MiDerivativeTaker
         from math import factorial
