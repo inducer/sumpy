@@ -20,7 +20,7 @@
 Python 2.7 POCL:
   script:
   - export PY_EXE=python2.7
-  - export PYOPENCL_TEST=portable
+  - export PYOPENCL_TEST=portable:pthread
   - export EXTRA_INSTALL="pybind11 numpy mako"
   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project.sh
   - ". ./build-and-test-py-project.sh"
@@ -36,7 +36,7 @@ Python 2.7 POCL:
 Python 3 POCL:
   script:
   - export PY_EXE=python3
-  - export PYOPENCL_TEST=portable
+  - export PYOPENCL_TEST=portable:pthread
   - export EXTRA_INSTALL="pybind11 numpy mako"
   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project.sh
   - ". ./build-and-test-py-project.sh"
@@ -106,7 +106,7 @@ Benchmarks:
   - sed 's/python=3/python=3.6/' .test-conda-env-py3.yml > .test-conda-env.yml
   - CONDA_ENVIRONMENT=.test-conda-env.yml
   - PROJECT=sumpy
-  - PYOPENCL_TEST=portable
+  - PYOPENCL_TEST=portable:pthread
   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-benchmark-py-project.sh
   - ". ./build-and-benchmark-py-project.sh"
   tags:
