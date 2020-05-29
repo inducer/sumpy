@@ -71,7 +71,7 @@ Python 3.6 Conda:
   # Disable caching to ensure SymEngine code generation is exercised.
   - export SUMPY_NO_CACHE=1
   - export SUMPY_FORCE_SYMBOLIC_BACKEND=symengine
-  - PYOPENCL_TEST=portable:pthread
+  - export PYOPENCL_TEST=portable:pthread
   - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project-within-miniconda.sh
   - ". ./build-and-test-py-project-within-miniconda.sh"
@@ -88,7 +88,7 @@ Python 3.6 Pocl Titan X:
   # Disable caching to ensure SymEngine code generation is exercised.
   - export SUMPY_NO_CACHE=1
   - export SUMPY_FORCE_SYMBOLIC_BACKEND=symengine
-  - PYOPENCL_TEST=portable:titan
+  - export PYOPENCL_TEST=portable:titan
   - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project-within-miniconda.sh
   - ". ./build-and-test-py-project-within-miniconda.sh"
