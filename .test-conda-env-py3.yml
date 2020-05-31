@@ -8,6 +8,7 @@ dependencies:
 - numpy
 - sympy
 - pocl
+- pocl-cuda
 - islpy
 - pyopencl
 - python=3
