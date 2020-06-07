@@ -27,7 +27,9 @@ import six
 from six.moves import range
 
 import numpy as np
-from pymbolic.mapper import IdentityMapper as IdentityMapperBase
+from loopy.symbolic import IdentityMapper as IdentityMapperBase
+from loopy.symbolic import WalkMapper as WalkMapperBase
+from pymbolic.mapper.substitutor import SubstitutionMapper as SubstitutionMapperBase
 import pymbolic.primitives as prim
 
 import logging
@@ -80,13 +82,15 @@ Derivative Integer Matrix Subs I pi functions""".split()
 
 if USE_SYMENGINE:
     import symengine as sym
-    from pymbolic.interop.symengine import (
+    from pymbolic.interop.symengine import (                    # noqa: F401
         PymbolicToSymEngineMapper as PymbolicToSympyMapper,
-        SymEngineToPymbolicMapper as SympyToPymbolicMapper)
+        SymEngineToPymbolicMapper as SympyToPymbolicMapper,
+        make_cse)
 else:
     import sympy as sym
-    from pymbolic.interop.sympy import (
-        PymbolicToSympyMapper, SympyToPymbolicMapper)
+    from pymbolic.interop.sympy import (                        # noqa: F401
+        PymbolicToSympyMapper, SympyToPymbolicMapper,
+        make_cse)
 
 for _apifunc in SYMBOLIC_API:
     globals()[_apifunc] = getattr(sym, _apifunc)
@@ -245,5 +249,47 @@ class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):
             return sym.Symbol("%s%d" % (expr.aggregate.name, expr.index))
         else:
             self.raise_conversion_error(expr)
+
+
+# {{{ Series
+
+class Series(prim.Expression):
+    def __init__(self, function, limits):
+        self.function = function
+        self.limits = limits
+
+    mapper_method = "map_series"
+
+    def __getinitargs__(self):
+        return self.function, self.limits
+
+
+class IdentityMapper(IdentityMapperBase):
+    def map_series(self, expr):
+        new_limits = []
+        for name, low, high in expr.limits:
+            new_limits.append((name, self.rec(low), self.rec(high)))
+
+        return Series(self.rec(expr.function), new_limits)
+
+
+class WalkMapper(WalkMapperBase):
+    def map_series(self, expr, *args, **kwargs):
+        if not self.visit(expr, *args, **kwargs):
+            return
+
+        for name, low, high in expr.limits:
+            self.rec(low, *args, **kwargs)
+            self.rec(high, *args, **kwargs)
+
+        self.rec(expr.function, *args, **kwargs)
+
+        self.post_visit(expr, *args, **kwargs)
+
+
+class SubstitutionMapper(SubstitutionMapperBase, IdentityMapper):
+    pass
+
+# }}}
 
 # vim: fdm=marker

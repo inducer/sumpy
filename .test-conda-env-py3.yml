@@ -12,12 +12,12 @@ dependencies:
 - islpy
 - pyopencl
 - python=3
-- python-symengine=0.6.0
+- python-symengine=0.6.1
 - pyfmmlib
 
 - pip
 - pip:
     - git+https://github.com/inducer/pytools
     - git+https://gitlab.tiker.net/inducer/boxtree
-    - git+https://github.com/inducer/pymbolic
+    - git+https://gitlab.tiker.net/inducer/pymbolic
     - git+https://github.com/inducer/loopy

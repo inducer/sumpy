@@ -102,7 +102,7 @@ class E2PBase(KernelCacheWrapper):
         sac.run_global_cse()
 
         from sumpy.codegen import to_loopy_insns
-        loopy_insns = to_loopy_insns(
+        loopy_insns, additional_domain = to_loopy_insns(
                 six.iteritems(sac.assignments),
                 vector_names=set(["b"]),
                 pymbolic_expr_maps=[self.expansion.get_code_transformer()],
@@ -110,7 +110,7 @@ class E2PBase(KernelCacheWrapper):
                 complex_dtype=np.complex128  # FIXME
                 )
 
-        return loopy_insns, result_names
+        return loopy_insns, additional_domain, result_names
 
     def get_kernel_scaling_assignment(self):
         from sumpy.symbolic import SympyToPymbolicMapper
@@ -135,13 +135,17 @@ class E2PFromSingleBox(E2PBase):
     def get_kernel(self):
         ncoeffs = len(self.expansion)
 
-        loopy_insns, result_names = self.get_loopy_insns_and_result_names()
+        loopy_insns, additional_domain, result_names = \
+            self.get_loopy_insns_and_result_names()
+
+        from sumpy.tools import get_loopy_domain
+        additional_domain = get_loopy_domain(additional_domain)
 
         loopy_knl = lp.make_kernel(
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
                     "{[itgt,idim]: itgt_start<=itgt<itgt_end and 0<=idim<dim}",
-                    ],
+                ] + additional_domain,
                 self.get_kernel_scaling_assignment()
                 + ["""
                 for itgt_box
@@ -232,7 +236,11 @@ class E2PFromCSR(E2PBase):
     def get_kernel(self):
         ncoeffs = len(self.expansion)
 
-        loopy_insns, result_names = self.get_loopy_insns_and_result_names()
+        loopy_insns, additional_domain, result_names = \
+            self.get_loopy_insns_and_result_names()
+
+        from sumpy.tools import get_loopy_domain
+        additional_domain = get_loopy_domain(additional_domain)
 
         loopy_knl = lp.make_kernel(
                 [
@@ -240,7 +248,7 @@ class E2PFromCSR(E2PBase):
                     "{[itgt]: itgt_start<=itgt<itgt_end}",
                     "{[isrc_box]: isrc_box_start<=isrc_box<isrc_box_end }",
                     "{[idim]: 0<=idim<dim}",
-                    ],
+                ] + additional_domain,
                 self.get_kernel_scaling_assignment()
                 + ["""
                 for itgt_box

@@ -115,12 +115,17 @@ class P2EFromSingleBox(P2EBase):
     def get_kernel(self):
         ncoeffs = len(self.expansion)
 
+        insns, additional_domain = self.get_loopy_instructions()
+
+        from sumpy.tools import get_loopy_domain
+        additional_domain = get_loopy_domain(additional_domain)
+
         from sumpy.tools import gather_loopy_source_arguments
         loopy_knl = lp.make_kernel(
                 [
                     "{[isrc_box]: 0<=isrc_box<nsrc_boxes}",
-                    "{[isrc,idim]: isrc_start<=isrc<isrc_end and 0<=idim<dim}",
-                    ],
+                    "{[isrc,idim]: isrc_start<=isrc<isrc_end and 0<=idim<dim}"
+                ] + additional_domain,
                 ["""
                 for isrc_box
                     <> src_ibox = source_boxes[isrc_box]
@@ -133,7 +138,7 @@ class P2EFromSingleBox(P2EBase):
                         <> a[idim] = center[idim] - sources[idim, isrc] {dup=idim}
 
                         <> strength = strengths[isrc]
-                        """] + self.get_loopy_instructions() + ["""
+                        """] + insns + ["""
                     end
                     """] + ["""
                     tgt_expansions[src_ibox-tgt_base_ibox, {coeffidx}] = \
@@ -206,6 +211,11 @@ class P2EFromCSR(P2EBase):
     def get_kernel(self):
         ncoeffs = len(self.expansion)
 
+        insns, additional_domain = self.get_loopy_instructions()
+
+        from sumpy.tools import get_loopy_domain
+        additional_domain = get_loopy_domain(additional_domain)
+
         from sumpy.tools import gather_loopy_source_arguments
         arguments = (
                 [
@@ -231,7 +241,7 @@ class P2EFromCSR(P2EBase):
                     "{[isrc_box]: isrc_box_start<=isrc_box<isrc_box_stop}",
                     "{[isrc]: isrc_start<=isrc<isrc_end}",
                     "{[idim]: 0<=idim<dim}",
-                    ],
+                ] + additional_domain,
                 ["""
                 for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
@@ -251,7 +261,7 @@ class P2EFromCSR(P2EBase):
                                     {dup=idim}
 
                             <> strength = strengths[isrc]
-                            """] + self.get_loopy_instructions() + ["""
+                            """] + insns + ["""
                         end
                     end
                     """] + ["""

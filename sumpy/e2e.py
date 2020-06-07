@@ -160,13 +160,18 @@ class E2EFromCSR(E2EBase):
         #
         # (same for itgt_box, tgt_ibox)
 
+        insns, additional_domain = self.get_translation_loopy_insns()
+
+        from sumpy.tools import get_loopy_domain
+        additional_domain = get_loopy_domain(additional_domain)
+
         from sumpy.tools import gather_loopy_arguments
         loopy_knl = lp.make_kernel(
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
                     "{[isrc_box]: isrc_start<=isrc_box<isrc_stop}",
                     "{[idim]: 0<=idim<dim}",
-                    ],
+                ] + additional_domain,
                 ["""
                 for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
@@ -190,7 +195,7 @@ class E2EFromCSR(E2EBase):
                             {{dep=read_src_ibox}}
                         """.format(coeffidx=i) for i in range(ncoeff_src)] + [
 
-                        ] + self.get_translation_loopy_insns() + ["""
+                        ] + insns + ["""
                     end
 
                     """] + ["""
@@ -276,11 +281,16 @@ class E2EFromChildren(E2EBase):
         #
         # (same for itgt_box, tgt_ibox)
 
+        insns, additional_domain = self.get_translation_loopy_insns()
+
+        from sumpy.tools import get_loopy_domain
+        additional_domain = get_loopy_domain(additional_domain)
+
         loopy_insns = [
                 insn.copy(
                     predicates=insn.predicates | frozenset(["is_src_box_valid"]),
                     id=lp.UniqueName("compute_coeff"))
-                for insn in self.get_translation_loopy_insns()]
+                for insn in insns]
 
         from sumpy.tools import gather_loopy_arguments
         loopy_knl = lp.make_kernel(
@@ -288,7 +298,7 @@ class E2EFromChildren(E2EBase):
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
                     "{[isrc_box]: 0<=isrc_box<nchildren}",
                     "{[idim]: 0<=idim<dim}",
-                    ],
+                ] + additional_domain,
                 ["""
                 for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
@@ -395,12 +405,17 @@ class E2EFromParent(E2EBase):
         #
         # (same for itgt_box, tgt_ibox)
 
+        insns, additional_domain = self.get_translation_loopy_insns()
+
+        from sumpy.tools import get_loopy_domain
+        additional_domain = get_loopy_domain(additional_domain)
+
         from sumpy.tools import gather_loopy_arguments
         loopy_knl = lp.make_kernel(
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
-                    "{[idim]: 0<=idim<dim}",
-                    ],
+                    "{[idim]: 0<=idim<dim}"
+                ] + additional_domain,
                 ["""
                 for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
@@ -419,7 +434,7 @@ class E2EFromParent(E2EBase):
                         {{id_prefix=read_expn,dep=read_src_ibox}}
                     """.format(i=i) for i in range(ncoeffs)] + [
 
-                    ] + self.get_translation_loopy_insns() + ["""
+                    ] + insns + ["""
 
                     tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] = \
                         tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] + coeff{i} \

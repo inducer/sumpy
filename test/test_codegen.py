@@ -25,6 +25,11 @@ THE SOFTWARE.
 
 import sys
 
+import pyopencl as cl
+from pyopencl.tools import (  # noqa
+        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
+import pytest
+
 import logging
 logger = logging.getLogger(__name__)
 
@@ -105,6 +110,85 @@ def test_line_taylor_coeff_growth():
     assert np.polyfit(np.log(indices), np.log(counts), deg=1)[0] < max_order
 
 
+def test_sym_sum(ctx_getter):
+    from sumpy.symbolic import USE_SYMENGINE
+    if USE_SYMENGINE:
+        pytest.xfail("Symengine does not support symbolic sum yet")
+
+    ctx = ctx_getter()
+    queue = cl.CommandQueue(ctx)
+
+    from sumpy.assignment_collection import SymbolicAssignmentCollection
+    sac = SymbolicAssignmentCollection()
+
+    from sympy.abc import i, j
+    from sympy import Sum
+    sac.add_assignment("tmp", Sum(j, (j, 0, i)))
+
+    import six
+    from sumpy.codegen import to_loopy_insns
+    insn, additional_loop_domain = to_loopy_insns(
+        six.iteritems(sac.assignments),
+        retain_names=["tmp"]
+    )
+
+    from sumpy.tools import get_loopy_domain
+    import loopy as lp
+    knl = lp.make_kernel(
+        ["{[i]: 0<=i<=5}"] + get_loopy_domain(additional_loop_domain),
+        ["for i"]
+        + insn
+        + [lp.Assignment("a[i]", "tmp")]
+        + ["end"],
+        lang_version=(2018, 2)
+    )
+
+    _, result = knl(queue)
+    result = result[0].get()
+
+    import numpy as np
+    ref_sol = np.array([0, 1, 3, 6, 10, 15], dtype=np.int32)
+
+    assert result.shape == (6,)
+    assert np.allclose(result, ref_sol)
+
+
+def test_sym_nested_sum(ctx_getter):
+    from sumpy.symbolic import USE_SYMENGINE
+    if USE_SYMENGINE:
+        pytest.xfail("Symengine does not support symbolic sum yet")
+
+    ctx = ctx_getter()
+    queue = cl.CommandQueue(ctx)
+
+    from sumpy.assignment_collection import SymbolicAssignmentCollection
+    sac = SymbolicAssignmentCollection()
+
+    from sympy.abc import i, j
+    from sympy import Sum
+    sac.add_assignment("tmp", Sum(i*j, (i, 0, 5), (j, 0, 3)))
+
+    import six
+    from sumpy.codegen import to_loopy_insns
+    insn, additional_loop_domain = to_loopy_insns(
+        six.iteritems(sac.assignments),
+        retain_names=["tmp"]
+    )
+
+    from sumpy.tools import get_loopy_domain
+    import loopy as lp
+    knl = lp.make_kernel(
+        get_loopy_domain(additional_loop_domain),
+        insn + [lp.Assignment("a", "tmp")],
+        lang_version=(2018, 2)
+    )
+
+    _, result = knl(queue)
+    result = result[0].get()
+
+    assert result == 90
+
+
 # You can test individual routines by typing
 # $ python test_fmm.py 'test_sumpy_fmm(cl.create_some_context)'
 
@@ -112,7 +196,6 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
     else:
-        from pytest import main
-        main([__file__])
+        pytest.main([__file__])
 
 # vim: fdm=marker

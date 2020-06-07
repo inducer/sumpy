@@ -26,8 +26,8 @@ from six.moves import range, zip
 
 import loopy as lp
 import numpy as np
-from pymbolic.mapper import IdentityMapper, CSECachingMapperMixin
-from sumpy.symbolic import pymbolic_real_norm_2
+from pymbolic.mapper import CSECachingMapperMixin
+from sumpy.symbolic import pymbolic_real_norm_2, IdentityMapper
 from pymbolic.primitives import make_sym_vector
 from pymbolic import var
 
