@@ -255,6 +255,282 @@ class E2EFromCSR(E2EBase):
 
 # }}}
 
+# {{{
+
+class E2EFromCSRTranslationInvariant(E2EFromCSR):
+    """Implements translation from a "compressed sparse row"-like source box
+    list for translation invariant Kernels.
+    """
+    default_name = "e2e_from_csr_translation_invariant"
+
+    def get_translation_loopy_insns(self):
+        from sumpy.symbolic import make_sym_vector
+        dvec = make_sym_vector("d", self.dim)
+
+        src_coeff_exprs = [sym.Symbol("src_coeff%d" % i)
+                for i in range(len(self.src_expansion))]
+        src_rscale = sym.Symbol("src_rscale")
+
+        tgt_rscale = sym.Symbol("tgt_rscale")
+
+        nprecomputed_exprs = len(self.m2l_global_precompute_mis(self.src_expansion))
+
+        precomputed_exprs = [sym.Symbol("precomputed_expr%d" % i)
+                for i in range(nprecomputed_exprs)]
+
+        from sumpy.assignment_collection import SymbolicAssignmentCollection
+        sac = SymbolicAssignmentCollection()
+        tgt_coeff_names = [
+                sac.assign_unique("coeff%d" % i, coeff_i)
+                for i, coeff_i in enumerate(
+                    self.tgt_expansion.translate_from(
+                        self.src_expansion, src_coeff_exprs, src_rscale,
+                        dvec, tgt_rscale, sac,
+                        precomputed_exprs=precomputed_exprs))]
+
+        sac.run_global_cse()
+
+        from sumpy.codegen import to_loopy_insns
+        return to_loopy_insns(
+                six.iteritems(sac.assignments),
+                vector_names=set(["d"]),
+                pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
+                retain_names=tgt_coeff_names,
+                complex_dtype=np.complex128  # FIXME
+                )
+
+    def get_kernel(self):
+        ncoeff_src = len(self.src_expansion)
+        ncoeff_tgt = len(self.tgt_expansion)
+        nprecomputed_exprs = len(self.m2l_global_precompute_mis(self.src_expansion))
+
+        # To clarify terminology:
+        #
+        # isrc_box -> The index in a list of (in this case, source) boxes
+        # src_ibox -> The (global) box number for the (in this case, source) box
+        #
+        # (same for itgt_box, tgt_ibox)
+
+        from sumpy.tools import gather_loopy_arguments
+        loopy_knl = lp.make_kernel(
+                [
+                    "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
+                    "{[isrc_box]: isrc_start<=isrc_box<isrc_stop}",
+                    "{[idim]: 0<=idim<dim}",
+                    ],
+                ["""
+                for itgt_box
+                    <> tgt_ibox = target_boxes[itgt_box]
+
+                    <> tgt_center[idim] = centers[idim, tgt_ibox] \
+
+                    <> isrc_start = src_box_starts[itgt_box]
+                    <> isrc_stop = src_box_starts[itgt_box+1]
+
+                    for isrc_box
+                        <> src_ibox = src_box_lists[isrc_box] \
+                                {id=read_src_ibox}
+
+                        <> src_center[idim] = centers[idim, src_ibox] {dup=idim}
+                        <> d[idim] = tgt_center[idim] - src_center[idim] \
+                            {dup=idim}
+                        <> translation_class = translation_classes_lists[isrc_box]
+                        <> translation_class_idx_start = translation_class * \
+                                nprecomputed_exprs
+                        """] + ["""
+                        <> precomputed_expr{idx} = \
+                            m2l_precomputed_exprs[translation_class_idx_start + {idx}]
+                        """.format(idx=idx) for idx in range(nprecomputed_exprs)
+                        ] + ["""
+                        <> src_coeff{coeffidx} = \
+                            src_expansions[src_ibox - src_base_ibox, {coeffidx}] \
+                            {{dep=read_src_ibox}}
+                        """.format(coeffidx=i) for i in range(ncoeff_src)] + [
+
+                        ] + self.get_translation_loopy_insns() + ["""
+                    end
+
+                    """] + ["""
+                    tgt_expansions[tgt_ibox - tgt_base_ibox, {coeffidx}] = \
+                            simul_reduce(sum, isrc_box, coeff{coeffidx}) \
+                            {{id_prefix=write_expn}}
+                    """.format(coeffidx=i) for i in range(ncoeff_tgt)] + ["""
+                end
+                """],
+                [
+                    lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
+                    lp.ValueArg("src_rscale,tgt_rscale", None),
+                    lp.GlobalArg("src_box_starts, src_box_lists",
+                        None, shape=None, strides=(1,), offset=lp.auto),
+                    lp.ValueArg("aligned_nboxes,tgt_base_ibox,src_base_ibox",
+                        np.int32),
+                    lp.ValueArg("nsrc_level_boxes,ntgt_level_boxes",
+                        np.int32),
+                    lp.GlobalArg("src_expansions", None,
+                        shape=("nsrc_level_boxes", ncoeff_src), offset=lp.auto),
+                    lp.GlobalArg("tgt_expansions", None,
+                        shape=("ntgt_level_boxes", ncoeff_tgt), offset=lp.auto),
+                    lp.GlobalArg("translation_classes_lists",
+                        None, shape=None, strides=(1,), offset=np.int32),
+                    lp.GlobalArg("m2l_precomputed_exprs", None,
+                        shape=(nprecomputed_exprs*ntranslation_classes,), offset=lp.auto),
+                    "..."
+                ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
+                name=self.name,
+                assumptions="ntgt_boxes>=1",
+                silenced_warnings="write_race(write_expn*)",
+                default_offset=lp.auto,
+                fixed_parameters=dict(dim=self.dim,
+                                      nprecomputed_exprs=nprecomputed_exprs),
+                lang_version=MOST_RECENT_LANGUAGE_VERSION
+                )
+
+        for expn in [self.src_expansion, self.tgt_expansion]:
+            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+        loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
+
+        return loopy_knl
+
+
+class E2EFromCSRTranslationClassesPrecompute(E2EFromCSR):
+    """Implements precomputing the translation classes dependent
+    derivatives.
+    """
+    default_name = "e2e_from_csr_translation_classes_precompute"
+    
+    def get_translation_loopy_insns(self):
+        from sumpy.symbolic import make_sym_vector
+        dvec = make_sym_vector("d", self.dim)
+
+        src_coeff_exprs = [sym.Symbol("src_coeff%d" % i)
+                for i in range(len(self.src_expansion))]
+        src_rscale = sym.Symbol("src_rscale")
+
+        tgt_rscale = sym.Symbol("tgt_rscale")
+
+        nprecomputed_exprs = len(self.m2l_global_precompute_exprs(self.src_expansion))
+        
+        precomputed_exprs = [sym.Symbol("precomputed_expr%d" % i)
+                for i in range(nprecomputed_exprs)]
+
+        from sumpy.assignment_collection import SymbolicAssignmentCollection
+        sac = SymbolicAssignmentCollection()
+        tgt_coeff_names = [
+                sac.assign_unique("coeff%d" % i, coeff_i)
+                for i, coeff_i in enumerate(
+                    self.tgt_expansion.translate_from(
+                        self.src_expansion, src_coeff_exprs, src_rscale,
+                        dvec, tgt_rscale, sac,
+                        precomputed_exprs=precomputed_exprs))]
+
+        sac.run_global_cse()
+
+        from sumpy.codegen import to_loopy_insns
+        return to_loopy_insns(
+                six.iteritems(sac.assignments),
+                vector_names=set(["d"]),
+                pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
+                retain_names=tgt_coeff_names,
+                complex_dtype=np.complex128  # FIXME
+                )
+
+    def get_kernel(self):
+        ncoeff_src = len(self.src_expansion)
+        ncoeff_tgt = len(self.tgt_expansion)
+        nprecomputed_exprs = len(self.m2l_global_precompute_mis(self.src_expansion))
+
+        # To clarify terminology:
+        #
+        # isrc_box -> The index in a list of (in this case, source) boxes
+        # src_ibox -> The (global) box number for the (in this case, source) box
+        #
+        # (same for itgt_box, tgt_ibox)
+
+        from sumpy.tools import gather_loopy_arguments
+        loopy_knl = lp.make_kernel(
+                [
+                    "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
+                    "{[isrc_box]: isrc_start<=isrc_box<isrc_stop}",
+                    "{[idim]: 0<=idim<dim}",
+                    ],
+                ["""
+                for itgt_box
+                    <> tgt_ibox = target_boxes[itgt_box]
+
+                    <> tgt_center[idim] = centers[idim, tgt_ibox] \
+
+                    <> isrc_start = src_box_starts[itgt_box]
+                    <> isrc_stop = src_box_starts[itgt_box+1]
+
+                    for isrc_box
+                        <> src_ibox = src_box_lists[isrc_box] \
+                                {id=read_src_ibox}
+
+                        <> src_center[idim] = centers[idim, src_ibox] {dup=idim}
+                        <> d[idim] = tgt_center[idim] - src_center[idim] \
+                            {dup=idim}
+                        <> translation_class = translation_classes_lists[isrc_box]
+                        <> translation_class_idx_start = translation_class * \
+                                nprecomputed_exprs
+                        """] + ["""
+                        <> precomputed_expr{idx} = \
+                            m2l_precomputed_exprs[translation_class_idx_start + {idx}]
+                        """.format(idx=idx) for idx in range(nprecomputed_exprs)
+                        ] + ["""
+                        <> src_coeff{coeffidx} = \
+                            src_expansions[src_ibox - src_base_ibox, {coeffidx}] \
+                            {{dep=read_src_ibox}}
+                        """.format(coeffidx=i) for i in range(ncoeff_src)] + [
+
+                        ] + self.get_translation_loopy_insns() + ["""
+                    end
+
+                    """] + ["""
+                    tgt_expansions[tgt_ibox - tgt_base_ibox, {coeffidx}] = \
+                            simul_reduce(sum, isrc_box, coeff{coeffidx}) \
+                            {{id_prefix=write_expn}}
+                    """.format(coeffidx=i) for i in range(ncoeff_tgt)] + ["""
+                end
+                """],
+                [
+                    lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
+                    lp.ValueArg("src_rscale,tgt_rscale", None),
+                    lp.GlobalArg("src_box_starts, src_box_lists",
+                        None, shape=None, strides=(1,), offset=lp.auto),
+                    lp.ValueArg("aligned_nboxes,tgt_base_ibox,src_base_ibox",
+                        np.int32),
+                    lp.ValueArg("nsrc_level_boxes,ntgt_level_boxes",
+                        np.int32),
+                    lp.GlobalArg("src_expansions", None,
+                        shape=("nsrc_level_boxes", ncoeff_src), offset=lp.auto),
+                    lp.GlobalArg("tgt_expansions", None,
+                        shape=("ntgt_level_boxes", ncoeff_tgt), offset=lp.auto),
+                    lp.GlobalArg("translation_classes_lists",
+                        None, shape=None, strides=(1,), offset=np.int32),
+                    lp.GlobalArg("m2l_precomputed_exprs", None,
+                        shape=(nprecomputed_exprs*ntranslation_classes,), offset=lp.auto),
+                    "..."
+                ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
+                name=self.name,
+                assumptions="ntgt_boxes>=1",
+                silenced_warnings="write_race(write_expn*)",
+                default_offset=lp.auto,
+                fixed_parameters=dict(dim=self.dim,
+                                      nprecomputed_exprs=nprecomputed_exprs),
+                lang_version=MOST_RECENT_LANGUAGE_VERSION
+                )
+
+        for expn in [self.src_expansion, self.tgt_expansion]:
+            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+        loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
+
+        return loopy_knl
+
+# }}}
 
 # {{{ translation from a box's children
 

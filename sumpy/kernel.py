@@ -356,6 +356,8 @@ class ExpressionKernel(Kernel):
                 key_builder.rec(key_hash, value)
 
     mapper_method = "map_expression_kernel"
+    # TODO: Allow kernels that are not translation invariant
+    is_translation_invariant = True
 
 
 one_kernel_2d = ExpressionKernel(
@@ -401,6 +403,7 @@ class LaplaceKernel(ExpressionKernel):
         return "LapKnl%dD" % self.dim
 
     mapper_method = "map_laplace_kernel"
+    is_translation_invariant = True
 
 
 class BiharmonicKernel(ExpressionKernel):
@@ -437,6 +440,7 @@ class BiharmonicKernel(ExpressionKernel):
         return "BiharmKnl%dD" % self.dim
 
     mapper_method = "map_biharmonic_kernel"
+    is_translation_invariant = True
 
 
 class HelmholtzKernel(ExpressionKernel):
@@ -507,6 +511,7 @@ class HelmholtzKernel(ExpressionKernel):
                     )]
 
     mapper_method = "map_helmholtz_kernel"
+    is_translation_invariant = True
 
 
 class YukawaKernel(ExpressionKernel):
@@ -565,6 +570,7 @@ class YukawaKernel(ExpressionKernel):
                     )]
 
     mapper_method = "map_yukawa_kernel"
+    is_translation_invariant = True
 
 
 class StokesletKernel(ExpressionKernel):
@@ -632,6 +638,7 @@ class StokesletKernel(ExpressionKernel):
                     )]
 
     mapper_method = "map_stokeslet_kernel"
+    is_translation_invariant = True
 
 
 class StressletKernel(ExpressionKernel):

@@ -1052,6 +1052,16 @@ def _binary_reverse(n, bits):
     return int(b[::-1], 2)
 
 
+def _padded_fft_size(n):
+    if n < 2:
+        return n
+    b = n.bit_length() - 1
+    if n & (n - 1):  # not a power of 2
+        b += 1
+        n = 2**b
+    return n
+
+
 def fft(seq, inverse=False, sac=None):
     """
     Return the discrete fourier transform of the sequence seq.
@@ -1064,10 +1074,8 @@ def fft(seq, inverse=False, sac=None):
     if n < 2:
         return a
 
+    n = _padded_fft_size(n)
     b = n.bit_length() - 1
-    if n & (n - 1):  # not a power of 2
-        b += 1
-        n = 2**b
 
     a += [(0, 0)]*(n - len(a))
     for i in range(1, n):
@@ -1119,8 +1127,12 @@ def fft_toeplitz_upper_triangular(first_row, x, sac=None):
     v_fft = fft([(a, 0) for a in v], sac)
     x_fft = fft([(a, 0) for a in x], sac)
     res_fft = [_complex_tuple_mul(a, b, sac) for a, b in zip(v_fft, x_fft)]
-    res = fft(res_fft, inverse=True, sac)
+    res = fft(res_fft, inverse=True, sac=sac)
     return [a for a, _ in reversed(res[:n])]
+
+
+def fft_toeplitz_upper_triangular_lwork(n):
+    return _padded_fft_size(2*n - 1)
 
 
 def matvec_toeplitz_upper_triangular(first_row, vector):
