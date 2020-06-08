@@ -162,8 +162,6 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             knl = self.kernel
         return knl.postprocess_at_target(result, bvec)
 
-
-    @memoize_method
     def m2l_global_precompute_mis(self, src_expansion):
         from pytools import generate_nonnegative_integer_tuples_below as gnitb
 
@@ -177,7 +175,6 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         toeplitz_matrix_coeffs = list(gnitb([m + 1 for m in max_mi]))
         return toeplitz_matrix_coeffs, max_mi
 
-    @memoize_method
     def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
             dvec, tgt_rscale, sac, use_fft=False):
         # We know the general form of the multipole expansion is:
@@ -201,7 +198,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         from sumpy.tools import add_mi
 
-        toeplitz_matrix_coeffs, max_mi = self.m2l_global_precompute_mis(self, src_expansion)
+        toeplitz_matrix_coeffs, max_mi = self.m2l_global_precompute_mis(src_expansion)
         toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
                             enumerate(toeplitz_matrix_coeffs))
 

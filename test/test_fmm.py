@@ -170,7 +170,8 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
     for order in order_values:
         out_kernels = [knl]
 
-        from sumpy.fmm import SumpyExpansionWranglerCodeContainer
+        from sumpy.fmm import (SumpyExpansionWranglerCodeContainer,
+            SumpyTranslationClassesData)
         wcc = SumpyExpansionWranglerCodeContainer(
                 ctx,
                 partial(mpole_expn_class, knl),
@@ -178,7 +179,8 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
                 out_kernels)
         wrangler = wcc.get_wrangler(queue, tree, dtype,
                 fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
-                kernel_extra_kwargs=extra_kwargs)
+                kernel_extra_kwargs=extra_kwargs,
+                translation_classes_data=SumpyTranslationClassesData(queue, trav))
 
         from boxtree.fmm import drive_fmm
 
