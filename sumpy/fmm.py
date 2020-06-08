@@ -374,7 +374,7 @@ class SumpyExpansionWrangler(object):
         def order_to_size(order):
             mpole_expn = self.code.multipole_expansion_factory(order)
             local_expn = self.code.local_expansion_factory(order)
-            return len(local_expn.m2l_global_precompute_mis(mpole_expn)[0])
+            return local_expn.m2l_global_precompute_nexpr(mpole_expn)
 
         return self._expansions_level_starts(order_to_size,
                 level_starts=self.m2l_translation_class_level_start_box_nrs())

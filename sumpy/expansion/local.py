@@ -163,8 +163,12 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             knl = self.kernel
         return knl.postprocess_at_target(result, bvec)
 
+    def m2l_global_precompute_nexpr(self, src_expansion):
+        return len(self.m2l_global_precompute_mis(src_expansion)[1])
+
     def m2l_global_precompute_mis(self, src_expansion):
         from pytools import generate_nonnegative_integer_tuples_below as gnitb
+        from sumpy.tools import add_mi
 
         max_mi = [0]*self.dim
         for i in range(self.dim):
@@ -174,7 +178,17 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                               self.get_coefficient_identifiers())
 
         toeplitz_matrix_coeffs = list(gnitb([m + 1 for m in max_mi]))
-        return toeplitz_matrix_coeffs, max_mi
+
+        needed_vector_terms = []
+        # For eg: 2D full Taylor Laplace, we only need kernel derivatives
+        # (n1+n2, m1+m2), n1+m1<=p, n2+m2<=p
+        for tgt_deriv in self.get_coefficient_identifiers():
+            for src_deriv in src_expansion.get_coefficient_identifiers():
+                needed = add_mi(src_deriv, tgt_deriv)
+                if needed not in needed_vector_terms:
+                    needed_vector_terms.append(needed)
+
+        return toeplitz_matrix_coeffs, needed_vector_terms, max_mi
 
     def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
             dvec, tgt_rscale, sac, use_fft=False):
@@ -198,7 +212,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         from sumpy.tools import add_mi
 
-        toeplitz_matrix_coeffs, max_mi = \
+        toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
             self.m2l_global_precompute_mis(src_expansion)
 
         # Create a expansion terms wrangler for derivatives up to order
@@ -227,20 +241,13 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             srcplusderiv_terms_wrangler.get_full_kernel_derivatives_from_stored(
                         vector_stored, src_rscale)
 
-        needed_vector_terms = set([])
-        # For eg: 2D full Taylor Laplace, we only need kernel derivatives
-        # (n1+n2, m1+m2), n1+m1<=p, n2+m2<=p
-        for tgt_deriv in self.get_coefficient_identifiers():
-            for src_deriv in src_expansion.get_coefficient_identifiers():
-                needed = add_mi(src_deriv, tgt_deriv)
-                needed_vector_terms.add(needed)
+        for term in srcplusderiv_full_coeff_ids:
+            assert term in needed_vector_terms
 
-        vector = [0]*len(toeplitz_matrix_coeffs)
-        for i, term in enumerate(toeplitz_matrix_coeffs):
-            if term in srcplusderiv_ident_to_index:
-                vector[i] = add_to_sac(sac,
+        vector = [0]*len(needed_vector_terms)
+        for i, term in enumerate(needed_vector_terms):
+            vector[i] = add_to_sac(sac,
                         vector_full[srcplusderiv_ident_to_index[term]])
-
         return vector
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
@@ -258,7 +265,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansionBase
 
         if isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
-            toeplitz_matrix_coeffs, max_mi = \
+            toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
                 self.m2l_global_precompute_mis(src_expansion)
             toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
                                 enumerate(toeplitz_matrix_coeffs))
@@ -268,6 +275,10 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                         src_rscale, dvec, tgt_rscale, sac, use_fft=use_fft)
             else:
                 derivatives = precomputed_exprs
+
+            derivatives_full = [0]*len(toeplitz_matrix_coeffs)
+            for expr, mi in zip(derivatives, needed_vector_terms):
+                derivatives_full[toeplitz_matrix_ident_to_index[mi]] = expr
 
             # Calculate the first row of the upper triangular Toeplitz matrix
             toeplitz_first_row = [0] * len(toeplitz_matrix_coeffs)
@@ -280,10 +291,10 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # Do the matvec
             if use_fft:
                 output = fft_toeplitz_upper_triangular(toeplitz_first_row,
-                                derivatives, sac=sac)
+                                derivatives_full, sac=sac)
             else:
                 output = matvec_toeplitz_upper_triangular(toeplitz_first_row,
-                                derivatives)
+                                derivatives_full)
 
             # Filter out the dummy rows and scale them for target
             result = []

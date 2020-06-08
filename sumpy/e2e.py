@@ -275,7 +275,7 @@ class E2EFromCSRTranslationInvariant(E2EFromCSR):
         tgt_rscale = sym.Symbol("tgt_rscale")
 
         nprecomputed_exprs = \
-            len(self.tgt_expansion.m2l_global_precompute_mis(self.src_expansion)[0])
+            self.tgt_expansion.m2l_global_precompute_nexpr(self.src_expansion)
 
         precomputed_exprs = [sym.Symbol("precomputed_expr%d" % i)
                 for i in range(nprecomputed_exprs)]
@@ -305,7 +305,7 @@ class E2EFromCSRTranslationInvariant(E2EFromCSR):
         ncoeff_src = len(self.src_expansion)
         ncoeff_tgt = len(self.tgt_expansion)
         nprecomputed_exprs = \
-            len(self.tgt_expansion.m2l_global_precompute_mis(self.src_expansion)[0])
+            self.tgt_expansion.m2l_global_precompute_nexpr(self.src_expansion)
 
         # To clarify terminology:
         #
@@ -439,7 +439,7 @@ class E2EFromCSRTranslationClassesPrecompute(E2EFromCSR):
 
     def get_kernel(self):
         nprecomputed_exprs = \
-            len(self.tgt_expansion.m2l_global_precompute_mis(self.src_expansion)[0])
+            self.tgt_expansion.m2l_global_precompute_nexpr(self.src_expansion)
         from sumpy.tools import gather_loopy_arguments
         loopy_knl = lp.make_kernel(
                 [
@@ -487,6 +487,7 @@ class E2EFromCSRTranslationClassesPrecompute(E2EFromCSR):
         # FIXME
         knl = self.get_kernel()
         knl = lp.split_iname(knl, "itr_class", 16, outer_tag="g.0")
+
         return knl
 
     def __call__(self, queue, **kwargs):
