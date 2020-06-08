@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 from six.moves import range, zip
 import sumpy.symbolic as sym
-from pytools import single_valued, memoize_method
+from pytools import single_valued
 
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
@@ -112,6 +112,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
 
 # }}}
 
+
 # {{{ volume taylor
 
 class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
@@ -194,13 +195,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         if not self.use_rscale:
             src_rscale = 1
-            tgt_rscale = 1
 
         from sumpy.tools import add_mi
 
-        toeplitz_matrix_coeffs, max_mi = self.m2l_global_precompute_mis(src_expansion)
-        toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
-                            enumerate(toeplitz_matrix_coeffs))
+        toeplitz_matrix_coeffs, max_mi = \
+            self.m2l_global_precompute_mis(src_expansion)
 
         # Create a expansion terms wrangler for derivatives up to order
         # (tgt order)+(src order) including a corresponding reduction matrix
@@ -244,7 +243,6 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         return vector
 
-
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac, precomputed_exprs=None, use_fft=False):
         logger.info("building translation operator: %s(%d) -> %s(%d): start"
@@ -266,8 +264,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                                 enumerate(toeplitz_matrix_coeffs))
 
             if precomputed_exprs is None:
-                derivatives = self.m2l_global_precompute_exprs(src_expansion, src_rscale,
-                            dvec, tgt_rscale, sac, use_fft=use_fft)
+                derivatives = self.m2l_global_precompute_exprs(src_expansion,
+                        src_rscale, dvec, tgt_rscale, sac, use_fft=use_fft)
             else:
                 derivatives = precomputed_exprs
 
@@ -281,10 +279,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
             # Do the matvec
             if use_fft:
-                output = fft_toeplitz_upper_triangular(toeplitz_first_row, derivatives,
-                                                       sac=sac)
+                output = fft_toeplitz_upper_triangular(toeplitz_first_row,
+                                derivatives, sac=sac)
             else:
-                output = matvec_toeplitz_upper_triangular(toeplitz_first_row, derivatives)
+                output = matvec_toeplitz_upper_triangular(toeplitz_first_row,
+                                derivatives)
 
             # Filter out the dummy rows and scale them for target
             result = []
