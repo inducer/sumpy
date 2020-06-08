@@ -524,14 +524,30 @@ class YukawaKernel(ExpressionKernel):
         """
         lam = var(yukawa_lambda_name)
 
-        if dim == 2:
-            r = pymbolic_real_norm_2(make_sym_vector("d", dim))
+        # NOTE: The Yukawa kernel is given by [1]
+        #   -1/(2 pi)**(n/2) * (lam/r)**(n/2-1) * K(n/2-1, lam r)
+        # where K is a modified Bessel function of the second kind.
+        #
+        # [1] https://en.wikipedia.org/wiki/Green%27s_function
+        # [2] http://dlmf.nist.gov/10.27#E8
+        # [3] https://dlmf.nist.gov/10.47#E2
+        # [4] https://dlmf.nist.gov/10.49
 
-            # http://dlmf.nist.gov/10.27#E8
+        r = pymbolic_real_norm_2(make_sym_vector("d", dim))
+        if dim == 2:
+            # NOTE: transform K(0, lam r) into a Hankel function using [2]
             expr = var("hankel_1")(0, var("I")*lam*r)
-            scaling_for_K0 = 1/2*var("pi")*var("I")  # noqa: N806
+            scaling_for_K0 = var("pi")/2*var("I")       # noqa: N806
 
             scaling = -1/(2*var("pi")) * scaling_for_K0
+        elif dim == 3:
+            # NOTE: to get the expression, we do the following and simplify
+            # 1. express K(1/2, lam r) as a modified spherical Bessel function
+            #   k(0, lam r) using [3] and use expression for k(0, lam r) from [4]
+            # 2. or use (AS 10.2.17) directly
+            expr = var("exp")(-lam*r) / r
+
+            scaling = -1/(4 * var("pi")**2)
         else:
             raise RuntimeError("unsupported dimensionality")
 
