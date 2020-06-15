@@ -165,11 +165,12 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
     def m2l_global_precompute_nexpr(self, src_expansion, use_fft=False):
         from sumpy.tools import fft_toeplitz_upper_triangular_lwork
-        nexpr = len(self._m2l_global_precompute_mis(src_expansion)[1])
         if use_fft:
-            return fft_toeplitz_upper_triangular_lwork(nexpr)
+            nexpr = len(self._m2l_global_precompute_mis(src_expansion)[0])
+            nexpr = fft_toeplitz_upper_triangular_lwork(nexpr)
         else:
-            return nexpr
+            nexpr = len(self._m2l_global_precompute_mis(src_expansion)[1])
+        return nexpr
 
     def _m2l_global_precompute_mis(self, src_expansion, use_fft=False):
         from pytools import generate_nonnegative_integer_tuples_below as gnitb
@@ -297,21 +298,19 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
     def m2l_postprocess_exprs(self, src_expansion, m2l_result, src_rscale,
             tgt_rscale, sac, use_fft=False):
-        if use_fft:
-            assert len(m2l_result) % 2 == 0
-            n = len(m2l_result)//2
-            print(len(m2l_result), n)
-            as_tuple = []
-            for i in range(n):
-                as_tuple.append((m2l_result[2*i], m2l_result[2*i+1]))
-            m2l_result = fft(as_tuple, inverse=True, sac=sac)
-            m2l_result = [a for a, _ in reversed(m2l_result[:(n+1)//2])]
-            print(len(m2l_result), n)
-
         toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
                 self._m2l_global_precompute_mis(src_expansion)
         toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
                             enumerate(toeplitz_matrix_coeffs))
+
+        if use_fft:
+            assert len(m2l_result) % 2 == 0
+            n = len(toeplitz_matrix_coeffs)
+            as_tuple = []
+            for i in range(0, len(m2l_result), 2):
+                as_tuple.append((m2l_result[i], m2l_result[i+1]))
+            m2l_result = fft(as_tuple, inverse=True, sac=sac)
+            m2l_result = [a for a, _ in reversed(m2l_result[:n])]
 
         # Filter out the dummy rows and scale them for target
         result = []
@@ -350,14 +349,13 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
             if use_fft:
                 assert precomputed_exprs is not None
-                print(len(src_coeff_exprs), len(precomputed_exprs))
                 assert len(src_coeff_exprs) == len(precomputed_exprs)
                 result = []
-                for i in range(len(precomputed_exprs)//2):
-                    re_a = precomputed_exprs[2*i]
-                    im_a = precomputed_exprs[2*i+1]
-                    re_b = src_coeff_exprs[2*i]
-                    im_b = src_coeff_exprs[2*i+1]
+                for i in range(0, len(precomputed_exprs), 2):
+                    re_a = precomputed_exprs[i]
+                    im_a = precomputed_exprs[i+1]
+                    re_b = src_coeff_exprs[i]
+                    im_b = src_coeff_exprs[i+1]
                     result.append(re_a*re_b - im_a*im_b)
                     result.append(re_a*im_b + re_b*im_a)
                 return result

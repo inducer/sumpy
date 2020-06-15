@@ -297,7 +297,7 @@ class E2EFromCSRTranslationInvariant(E2EFromCSR):
                 for i, coeff_i in enumerate(
                     self.tgt_expansion.translate_from(
                         self.src_expansion, src_coeff_exprs, src_rscale,
-                        dvec, tgt_rscale, sac,
+                        dvec, tgt_rscale, sac=sac,
                         precomputed_exprs=precomputed_exprs, use_fft=self.use_fft))]
 
         sac.run_global_cse()
@@ -333,8 +333,8 @@ class E2EFromCSRTranslationInvariant(E2EFromCSR):
 
         if self.use_fft:
             tgt_coeff_post_exprs = self.tgt_expansion.m2l_postprocess_exprs(
-                self.src_expansion,
-                tgt_coeff_exprs, src_rscale, tgt_rscale, sac, use_fft=self.use_fft)
+                self.src_expansion, tgt_coeff_exprs, src_rscale, tgt_rscale,
+                sac=sac, use_fft=self.use_fft)
         else:
             tgt_coeff_post_exprs = tgt_coeff_exprs
 
@@ -462,7 +462,6 @@ class E2EFromCSRTranslationInvariant(E2EFromCSR):
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
-        print(loopy_knl)
         return loopy_knl
 
 
@@ -485,8 +484,8 @@ class E2EFromCSRTranslationClassesPrecompute(E2EFromCSR):
                 sac.assign_unique("precomputed_expr%d" % i, coeff_i)
                 for i, coeff_i in enumerate(
                     self.tgt_expansion.m2l_global_precompute_exprs(
-                        self.src_expansion, src_rscale,
-                        dvec, tgt_rscale, sac, use_fft=self.use_fft))]
+                        self.src_expansion, src_rscale, dvec, tgt_rscale,
+                        sac=sac, use_fft=self.use_fft))]
 
         sac.run_global_cse()
 
@@ -591,7 +590,7 @@ class E2EFromCSRWithFFTPreprocess(E2EFromCSR):
                 for i, coeff_i in enumerate(
                     self.tgt_expansion.m2l_preprocess_exprs(
                         self.src_expansion, src_coeff_exprs,
-                        sac, use_fft=self.use_fft))]
+                        sac=sac, use_fft=self.use_fft))]
 
         sac.run_global_cse()
 
@@ -648,7 +647,6 @@ class E2EFromCSRWithFFTPreprocess(E2EFromCSR):
         # FIXME
         knl = self.get_kernel()
         knl = lp.split_iname(knl, "isrc_box", 16, outer_tag="g.0")
-
         return knl
 
     def __call__(self, queue, **kwargs):

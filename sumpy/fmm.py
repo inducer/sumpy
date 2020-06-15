@@ -980,7 +980,7 @@ class SumpyExpansionWithFFTWrangler(SumpyExpansionWrangler):
                 pp_src_expansions=pp_source_mpoles_view,
                 **self.kernel_extra_kwargs
             )
-            events.append([evt])
+            events.append(evt)
 
         result, timing_future = SumpyExpansionWrangler.multipole_to_local(
             self, level_start_target_box_nrs, target_boxes, src_box_starts,
