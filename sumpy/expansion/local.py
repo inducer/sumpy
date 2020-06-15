@@ -32,7 +32,7 @@ from sumpy.expansion import (
     BiharmonicConformingVolumeTaylorExpansion)
 
 from sumpy.tools import (matvec_toeplitz_upper_triangular,
-    fft_toeplitz_upper_triangular, add_to_sac)
+    fft_toeplitz_upper_triangular, add_to_sac, fft)
 
 
 class LocalExpansionBase(ExpansionBase):
@@ -163,10 +163,15 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             knl = self.kernel
         return knl.postprocess_at_target(result, bvec)
 
-    def m2l_global_precompute_nexpr(self, src_expansion):
-        return len(self.m2l_global_precompute_mis(src_expansion)[1])
+    def m2l_global_precompute_nexpr(self, src_expansion, use_fft=False):
+        from sumpy.tools import fft_toeplitz_upper_triangular_lwork
+        nexpr = len(self._m2l_global_precompute_mis(src_expansion)[1])
+        if use_fft:
+            return fft_toeplitz_upper_triangular_lwork(nexpr)
+        else:
+            return nexpr
 
-    def m2l_global_precompute_mis(self, src_expansion):
+    def _m2l_global_precompute_mis(self, src_expansion, use_fft=False):
         from pytools import generate_nonnegative_integer_tuples_below as gnitb
         from sumpy.tools import add_mi
 
@@ -190,6 +195,17 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         return toeplitz_matrix_coeffs, needed_vector_terms, max_mi
 
+    def _fft(self, x, sac):
+        # Add zeros at the end because we are embedding the Toeplitz matrix
+        # in a circulant matrix
+        x += [0]*(len(x)-1)
+        x_fft = fft([(a, 0) for a in x], sac=sac)
+        result = []
+        for re, im in x_fft:
+            result.append(re)
+            result.append(im)
+        return result
+
     def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
             dvec, tgt_rscale, sac, use_fft=False):
         # We know the general form of the multipole expansion is:
@@ -210,10 +226,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         if not self.use_rscale:
             src_rscale = 1
 
-        from sumpy.tools import add_mi
-
         toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
-            self.m2l_global_precompute_mis(src_expansion)
+            self._m2l_global_precompute_mis(src_expansion)
+
+        toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
+                                enumerate(toeplitz_matrix_coeffs))
 
         # Create a expansion terms wrangler for derivatives up to order
         # (tgt order)+(src order) including a corresponding reduction matrix
@@ -248,7 +265,62 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         for i, term in enumerate(needed_vector_terms):
             vector[i] = add_to_sac(sac,
                         vector_full[srcplusderiv_ident_to_index[term]])
+
+        if use_fft:
+            # Add zero values needed to make the translation matrix toeplitz
+            derivatives_full = [0]*len(toeplitz_matrix_coeffs)
+            for expr, mi in zip(vector, needed_vector_terms):
+                derivatives_full[toeplitz_matrix_ident_to_index[mi]] = expr
+            return self._fft(list(reversed(derivatives_full)), sac=sac)
+
         return vector
+
+    def m2l_preprocess_exprs(self, src_expansion, src_coeff_exprs, sac,
+            use_fft=False):
+        toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
+                self._m2l_global_precompute_mis(src_expansion)
+        toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
+                            enumerate(toeplitz_matrix_coeffs))
+
+        # Calculate the first row of the upper triangular Toeplitz matrix
+        toeplitz_first_row = [0] * len(toeplitz_matrix_coeffs)
+        for coeff, term in zip(
+                src_coeff_exprs,
+                src_expansion.get_coefficient_identifiers()):
+            toeplitz_first_row[toeplitz_matrix_ident_to_index[term]] = \
+                    add_to_sac(sac, coeff)
+
+        if use_fft:
+            return self._fft(toeplitz_first_row, sac=sac)
+        else:
+            return toeplitz_first_row
+
+    def m2l_postprocess_exprs(self, src_expansion, m2l_result, src_rscale,
+            tgt_rscale, sac, use_fft=False):
+        if use_fft:
+            assert len(m2l_result) % 2 == 0
+            n = len(m2l_result)//2
+            print(len(m2l_result), n)
+            as_tuple = []
+            for i in range(n):
+                as_tuple.append((m2l_result[2*i], m2l_result[2*i+1]))
+            m2l_result = fft(as_tuple, inverse=True, sac=sac)
+            m2l_result = [a for a, _ in reversed(m2l_result[:(n+1)//2])]
+            print(len(m2l_result), n)
+
+        toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
+                self._m2l_global_precompute_mis(src_expansion)
+        toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
+                            enumerate(toeplitz_matrix_coeffs))
+
+        # Filter out the dummy rows and scale them for target
+        result = []
+        rscale_ratio = add_to_sac(sac, tgt_rscale/src_rscale)
+        for term in self.get_coefficient_identifiers():
+            index = toeplitz_matrix_ident_to_index[term]
+            result.append(m2l_result[index]*rscale_ratio**sum(term))
+
+        return result
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac, precomputed_exprs=None, use_fft=False):
@@ -266,7 +338,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         if isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
             toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
-                self.m2l_global_precompute_mis(src_expansion)
+                self._m2l_global_precompute_mis(src_expansion)
             toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
                                 enumerate(toeplitz_matrix_coeffs))
 
@@ -276,32 +348,37 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             else:
                 derivatives = precomputed_exprs
 
+            if use_fft:
+                assert precomputed_exprs is not None
+                print(len(src_coeff_exprs), len(precomputed_exprs))
+                assert len(src_coeff_exprs) == len(precomputed_exprs)
+                result = []
+                for i in range(len(precomputed_exprs)//2):
+                    re_a = precomputed_exprs[2*i]
+                    im_a = precomputed_exprs[2*i+1]
+                    re_b = src_coeff_exprs[2*i]
+                    im_b = src_coeff_exprs[2*i+1]
+                    result.append(re_a*re_b - im_a*im_b)
+                    result.append(re_a*im_b + re_b*im_a)
+                return result
+
             derivatives_full = [0]*len(toeplitz_matrix_coeffs)
             for expr, mi in zip(derivatives, needed_vector_terms):
                 derivatives_full[toeplitz_matrix_ident_to_index[mi]] = expr
 
-            # Calculate the first row of the upper triangular Toeplitz matrix
-            toeplitz_first_row = [0] * len(toeplitz_matrix_coeffs)
-            for coeff, term in zip(
-                    src_coeff_exprs,
-                    src_expansion.get_coefficient_identifiers()):
-                toeplitz_first_row[toeplitz_matrix_ident_to_index[term]] = \
-                        add_to_sac(sac, coeff)
+            toeplitz_first_row = self.m2l_preprocess_exprs(src_expansion,
+                src_coeff_exprs, sac, use_fft)
 
             # Do the matvec
-            if use_fft:
+            if 0:
                 output = fft_toeplitz_upper_triangular(toeplitz_first_row,
                                 derivatives_full, sac=sac)
             else:
                 output = matvec_toeplitz_upper_triangular(toeplitz_first_row,
                                 derivatives_full)
 
-            # Filter out the dummy rows and scale them for target
-            result = []
-            rscale_ratio = add_to_sac(sac, tgt_rscale/src_rscale)
-            for term in self.get_coefficient_identifiers():
-                index = toeplitz_matrix_ident_to_index[term]
-                result.append(output[index]*rscale_ratio**sum(term))
+            result = self.m2l_postprocess_exprs(src_expansion, output, src_rscale,
+                tgt_rscale, sac, use_fft)
 
             logger.info("building translation operator: done")
             return result

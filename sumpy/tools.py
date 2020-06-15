@@ -1132,7 +1132,7 @@ def fft_toeplitz_upper_triangular(first_row, x, sac=None):
 
 
 def fft_toeplitz_upper_triangular_lwork(n):
-    return _padded_fft_size(2*n - 1)
+    return _padded_fft_size(2*n - 1)*2
 
 
 def matvec_toeplitz_upper_triangular(first_row, vector):
