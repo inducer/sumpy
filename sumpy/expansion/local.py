@@ -199,13 +199,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
     def _fft(self, x, sac):
         # Add zeros at the end because we are embedding the Toeplitz matrix
         # in a circulant matrix
-        x += [0]*(len(x)-1)
-        x_fft = fft([(a, 0) for a in x], sac=sac)
-        result = []
-        for re, im in x_fft:
-            result.append(re)
-            result.append(im)
-        return result
+        x = x + [0]*(len(x)-1)
+        return fft(x, sac=sac)
 
     def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
             dvec, tgt_rscale, sac, use_fft=False):
@@ -304,13 +299,9 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                             enumerate(toeplitz_matrix_coeffs))
 
         if use_fft:
-            assert len(m2l_result) % 2 == 0
             n = len(toeplitz_matrix_coeffs)
-            as_tuple = []
-            for i in range(0, len(m2l_result), 2):
-                as_tuple.append((m2l_result[i], m2l_result[i+1]))
-            m2l_result = fft(as_tuple, inverse=True, sac=sac)
-            m2l_result = [a for a, _ in reversed(m2l_result[:n])]
+            m2l_result = fft(m2l_result, inverse=True, sac=sac)
+            m2l_result = list(reversed(m2l_result[:n]))
 
         # Filter out the dummy rows and scale them for target
         result = []

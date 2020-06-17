@@ -34,6 +34,8 @@ from six.moves import zip
 import pyopencl as cl
 import pyopencl.array  # noqa
 
+import numpy as np
+
 from pytools import memoize_method
 
 from sumpy import (
@@ -907,7 +909,8 @@ class SumpyExpansionWithFFTWrangler(SumpyExpansionWrangler):
             source_extra_kwargs,
             kernel_extra_kwargs=None,
             self_extra_kwargs=None,
-            translation_classes_data=None):
+            translation_classes_data=None,
+            complex_dtype=None):
 
         super(SumpyExpansionWithFFTWrangler, self).__init__(code_container, queue,
             tree, dtype, fmm_level_to_order, source_extra_kwargs,
@@ -916,6 +919,15 @@ class SumpyExpansionWithFFTWrangler(SumpyExpansionWrangler):
             translation_classes_data=translation_classes_data)
         assert self.translation_classes_data is not None
         assert self.supports_optimized_m2l is True
+
+        if complex_dtype is not None:
+            self.complex_dtype = complex_dtype
+        elif self.dtype in (np.float32, np.complex64):
+            self.complex_dtype = np.complex64
+        elif self.dtype in (np.float64, np.complex128):
+            self.complex_dtype = np.complex128
+        else:
+            raise RuntimeError(f"Cannot compute complex type for {self.dtype}")
 
     @memoize_method
     def m2l_precomputed_exprs_level_starts(self):
@@ -942,7 +954,7 @@ class SumpyExpansionWithFFTWrangler(SumpyExpansionWrangler):
         return cl.array.zeros(
                 self.queue,
                 self.pp_multipole_expansions_level_starts()[-1],
-                dtype=self.dtype)
+                dtype=self.complex_dtype)
 
     def m2l_mpole_expansions_view(self, mpole_exps, level):
         expn_start, expn_stop = \
@@ -951,6 +963,12 @@ class SumpyExpansionWithFFTWrangler(SumpyExpansionWrangler):
 
         return (box_start,
                 mpole_exps[expn_start:expn_stop].reshape(box_stop-box_start, -1))
+
+    def m2l_precomputed_exprs_zeros(self):
+        return cl.array.zeros(
+                self.queue,
+                self.m2l_precomputed_exprs_level_starts()[-1],
+                dtype=self.complex_dtype)
 
     def multipole_to_local(self,
             level_start_target_box_nrs,
@@ -986,7 +1004,7 @@ class SumpyExpansionWithFFTWrangler(SumpyExpansionWrangler):
             self, level_start_target_box_nrs, target_boxes, src_box_starts,
             src_box_lists, pp_mpole_exps)
 
-        events = events + timing_future.events
+        events += timing_future.events
         return (result, SumpyTimingFuture(self.queue, events))
 
 # }}}
