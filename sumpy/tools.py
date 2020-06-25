@@ -1052,6 +1052,17 @@ def _padded_fft_size(n):
         n = 2**b
     return n
 
+def _fft_w(n, ang):
+    # Rewrite cosines and sines using cosines of angle in the first quadrant
+    # This is to reduce duplicate of floating point numbers with 1 ULP difference
+    # and also make sure quantities like cos(pi/2) - sin(pi/2) produces 0 exactly.
+    w = [math.cos(ang*i) + 1j * math.cos(ang*(n/4.0 - i)) for i in range((n + 3)//4)]
+    w[0] = 1
+    w += [-math.cos(ang*(n/2 - i)) + 1j * math.cos(ang*(i - n/4.0)) for
+            i in range((n + 3)//4, n//2)]
+    if n % 4 == 0:
+        w[n//4] = 1j
+    return w
 
 def fft(seq, inverse=False, sac=None):
     """
@@ -1074,15 +1085,7 @@ def fft(seq, inverse=False, sac=None):
         if i < j:
             a[i], a[j] = a[j], a[i]
     ang = 2*math.pi/n
-    # Rewrite cosines and sines using cosines of angle in the first quadrant
-    # This is to reduce duplicate of floating point numbers with 1 ULP difference
-    # and also make sure quantities like cos(pi/2) - sin(pi/2) produces 0 exactly.
-    w = [math.cos(ang*i) + 1j * math.cos(ang*(n/4.0 - i)) for i in range((n + 3)//4)]
-    w[0] = 1
-    w += [-math.cos(ang*(n/2 - i)) + 1j * math.cos(ang*(i - n/4.0)) for
-            i in range((n + 3)//4, n//2)]
-    if n % 4 == 0:
-        w[n//4] = sym.I
+    w = _fft_w(n, ang)
     if inverse:
         w = [x.real - 1j * x.imag for x in w]
     h = 2
