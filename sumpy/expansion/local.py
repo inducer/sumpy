@@ -287,12 +287,6 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                     add_to_sac(sac, coeff)
 
         if use_fft:
-            #from sumpy.tools import fft_toeplitz_upper_triangular_lwork
-            #func = sym.Function("fft")
-            #n = len(toeplitz_first_row)
-            #toeplitz_first_row += [0]*(fft_toeplitz_upper_triangular_lwork(n) - n)
-            #res = [func(*(toeplitz_first_row + [i])) for i in range(len(toeplitz_first_row))]
-            #return res
             return self._fft(toeplitz_first_row, sac=sac)
         else:
             return toeplitz_first_row
