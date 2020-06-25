@@ -231,6 +231,7 @@ class E2EFromCSR(E2EBase):
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
+        loopy_knl = lp.set_options(loopy_knl, enforce_variable_access_ordered="no_check")
 
         return loopy_knl
 
@@ -462,6 +463,7 @@ class E2EFromCSRTranslationInvariant(E2EFromCSR):
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
+        loopy_knl = lp.set_options(loopy_knl, enforce_variable_access_ordered="no_check")
         return loopy_knl
 
 
@@ -542,6 +544,7 @@ class E2EFromCSRTranslationClassesPrecompute(E2EFromCSR):
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
+        loopy_knl = lp.set_options(loopy_knl, enforce_variable_access_ordered="no_check")
 
         return loopy_knl
 
@@ -641,6 +644,7 @@ class E2EFromCSRWithFFTPreprocess(E2EFromCSR):
         for expn in [self.src_expansion, self.tgt_expansion]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
+        loopy_knl = lp.set_options(loopy_knl, enforce_variable_access_ordered="no_check")
         return loopy_knl
 
     def get_optimized_kernel(self):
@@ -750,6 +754,7 @@ class E2EFromChildren(E2EBase):
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+        loopy_knl = lp.set_options(loopy_knl, enforce_variable_access_ordered="no_check")
 
         return loopy_knl
 
