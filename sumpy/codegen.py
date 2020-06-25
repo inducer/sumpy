@@ -139,6 +139,7 @@ def make_one_step_subst(assignments):
             for used_name in get_dependencies(value)
             if used_name not in used_name_to_var)
 
+        #result[name] = prim.CommonSubexpression(simplify(value))
         result[name] = simplify(value)
 
     # }}}
@@ -675,6 +676,124 @@ class MathConstantRewriter(CSECachingMapperMixin, IdentityMapper):
             return IdentityMapper.map_variable(self, expr)
 
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+
+
+def process_fft_kernel(knl):
+    import loopy as lp
+    import pymbolic.primitives as prim
+    import islpy
+    from islpy import BasicSet
+    from sumpy.tools import _padded_fft_size, _binary_reverse, _fft_w
+    import math
+
+    new_instructions = []
+    new_domains = knl.domains[:]
+    temporary_variables = dict(knl.temporary_variables)
+    seen_fft = False
+    fft_name = None
+    fft_params = None
+    depends_on = None
+    for insn in knl.instructions:
+        if not (isinstance(insn, lp.Assignment) and \
+                isinstance(insn.expression, prim.Call) and \
+                isinstance(insn.expression.function, prim.Variable) and \
+                insn.expression.function.name in ["fft", "ifft"]):
+            new_instructions.append(insn)
+            continue
+
+        params = insn.expression.parameters
+        new_expr = prim.Subscript(prim.Variable("fft_temp"), params[-1])
+        transformed_insn = insn.copy(expression=new_expr)
+
+        if seen_fft:
+            assert fft_name == insn.expression.function.name
+            assert fft_params == params[:-1]
+            new_instructions.append(transformed_insn.copy(depends_on=frozenset(depends_on)))
+            continue
+        
+        depends_on = set(insn.depends_on)
+        within_inames = set(insn.within_inames)
+        fft_name = insn.expression.function.name
+        params = insn.expression.parameters
+        fft_params = params[:-1]
+        inverse = fft_name == "ifft"
+
+        n = len(fft_params)
+        n = _padded_fft_size(n)
+        b = n.bit_length() - 1
+
+        if inverse:
+            ang = -2*math.pi/n
+        else:
+            ang = 2*math.pi/n
+
+        w = _fft_w(n, ang)
+
+        for i in range(n//2):
+            new_expr = prim.Subscript(prim.Variable("fft_temp_w"), i)
+            new_insn = lp.Assignment(new_expr, np.complex128(w[i]), id=f"fft_temp_w_assign{i}")
+            new_instructions.append(new_insn)
+            depends_on.add(f"fft_temp_w_assign{i}")
+        temporary_variables["fft_temp_w"] = lp.TemporaryVariable("fft_temp_w", shape=(n//2,))
+
+        a = list(fft_params)
+        a += [0]*(n - len(a))
+        for i in range(1, n):
+            j = _binary_reverse(i, b)
+            if i < j:
+                a[i], a[j] = a[j], a[i]
+
+        for i in range(n):
+            new_expr = prim.Subscript(prim.Variable("fft_temp"), i)
+            new_insn = lp.Assignment(new_expr, a[i], id=f"fft_temp_assign{i}", depends_on=frozenset(depends_on), within_inames=insn.within_inames)
+            new_instructions.append(new_insn)
+            depends_on.add(f"fft_temp_assign{i}")
+        temporary_variables["fft_temp"] = lp.TemporaryVariable("fft_temp", shape=(n,))
+
+        new_domain = BasicSet("{ [fft_loghf] : 0 <= fft_loghf < %d }" % b)
+        new_domains.append(new_domain)
+
+        within_inames.add("fft_loghf")
+
+        new_insn = lp.Assignment("fft_hf", "2**fft_loghf", within_inames=frozenset(within_inames), id=f"fft_calc_hf")
+        temporary_variables["fft_hf"] = lp.TemporaryVariable("fft_hf")
+        depends_on.add("fft_calc_hf")
+        new_instructions.append(new_insn)
+
+        new_insn = lp.Assignment("fft_ut", f"2**({b} - 1 - fft_loghf)", within_inames=frozenset(within_inames), id="fft_calc_ut")
+        temporary_variables["fft_ut"] = lp.TemporaryVariable("fft_ut")
+        depends_on.add("fft_calc_ut")
+        new_instructions.append(new_insn)
+        
+        new_insn = lp.Assignment("fft_h", f"2*fft_hf", within_inames=frozenset(within_inames), id="fft_calc_h", depends_on=frozenset("fft_calc_hf"))
+        temporary_variables["fft_h"] = lp.TemporaryVariable("fft_h")
+        depends_on.add("fft_calc_h")
+        new_instructions.append(new_insn)
+
+        new_domain = BasicSet("[fft_ut] -> { [fft_i] : 0 <= fft_i < fft_ut }")
+        new_domains.append(new_domain)
+
+        new_domain = BasicSet("[fft_hf, fft_i] -> {[fft_j] : 0<= fft_j< fft_hf }")
+        new_domains.append(new_domain)
+
+        within_inames.add('fft_i')
+        within_inames.add('fft_j')
+        new_instructions.append(lp.Assignment("fft_u", "fft_temp[fft_i * fft_h + fft_j]", id="fft_calc_u", within_inames=frozenset(within_inames), depends_on=frozenset(depends_on)))
+        temporary_variables["fft_u"] = lp.TemporaryVariable("fft_u")
+        new_instructions.append(lp.Assignment("fft_v", "fft_temp[fft_i * fft_h + fft_j + fft_hf] * fft_temp_w[fft_ut * fft_j]", id="fft_calc_v", within_inames=frozenset(within_inames), depends_on=frozenset(depends_on)))
+        temporary_variables["fft_v"] = lp.TemporaryVariable("fft_v")
+        depends_on.add(f"fft_calc_u")
+        depends_on.add(f"fft_calc_v")
+        new_instructions.append(lp.Assignment("fft_temp[fft_i * fft_h + fft_j]", "fft_u + fft_v", id="fft_store0", within_inames=frozenset(within_inames), depends_on=frozenset(depends_on)))
+        new_instructions.append(lp.Assignment("fft_temp[fft_i * fft_h + fft_j + fft_hf]", "fft_u - fft_v", id="fft_store1", within_inames=frozenset(within_inames), depends_on=frozenset(depends_on)))
+
+        depends_on.add("fft_store0")
+        depends_on.add("fft_store1")
+
+        new_instructions.append(transformed_insn.copy(depends_on=frozenset(depends_on)))
+        seen_fft = True
+
+    return knl.copy(domains=new_domains, instructions=new_instructions, temporary_variables=temporary_variables)
 
 
 def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
