@@ -342,13 +342,10 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 assert precomputed_exprs is not None
                 assert len(src_coeff_exprs) == len(precomputed_exprs)
                 result = []
-                for i in range(0, len(precomputed_exprs), 2):
-                    re_a = precomputed_exprs[i]
-                    im_a = precomputed_exprs[i+1]
-                    re_b = src_coeff_exprs[i]
-                    im_b = src_coeff_exprs[i+1]
-                    result.append(re_a*re_b - im_a*im_b)
-                    result.append(re_a*im_b + re_b*im_a)
+                for i in range(len(precomputed_exprs)):
+                    a = precomputed_exprs[i]
+                    b = src_coeff_exprs[i]
+                    result.append(a*b)
                 return result
 
             derivatives_full = [0]*len(toeplitz_matrix_coeffs)
