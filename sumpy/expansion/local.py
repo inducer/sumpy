@@ -197,9 +197,6 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         return toeplitz_matrix_coeffs, needed_vector_terms, max_mi
 
     def _fft(self, x, sac):
-        # Add zeros at the end because we are embedding the Toeplitz matrix
-        # in a circulant matrix
-        x = x + [0]*(len(x)-1)
         return fft(x, sac=sac)
 
     def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
