@@ -535,8 +535,36 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                        * sym.exp(sym.I * c * -target_angle_rel_center), bvec)
                 for c in self.get_coefficient_identifiers())
 
+    def m2l_global_precompute_nexpr(self, src_expansion, use_fft=False):
+        from sumpy.tools import fft_toeplitz_upper_triangular_lwork
+        nexpr = 4 * self.order + 1
+        if use_fft:
+            nexpr = fft_toeplitz_upper_triangular_lwork(nexpr)
+        return nexpr
+
+    def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
+            dvec, tgt_rscale, sac, use_fft=False):
+
+        from sumpy.symbolic import sym_real_norm_2
+        dvec_len = sym_real_norm_2(dvec)
+        hankel_1 = sym.Function("hankel_1")
+        new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
+        arg_scale = self.get_bessel_arg_scaling()
+        assert self.order == src_expansion.order
+        precomputed_exprs = [0] * (4*self.order + 1)
+        for j in self.get_coefficient_identifiers():
+            for m in self.get_coefficient_identifiers():
+                precomputed_exprs[m + j + 2 * self.order] = (
+                    hankel_1(m + j, arg_scale * dvec_len)
+                    * sym.exp(sym.I * (m + j) * new_center_angle_rel_old_center))
+
+        if use_fft:
+            return fft(precomputed_exprs, sac)
+
+        return precomputed_exprs
+
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale, sac):
+            dvec, tgt_rscale, sac, precomputed_exprs=None, use_fft=False):
         from sumpy.symbolic import sym_real_norm_2
 
         if not self.use_rscale:
@@ -564,15 +592,19 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             dvec_len = sym_real_norm_2(dvec)
             hankel_1 = sym.Function("hankel_1")
             new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
+            if precomputed_exprs is None:
+                derivatives = self.m2l_global_precompute_exprs(src_expansion,
+                    src_rscale, dvec, tgt_rscale, sac, use_fft)
+            else:
+                derivatives = precomputed_exprs
             translated_coeffs = []
             for j in self.get_coefficient_identifiers():
                 translated_coeffs.append(
                     sum(
                         (-1) ** j
-                        * hankel_1(m + j, arg_scale * dvec_len)
                         * src_rscale ** abs(m)
                         * tgt_rscale ** abs(j)
-                        * sym.exp(sym.I * (m + j) * new_center_angle_rel_old_center)
+                        * derivatives[m + j + 2*self.order]
                         * src_coeff_exprs[src_expansion.get_storage_index(m)]
                         for m in src_expansion.get_coefficient_identifiers()))
             return translated_coeffs
