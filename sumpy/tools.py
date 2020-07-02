@@ -717,4 +717,9 @@ def my_syntactic_subs(expr, subst_dict):
         return expr
 
 
+def is_obj_array_like(ary):
+    return (
+            isinstance(ary, (tuple, list))
+            or (isinstance(ary, np.ndarray) and ary.dtype.char == "O"))
+
 # vim: fdm=marker

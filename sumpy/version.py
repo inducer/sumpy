@@ -43,7 +43,7 @@ else:
 # }}}
 
 
-VERSION = (2020, 1)
+VERSION = (2020, 2)
 VERSION_STATUS = "beta1"
 VERSION_TEXT = ".".join(str(x) for x in VERSION) + VERSION_STATUS
 
