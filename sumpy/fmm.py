@@ -320,8 +320,11 @@ class SumpyExpansionWrangler(object):
         return source_array.with_queue(self.queue)[self.tree.user_source_ids]
 
     def reorder_potentials(self, potentials):
-        from pytools.obj_array import is_obj_array, obj_array_vectorize
-        assert is_obj_array(potentials)
+        from pytools.obj_array import obj_array_vectorize
+        import numpy as np
+        assert (
+                isinstance(potentials, np.ndarray)
+                and potentials.dtype.char == "O")
 
         def reorder(x):
             return x.with_queue(self.queue)[self.tree.sorted_target_ids]
