@@ -243,7 +243,7 @@ RTOL_P2E2E2P = 1e-2
 
 
 @pytest.mark.parametrize("case", P2E2E2P_TEST_CASES)
-def test_toy_p2e2e2p(ctx_getter, case):
+def test_toy_p2e2e2p(ctx_factory, case):
     dim = case.dim
 
     src = case.source.reshape(dim, -1)
@@ -256,7 +256,7 @@ def test_toy_p2e2e2p(ctx_getter, case):
     from sumpy.expansion.local import VolumeTaylorLocalExpansion
     from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansion
 
-    cl_ctx = ctx_getter()
+    cl_ctx = ctx_factory()
     ctx = t.ToyContext(cl_ctx,
              LaplaceKernel(dim),
              VolumeTaylorMultipoleExpansion,

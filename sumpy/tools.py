@@ -181,18 +181,18 @@ def build_matrix(op, dtype=None, shape=None):
 
 
 def vector_to_device(queue, vec):
-    from pytools.obj_array import with_object_array_or_scalar
+    from pytools.obj_array import obj_array_vectorize
 
     from pyopencl.array import to_device
 
     def to_dev(ary):
         return to_device(queue, ary)
 
-    return with_object_array_or_scalar(to_dev, vec)
+    return obj_array_vectorize(to_dev, vec)
 
 
 def vector_from_device(queue, vec):
-    from pytools.obj_array import with_object_array_or_scalar
+    from pytools.obj_array import obj_array_vectorize
 
     def from_dev(ary):
         from numbers import Number
@@ -202,7 +202,7 @@ def vector_from_device(queue, vec):
 
         return ary.get(queue=queue)
 
-    return with_object_array_or_scalar(from_dev, vec)
+    return obj_array_vectorize(from_dev, vec)
 
 
 def _merge_kernel_arguments(dictionary, arg):

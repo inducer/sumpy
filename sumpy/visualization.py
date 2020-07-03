@@ -33,34 +33,22 @@ from six.moves import range
 
 
 def separate_by_real_and_imag(data, real_only):
+    from pytools.obj_array import obj_array_real_copy, obj_array_imag_copy
+
     for name, field in data:
-        from pytools.obj_array import log_shape
-        ls = log_shape(field)
+        try:
+            # Look inside object arrays to get the entry dtype.
+            entry_dtype = field[0].dtype
+        except AttributeError:
+            entry_dtype = field.dtype
 
-        if ls != () and ls[0] > 1:
-            assert len(ls) == 1
-            from pytools.obj_array import (
-                    oarray_real_copy, oarray_imag_copy,
-                    with_object_array_or_scalar)
+        assert entry_dtype.kind != "O"
 
-            if field[0].dtype.kind == "c":
-                if real_only:
-                    yield (name,
-                            with_object_array_or_scalar(oarray_real_copy, field))
-                else:
-                    yield (name+"_r",
-                            with_object_array_or_scalar(oarray_real_copy, field))
-                    yield (name+"_i",
-                            with_object_array_or_scalar(oarray_imag_copy, field))
-            else:
-                yield (name, field)
+        if real_only or entry_dtype.kind != "c":
+            yield (name, obj_array_real_copy(field))
         else:
-            # ls == ()
-            if field.dtype.kind == "c":
-                yield (name+"_r", field.real.copy())
-                yield (name+"_i", field.imag.copy())
-            else:
-                yield (name, field)
+            yield (name + "_r", obj_array_real_copy(field))
+            yield (name + "_i", obj_array_imag_copy(field))
 
 
 def make_field_plotter_from_bbox(bbox, h, extend_factor=0):
