@@ -41,11 +41,11 @@ else:
     faulthandler.enable()
 
 
-def test_direct(ctx_getter):
+def test_direct(ctx_factory):
     # This evaluates a single layer potential on a circle.
     logging.basicConfig(level=logging.INFO)
 
-    ctx = ctx_getter()
+    ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
     from sumpy.kernel import LaplaceKernel
