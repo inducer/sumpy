@@ -585,6 +585,8 @@ class E2EFromCSRWithFFTPreprocess(E2EFromCSR):
         src_coeff_exprs = [sym.Symbol("src_coeff%d" % i)
                 for i in range(len(self.src_expansion))]
 
+        src_rscale = sym.Symbol("src_rscale")
+
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
 
@@ -593,7 +595,7 @@ class E2EFromCSRWithFFTPreprocess(E2EFromCSR):
                 for i, coeff_i in enumerate(
                     self.tgt_expansion.m2l_preprocess_exprs(
                         self.src_expansion, src_coeff_exprs,
-                        sac=sac, use_fft=self.use_fft))]
+                        sac=sac, src_rscale=src_rscale, use_fft=self.use_fft))]
 
         sac.run_global_cse()
 
@@ -628,6 +630,7 @@ class E2EFromCSRWithFFTPreprocess(E2EFromCSR):
                 """],
                 [
                     lp.ValueArg("nsrc_boxes", np.int32),
+                    lp.ValueArg("src_rscale", lp.auto),
                     lp.GlobalArg("src_expansions", None,
                         shape=("nsrc_boxes", nsrc_coeffs), offset=lp.auto),
                     lp.GlobalArg("pp_src_expansions", None,

@@ -1071,6 +1071,19 @@ def fft(seq, inverse=False, sac=None):
     corresponding to the real part and imaginary part.
     """
 
+    from pymbolic.algorithm import fft as _fft, ifft as _ifft 
+
+    def wrap(expr):
+        if isinstance(expr, np.ndarray):
+            res = [wrap(a) for a in expr]
+            return np.array(res, dtype=object).reshape(expr.shape)
+        return add_to_sac(sac, expr)
+
+    if inverse:
+        return _ifft(list(seq), wrap_intermediate=wrap).tolist()
+    else:
+        return _fft(list(seq), wrap_intermediate=wrap).tolist()
+
     a = seq
     n = len(a)
     if n < 2:
@@ -1125,6 +1138,7 @@ def fft_toeplitz_upper_triangular(first_row, x, sac=None):
 
 
 def fft_toeplitz_upper_triangular_lwork(n):
+    return n
     return _padded_fft_size(n)
 
 

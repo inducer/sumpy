@@ -269,7 +269,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         return vector
 
     def m2l_preprocess_exprs(self, src_expansion, src_coeff_exprs, sac,
-            use_fft=False):
+            src_rscale, use_fft=False):
         toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
                 self._m2l_global_precompute_mis(src_expansion)
         toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
@@ -540,12 +540,15 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         nexpr = 4 * self.order + 1
         if use_fft:
             nexpr = fft_toeplitz_upper_triangular_lwork(nexpr)
+        print("nexpr", nexpr, 4 * self.order + 1)
         return nexpr
 
     def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
             dvec, tgt_rscale, sac, use_fft=False):
 
         from sumpy.symbolic import sym_real_norm_2
+        from sumpy.tools import fft
+
         dvec_len = sym_real_norm_2(dvec)
         hankel_1 = sym.Function("hankel_1")
         new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
@@ -559,9 +562,42 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                     * sym.exp(sym.I * (m + j) * new_center_angle_rel_old_center))
 
         if use_fft:
-            return fft(precomputed_exprs, sac)
+            order = self.order
+            first, last = precomputed_exprs[:2*order], precomputed_exprs[2*order:]
+            return fft(list(last)+list(first), sac)
 
         return precomputed_exprs
+
+    def m2l_preprocess_exprs(self, src_expansion, src_coeff_exprs, sac,
+            src_rscale, use_fft=False):
+
+        from sumpy.tools import fft
+        src_coeff_exprs = list(src_coeff_exprs)
+        for m in src_expansion.get_coefficient_identifiers():
+            src_coeff_exprs[src_expansion.get_storage_index(m)] *= src_rscale**abs(m)
+
+        if use_fft:
+            src_coeff_exprs = list(reversed(src_coeff_exprs))
+            src_coeff_exprs += [0] * (len(src_coeff_exprs) - 1)
+            res = fft(src_coeff_exprs, sac=sac)
+            return res
+        else:
+            return src_coeff_exprs
+
+    def m2l_postprocess_exprs(self, src_expansion, m2l_result, src_rscale,
+            tgt_rscale, sac, use_fft=False):
+
+        if use_fft:
+            n = 2 * self.order + 1
+            m2l_result = fft(m2l_result, inverse=True, sac=sac)
+            m2l_result = m2l_result[:2*self.order+1]
+
+        # Filter out the dummy rows and scale them for target
+        result = []
+        for j in self.get_coefficient_identifiers():
+            result.append(m2l_result[j + self.order] * tgt_rscale**(abs(j)) * (-1)**j)
+
+        return result
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac, precomputed_exprs=None, use_fft=False):
@@ -578,6 +614,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             bessel_j = sym.Function("bessel_j")
             new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
             translated_coeffs = []
+
             for j in self.get_coefficient_identifiers():
                 translated_coeffs.append(
                     sum(src_coeff_exprs[src_expansion.get_storage_index(m)]
@@ -589,24 +626,72 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             return translated_coeffs
 
         if isinstance(src_expansion, self.mpole_expn_class):
-            dvec_len = sym_real_norm_2(dvec)
-            hankel_1 = sym.Function("hankel_1")
-            new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
             if precomputed_exprs is None:
                 derivatives = self.m2l_global_precompute_exprs(src_expansion,
                     src_rscale, dvec, tgt_rscale, sac, use_fft)
             else:
                 derivatives = precomputed_exprs
+
             translated_coeffs = []
+            if use_fft:
+                assert precomputed_exprs is not None
+                assert len(derivatives) == len(src_coeff_exprs)
+                for a, b in zip(derivatives, src_coeff_exprs):
+                    translated_coeffs.append(a * b)
+                return translated_coeffs
+
+            src_coeff_exprs = self.m2l_preprocess_exprs(src_expansion, src_coeff_exprs, sac,
+                src_rscale, use_fft=False)
+
+            import numpy as np
+            n = len(src_coeff_exprs)
+            print(n, self.order)
+            src = np.array(list(reversed(src_coeff_exprs))+[0]*(n-1), dtype=object)
+
+            order = self.order
+            first, last = precomputed_exprs[:2*order], precomputed_exprs[2*order:]
+            derivatives_vec = np.array(list(last)+list(first), dtype=object)
+            deriv_fft = fft(list(derivatives_vec), sac=None)
+            src_fft = fft(list(src), sac=None)
+            n = (len(derivatives_vec)+1)//2
+
+            translated_coeffs = []
+            assert len(deriv_fft) == len(src_fft)
+            for a, b in zip(deriv_fft, src_fft):
+                translated_coeffs.append(a * b)
+
+            translated_coeffs = fft(translated_coeffs, sac=None, inverse=True)
+
+            def simp(expr):
+                #expr = expr.expand()
+                rep = {}
+                for i in expr.atoms(sym.Float):
+                    j = i
+                    if abs(complex(j))<1e-8:
+                        j = 0
+                    rep[i] = j
+                rep[1.0] = 1
+                expr = expr.xreplace(rep)
+                return expr
+
+            translated_coeffs = translated_coeffs[:n]
+            for i in range(n):
+                #print(translated_coeffs[i], simp(translated_coeffs[i]))
+                translated_coeffs[i] = simp(translated_coeffs[i])
+
             for j in self.get_coefficient_identifiers():
-                translated_coeffs.append(
-                    sum(
-                        (-1) ** j
-                        * src_rscale ** abs(m)
-                        * tgt_rscale ** abs(j)
-                        * derivatives[m + j + 2*self.order]
+                x1 = (
+                      sum(derivatives[m + j + 2*self.order]
                         * src_coeff_exprs[src_expansion.get_storage_index(m)]
                         for m in src_expansion.get_coefficient_identifiers()))
+                print("=================")
+                x3 = translated_coeffs[j+self.order]
+                if simp((x1-x3).expand()) != 0:
+                    print((x1-x3).expand())
+                    raise RuntimeError("")
+
+            translated_coeffs = self.m2l_postprocess_exprs(src_expansion, translated_coeffs, src_rscale,
+                tgt_rscale, sac, use_fft=False)
             return translated_coeffs
 
         raise RuntimeError("do not know how to translate %s to %s"

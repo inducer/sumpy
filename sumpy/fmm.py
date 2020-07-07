@@ -996,9 +996,13 @@ class SumpyExpansionWithFFTWrangler(SumpyExpansionWrangler):
                 self.queue,
                 src_expansions=source_mpoles_view,
                 pp_src_expansions=pp_source_mpoles_view,
+                src_rscale=level_to_rscale(self.tree, lev),
                 **self.kernel_extra_kwargs
             )
             events.append(evt)
+
+        a = SumpyTimingFuture(self.queue, events)
+        print(a.result()["wall_elapsed"])        
 
         result, timing_future = SumpyExpansionWrangler.multipole_to_local(
             self, level_start_target_box_nrs, target_boxes, src_box_starts,
