@@ -402,6 +402,15 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         return defaultdict(list, matrix_rows), reconstruct_matrix_with_rscale, \
             use_reconstruct
 
+    def get_pde(self):
+        r"""
+        Returns a PDE. A PDE stores a dictionary of (mi, coeff)
+        where mi is the multi-index of the  derivative and coeff is the
+        coefficient
+        """
+
+        raise NotImplementedError
+
     @memoize_method
     def get_stored_ids_and_coeff_mat(self):
         from six import iteritems
@@ -477,15 +486,6 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                              red=len(stored_identifiers)))
 
         return stored_identifiers, coeff_matrix, reconstruct_matrix
-
-    def get_pde(self):
-        r"""
-        Returns a PDE. A PDE stores a dictionary of (mi, coeff)
-        where mi is the multi-index of the  derivative and coeff is the
-        coefficient
-        """
-
-        raise NotImplementedError
 
 
 class LaplaceExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
