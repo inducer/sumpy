@@ -28,34 +28,34 @@ from sumpy.tools import add_mi
 class PDE(object):
     r"""
     Represents a iscalar PDEs of dimension `dim`. It is represented by a
-    dictionary. A dictionary maps a a multi-index given as a tuple
-    to the coefficient.
+    dictionary. The dictionary maps a multi-index given as a tuple
+    to the coefficient. This object is immutable.
     """
     def __init__(self, dim, eq):
         """
         :arg dim: dimension of the PDE
-        :arg eq: A dictionary mapping a multi-index to a value
+        :arg eq: A dictionary mapping a multi-index to a coefficient
         """
         self.dim = dim
         self.eq = eq
 
     def __mul__(self, param):
-        res = PDE(self.dim, {})
+        eq = {}
         for k, v in self.eq.items():
-            res.eq[k] = v * param
-        return res
+            eq[k] = v * param
+        return PDE(self.dim, eq)
 
     __rmul__ = __mul__
 
     def __add__(self, other_pde):
         assert self.dim == other_pde.dim
-        res = PDE(self.dim, self.eq.copy())
+        res = self.eq.copy()
         for k, v in other_pde.eq.items():
             if k in res.eq:
-                res.eq[k] += v
+                res[k] += v
             else:
-                res.eq[k] = v
-        return res
+                res[k] = v
+        return PDE(self.dim, res)
 
     __radd__ = __add__
 
@@ -63,7 +63,7 @@ class PDE(object):
         return self + (-1)*other_pde
 
     def __repr__(self):
-        return repr(self.eq)
+        return f"PDE({self.dim}, {repr(self.eq)})"
 
 
 def laplacian(pde):
@@ -77,10 +77,10 @@ def laplacian(pde):
 
 
 def diff(pde, mi):
-    res = PDE(pde.dim, {})
+    res = {}
     for eq_mi, v in pde.eq.items():
-        res.eq[add_mi(eq_mi, mi)] = v
-    return res
+        res[add_mi(eq_mi, mi)] = v
+    return PDE(pde.dim, res)
 
 
 def make_pde_sym(dim):

@@ -280,16 +280,17 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                                 embedded_coeffs, src_rscale)
 
                 # Sum the embedded coefficient set
-                for i, coeff in enumerate(stored_coeffs):
+                for tgtplusderiv_coeff_id, coeff in zip(tgtplusderiv_coeff_ids,
+                                                        stored_coeffs):
                     if coeff == 0:
                         continue
                     nderivatives_for_scaling = \
-                            sum(tgtplusderiv_coeff_ids[i])-sum(lexp_mi)
+                            sum(tgtplusderiv_coeff_id)-sum(lexp_mi)
                     kernel_deriv = (
                             src_expansion.get_scaled_multipole(
-                                taker.diff(tgtplusderiv_coeff_ids[i]),
+                                taker.diff(tgtplusderiv_coeff_id),
                                 dvec, src_rscale,
-                                nderivatives=sum(tgtplusderiv_coeff_ids[i]),
+                                nderivatives=sum(tgtplusderiv_coeff_id),
                                 nderivatives_for_scaling=nderivatives_for_scaling))
 
                     lexp_mi_terms.append(

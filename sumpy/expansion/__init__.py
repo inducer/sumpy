@@ -193,16 +193,10 @@ class ExpansionTermsWrangler(object):
 
         res = sorted(gnitstam(self.order, self.dim), key=sum)
 
-        def filter_tuple(tup):
-            if self.max_mi is None:
-                return True
-            for a, b in zip(tup, self.max_mi):
-                if a > b:
-                    return False
-            return True
+        if self.max_mi is None:
+            return res
 
-        res = list(filter(filter_tuple, res))
-        return res
+        return [mi for mi in res if all(mi[i] <= self.max_mi[i])]
 
     def copy(self, **kwargs):
         new_kwargs = dict(
@@ -264,8 +258,6 @@ def _spmv(spmat, x, sparse_vectors):
 
     return result
 
-# }}}
-
 
 def _fast_spmv(reconstruct_matrix, vec, sac, transpose=False):
     if not transpose:
@@ -278,7 +270,7 @@ def _fast_spmv(reconstruct_matrix, vec, sac, transpose=False):
             else:
                 for k, v in deps:
                     res[row] += res[k] * v
-            new_sym = sym.Symbol(sac.assign_unique("expr", res[row]))
+            new_sym = sym.Symbol(sac.assign_unique("decompress_temp", res[row]))
             res[row] = new_sym
         return res
     else:
@@ -288,11 +280,13 @@ def _fast_spmv(reconstruct_matrix, vec, sac, transpose=False):
             if len(deps) == 0:
                 res.append(expr_all[row])
                 continue
-            new_sym = sym.Symbol(sac.assign_unique("expr", expr_all[row]))
+            new_sym = sym.Symbol(sac.assign_unique("compress_temp", expr_all[row]))
             for k, v in deps:
                 expr_all[k] += new_sym * v
         res.reverse()
         return res
+
+# }}}
 
 
 class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
@@ -476,7 +470,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         plog.done()
 
-        print("number of Taylor coefficients was reduced from {orig} to {red}"
+        logger.debug("number of Taylor coefficients was reduced from {orig} to {red}"
                      .format(orig=len(self.get_full_coefficient_identifiers()),
                              red=len(stored_identifiers)))
 
