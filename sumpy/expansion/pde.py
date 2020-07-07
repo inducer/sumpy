@@ -24,6 +24,12 @@ THE SOFTWARE.
 
 from sumpy.tools import add_mi
 
+__doc__ = """
+PDE interface
+-------------
+
+.. autoclass:: PDE
+"""
 
 class PDE(object):
     r"""

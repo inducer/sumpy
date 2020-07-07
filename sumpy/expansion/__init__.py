@@ -332,9 +332,9 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
     def get_pde(self):
         r"""
-        Returns a PDE. A PDE stores a dictionary of (mi, coeff)
-        where mi is the multi-index of the  derivative and coeff is the
-        coefficient
+        Returns a :class:`sumpy.expansion.pde.PDE` object.
+        A PDE stores a dictionary of (mi, coeff) where mi is the multi-index
+        of the  derivative and coeff is the coefficient.
         """
 
         raise NotImplementedError
@@ -359,6 +359,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 projection_matrix_assignments = [list() for i in range(len(mis))]
                 return mis, CSEMatVec(projection_matrix_assignments)
 
+        # Calculate the multi-index that appears last in in the PDE in
+        # reverse degree lexicographic order.
         max_mi_idx = max(coeff_ident_enumerate_dict[ident] for
                          ident in pde_dict.keys())
         max_mi = mis[max_mi_idx]
@@ -376,12 +378,18 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         projection_matrix_assignments = []
         for i, mi in enumerate(mis):
             projection_matrix_assignments.append([])
+            # If the multi-index is to be stored, keep the projection matrix
+            # entry empty
             if is_stored(mi):
                 continue
             diff = [mi[d] - max_mi[d] for d in range(self.dim)]
+
+            # eg: u_xx + u_yy + u_zz is represented as
+            # [((2, 0, 0), 1), ((0, 2, 0), 1), ((0, 0, 2), 1)]
             for other_mi, coeff in iteritems(pde_dict):
                 j = coeff_ident_enumerate_dict[add_mi(other_mi, diff)]
                 if i == j:
+                    # Skip the u_zz part here.
                     continue
                 # PDE might not have max_mi_coeff = -1, divide by -max_mi_coeff
                 # to get a relation of the form, u_zz = - u_xx - u_yy for Laplace 3D.
