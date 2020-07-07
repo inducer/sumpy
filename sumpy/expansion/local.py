@@ -244,12 +244,13 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # of multi-indices needed is much less than
             # gnitstam(src_order + tgt order) when PDE conforming expansions
             # are used. For full Taylor, there's no difference.
-            max_mi = [0]*self.dim
-            for i in range(self.dim):
-                max_mi[i] = max(mi[i] for mi in
-                                  src_expansion.get_coefficient_identifiers())
-                max_mi[i] += max(mi[i] for mi in
-                                  self.get_coefficient_identifiers())
+
+            def calc_max_mi(mis):
+                return (max(mi[i] for mi in mis) for i in range(self.dim))
+
+            src_max_mi = calc_max_mi(src_expansion.get_coefficient_identifiers())
+            tgt_max_mi = calc_max_mi(self.get_coefficient_identifiers())
+            max_mi = add_mi(src_max_mi, tgt_max_mi)
 
             # Create a expansion terms wrangler for derivatives up to order
             # (tgt order)+(src order) including a corresponding reduction matrix
@@ -261,8 +262,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             tgtplusderiv_full_coeff_ids = \
                 tgtplusderiv_exp_terms_wrangler.get_full_coefficient_identifiers()
 
-            tgtplusderiv_ident_to_index = dict((ident, i) for i, ident in
-                                enumerate(tgtplusderiv_full_coeff_ids))
+            tgtplusderiv_ident_to_index = {ident: i for i, ident in
+                                enumerate(tgtplusderiv_full_coeff_ids)}
 
             result = []
             for lexp_mi in self.get_coefficient_identifiers():

@@ -27,9 +27,9 @@ from sumpy.tools import add_mi
 
 class PDE(object):
     r"""
-    Represents a scalar, constant-coefficient PDE of dimension `dim`. It is represented by a
-    dictionary. The dictionary maps a multi-index given as a tuple
-    to the coefficient. This object is immutable.
+    Represents a scalar, constant-coefficient PDE of dimension `dim`.
+    It is represented by a dictionary. The dictionary maps a multi-index
+    given as a tuple to the coefficient. This object is immutable.
     """
     def __init__(self, dim, eq):
         """
@@ -51,7 +51,7 @@ class PDE(object):
         assert self.dim == other_pde.dim
         res = self.eq.copy()
         for k, v in other_pde.eq.items():
-            if k in res.eq:
+            if k in res:
                 res[k] += v
             else:
                 res[k] = v
