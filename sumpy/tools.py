@@ -1036,34 +1036,6 @@ def solve_symbolic(A, b):  # noqa: N803
 
 # {{{ FFT
 
-def _binary_reverse(n, bits):
-    # Returns the reverse of the number n in binary form with bits
-    # number of bits
-    b = bin(n)[2:].rjust(bits, "0")
-    return int(b[::-1], 2)
-
-
-def _padded_fft_size(n):
-    if n < 2:
-        return n
-    b = n.bit_length() - 1
-    if n & (n - 1):  # not a power of 2
-        b += 1
-        n = 2**b
-    return n
-
-def _fft_w(n, ang):
-    # Rewrite cosines and sines using cosines of angle in the first quadrant
-    # This is to reduce duplicate of floating point numbers with 1 ULP difference
-    # and also make sure quantities like cos(pi/2) - sin(pi/2) produces 0 exactly.
-    w = [math.cos(ang*i) + 1j * math.cos(ang*(n/4.0 - i)) for i in range((n + 3)//4)]
-    w[0] = 1
-    w += [-math.cos(ang*(n/2 - i)) + 1j * math.cos(ang*(i - n/4.0)) for
-            i in range((n + 3)//4, n//2)]
-    if n % 4 == 0:
-        w[n//4] = 1j
-    return w
-
 def fft(seq, inverse=False, sac=None):
     """
     Return the discrete fourier transform of the sequence seq.
@@ -1083,38 +1055,6 @@ def fft(seq, inverse=False, sac=None):
         return _ifft(list(seq), wrap_intermediate=wrap).tolist()
     else:
         return _fft(list(seq), wrap_intermediate=wrap).tolist()
-
-    a = seq
-    n = len(a)
-    if n < 2:
-        return a
-
-    n = _padded_fft_size(n)
-    b = n.bit_length() - 1
-
-    a += [0]*(n - len(a))
-    for i in range(1, n):
-        j = _binary_reverse(i, b)
-        if i < j:
-            a[i], a[j] = a[j], a[i]
-    ang = 2*math.pi/n
-    w = _fft_w(n, ang)
-    if inverse:
-        w = [x.real - 1j * x.imag for x in w]
-    h = 2
-    while h <= n:
-        hf, ut = h // 2, n // h
-        for i in range(0, n, h):
-            for j in range(hf):
-                u, v = a[i + j], add_to_sac(sac, a[i + j + hf] * w[ut * j])
-                a[i + j] = u + v
-                a[i + j + hf] = u - v
-        h *= 2
-
-    if inverse:
-        a = [x/n for x in a]
-
-    return a
 
 
 def fft_toeplitz_upper_triangular(first_row, x, sac=None):
@@ -1139,7 +1079,6 @@ def fft_toeplitz_upper_triangular(first_row, x, sac=None):
 
 def fft_toeplitz_upper_triangular_lwork(n):
     return n
-    return _padded_fft_size(n)
 
 
 def matvec_toeplitz_upper_triangular(first_row, vector):

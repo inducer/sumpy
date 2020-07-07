@@ -643,52 +643,11 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             src_coeff_exprs = self.m2l_preprocess_exprs(src_expansion, src_coeff_exprs, sac,
                 src_rscale, use_fft=False)
 
-            import numpy as np
-            n = len(src_coeff_exprs)
-            print(n, self.order)
-            src = np.array(list(reversed(src_coeff_exprs))+[0]*(n-1), dtype=object)
-
-            order = self.order
-            first, last = precomputed_exprs[:2*order], precomputed_exprs[2*order:]
-            derivatives_vec = np.array(list(last)+list(first), dtype=object)
-            deriv_fft = fft(list(derivatives_vec), sac=None)
-            src_fft = fft(list(src), sac=None)
-            n = (len(derivatives_vec)+1)//2
-
-            translated_coeffs = []
-            assert len(deriv_fft) == len(src_fft)
-            for a, b in zip(deriv_fft, src_fft):
-                translated_coeffs.append(a * b)
-
-            translated_coeffs = fft(translated_coeffs, sac=None, inverse=True)
-
-            def simp(expr):
-                #expr = expr.expand()
-                rep = {}
-                for i in expr.atoms(sym.Float):
-                    j = i
-                    if abs(complex(j))<1e-8:
-                        j = 0
-                    rep[i] = j
-                rep[1.0] = 1
-                expr = expr.xreplace(rep)
-                return expr
-
-            translated_coeffs = translated_coeffs[:n]
-            for i in range(n):
-                #print(translated_coeffs[i], simp(translated_coeffs[i]))
-                translated_coeffs[i] = simp(translated_coeffs[i])
-
             for j in self.get_coefficient_identifiers():
-                x1 = (
+                translated_coeff.append(
                       sum(derivatives[m + j + 2*self.order]
                         * src_coeff_exprs[src_expansion.get_storage_index(m)]
                         for m in src_expansion.get_coefficient_identifiers()))
-                print("=================")
-                x3 = translated_coeffs[j+self.order]
-                if simp((x1-x3).expand()) != 0:
-                    print((x1-x3).expand())
-                    raise RuntimeError("")
 
             translated_coeffs = self.m2l_postprocess_exprs(src_expansion, translated_coeffs, src_rscale,
                 tgt_rscale, sac, use_fft=False)
