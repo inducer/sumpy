@@ -27,7 +27,7 @@ from sumpy.tools import add_mi
 
 class PDE(object):
     r"""
-    Represents a iscalar PDEs of dimension `dim`. It is represented by a
+    Represents a scalar, constant-coefficient PDE of dimension `dim`. It is represented by a
     dictionary. The dictionary maps a multi-index given as a tuple
     to the coefficient. This object is immutable.
     """
