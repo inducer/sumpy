@@ -240,6 +240,10 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
             from sumpy.tools import add_mi
 
+            # Calculate a elementwise maximum multi-index because the number
+            # of multi-indices needed is much less than
+            # gnitstam(src_order + tgt order) when PDE conforming expansions
+            # are used. For full Taylor, there's no difference.
             max_mi = [0]*self.dim
             for i in range(self.dim):
                 max_mi[i] = max(mi[i] for mi in

@@ -196,7 +196,8 @@ class ExpansionTermsWrangler(object):
         if self.max_mi is None:
             return res
 
-        return [mi for mi in res if all(mi[i] <= self.max_mi[i])]
+        return [mi for mi in res if
+            all(mi[i] <= self.max_mi[i] for i in range(self.dim))]
 
     def copy(self, **kwargs):
         new_kwargs = dict(
