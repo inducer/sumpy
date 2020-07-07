@@ -29,7 +29,7 @@ from pytools import memoize_method
 import sumpy.symbolic as sym
 from collections import defaultdict
 from sumpy.tools import add_mi
-from .pde_utils import make_pde_sym, laplacian
+from .pde import make_pde_sym, laplacian
 
 __doc__ = """
 .. autoclass:: ExpansionBase
