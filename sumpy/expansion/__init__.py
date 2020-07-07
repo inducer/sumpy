@@ -273,7 +273,8 @@ class CSEMatVec(object):
                 res.append(expr_all[row])
                 continue
             if sac is not None:
-                new_sym = sym.Symbol(sac.assign_unique("compress_temp", expr_all[row]))
+                new_sym = \
+                    sym.Symbol(sac.assign_unique("compress_temp", expr_all[row]))
                 for k, v in deps:
                     expr_all[k] += new_sym * v
             else:
