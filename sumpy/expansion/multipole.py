@@ -145,7 +145,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         return MiDerivativeTaker(self.kernel.get_expression(bvec), bvec)
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale):
+            dvec, tgt_rscale, sac=None):
         if not isinstance(src_expansion, type(self)):
             raise RuntimeError("do not know how to translate %s to "
                     "Taylor multipole expansion"
@@ -234,7 +234,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         logger.info("building translation operator: done")
         return (
             self.expansion_terms_wrangler.get_stored_mpole_coefficients_from_full(
-                result, tgt_rscale))
+                result, tgt_rscale, sac=sac))
 
 
 class VolumeTaylorMultipoleExpansion(
@@ -326,7 +326,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
                 for c in self.get_coefficient_identifiers())
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale):
+            dvec, tgt_rscale, sac=None):
         if not isinstance(src_expansion, type(self)):
             raise RuntimeError("do not know how to translate %s to %s"
                                % (type(src_expansion).__name__,

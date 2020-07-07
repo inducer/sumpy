@@ -131,7 +131,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         evaluated_coeffs = (
             self.expansion_terms_wrangler.get_full_kernel_derivatives_from_stored(
-                coeffs, rscale))
+                coeffs, rscale, sac=sac))
 
         bvec = [b*rscale**-1 for b in bvec]
         mi_to_index = dict((mi, i) for i, mi in
@@ -213,7 +213,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         return local_sum[0]
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale):
+            dvec, tgt_rscale, sac=None):
         logger.info("building translation operator: %s(%d) -> %s(%d): start"
                 % (type(src_expansion).__name__,
                     src_expansion.order,
@@ -282,7 +282,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 # Compress the embedded coefficient set
                 stored_coeffs = tgtplusderiv_exp_terms_wrangler \
                         .get_stored_mpole_coefficients_from_full(
-                                embedded_coeffs, src_rscale)
+                                embedded_coeffs, src_rscale, sac=sac)
 
                 # Sum the embedded coefficient set
                 for tgtplusderiv_coeff_id, coeff in zip(tgtplusderiv_coeff_ids,
@@ -313,7 +313,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # the end in the hope of helping rscale magnitude.
             dvec_scaled = [d*src_rscale for d in dvec]
             expr = src_expansion.evaluate(src_coeff_exprs, dvec_scaled,
-                        rscale=src_rscale)
+                        rscale=src_rscale, sac=sac)
             replace_dict = dict((d, d/src_rscale) for d in dvec)
             taker = MiDerivativeTaker(expr, dvec)
             rscale_ratio = sym.UnevaluatedExpr(tgt_rscale/src_rscale)
@@ -412,7 +412,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                 for c in self.get_coefficient_identifiers())
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale):
+            dvec, tgt_rscale, sac=None):
         from sumpy.symbolic import sym_real_norm_2
 
         if not self.use_rscale:

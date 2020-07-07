@@ -136,7 +136,7 @@ class ExpansionBase(object):
         raise NotImplementedError
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale):
+            dvec, tgt_rscale, sac=None):
         raise NotImplementedError
 
     def update_persistent_hash(self, key_hash, key_builder):
@@ -227,30 +227,58 @@ class FullExpansionTermsWrangler(ExpansionTermsWrangler):
 
 # {{{ sparse matrix-vector multiplication
 
-def _fast_spmv(reconstruct_matrix, vec, sac, transpose=False):
-    if not transpose:
-        res = [0] * len(reconstruct_matrix)
+class CSEMatVec(object):
+    """
+    A class to facilitate a fast matrix vector multiplication with
+    common subexpression eliminated. In compressed Taylor
+    series, the compression matrix's operation count can be
+    reduced to `O(p**d)` from `O(p**{2d-1})` using CSE.
+
+    .. attribute:: assignments
+
+        A list of tuples where the first argument of the tuple
+        is a row and the second argument is a list. If the
+        second argument is empty, the row is equal to the first
+        unused element from the vector. If not, the second
+        argument gives a list of tuples indicating a linear
+        combination of previously calculated row.
+
+        The matrix represented is a square matrix with the number
+        of rows equal to the length of the `assignments` list.
+    """
+
+    def __init__(self, assignments):
+        self.assignments = assignments
+
+    def matvec(self, vec, sac):
+        res = [0] * len(self.assignments)
         stored_idx = 0
-        for row, deps in enumerate(reconstruct_matrix):
+        for row, deps in enumerate(self.assignments):
             if len(deps) == 0:
                 res[row] = vec[stored_idx]
                 stored_idx += 1
             else:
                 for k, v in deps:
                     res[row] += res[k] * v
-            new_sym = sym.Symbol(sac.assign_unique("decompress_temp", res[row]))
-            res[row] = new_sym
+            if sac is not None:
+                new_sym = sym.Symbol(sac.assign_unique("projection_temp", res[row]))
+                res[row] = new_sym
         return res
-    else:
+
+    def transpose_matvec(self, vec, sac):
         res = []
         expr_all = list(vec)
-        for row, deps in reversed(list(enumerate(reconstruct_matrix))):
+        for row, deps in reversed(list(enumerate(self.assignments))):
             if len(deps) == 0:
                 res.append(expr_all[row])
                 continue
-            new_sym = sym.Symbol(sac.assign_unique("compress_temp", expr_all[row]))
-            for k, v in deps:
-                expr_all[k] += new_sym * v
+            if sac is not None:
+                new_sym = sym.Symbol(sac.assign_unique("compress_temp", expr_all[row]))
+                for k, v in deps:
+                    expr_all[k] += new_sym * v
+            else:
+                for k, v in deps:
+                    expr_all[k] += sym.sympify(expr_all[row] * v).expand(deep=False)
         res.reverse()
         return res
 
@@ -261,7 +289,6 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     """
     .. automethod:: __init__
     .. automethod:: get_pde
-    .. automethod:: get_reduced_coeffs
     """
 
     init_arg_names = ("order", "dim", "max_mi")
@@ -279,19 +306,18 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
     def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
             rscale, sac=None):
-        reconstruct_matrix = self.get_coefficient_matrix(rscale)
-        return _fast_spmv(reconstruct_matrix, stored_kernel_derivatives, sac)
+        projection_matrix = self.get_projection_matrix(rscale)
+        return projection_matrix.matvec(stored_kernel_derivatives, sac)
 
     def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients,
             rscale, sac=None):
-        # = M^T x, where M = coeff matrix
-        reconstruct_matrix = self.get_coefficient_matrix(rscale)
-        return _fast_spmv(reconstruct_matrix, full_mpole_coefficients, sac,
-                transpose=True)
+        # = M^T x, where M = projection matrix
+        projection_matrix = self.get_projection_matrix(rscale)
+        return projection_matrix.transpose_matvec(full_mpole_coefficients, sac)
 
     @property
     def stored_identifiers(self):
-        stored_identifiers, coeff_matrix = self.get_stored_ids_and_coeff_mat()
+        stored_identifiers, _ = self.get_stored_ids_and_unscaled_projection_matrix()
         return stored_identifiers
 
     def get_pde(self):
@@ -304,7 +330,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         raise NotImplementedError
 
     @memoize_method
-    def get_stored_ids_and_coeff_mat(self):
+    def get_stored_ids_and_unscaled_projection_matrix(self):
         from six import iteritems
 
         from pytools import ProcessLogger
@@ -319,10 +345,9 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             if ident not in coeff_ident_enumerate_dict:
                 # Order of the expansion is less than the order of the PDE.
                 # In that case, the compression matrix is the identity matrix
-                reconstruct_matrix = []
-                for i in range(len(mis)):
-                    reconstruct_matrix.append([])
-                return mis, reconstruct_matrix
+                # and there's nothing to project
+                projection_matrix_assignments = [list() for i in range(len(mis))]
+                return mis, CSEMatVec(projection_matrix_assignments)
 
         max_mi_idx = max(coeff_ident_enumerate_dict[ident] for
                          ident in pde_dict.keys())
@@ -338,9 +363,9 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         stored_identifiers = [mi for mi in mis if is_stored(mi)]
 
-        reconstruct_matrix = []
+        projection_matrix_assignments = []
         for i, mi in enumerate(mis):
-            reconstruct_matrix.append([])
+            projection_matrix_assignments.append([])
             if is_stored(mi):
                 continue
             diff = [mi[d] - max_mi[d] for d in range(self.dim)]
@@ -350,7 +375,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                     continue
                 # PDE might not have max_mi_coeff = -1, divide by -max_mi_coeff
                 # to get a relation of the form, u_zz = - u_xx - u_yy for Laplace 3D.
-                reconstruct_matrix[i].append((j, coeff*max_mi_mult))
+                projection_matrix_assignments[i].append((j, coeff*max_mi_mult))
 
         plog.done()
 
@@ -358,10 +383,10 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                      .format(orig=len(self.get_full_coefficient_identifiers()),
                              red=len(stored_identifiers)))
 
-        return stored_identifiers, reconstruct_matrix
+        return stored_identifiers, CSEMatVec(projection_matrix_assignments)
 
     @memoize_method
-    def get_coefficient_matrix(self, rscale):
+    def get_projection_matrix(self, rscale):
         """
         Return a matrix that expresses every derivative in terms of a
         set of "stored" derivatives.
@@ -379,14 +404,16 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             u_zz| ...  -1   -1  ...
 
             ^ rows = one for every derivative
+
+        the projection matrix `M` is the transpose of the coefficient matrix
         """
-        stored_identifiers, reconstruct_matrix = \
-            self.get_stored_ids_and_coeff_mat()
+        _, projection_matrix = \
+            self.get_stored_ids_and_unscaled_projection_matrix()
 
         full_coeffs = self.get_full_coefficient_identifiers()
 
-        reconstruct_matrix_with_rscale = []
-        for row, deps in enumerate(reconstruct_matrix):
+        projection_with_rscale = []
+        for row, deps in enumerate(projection_matrix.assignments):
             # For eg: (u_xxx / rscale**3) = (u_yy / rscale**2) * coeff1 +
             #                               (u_xx / rscale**2) * coeff2
             # is converted to u_xxx = u_yy * (rscale * coeff1) +
@@ -397,9 +424,9 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 diff = row_rscale - sum(full_coeffs[k])
                 mult = rscale**diff
                 deps_with_rscale.append((k, coeff * mult))
-            reconstruct_matrix_with_rscale.append(deps_with_rscale)
+            projection_with_rscale.append(deps_with_rscale)
 
-        return reconstruct_matrix_with_rscale
+        return CSEMatVec(projection_with_rscale)
 
 
 class LaplaceExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
