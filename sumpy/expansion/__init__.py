@@ -23,11 +23,9 @@ THE SOFTWARE.
 """
 
 from six.moves import range
-import six
 import logging
 from pytools import memoize_method
 import sumpy.symbolic as sym
-from collections import defaultdict
 from sumpy.tools import add_mi
 from .pde import make_pde_sym, laplacian
 
@@ -229,37 +227,6 @@ class FullExpansionTermsWrangler(ExpansionTermsWrangler):
 
 # {{{ sparse matrix-vector multiplication
 
-def _spmv(spmat, x, sparse_vectors):
-    """
-    :param spmat: maps row indices to list of (col idx, value)
-    :param x: maps vector indices to values
-    :param sparse_vectors: If True, treat vectors as dict-like, otherwise list-like
-    """
-    if sparse_vectors:
-        result = {}
-    else:
-        result = []
-
-    for row in range(len(spmat)):
-        acc = 0
-
-        for j, coeff in spmat[row]:
-            if sparse_vectors:
-                # Check if the index exists in the vector.
-                if x.get(j, 0) == 0:
-                    continue
-
-            acc += coeff * x[j]
-
-        if sparse_vectors:
-            if acc != 0:
-                result[row] = acc
-        else:
-            result.append(acc)
-
-    return result
-
-
 def _fast_spmv(reconstruct_matrix, vec, sac, transpose=False):
     if not transpose:
         res = [0] * len(reconstruct_matrix)
@@ -312,31 +279,86 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
     def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
             rscale, sac=None):
-        coeff_matrix, reconstruct_matrix, use_reconstruct = \
-            self.get_coefficient_matrix(rscale)
-        if not use_reconstruct or sac is None:
-            return _spmv(coeff_matrix, stored_kernel_derivatives,
-                     sparse_vectors=False)
+        reconstruct_matrix = self.get_coefficient_matrix(rscale)
         return _fast_spmv(reconstruct_matrix, stored_kernel_derivatives, sac)
 
     def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients,
             rscale, sac=None):
         # = M^T x, where M = coeff matrix
-        coeff_matrix, reconstruct_matrix, use_reconstruct = \
-            self.get_coefficient_matrix(rscale)
-        if not use_reconstruct or sac is None:
-            result = [0] * len(self.stored_identifiers)
-            for row, coeff in enumerate(full_mpole_coefficients):
-                for col, val in coeff_matrix[row]:
-                    result[col] += coeff * val
-            return result
+        reconstruct_matrix = self.get_coefficient_matrix(rscale)
         return _fast_spmv(reconstruct_matrix, full_mpole_coefficients, sac,
                 transpose=True)
 
     @property
     def stored_identifiers(self):
-        stored_identifiers, coeff_matrix, _ = self.get_stored_ids_and_coeff_mat()
+        stored_identifiers, coeff_matrix = self.get_stored_ids_and_coeff_mat()
         return stored_identifiers
+
+    def get_pde(self):
+        r"""
+        Returns a PDE. A PDE stores a dictionary of (mi, coeff)
+        where mi is the multi-index of the  derivative and coeff is the
+        coefficient
+        """
+
+        raise NotImplementedError
+
+    @memoize_method
+    def get_stored_ids_and_coeff_mat(self):
+        from six import iteritems
+
+        from pytools import ProcessLogger
+        plog = ProcessLogger(logger, "compute PDE for Taylor coefficients")
+
+        mis = self.get_full_coefficient_identifiers()
+        coeff_ident_enumerate_dict = {tuple(mi): i for
+                                            (i, mi) in enumerate(mis)}
+
+        pde_dict = self.get_pde().eq
+        for ident in pde_dict.keys():
+            if ident not in coeff_ident_enumerate_dict:
+                # Order of the expansion is less than the order of the PDE.
+                # In that case, the compression matrix is the identity matrix
+                reconstruct_matrix = []
+                for i in range(len(mis)):
+                    reconstruct_matrix.append([])
+                return mis, reconstruct_matrix
+
+        max_mi_idx = max(coeff_ident_enumerate_dict[ident] for
+                         ident in pde_dict.keys())
+        max_mi = mis[max_mi_idx]
+        max_mi_coeff = pde_dict[max_mi]
+        max_mi_mult = -1/sym.sympify(max_mi_coeff)
+
+        def is_stored(mi):
+            """
+            A multi_index mi is not stored if mi >= max_mi
+            """
+            return any(mi[d] < max_mi[d] for d in range(self.dim))
+
+        stored_identifiers = [mi for mi in mis if is_stored(mi)]
+
+        reconstruct_matrix = []
+        for i, mi in enumerate(mis):
+            reconstruct_matrix.append([])
+            if is_stored(mi):
+                continue
+            diff = [mi[d] - max_mi[d] for d in range(self.dim)]
+            for other_mi, coeff in iteritems(pde_dict):
+                j = coeff_ident_enumerate_dict[add_mi(other_mi, diff)]
+                if i == j:
+                    continue
+                # PDE might not have max_mi_coeff = -1, divide by -max_mi_coeff
+                # to get a relation of the form, u_zz = - u_xx - u_yy for Laplace 3D.
+                reconstruct_matrix[i].append((j, coeff*max_mi_mult))
+
+        plog.done()
+
+        logger.debug("number of Taylor coefficients was reduced from {orig} to {red}"
+                     .format(orig=len(self.get_full_coefficient_identifiers()),
+                             red=len(stored_identifiers)))
+
+        return stored_identifiers, reconstruct_matrix
 
     @memoize_method
     def get_coefficient_matrix(self, rscale):
@@ -358,135 +380,26 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
             ^ rows = one for every derivative
         """
-        stored_identifiers, coeff_matrix, reconstruct_matrix = \
+        stored_identifiers, reconstruct_matrix = \
             self.get_stored_ids_and_coeff_mat()
 
         full_coeffs = self.get_full_coefficient_identifiers()
-        matrix_rows = []
-        count_nonzero_coeff = -len(stored_identifiers)
-        for irow, row in six.iteritems(coeff_matrix):
-            # For eg: (u_xxx / rscale**3) = (u_yy / rscale**2) * coeff1 +
-            #                               (u_xx / rscale**2) * coeff2
-            # is converted to u_xxx = u_yy * (rscale * coeff1) +
-            #                         u_xx * (rscale * coeff2)
-            row_rscale = sum(full_coeffs[irow])
-            matrix_row = []
-            for icol, coeff in row:
-                diff = row_rscale - sum(stored_identifiers[icol])
-                mult = rscale**diff
-                matrix_row.append((icol, coeff * mult))
-            count_nonzero_coeff += len(row)
-            matrix_rows.append((irow, matrix_row))
-
-        if reconstruct_matrix is None:
-            return defaultdict(list, matrix_rows), None, False
 
         reconstruct_matrix_with_rscale = []
-        count_nonzero_reconstruct = 0
         for row, deps in enumerate(reconstruct_matrix):
             # For eg: (u_xxx / rscale**3) = (u_yy / rscale**2) * coeff1 +
             #                               (u_xx / rscale**2) * coeff2
             # is converted to u_xxx = u_yy * (rscale * coeff1) +
             #                         u_xx * (rscale * coeff2)
             row_rscale = sum(full_coeffs[row])
-            matrix_row = []
             deps_with_rscale = []
             for k, coeff in deps:
                 diff = row_rscale - sum(full_coeffs[k])
                 mult = rscale**diff
                 deps_with_rscale.append((k, coeff * mult))
-            count_nonzero_reconstruct += len(deps)
             reconstruct_matrix_with_rscale.append(deps_with_rscale)
 
-        use_reconstruct = count_nonzero_reconstruct < count_nonzero_coeff
-
-        return defaultdict(list, matrix_rows), reconstruct_matrix_with_rscale, \
-            use_reconstruct
-
-    def get_pde(self):
-        r"""
-        Returns a PDE. A PDE stores a dictionary of (mi, coeff)
-        where mi is the multi-index of the  derivative and coeff is the
-        coefficient
-        """
-
-        raise NotImplementedError
-
-    @memoize_method
-    def get_stored_ids_and_coeff_mat(self):
-        from six import iteritems
-
-        from pytools import ProcessLogger
-        plog = ProcessLogger(logger, "compute PDE for Taylor coefficients")
-
-        mis = self.get_full_coefficient_identifiers()
-        coeff_ident_enumerate_dict = dict((tuple(mi), i) for
-                                            (i, mi) in enumerate(mis))
-
-        pde_dict = self.get_pde().eq
-        for ident in pde_dict.keys():
-            if ident not in coeff_ident_enumerate_dict:
-                # Order of the expansion is less than the order of the PDE.
-                # In that case, the compression matrix is the identity matrix
-                coeff_matrix = defaultdict(list)
-                reconstruct_matrix = []
-                for i in range(len(mis)):
-                    coeff_matrix[i] = [(i, 1)]
-                    reconstruct_matrix.append([])
-                return mis, coeff_matrix, reconstruct_matrix
-
-        max_mi_idx = max(coeff_ident_enumerate_dict[ident] for
-                         ident in pde_dict.keys())
-        max_mi = mis[max_mi_idx]
-        max_mi_coeff = pde_dict[max_mi]
-        max_mi_mult = -1/sym.sympify(max_mi_coeff)
-
-        def is_stored(mi):
-            """
-            A multi_index mi is not stored if mi >= max_mi
-            """
-            return any(mi[d] < max_mi[d] for d in range(self.dim))
-
-        stored_identifiers = [mi for mi in mis if is_stored(mi)]
-        stored_ident_enumerate_dict = dict((tuple(mi), i) for
-                                            (i, mi) in enumerate(stored_identifiers))
-
-        coeff_matrix_dict = defaultdict(lambda: defaultdict(lambda: 0))
-        reconstruct_matrix = []
-        for i, mi in enumerate(mis):
-            reconstruct_matrix.append([])
-            if is_stored(mi):
-                coeff_matrix_dict[i][stored_ident_enumerate_dict[mi]] = 1
-                continue
-            diff = [mi[d] - max_mi[d] for d in range(self.dim)]
-            for other_mi, coeff in iteritems(pde_dict):
-                j = coeff_ident_enumerate_dict[add_mi(other_mi, diff)]
-                if i == j:
-                    continue
-                # PDE might not have max_mi_coeff = -1, divide by -max_mi_coeff
-                # to get a relation of the form, u_zz = - u_xx - u_yy for Laplace 3D.
-                reconstruct_matrix[i].append((j, coeff*max_mi_mult))
-                # j can be a stored or a non-stored multi-index
-                # Look at the coeff_matrix of j to get the j as a linear combination
-                # of stored coefficients.
-                for dep, other_coeff in iteritems(coeff_matrix_dict[j]):
-                    coeff_matrix_dict[i][dep] += other_coeff*coeff*max_mi_mult
-
-        # coeff_matrix is a dictionary of lists. Each key in the dictionary
-        # is a row number and the values are pairs of column number and value.
-        coeff_matrix = defaultdict(list)
-        for row, deps in iteritems(coeff_matrix_dict):
-            for col, val in iteritems(deps):
-                if val != 0:
-                    coeff_matrix[row].append((col, val))
-
-        plog.done()
-
-        logger.debug("number of Taylor coefficients was reduced from {orig} to {red}"
-                     .format(orig=len(self.get_full_coefficient_identifiers()),
-                             red=len(stored_identifiers)))
-
-        return stored_identifiers, coeff_matrix, reconstruct_matrix
+        return reconstruct_matrix_with_rscale
 
 
 class LaplaceExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
