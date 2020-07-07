@@ -251,6 +251,15 @@ class CSEMatVec(object):
         self.assignments = assignments
 
     def matvec(self, vec, sac):
+        """
+        :arg vec: vector for the matrix vector multiplication
+
+        :arg sac: an object of type
+                  :class:`sumpy.assignment_collection.SymbolicAssignmentCollection`
+                  for storing intermediate row values. If given `None`, the
+                  matvec operation will not use common subexpression elimination
+                  resulting in an expensive matvec
+        """
         res = [0] * len(self.assignments)
         stored_idx = 0
         for row, deps in enumerate(self.assignments):
@@ -279,7 +288,7 @@ class CSEMatVec(object):
                     expr_all[k] += new_sym * v
             else:
                 for k, v in deps:
-                    expr_all[k] += sym.sympify(expr_all[row] * v).expand(deep=False)
+                    expr_all[k] += expr_all[row] * v
         res.reverse()
         return res
 
@@ -389,8 +398,9 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     @memoize_method
     def get_projection_matrix(self, rscale):
         """
-        Return a matrix that expresses every derivative in terms of a
-        set of "stored" derivatives.
+        Return a :class:`CSEMatVec` class which exposes a matrix vector
+        multiplication operator for the projection matrix that expresses
+        every derivative in terms of a set of "stored" derivatives.
 
         For example, for the PDE::
 
