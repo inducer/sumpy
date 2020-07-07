@@ -416,6 +416,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         pde_dict = self.get_pde().eq
         for ident in pde_dict.keys():
             if ident not in coeff_ident_enumerate_dict:
+                # Order of the expansion is less than the order of the PDE.
+                # In that case, the compression matrix is the identity matrix
                 coeff_matrix = defaultdict(list)
                 reconstruct_matrix = []
                 for i in range(len(mis)):
