@@ -58,8 +58,8 @@ else:
 
 
 @pytest.mark.parametrize("exclude_self", (True, False))
-def test_p2p(ctx_getter, exclude_self):
-    ctx = ctx_getter()
+def test_p2p(ctx_factory, exclude_self):
+    ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
     dimensions = 3
@@ -140,13 +140,13 @@ def test_p2p(ctx_getter, exclude_self):
     True
     ])
 # Sample: test_p2e2p(cl._csc, LaplaceKernel(2), VolumeTaylorLocalExpansion, 4, False)
-def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
+def test_p2e2p(ctx_factory, base_knl, expn_class, order, with_source_derivative):
     #logging.basicConfig(level=logging.INFO)
 
     from sympy.core.cache import clear_cache
     clear_cache()
 
-    ctx = ctx_getter()
+    ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
     np.random.seed(17)
@@ -359,13 +359,13 @@ def test_p2e2p(ctx_getter, base_knl, expn_class, order, with_source_derivative):
     (StokesletKernel(2, 0, 0), BiharmonicConformingVolumeTaylorLocalExpansion,
      BiharmonicConformingVolumeTaylorMultipoleExpansion),
     ])
-def test_translations(ctx_getter, knl, local_expn_class, mpole_expn_class):
+def test_translations(ctx_factory, knl, local_expn_class, mpole_expn_class):
     logging.basicConfig(level=logging.INFO)
 
     from sympy.core.cache import clear_cache
     clear_cache()
 
-    ctx = ctx_getter()
+    ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
     np.random.seed(17)

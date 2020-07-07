@@ -91,6 +91,7 @@ setup(name="sumpy",
       license="MIT",
       packages=["sumpy", "sumpy.expansion"],
 
+      python_requires="~=3.6",
       install_requires=[
           "pytools>=2018.2",
           "loo.py>=2017.2",

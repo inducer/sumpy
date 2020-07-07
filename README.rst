@@ -4,9 +4,9 @@ sumpy: n-body kernels and translation operators
 .. image:: https://gitlab.tiker.net/inducer/sumpy/badges/master/pipeline.svg
     :alt: Gitlab Build Status
     :target: https://gitlab.tiker.net/inducer/sumpy/commits/master
-.. image:: https://dev.azure.com/ak-spam/inducer/_apis/build/status/inducer.sumpy?branchName=master
-    :alt: Azure Build Status
-    :target: https://dev.azure.com/ak-spam/inducer/_build/latest?definitionId=17&branchName=master
+.. image:: https://github.com/inducer/sumpy/workflows/CI/badge.svg?branch=master&event=push
+    :alt: Github Build Status
+    :target: https://github.com/inducer/sumpy/actions?query=branch%3Amaster+workflow%3ACI+event%3Apush
 .. image:: https://badge.fury.io/py/sumpy.png
     :alt: Python Package Index Release Page
     :target: https://pypi.org/project/sumpy/

@@ -72,10 +72,10 @@ else:
                          HelmholtzConformingVolumeTaylorMultipoleExpansion),
     (YukawaKernel(2), Y2DLocalExpansion, Y2DMultipoleExpansion),
     ])
-def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
+def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class):
     logging.basicConfig(level=logging.INFO)
 
-    ctx = ctx_getter()
+    ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
     nsources = 1000
@@ -201,10 +201,10 @@ def test_sumpy_fmm(ctx_getter, knl, local_expn_class, mpole_expn_class):
     pconv_verifier()
 
 
-def test_sumpy_fmm_timing_data_collection(ctx_getter):
+def test_sumpy_fmm_timing_data_collection(ctx_factory):
     logging.basicConfig(level=logging.INFO)
 
-    ctx = ctx_getter()
+    ctx = ctx_factory()
     queue = cl.CommandQueue(
             ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
@@ -257,10 +257,10 @@ def test_sumpy_fmm_timing_data_collection(ctx_getter):
     assert timing_data
 
 
-def test_sumpy_fmm_exclude_self(ctx_getter):
+def test_sumpy_fmm_exclude_self(ctx_factory):
     logging.basicConfig(level=logging.INFO)
 
-    ctx = ctx_getter()
+    ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
     nsources = 500

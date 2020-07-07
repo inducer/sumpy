@@ -98,10 +98,10 @@ def _build_block_index(queue, nnodes, nblks, factor):
 
 @pytest.mark.parametrize('factor', [1.0, 0.6])
 @pytest.mark.parametrize('lpot_id', [1, 2])
-def test_qbx_direct(ctx_getter, factor, lpot_id):
+def test_qbx_direct(ctx_factory, factor, lpot_id):
     logging.basicConfig(level=logging.INFO)
 
-    ctx = ctx_getter()
+    ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
     ndim = 2
@@ -143,8 +143,9 @@ def test_qbx_direct(ctx_getter, factor, lpot_id):
 
         extra_kwargs = {}
         if lpot_id == 2:
+            from pytools.obj_array import make_obj_array
             extra_kwargs["dsource_vec"] = \
-                    vector_to_device(queue, np.ones((ndim, n)))
+                    vector_to_device(queue, make_obj_array(np.ones((ndim, n))))
 
         _, (result_lpot,) = lpot(queue,
                 targets=targets,
@@ -181,10 +182,10 @@ def test_qbx_direct(ctx_getter, factor, lpot_id):
 @pytest.mark.parametrize("exclude_self", [True, False])
 @pytest.mark.parametrize("factor", [1.0, 0.6])
 @pytest.mark.parametrize('lpot_id', [1, 2])
-def test_p2p_direct(ctx_getter, exclude_self, factor, lpot_id):
+def test_p2p_direct(ctx_factory, exclude_self, factor, lpot_id):
     logging.basicConfig(level=logging.INFO)
 
-    ctx = ctx_getter()
+    ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
 
     ndim = 2
@@ -225,8 +226,9 @@ def test_p2p_direct(ctx_getter, exclude_self, factor, lpot_id):
             extra_kwargs["target_to_source"] = \
                 cl.array.arange(queue, 0, n, dtype=np.int)
         if lpot_id == 2:
+            from pytools.obj_array import make_obj_array
             extra_kwargs["dsource_vec"] = \
-                    vector_to_device(queue, np.ones((ndim, n)))
+                    vector_to_device(queue, make_obj_array(np.ones((ndim, n))))
 
         _, (result_lpot,) = lpot(queue,
                 targets=targets,

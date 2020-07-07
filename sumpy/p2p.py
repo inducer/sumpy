@@ -33,7 +33,8 @@ import loopy as lp
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 from pymbolic import var
 
-from sumpy.tools import KernelComputation, KernelCacheWrapper
+from sumpy.tools import (
+        KernelComputation, KernelCacheWrapper, is_obj_array_like)
 
 
 __doc__ = """
@@ -214,12 +215,9 @@ class P2P(P2PBase):
         return loopy_knl
 
     def __call__(self, queue, targets, sources, strength, **kwargs):
-        from pytools.obj_array import is_obj_array
         knl = self.get_cached_optimized_kernel(
-                targets_is_obj_array=(
-                    is_obj_array(targets) or isinstance(targets, (tuple, list))),
-                sources_is_obj_array=(
-                    is_obj_array(sources) or isinstance(sources, (tuple, list))))
+                targets_is_obj_array=is_obj_array_like(targets),
+                sources_is_obj_array=is_obj_array_like(sources))
 
         return knl(queue, sources=sources, targets=targets, strength=strength,
                 **kwargs)
@@ -278,12 +276,9 @@ class P2PMatrixGenerator(P2PBase):
         return loopy_knl
 
     def __call__(self, queue, targets, sources, **kwargs):
-        from pytools.obj_array import is_obj_array
         knl = self.get_cached_optimized_kernel(
-                targets_is_obj_array=(
-                    is_obj_array(targets) or isinstance(targets, (tuple, list))),
-                sources_is_obj_array=(
-                    is_obj_array(sources) or isinstance(sources, (tuple, list))))
+                targets_is_obj_array=is_obj_array_like(targets),
+                sources_is_obj_array=is_obj_array_like(sources))
 
         return knl(queue, sources=sources, targets=targets, **kwargs)
 
@@ -390,12 +385,9 @@ class P2PMatrixBlockGenerator(P2PBase):
         :return: a tuple of one-dimensional arrays of kernel evaluations at
             target-source pairs described by `index_set`.
         """
-        from pytools.obj_array import is_obj_array
         knl = self.get_cached_optimized_kernel(
-                targets_is_obj_array=(
-                    is_obj_array(targets) or isinstance(targets, (tuple, list))),
-                sources_is_obj_array=(
-                    is_obj_array(sources) or isinstance(sources, (tuple, list))))
+                targets_is_obj_array=is_obj_array_like(targets),
+                sources_is_obj_array=is_obj_array_like(sources))
 
         return knl(queue,
                    targets=targets,

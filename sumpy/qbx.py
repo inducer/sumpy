@@ -35,7 +35,8 @@ import sumpy.symbolic as sym
 from pytools import memoize_method
 from pymbolic import parse, var
 
-from sumpy.tools import KernelComputation, KernelCacheWrapper
+from sumpy.tools import (
+        KernelComputation, KernelCacheWrapper, is_obj_array_like)
 
 import logging
 logger = logging.getLogger(__name__)
@@ -154,7 +155,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                 lp.GlobalArg("tgt", None,
                     shape=(self.dim, "ntargets"), order="C"),
                 lp.GlobalArg("center", None,
-                    shape=(self.dim, "ntargets"), dim_tags="sep,C"),
+                    shape=(self.dim, "ntargets"), order="C"),
                 lp.GlobalArg("expansion_radii",
                     None, shape="ntargets"),
                 lp.ValueArg("nsources", None),
@@ -164,9 +165,17 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
     def get_kernel(self):
         raise NotImplementedError
 
-    def get_optimized_kernel(self):
+    def get_optimized_kernel(self,
+            targets_is_obj_array, sources_is_obj_array, centers_is_obj_array):
         # FIXME specialize/tune for GPU/CPU
         loopy_knl = self.get_kernel()
+
+        if targets_is_obj_array:
+            loopy_knl = lp.tag_array_axes(loopy_knl, "tgt", "sep,C")
+        if sources_is_obj_array:
+            loopy_knl = lp.tag_array_axes(loopy_knl, "src", "sep,C")
+        if centers_is_obj_array:
+            loopy_knl = lp.tag_array_axes(loopy_knl, "center", "sep,C")
 
         import pyopencl as cl
         dev = self.context.devices[0]
@@ -249,7 +258,10 @@ class LayerPotential(LayerPotentialBase):
             already multiplied in.
         """
 
-        knl = self.get_cached_optimized_kernel()
+        knl = self.get_cached_optimized_kernel(
+                targets_is_obj_array=is_obj_array_like(targets),
+                sources_is_obj_array=is_obj_array_like(sources),
+                centers_is_obj_array=is_obj_array_like(centers))
 
         for i, dens in enumerate(strengths):
             kwargs["strength_%d" % i] = dens
@@ -313,7 +325,10 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
         return loopy_knl
 
     def __call__(self, queue, targets, sources, centers, expansion_radii, **kwargs):
-        knl = self.get_cached_optimized_kernel()
+        knl = self.get_cached_optimized_kernel(
+                targets_is_obj_array=is_obj_array_like(targets),
+                sources_is_obj_array=is_obj_array_like(sources),
+                centers_is_obj_array=is_obj_array_like(centers))
 
         return knl(queue, src=sources, tgt=targets, center=centers,
                 expansion_radii=expansion_radii, **kwargs)
@@ -388,8 +403,16 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
 
         return loopy_knl
 
-    def get_optimized_kernel(self):
+    def get_optimized_kernel(self,
+            targets_is_obj_array, sources_is_obj_array, centers_is_obj_array):
         loopy_knl = self.get_kernel()
+
+        if targets_is_obj_array:
+            loopy_knl = lp.tag_array_axes(loopy_knl, "tgt", "sep,C")
+        if sources_is_obj_array:
+            loopy_knl = lp.tag_array_axes(loopy_knl, "src", "sep,C")
+        if centers_is_obj_array:
+            loopy_knl = lp.tag_array_axes(loopy_knl, "center", "sep,C")
 
         loopy_knl = lp.split_iname(loopy_knl, "imat", 1024, outer_tag="g.0")
         return loopy_knl
@@ -406,8 +429,10 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
         :return: a tuple of one-dimensional arrays of kernel evaluations at
             target-source pairs described by `index_set`.
         """
-
-        knl = self.get_cached_optimized_kernel()
+        knl = self.get_cached_optimized_kernel(
+                targets_is_obj_array=is_obj_array_like(targets),
+                sources_is_obj_array=is_obj_array_like(sources),
+                centers_is_obj_array=is_obj_array_like(centers))
 
         return knl(queue,
                    src=sources,

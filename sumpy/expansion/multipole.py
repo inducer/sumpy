@@ -171,8 +171,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
         src_coeff_exprs = list(src_coeff_exprs)
         for i, mi in enumerate(src_expansion.get_coefficient_identifiers()):
-            src_coeff_exprs[i] *= mi_factorial(mi) * \
-                sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(mi)
+            src_coeff_exprs[i] *= sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(mi)
 
         result = [0] * len(self.get_full_coefficient_identifiers())
 
@@ -220,20 +219,14 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                         continue
 
                     contrib = dim_coeffs_to_translate[src_index]
-
                     for idim in range(self.dim):
                         n = tgt_mi[idim]
                         k = src_mi[idim]
                         assert n >= k
-                        from sympy import binomial
-                        contrib *= (binomial(n, k)
-                                * sym.UnevaluatedExpr(dvec[idim]/tgt_rscale)**(n-k))
+                        contrib /= mi_factorial((n-k,))
+                        contrib *= sym.UnevaluatedExpr(dvec[idim]/tgt_rscale)**(n-k)
 
                     result[i] += contrib
-
-                # Defer division by target factorial until the very end
-                if d == self.dim-1:
-                    result[i] /= mi_factorial(tgt_mi)
 
             dim_coeffs_to_translate = result[:]
             mi_to_index = tgt_mi_to_index
@@ -308,11 +301,11 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
         source_angle_rel_center = sym.atan2(-avec[1], -avec[0])
         return [
                 self.kernel.postprocess_at_source(
-                    bessel_j(l, arg_scale * avec_len)
-                    / rscale ** abs(l)
-                    * sym.exp(sym.I * l * -source_angle_rel_center),
+                    bessel_j(c, arg_scale * avec_len)
+                    / rscale ** abs(c)
+                    * sym.exp(sym.I * c * -source_angle_rel_center),
                     avec)
-                for l in self.get_coefficient_identifiers()]
+                for c in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec, rscale, sac=None):
         if not self.use_rscale:
@@ -325,12 +318,12 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
 
         arg_scale = self.get_bessel_arg_scaling()
 
-        return sum(coeffs[self.get_storage_index(l)]
+        return sum(coeffs[self.get_storage_index(c)]
                    * self.kernel.postprocess_at_target(
-                       hankel_1(l, arg_scale * bvec_len)
-                       * rscale ** abs(l)
-                       * sym.exp(sym.I * l * target_angle_rel_center), bvec)
-                for l in self.get_coefficient_identifiers())
+                       hankel_1(c, arg_scale * bvec_len)
+                       * rscale ** abs(c)
+                       * sym.exp(sym.I * c * target_angle_rel_center), bvec)
+                for c in self.get_coefficient_identifiers())
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale):
@@ -351,13 +344,13 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
         arg_scale = self.get_bessel_arg_scaling()
 
         translated_coeffs = []
-        for l in self.get_coefficient_identifiers():
+        for j in self.get_coefficient_identifiers():
             translated_coeffs.append(
                 sum(src_coeff_exprs[src_expansion.get_storage_index(m)]
-                    * bessel_j(m - l, arg_scale * dvec_len)
+                    * bessel_j(m - j, arg_scale * dvec_len)
                     * src_rscale ** abs(m)
-                    / tgt_rscale ** abs(l)
-                    * sym.exp(sym.I * (m - l) * new_center_angle_rel_old_center)
+                    / tgt_rscale ** abs(j)
+                    * sym.exp(sym.I * (m - j) * new_center_angle_rel_old_center)
                 for m in src_expansion.get_coefficient_identifiers()))
         return translated_coeffs
 
