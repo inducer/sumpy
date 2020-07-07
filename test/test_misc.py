@@ -278,6 +278,23 @@ def test_toy_p2e2e2p(ctx_factory, case):
         (conv_factor, case.conv_factor * (1 + RTOL_P2E2E2P))
 
 
+def test_cse_matvec():
+    from sumpy.expansion import CSEMatVec
+    assignments = [[], [(0, 3)], [], [(2, 7), (1, 5)]]
+    op = CSEMatVec(assignments)
+    m = np.array([[1, 0], [3, 0], [0, 1], [15, 7]])
+
+    vec = np.random.random(2)
+    expected_result = m @ vec
+    actual_result = op.matvec(vec, sac=None)
+    assert np.allclose(expected_result, actual_result)
+
+    vec = np.random.random(4)
+    expected_result = m.T @ vec
+    actual_result = op.transpose_matvec(vec, sac=None)
+    assert np.allclose(expected_result, actual_result)
+
+
 # You can test individual routines by typing
 # $ python test_misc.py 'test_p2p(cl.create_some_context)'
 

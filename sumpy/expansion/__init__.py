@@ -236,15 +236,15 @@ class CSEMatVec(object):
 
     .. attribute:: assignments
 
-        A list of tuples where the first argument of the tuple
-        is a row and the second argument is a list. If the
-        second argument is empty, the row is equal to the first
-        unused element from the vector. If not, the second
-        argument gives a list of tuples indicating a linear
-        combination of previously calculated row.
+        A list of lists indicating a linear combination of previously
+        calculated rows. If an element of the `assignments` is empty,
+        then that row is taken from the first unused row from the
+        vector. Each element is a list of tuples where first argument
+        is a previous row number and the second argument is the weight
+        in the linear combination.
 
-        The matrix represented is a square matrix with the number
-        of rows equal to the length of the `assignments` list.
+        Number of rows in the matrix represented is equal to the
+        length of the `assignments` list.
     """
 
     def __init__(self, assignments):

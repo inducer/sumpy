@@ -31,6 +31,7 @@ PDE interface
 .. autoclass:: PDE
 """
 
+
 class PDE(object):
     r"""
     Represents a scalar, constant-coefficient PDE of dimension `dim`.
