@@ -22,12 +22,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from six.moves import range
 import logging
 from pytools import memoize_method
 import sumpy.symbolic as sym
 from sumpy.tools import add_mi
-from .pde import make_pde_sym, laplacian
+from .diff_op import make_identity_diff_op, laplacian
 
 __doc__ = """
 .. autoclass:: ExpansionBase
@@ -293,7 +292,7 @@ class CSEMatVecOperator(object):
 class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     """
     .. automethod:: __init__
-    .. automethod:: get_pde
+    .. automethod:: get_pde_as_diff_op
     """
 
     init_arg_names = ("order", "dim", "max_mi")
@@ -336,11 +335,10 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         stored_identifiers, _ = self.get_stored_ids_and_unscaled_projection_matrix()
         return stored_identifiers
 
-    def get_pde(self):
+    def get_pde_as_diff_op(self):
         r"""
-        Returns a :class:`sumpy.expansion.pde.PDE` object.
-        A PDE stores a dictionary of (mi, coeff) where mi is the multi-index
-        of the  derivative and coeff is the coefficient.
+        Returns the PDE as a :class:`sumpy.expansion.diff_op.DifferentialOperator`
+        object `L` where `L(u) = 0` is the PDE.
         """
 
         raise NotImplementedError
@@ -356,7 +354,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         coeff_ident_enumerate_dict = {tuple(mi): i for
                                             (i, mi) in enumerate(mis)}
 
-        pde_dict = self.get_pde().eq
+        pde_dict = self.get_pde_as_diff_op().eq
         for ident in pde_dict.keys():
             if ident not in coeff_ident_enumerate_dict:
                 # Order of the expansion is less than the order of the PDE.
@@ -471,8 +469,8 @@ class LaplaceExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
         super(LaplaceExpansionTermsWrangler, self).__init__(order=order, dim=dim,
             max_mi=max_mi)
 
-    def get_pde(self):
-        w = make_pde_sym(self.dim)
+    def get_pde_as_diff_op(self):
+        w = make_identity_diff_op(self.dim)
         return laplacian(w)
 
 
@@ -485,8 +483,8 @@ class HelmholtzExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
         super(HelmholtzExpansionTermsWrangler, self).__init__(order=order, dim=dim,
             max_mi=max_mi)
 
-    def get_pde(self, **kwargs):
-        w = make_pde_sym(self.dim)
+    def get_pde_as_diff_op(self, **kwargs):
+        w = make_identity_diff_op(self.dim)
         k = sym.Symbol(self.helmholtz_k_name)
         return (laplacian(w) + k**2 * w)
 
@@ -499,8 +497,8 @@ class BiharmonicExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
         super(BiharmonicExpansionTermsWrangler, self).__init__(order=order, dim=dim,
             max_mi=max_mi)
 
-    def get_pde(self, **kwargs):
-        w = make_pde_sym(self.dim)
+    def get_pde_as_diff_op(self, **kwargs):
+        w = make_identity_diff_op(self.dim)
         return laplacian(laplacian(w))
 # }}}
 

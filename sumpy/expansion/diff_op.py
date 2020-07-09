@@ -25,22 +25,23 @@ THE SOFTWARE.
 from sumpy.tools import add_mi
 
 __doc__ = """
-PDE interface
--------------
+Differential operator interface
+-------------------------------
 
-.. autoclass:: PDE
+.. autoclass:: DifferentialOperator
 """
 
 
-class PDE(object):
+class DifferentialOperator(object):
     r"""
-    Represents a scalar, constant-coefficient PDE of dimension `dim`.
-    It is represented by a dictionary. The dictionary maps a multi-index
-    given as a tuple to the coefficient. This object is immutable.
+    Represents a scalar, constant-coefficient DifferentialOperator of
+    dimension `dim`. It is represented by a dictionary. The dictionary
+    maps a multi-index given as a tuple to the coefficient.
+    This object is immutable.
     """
     def __init__(self, dim, eq):
         """
-        :arg dim: dimension of the PDE
+        :arg dim: dimension of the DifferentialOperator
         :arg eq: A dictionary mapping a multi-index to a coefficient
         """
         self.dim = dim
@@ -50,7 +51,7 @@ class PDE(object):
         eq = {}
         for k, v in self.eq.items():
             eq[k] = v * param
-        return PDE(self.dim, eq)
+        return DifferentialOperator(self.dim, eq)
 
     __rmul__ = __mul__
 
@@ -62,7 +63,7 @@ class PDE(object):
                 res[k] += v
             else:
                 res[k] = v
-        return PDE(self.dim, res)
+        return DifferentialOperator(self.dim, res)
 
     __radd__ = __add__
 
@@ -70,12 +71,12 @@ class PDE(object):
         return self + (-1)*other_pde
 
     def __repr__(self):
-        return f"PDE({self.dim}, {repr(self.eq)})"
+        return f"DifferentialOperator({self.dim}, {repr(self.eq)})"
 
 
 def laplacian(pde):
     dim = pde.dim
-    res = PDE(dim, {})
+    res = DifferentialOperator(dim, {})
     for j in range(dim):
         mi = [0]*dim
         mi[j] = 2
@@ -87,12 +88,12 @@ def diff(pde, mi):
     res = {}
     for eq_mi, v in pde.eq.items():
         res[add_mi(eq_mi, mi)] = v
-    return PDE(pde.dim, res)
+    return DifferentialOperator(pde.dim, res)
 
 
-def make_pde_sym(dim):
+def make_identity_diff_op(dim):
     """
-    Returns a PDE u = 0
+    Returns the identity as a differential operator.
     """
     mi = tuple([0]*dim)
-    return PDE(dim, {mi: 1})
+    return DifferentialOperator(dim, {mi: 1})
