@@ -227,7 +227,7 @@ class FullExpansionTermsWrangler(ExpansionTermsWrangler):
 
 # {{{ sparse matrix-vector multiplication
 
-class CSEMatVec(object):
+class CSEMatVecOperator(object):
     """
     A class to facilitate a fast matrix vector multiplication with
     common subexpression eliminated. In compressed Taylor
@@ -236,19 +236,24 @@ class CSEMatVec(object):
 
     .. attribute:: assignments
 
-        A list of lists indicating a linear combination of previously
-        calculated rows. If an element of the `assignments` is empty,
-        then that row is taken from the first unused row from the
-        vector. Each element is a list of tuples where first argument
-        is a previous row number and the second argument is the weight
-        in the linear combination.
+        A object of type List[Tuple[List[Tuple[int, Any]], List[Tuple[int, Any]]]].
+        Each element in the list represents a row of the Matrix using a tuple
+        of linear combinations. In the tuple, the first argument is a list of tuples
+        representing (index of input vector, coeff) and the second argument of a
+        list of tuples representing (index of output vector, coeff)
 
         Number of rows in the matrix represented is equal to the
         length of the `assignments` list.
+
+    .. attribute:: shape
+
+        Shape of the matrix as a tuple.
     """
 
-    def __init__(self, assignments):
+    def __init__(self, assignments, shape):
         self.assignments = assignments
+        self.shape = shape
+        assert len(self.assignments) == shape[0]
 
     def matvec(self, vec, wrap_intermediate=lambda x: x):
         """
@@ -258,31 +263,28 @@ class CSEMatVec(object):
              If not given, the number of operations might grow in the
              final expressions in the vector resulting in an expensive matvec.
         """
-        res = [0] * len(self.assignments)
-        stored_idx = 0
-        for row, deps in enumerate(self.assignments):
-            if len(deps) == 0:
-                res[row] = vec[stored_idx]
-                stored_idx += 1
-            else:
-                for k, v in deps:
-                    res[row] += res[k] * v
-            res[row] = wrap_intermediate(res[row])
+        assert len(vec) == self.shape[1]
+        res = []
+        for input_vec_list, output_vec_list in self.assignments:
+            value = 0
+            for input_index, coeff in input_vec_list:
+                value += vec[input_index] * coeff
+            for output_index, coeff in output_vec_list:
+                value += res[output_index] * coeff
+            res.append(wrap_intermediate(value))
         return res
 
     def transpose_matvec(self, vec, wrap_intermediate=lambda x: x):
-        res = []
+        assert len(vec) == self.shape[0]
+        res = [0]*self.shape[1]
         expr_all = list(vec)
-        for row, deps in reversed(list(enumerate(self.assignments))):
-            if len(deps) == 0:
-                res.append(expr_all[row])
-                continue
-
-            new_sym = wrap_intermediate(expr_all[row])
-            for k, v in deps:
-                expr_all[k] += new_sym * v
-
-        res.reverse()
+        for i, (input_vec_list, output_vec_list) in \
+                reversed(list(enumerate(self.assignments))):
+            for output_index, coeff in output_vec_list:
+                expr_all[output_index] += expr_all[i] * coeff
+                expr_all[output_index] = wrap_intermediate(expr_all[output_index])
+            for input_index, coeff in input_vec_list:
+                res[input_index] += expr_all[i] * coeff
         return res
 
 # }}}
@@ -360,8 +362,10 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 # Order of the expansion is less than the order of the PDE.
                 # In that case, the compression matrix is the identity matrix
                 # and there's nothing to project
-                projection_matrix_assignments = [list() for i in range(len(mis))]
-                return mis, CSEMatVec(projection_matrix_assignments)
+                projection_matrix_assignments = \
+                    [([(i, 1)], []) for i in range(len(mis))]
+                shape = (len(mis), len(mis))
+                return mis, CSEMatVecOperator(projection_matrix_assignments, shape)
 
         # Calculate the multi-index that appears last in in the PDE in
         # reverse degree lexicographic order.
@@ -377,19 +381,22 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             """
             return any(mi[d] < max_mi[d] for d in range(self.dim))
 
-        stored_identifiers = [mi for mi in mis if is_stored(mi)]
+        stored_identifiers = []
 
         projection_matrix_assignments = []
         for i, mi in enumerate(mis):
-            projection_matrix_assignments.append([])
             # If the multi-index is to be stored, keep the projection matrix
             # entry empty
             if is_stored(mi):
+                idx = len(stored_identifiers)
+                stored_identifiers.append(mi)
+                projection_matrix_assignments.append(([(idx, 1)], []))
                 continue
             diff = [mi[d] - max_mi[d] for d in range(self.dim)]
 
             # eg: u_xx + u_yy + u_zz is represented as
             # [((2, 0, 0), 1), ((0, 2, 0), 1), ((0, 0, 2), 1)]
+            assignment = []
             for other_mi, coeff in iteritems(pde_dict):
                 j = coeff_ident_enumerate_dict[add_mi(other_mi, diff)]
                 if i == j:
@@ -397,7 +404,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                     continue
                 # PDE might not have max_mi_coeff = -1, divide by -max_mi_coeff
                 # to get a relation of the form, u_zz = - u_xx - u_yy for Laplace 3D.
-                projection_matrix_assignments[i].append((j, coeff*max_mi_mult))
+                assignment.append((j, coeff*max_mi_mult))
+            projection_matrix_assignments.append(([], assignment))
 
         plog.done()
 
@@ -405,12 +413,14 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                      .format(orig=len(self.get_full_coefficient_identifiers()),
                              red=len(stored_identifiers)))
 
-        return stored_identifiers, CSEMatVec(projection_matrix_assignments)
+        shape = (len(mis), len(stored_identifiers))
+        op = CSEMatVecOperator(projection_matrix_assignments, shape)
+        return stored_identifiers, op
 
     @memoize_method
     def get_projection_matrix(self, rscale):
         """
-        Return a :class:`CSEMatVec` class which exposes a matrix vector
+        Return a :class:`CSEMatVecOperator` object which exposes a matrix vector
         multiplication operator for the projection matrix that expresses
         every derivative in terms of a set of "stored" derivatives.
 
@@ -436,20 +446,21 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         full_coeffs = self.get_full_coefficient_identifiers()
 
         projection_with_rscale = []
-        for row, deps in enumerate(projection_matrix.assignments):
+        for row, assignment in enumerate(projection_matrix.assignments):
             # For eg: (u_xxx / rscale**3) = (u_yy / rscale**2) * coeff1 +
             #                               (u_xx / rscale**2) * coeff2
             # is converted to u_xxx = u_yy * (rscale * coeff1) +
             #                         u_xx * (rscale * coeff2)
             row_rscale = sum(full_coeffs[row])
-            deps_with_rscale = []
-            for k, coeff in deps:
+            assignment_with_rscale = [assignment[0].copy(), []]
+            for k, coeff in assignment[1]:
                 diff = row_rscale - sum(full_coeffs[k])
                 mult = rscale**diff
-                deps_with_rscale.append((k, coeff * mult))
-            projection_with_rscale.append(deps_with_rscale)
+                assignment_with_rscale[1].append((k, coeff * mult))
+            projection_with_rscale.append(tuple(assignment_with_rscale))
 
-        return CSEMatVec(projection_with_rscale)
+        shape = projection_matrix.shape
+        return CSEMatVecOperator(projection_with_rscale, shape)
 
 
 class LaplaceExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
