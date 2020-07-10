@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from pyrsistent import pmap
 from sumpy.tools import add_mi
 
 __doc__ = """
@@ -35,35 +36,35 @@ Differential operator interface
 class DifferentialOperator(object):
     r"""
     Represents a scalar, constant-coefficient DifferentialOperator of
-    dimension `dim`. It is represented by a dictionary. The dictionary
-    maps a multi-index given as a tuple to the coefficient.
+    dimension `dim`. It is represented by a frozen dictionary.
+    The dictionary maps a multi-index given as a tuple to the coefficient.
     This object is immutable.
     """
-    def __init__(self, dim, eq):
+    def __init__(self, dim, mi_to_coeff):
         """
         :arg dim: dimension of the DifferentialOperator
-        :arg eq: A dictionary mapping a multi-index to a coefficient
+        :arg mi_to_coeff: A dictionary mapping a multi-index to a coefficient
         """
         self.dim = dim
-        self.eq = eq
+        self.mi_to_coeff = mi_to_coeff
 
     def __mul__(self, param):
-        eq = {}
-        for k, v in self.eq.items():
-            eq[k] = v * param
-        return DifferentialOperator(self.dim, eq)
+        mi_to_coeff = {}
+        for k, v in self.mi_to_coeff.items():
+            mi_to_coeff[k] = v * param
+        return DifferentialOperator(self.dim, pmap(mi_to_coeff))
 
     __rmul__ = __mul__
 
     def __add__(self, other_pde):
         assert self.dim == other_pde.dim
-        res = self.eq.copy()
-        for k, v in other_pde.eq.items():
+        res = dict(self.mi_to_coeff)
+        for k, v in other_pde.mi_to_coeff.items():
             if k in res:
                 res[k] += v
             else:
                 res[k] = v
-        return DifferentialOperator(self.dim, res)
+        return DifferentialOperator(self.dim, pmap(res))
 
     __radd__ = __add__
 
@@ -71,12 +72,12 @@ class DifferentialOperator(object):
         return self + (-1)*other_pde
 
     def __repr__(self):
-        return f"DifferentialOperator({self.dim}, {repr(self.eq)})"
+        return f"DifferentialOperator({self.dim}, {repr(self.mi_to_coeff)})"
 
 
 def laplacian(pde):
     dim = pde.dim
-    res = DifferentialOperator(dim, {})
+    res = DifferentialOperator(dim, pmap())
     for j in range(dim):
         mi = [0]*dim
         mi[j] = 2
@@ -86,9 +87,9 @@ def laplacian(pde):
 
 def diff(pde, mi):
     res = {}
-    for eq_mi, v in pde.eq.items():
-        res[add_mi(eq_mi, mi)] = v
-    return DifferentialOperator(pde.dim, res)
+    for mi_to_coeff_mi, v in pde.mi_to_coeff.items():
+        res[add_mi(mi_to_coeff_mi, mi)] = v
+    return DifferentialOperator(pde.dim, pmap(res))
 
 
 def make_identity_diff_op(dim):
@@ -96,4 +97,4 @@ def make_identity_diff_op(dim):
     Returns the identity as a differential operator.
     """
     mi = tuple([0]*dim)
-    return DifferentialOperator(dim, {mi: 1})
+    return DifferentialOperator(dim, pmap({mi: 1}))
