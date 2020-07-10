@@ -232,58 +232,67 @@ class CSEMatVecOperator(object):
     common subexpression eliminated. In compressed Taylor
     series, the compression matrix's operation count can be
     reduced to `O(p**d)` from `O(p**{2d-1})` using CSE.
+    Each row in the matrix is represented by a linear combination
+    of values from input vector and a linear combination of values
+    from the output vector.
 
-    .. attribute:: assignments
+    .. attribute:: from_input_coeffs_by_row
 
-        An object of type
-        ``List[Tuple[List[Tuple[int, Any]], List[Tuple[int, Any]]]]``.
-        Each element in the list represents a row of the Matrix using a tuple
-        of linear combinations. In the tuple, the first argument is a list of tuples
-        representing ``(index of input vector, coeff)`` and the second argument of a
-        list of tuples representing ``(index of output vector, coeff)``.
+        An object of type ``List[List[Tuple[int, Any]]]``. Each element
+        in the list represents a row of the Matrix using a linear combination
+        of values from input vector. Each element represents a
+        ``(index of input vector, coeff)``.
 
         Number of rows in the matrix represented is equal to the
-        length of the `assignments` list.
+        length of the `from_input_coeffs_by_row` list.
+
+    .. attribute:: from_output_coeffs_by_row
+
+        An object of type ``List[List[Tuple[int, Any]]]``. Each element
+        in the list represents a row of the Matrix using a linear combination
+        of values from output vector. Each element represents a
+        ``(index of output vector, coeff)``.
 
     .. attribute:: shape
 
         Shape of the matrix as a tuple.
     """
 
-    def __init__(self, assignments, shape):
-        self.assignments = assignments
+    def __init__(self, from_input_coeffs_by_row, from_output_coeffs_by_row, shape):
+        self.from_input_coeffs_by_row = from_input_coeffs_by_row
+        self.from_output_coeffs_by_row = from_output_coeffs_by_row
         self.shape = shape
-        assert len(self.assignments) == shape[0]
+        assert len(self.from_input_coeffs_by_row) == shape[0]
+        assert len(self.from_output_coeffs_by_row) == shape[0]
 
-    def matvec(self, vec, wrap_intermediate=lambda x: x):
+    def matvec(self, inp, wrap_intermediate=lambda x: x):
         """
-        :arg vec: vector for the matrix vector multiplication
+        :arg inp: vector for the matrix vector multiplication
 
         :arg wrap_intermediate: a function to wrap intermediate expressions
              If not given, the number of operations might grow in the
              final expressions in the vector resulting in an expensive matvec.
         """
-        assert len(vec) == self.shape[1]
-        res = []
-        for input_vec_list, output_vec_list in self.assignments:
+        assert len(inp) == self.shape[1]
+        out = []
+        for i in range(self.shape[0]):
             value = 0
-            for input_index, coeff in input_vec_list:
-                value += vec[input_index] * coeff
-            for output_index, coeff in output_vec_list:
-                value += res[output_index] * coeff
-            res.append(wrap_intermediate(value))
-        return res
+            for input_index, coeff in self.from_input_coeffs_by_row[i]:
+                value += inp[input_index] * coeff
+            for output_index, coeff in self.from_output_coeffs_by_row[i]:
+                value += out[output_index] * coeff
+            out.append(wrap_intermediate(value))
+        return out
 
-    def transpose_matvec(self, vec, wrap_intermediate=lambda x: x):
-        assert len(vec) == self.shape[0]
+    def transpose_matvec(self, inp, wrap_intermediate=lambda x: x):
+        assert len(inp) == self.shape[0]
         res = [0]*self.shape[1]
-        expr_all = list(vec)
-        for i, (input_vec_list, output_vec_list) in \
-                reversed(list(enumerate(self.assignments))):
-            for output_index, coeff in output_vec_list:
+        expr_all = list(inp)
+        for i in reversed(range(self.shape[0])):
+            for output_index, coeff in self.from_output_coeffs_by_row[i]:
                 expr_all[output_index] += expr_all[i] * coeff
                 expr_all[output_index] = wrap_intermediate(expr_all[output_index])
-            for input_index, coeff in input_vec_list:
+            for input_index, coeff in self.from_input_coeffs_by_row[i]:
                 res[input_index] += expr_all[i] * coeff
         return res
 
@@ -363,10 +372,12 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 # Order of the expansion is less than the order of the PDE.
                 # In that case, the compression matrix is the identity matrix
                 # and there's nothing to project
-                projection_matrix_assignments = \
-                    [([(i, 1)], []) for i in range(len(mis))]
+                from_input_coeffs_by_row = [[(i, 1)] for i in range(len(mis))]
+                from_output_coeffs_by_row = [[] for _ in range(len(mis))]
                 shape = (len(mis), len(mis))
-                return mis, CSEMatVecOperator(projection_matrix_assignments, shape)
+                op = CSEMatVecOperator(from_input_coeffs_by_row,
+                                       from_output_coeffs_by_row, shape)
+                return mis, op
 
         # Calculate the multi-index that appears last in in the PDE in
         # reverse degree lexicographic order.
@@ -384,14 +395,16 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         stored_identifiers = []
 
-        projection_matrix_assignments = []
+        from_input_coeffs_by_row = []
+        from_output_coeffs_by_row = []
         for i, mi in enumerate(mis):
             # If the multi-index is to be stored, keep the projection matrix
             # entry empty
             if is_stored(mi):
                 idx = len(stored_identifiers)
                 stored_identifiers.append(mi)
-                projection_matrix_assignments.append(([(idx, 1)], []))
+                from_input_coeffs_by_row.append([(idx, 1)])
+                from_output_coeffs_by_row.append([])
                 continue
             diff = [mi[d] - max_mi[d] for d in range(self.dim)]
 
@@ -406,7 +419,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 # PDE might not have max_mi_coeff = -1, divide by -max_mi_coeff
                 # to get a relation of the form, u_zz = - u_xx - u_yy for Laplace 3D.
                 assignment.append((j, coeff*max_mi_mult))
-            projection_matrix_assignments.append(([], assignment))
+            from_input_coeffs_by_row.append([])
+            from_output_coeffs_by_row.append(assignment)
 
         plog.done()
 
@@ -415,7 +429,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                              red=len(stored_identifiers)))
 
         shape = (len(mis), len(stored_identifiers))
-        op = CSEMatVecOperator(projection_matrix_assignments, shape)
+        op = CSEMatVecOperator(from_input_coeffs_by_row,
+                               from_output_coeffs_by_row, shape)
         return stored_identifiers, op
 
     @memoize_method
@@ -447,21 +462,23 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         full_coeffs = self.get_full_coefficient_identifiers()
 
         projection_with_rscale = []
-        for row, assignment in enumerate(projection_matrix.assignments):
+        for row, assignment in \
+                enumerate(projection_matrix.from_output_coeffs_by_row):
             # For eg: (u_xxx / rscale**3) = (u_yy / rscale**2) * coeff1 +
             #                               (u_xx / rscale**2) * coeff2
             # is converted to u_xxx = u_yy * (rscale * coeff1) +
             #                         u_xx * (rscale * coeff2)
             row_rscale = sum(full_coeffs[row])
-            assignment_with_rscale = [assignment[0].copy(), []]
-            for k, coeff in assignment[1]:
+            from_output_coeffs_with_rscale = []
+            for k, coeff in assignment:
                 diff = row_rscale - sum(full_coeffs[k])
                 mult = rscale**diff
-                assignment_with_rscale[1].append((k, coeff * mult))
-            projection_with_rscale.append(tuple(assignment_with_rscale))
+                from_output_coeffs_with_rscale.append((k, coeff * mult))
+            projection_with_rscale.append(from_output_coeffs_with_rscale)
 
         shape = projection_matrix.shape
-        return CSEMatVecOperator(projection_with_rscale, shape)
+        return CSEMatVecOperator(projection_matrix.from_input_coeffs_by_row,
+                                 projection_with_rscale, shape)
 
 
 class LaplaceExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
