@@ -280,13 +280,21 @@ def test_toy_p2e2e2p(ctx_factory, case):
 
 def test_cse_matvec():
     from sumpy.expansion import CSEMatVecOperator
-    assignments = [
-        ([(0, 2)], []),
-        ([], [(0, 3)]),
-        ([(1, 1)], []),
-        ([(1, 9)], [(2, 7), (1, 5)]),
+    input_coeffs = [
+        [(0, 2)],
+        [],
+        [(1, 1)],
+        [(1, 9)],
     ]
-    op = CSEMatVecOperator(assignments, shape=(4, 2))
+
+    output_coeffs = [
+        [],
+        [(0, 3)],
+        [],
+        [(2, 7), (1, 5)],
+    ]
+
+    op = CSEMatVecOperator(input_coeffs, output_coeffs, shape=(4, 2))
     m = np.array([[2, 0], [6, 0], [0, 1], [30, 16]])
 
     vec = np.random.random(2)
