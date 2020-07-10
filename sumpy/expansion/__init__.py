@@ -235,7 +235,8 @@ class CSEMatVecOperator(object):
 
     .. attribute:: assignments
 
-        A object of type ``List[Tuple[List[Tuple[int, Any]], List[Tuple[int, Any]]]]``.
+        An object of type
+        ``List[Tuple[List[Tuple[int, Any]], List[Tuple[int, Any]]]]``.
         Each element in the list represents a row of the Matrix using a tuple
         of linear combinations. In the tuple, the first argument is a list of tuples
         representing ``(index of input vector, coeff)`` and the second argument of a
@@ -317,18 +318,20 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             return sym.Symbol(sac.assign_unique("projection_temp", expr))
 
         projection_matrix = self.get_projection_matrix(rscale)
-        return projection_matrix.matvec(stored_kernel_derivatives, wrap)
+        return projection_matrix.matvec(stored_kernel_derivatives,
+                                        save_intermediate)
 
     def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients,
             rscale, sac=None):
 
-        def wrap(expr):
+        def save_intermediate(expr):
             if sac is None:
                 return expr
             return sym.Symbol(sac.assign_unique("compress_temp", expr))
 
         projection_matrix = self.get_projection_matrix(rscale)
-        return projection_matrix.transpose_matvec(full_mpole_coefficients, wrap)
+        return projection_matrix.transpose_matvec(full_mpole_coefficients,
+                                                  save_intermediate)
 
     @property
     def stored_identifiers(self):
