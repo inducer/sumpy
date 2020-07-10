@@ -235,11 +235,11 @@ class CSEMatVecOperator(object):
 
     .. attribute:: assignments
 
-        A object of type List[Tuple[List[Tuple[int, Any]], List[Tuple[int, Any]]]].
+        A object of type ``List[Tuple[List[Tuple[int, Any]], List[Tuple[int, Any]]]]``.
         Each element in the list represents a row of the Matrix using a tuple
         of linear combinations. In the tuple, the first argument is a list of tuples
-        representing (index of input vector, coeff) and the second argument of a
-        list of tuples representing (index of output vector, coeff)
+        representing ``(index of input vector, coeff)`` and the second argument of a
+        list of tuples representing ``(index of output vector, coeff)``.
 
         Number of rows in the matrix represented is equal to the
         length of the `assignments` list.
@@ -311,7 +311,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
             rscale, sac=None):
 
-        def wrap(expr):
+        def save_intermediate(expr):
             if sac is None:
                 return expr
             return sym.Symbol(sac.assign_unique("projection_temp", expr))
