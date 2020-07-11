@@ -1,13 +1,10 @@
 import numpy as np
 
-import pytest
-import pyopencl as cl
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 
 from sumpy.expansion.multipole import (
         VolumeTaylorMultipoleExpansion, H2DMultipoleExpansion,
-        VolumeTaylorMultipoleExpansionBase,
         LaplaceConformingVolumeTaylorMultipoleExpansion,
         HelmholtzConformingVolumeTaylorMultipoleExpansion)
 from sumpy.expansion.local import (
@@ -15,19 +12,18 @@ from sumpy.expansion.local import (
         LaplaceConformingVolumeTaylorLocalExpansion,
         HelmholtzConformingVolumeTaylorLocalExpansion)
 
-from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, AxisTargetDerivative,
-        DirectionalSourceDerivative)
+from sumpy.kernel import LaplaceKernel, HelmholtzKernel
 
 import logging
 logger = logging.getLogger(__name__)
 
-import sympy
 import six
 import pymbolic.mapper.flop_counter
 
 import sumpy.symbolic as sym
 from sumpy.assignment_collection import SymbolicAssignmentCollection
 from sumpy.codegen import to_loopy_insns
+
 
 class Param:
     def __init__(self, dim, order):
@@ -125,5 +121,3 @@ class Helmholtz2DTranslation(TranslationBenchmarkSuite):
         Param(2, 15),
         Param(2, 20),
     ]
-
-

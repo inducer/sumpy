@@ -86,9 +86,9 @@ class P2EBase(KernelCacheWrapper):
         sac = SymbolicAssignmentCollection()
 
         coeff_names = [
-                sac.assign_unique("coeff%d" % i, coeff_i)
-                for i, coeff_i in enumerate(
-                    self.expansion.coefficients_from_source(avec, None, rscale))]
+            sac.assign_unique("coeff%d" % i, coeff_i)
+            for i, coeff_i in enumerate(
+                self.expansion.coefficients_from_source(avec, None, rscale, sac))]
 
         sac.run_global_cse()
 

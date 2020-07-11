@@ -106,53 +106,6 @@ class MiDerivativeTaker(object):
                 if (np.array(mi) >= np.array(other_mi)).all()),
             key=lambda other_mi: sum(self.mi_dist(mi, other_mi)))
 
-
-class LinearRecurrenceBasedMiDerivativeTaker(MiDerivativeTaker):
-    """
-    The derivative taker for expansions that use
-    :class:`sumpy.expansion.LinearRecurrenceBasedDerivativeWrangler`
-    """
-
-    def __init__(self, expr, var_list, wrangler):
-        super(LinearRecurrenceBasedMiDerivativeTaker, self).__init__(
-                expr, var_list)
-        self.wrangler = wrangler
-
-    @memoize_method
-    def diff(self, mi):
-        """
-        :arg mi: a multi-index (tuple) indicating how many x/y derivatives are
-            to be taken.
-        """
-        try:
-            expr = self.cache_by_mi[mi]
-        except KeyError:
-            from six import iteritems
-            from sumpy.symbolic import Add
-
-            closest_mi = self.get_closest_cached_mi(mi)
-            expr = self.cache_by_mi[closest_mi]
-
-            # Try to reduce the derivative using recurrences first, and if that
-            # fails fall back to derivative taking.
-            for next_deriv, next_mi in (
-                        self.get_derivative_taking_sequence(closest_mi, mi)):
-
-                recurrence = (
-                        self.wrangler.try_get_recurrence_for_derivative(
-                            next_mi, self.cache_by_mi))
-
-                if recurrence is not None:
-                    expr = Add(*tuple(
-                            coeff * self.cache_by_mi[ident]
-                            for ident, coeff in iteritems(recurrence)))
-                else:
-                    expr = expr.diff(next_deriv)
-
-                self.cache_by_mi[next_mi] = expr
-
-        return expr
-
 # }}}
 
 
@@ -721,5 +674,6 @@ def is_obj_array_like(ary):
     return (
             isinstance(ary, (tuple, list))
             or (isinstance(ary, np.ndarray) and ary.dtype.char == "O"))
+
 
 # vim: fdm=marker

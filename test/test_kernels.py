@@ -22,8 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from six.moves import range
-
 import numpy as np
 import numpy.linalg as la
 import sys
@@ -37,13 +35,15 @@ from sumpy.expansion.multipole import (
         VolumeTaylorMultipoleExpansion, H2DMultipoleExpansion,
         VolumeTaylorMultipoleExpansionBase,
         LaplaceConformingVolumeTaylorMultipoleExpansion,
-        HelmholtzConformingVolumeTaylorMultipoleExpansion)
+        HelmholtzConformingVolumeTaylorMultipoleExpansion,
+        BiharmonicConformingVolumeTaylorMultipoleExpansion)
 from sumpy.expansion.local import (
         VolumeTaylorLocalExpansion, H2DLocalExpansion,
         LaplaceConformingVolumeTaylorLocalExpansion,
-        HelmholtzConformingVolumeTaylorLocalExpansion)
+        HelmholtzConformingVolumeTaylorLocalExpansion,
+        BiharmonicConformingVolumeTaylorLocalExpansion)
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, AxisTargetDerivative,
-        DirectionalSourceDerivative, BiharmonicKernel)
+        DirectionalSourceDerivative, BiharmonicKernel, StokesletKernel)
 from pytools.convergence import PConvergenceVerifier
 
 import logging
@@ -160,6 +160,8 @@ def test_p2e2p(ctx_factory, base_knl, expn_class, order, with_source_derivative)
             extra_kwargs["k"] = 0.2 * (0.707 + 0.707j)
         else:
             extra_kwargs["k"] = 0.2
+    if isinstance(base_knl, StokesletKernel):
+        extra_kwargs["mu"] = 0.2
 
     if with_source_derivative:
         knl = DirectionalSourceDerivative(base_knl, "dir_vec")
@@ -187,7 +189,7 @@ def test_p2e2p(ctx_factory, base_knl, expn_class, order, with_source_derivative)
     else:
         h_values = [1/2, 1/3, 1/5]
 
-    center = np.array([2, 1], np.float64)
+    center = np.array([2, 1, 0][:knl.dim], np.float64)
     sources = (0.7*(-0.5+np.random.rand(knl.dim, nsources).astype(np.float64))
             + center[:, np.newaxis])
 
@@ -207,15 +209,15 @@ def test_p2e2p(ctx_factory, base_knl, expn_class, order, with_source_derivative)
 
     for h in h_values:
         if issubclass(expn_class, LocalExpansionBase):
-            loc_center = np.array([5.5, 0.0]) + center
+            loc_center = np.array([5.5, 0.0, 0.0][:knl.dim]) + center
             centers = np.array(loc_center, dtype=np.float64).reshape(knl.dim, 1)
             fp = FieldPlotter(loc_center, extent=h, npoints=res)
         else:
-            eval_center = np.array([1/h, 0.0]) + center
+            eval_center = np.array([1/h, 0.0, 0.0][:knl.dim]) + center
             fp = FieldPlotter(eval_center, extent=0.1, npoints=res)
-            centers = (
-                    np.array([0.0, 0.0], dtype=np.float64).reshape(knl.dim, 1)
-                    + center[:, np.newaxis])
+            centers = (np.array([0.0, 0.0, 0.0][:knl.dim],
+                                dtype=np.float64).reshape(knl.dim, 1)
+                        + center[:, np.newaxis])
 
         targets = fp.points
 
@@ -351,7 +353,11 @@ def test_p2e2p(ctx_factory, base_knl, expn_class, order, with_source_derivative)
     (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), HelmholtzConformingVolumeTaylorLocalExpansion,
      HelmholtzConformingVolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion)
+    (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion),
+    (StokesletKernel(2, 0, 0), VolumeTaylorLocalExpansion,
+     VolumeTaylorMultipoleExpansion),
+    (StokesletKernel(2, 0, 0), BiharmonicConformingVolumeTaylorLocalExpansion,
+     BiharmonicConformingVolumeTaylorMultipoleExpansion),
     ])
 def test_translations(ctx_factory, knl, local_expn_class, mpole_expn_class):
     logging.basicConfig(level=logging.INFO)
@@ -372,9 +378,11 @@ def test_translations(ctx_factory, knl, local_expn_class, mpole_expn_class):
     extra_kwargs = {}
     if isinstance(knl, HelmholtzKernel):
         extra_kwargs["k"] = 0.05
+    if isinstance(knl, StokesletKernel):
+        extra_kwargs["mu"] = 0.05
 
     # Just to make sure things also work away from the origin
-    origin = np.array([2, 1], np.float64)
+    origin = np.array([2, 1, 0][:knl.dim], np.float64)
     sources = (0.7*(-0.5+np.random.rand(knl.dim, nsources).astype(np.float64))
             + origin[:, np.newaxis])
     strengths = np.ones(nsources, dtype=np.float64) * (1/nsources)
@@ -386,18 +394,18 @@ def test_translations(ctx_factory, knl, local_expn_class, mpole_expn_class):
 
     from sumpy.visualization import FieldPlotter
 
-    eval_offset = np.array([5.5, 0.0])
+    eval_offset = np.array([5.5, 0.0, 0][:knl.dim])
 
     centers = (np.array(
             [
                 # box 0: particles, first mpole here
-                [0, 0],
+                [0, 0, 0][:knl.dim],
 
                 # box 1: second mpole here
-                np.array([-0.2, 0.1], np.float64),
+                np.array([-0.2, 0.1, 0][:knl.dim], np.float64),
 
                 # box 2: first local here
-                eval_offset + np.array([0.3, -0.2], np.float64),
+                eval_offset + np.array([0.3, -0.2, 0][:knl.dim], np.float64),
 
                 # box 3: second local and eval here
                 eval_offset

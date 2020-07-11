@@ -22,18 +22,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from six.moves import range
-import six
-import numpy as np
 import logging
 from pytools import memoize_method
 import sumpy.symbolic as sym
-from sumpy.tools import MiDerivativeTaker
-from collections import defaultdict
-
+from sumpy.tools import add_mi
+from .diff_op import make_identity_diff_op, laplacian
 
 __doc__ = """
 .. autoclass:: ExpansionBase
+.. autoclass:: LinearPDEBasedExpansionTermsWrangler
 
 Expansion Factories
 ^^^^^^^^^^^^^^^^^^^
@@ -114,19 +111,21 @@ class ExpansionBase(object):
         """
         raise NotImplementedError
 
-    def coefficients_from_source(self, avec, bvec, rscale):
+    def coefficients_from_source(self, avec, bvec, rscale, sac=None):
         """Form an expansion from a source point.
 
         :arg avec: vector from source to center.
         :arg bvec: vector from center to target. Not usually necessary,
             except for line-Taylor expansion.
+        :arg sac: a symbolic assignment collection where temporary
+            expressions are stored.
 
         :returns: a list of :mod:`sympy` expressions representing
             the coefficients of the expansion.
         """
         raise NotImplementedError
 
-    def evaluate(self, coeffs, bvec, rscale):
+    def evaluate(self, coeffs, bvec, rscale, sac=None):
         """
         :return: a :mod:`sympy` expression corresponding
             to the evaluated expansion with the coefficients
@@ -136,7 +135,7 @@ class ExpansionBase(object):
         raise NotImplementedError
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale):
+            dvec, tgt_rscale, sac=None):
         raise NotImplementedError
 
     def update_persistent_hash(self, key_hash, key_builder):
@@ -158,26 +157,26 @@ class ExpansionBase(object):
 # }}}
 
 
-# {{{ derivative wrangler
+# {{{ expansion terms wrangler
 
-class DerivativeWrangler(object):
+class ExpansionTermsWrangler(object):
 
-    def __init__(self, order, dim):
+    init_arg_names = ("order", "dim", "max_mi")
+
+    def __init__(self, order, dim, max_mi=None):
         self.order = order
         self.dim = dim
+        self.max_mi = max_mi
 
     def get_coefficient_identifiers(self):
         raise NotImplementedError
 
     def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
-            rscale):
+            rscale, sac=None):
         raise NotImplementedError
 
     def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients,
-            rscale):
-        raise NotImplementedError
-
-    def get_derivative_taker(self, expr, var_list):
+            rscale, sac=None):
         raise NotImplementedError
 
     @memoize_method
@@ -190,19 +189,35 @@ class DerivativeWrangler(object):
                 as gnitstam)
 
         res = sorted(gnitstam(self.order, self.dim), key=sum)
-        return res
+
+        if self.max_mi is None:
+            return res
+
+        return [mi for mi in res if
+            all(mi[i] <= self.max_mi[i] for i in range(self.dim))]
+
+    def copy(self, **kwargs):
+        new_kwargs = dict(
+                (name, getattr(self, name))
+                for name in self.init_arg_names)
+
+        for name in self.init_arg_names:
+            new_kwargs[name] = kwargs.pop(name, getattr(self, name))
+
+        if kwargs:
+            raise TypeError("unexpected keyword arguments '%s'"
+                % ", ".join(kwargs))
+
+        return type(self)(**new_kwargs)
 
 
-class FullDerivativeWrangler(DerivativeWrangler):
-
-    def get_derivative_taker(self, expr, dvec):
-        return MiDerivativeTaker(expr, dvec)
+class FullExpansionTermsWrangler(ExpansionTermsWrangler):
 
     get_coefficient_identifiers = (
-            DerivativeWrangler.get_full_coefficient_identifiers)
+            ExpansionTermsWrangler.get_full_coefficient_identifiers)
 
     def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
-            rscale):
+            rscale, sac=None):
         return stored_kernel_derivatives
 
     get_stored_mpole_coefficients_from_full = (
@@ -211,228 +226,300 @@ class FullDerivativeWrangler(DerivativeWrangler):
 
 # {{{ sparse matrix-vector multiplication
 
-def _spmv(spmat, x, sparse_vectors):
+class CSEMatVecOperator(object):
     """
-    :param spmat: maps row indices to list of (col idx, value)
-    :param x: maps vector indices to values
-    :param sparse_vectors: If True, treat vectors as dict-like, otherwise list-like
+    A class to facilitate a fast matrix vector multiplication with
+    common subexpression eliminated. In compressed Taylor
+    series, the compression matrix's operation count can be
+    reduced to `O(p**d)` from `O(p**{2d-1})` using CSE.
+    Each row in the matrix is represented by a linear combination
+    of values from input vector and a linear combination of values
+    from the output vector.
+
+    .. attribute:: from_input_coeffs_by_row
+
+        An object of type ``List[List[Tuple[int, Any]]]``. Each element
+        in the list represents a row of the matrix using a linear combination
+        of values from the input vector. Each element has the form
+        ``(index of input vector, coeff)``.
+
+        Number of rows in the matrix represented is equal to the
+        length of the `from_input_coeffs_by_row` list.
+
+    .. attribute:: from_output_coeffs_by_row
+
+        An object of type ``List[List[Tuple[int, Any]]]``. Each element
+        in the list represents a row of the matrix using a linear combination
+        of values from the output vector. Each element has the form
+        ``(index of output vector, coeff)``.
+
+    .. attribute:: shape
+
+        Shape of the matrix as a tuple.
     """
-    if sparse_vectors:
-        result = {}
-    else:
-        result = []
 
-    for row in range(len(spmat)):
-        acc = 0
+    def __init__(self, from_input_coeffs_by_row, from_output_coeffs_by_row, shape):
+        self.from_input_coeffs_by_row = from_input_coeffs_by_row
+        self.from_output_coeffs_by_row = from_output_coeffs_by_row
+        self.shape = shape
+        assert len(self.from_input_coeffs_by_row) == shape[0]
+        assert len(self.from_output_coeffs_by_row) == shape[0]
 
-        for j, coeff in spmat[row]:
-            if sparse_vectors:
-                # Check if the index exists in the vector.
-                if x.get(j, 0) == 0:
-                    continue
+    def matvec(self, inp, wrap_intermediate=lambda x: x):
+        """
+        :arg inp: vector for the matrix vector multiplication
 
-            acc += coeff * x[j]
+        :arg wrap_intermediate: a function to wrap intermediate expressions
+             If not given, the number of operations might grow in the
+             final expressions in the vector resulting in an expensive matvec.
+        """
+        assert len(inp) == self.shape[1]
+        out = []
+        for i in range(self.shape[0]):
+            value = 0
+            for input_index, coeff in self.from_input_coeffs_by_row[i]:
+                value += inp[input_index] * coeff
+            for output_index, coeff in self.from_output_coeffs_by_row[i]:
+                value += out[output_index] * coeff
+            out.append(wrap_intermediate(value))
+        return out
 
-        if sparse_vectors:
-            if acc != 0:
-                result[row] = acc
-        else:
-            result.append(acc)
-
-    return result
+    def transpose_matvec(self, inp, wrap_intermediate=lambda x: x):
+        assert len(inp) == self.shape[0]
+        res = [0]*self.shape[1]
+        expr_all = list(inp)
+        for i in reversed(range(self.shape[0])):
+            for output_index, coeff in self.from_output_coeffs_by_row[i]:
+                expr_all[output_index] += expr_all[i] * coeff
+                expr_all[output_index] = wrap_intermediate(expr_all[output_index])
+            for input_index, coeff in self.from_input_coeffs_by_row[i]:
+                res[input_index] += expr_all[i] * coeff
+        return res
 
 # }}}
 
 
-class LinearRecurrenceBasedDerivativeWrangler(DerivativeWrangler):
+class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
+    """
+    .. automethod:: __init__
+    .. automethod:: get_pde_as_diff_op
+    """
+
+    init_arg_names = ("order", "dim", "max_mi")
+
+    def __init__(self, order, dim, max_mi=None):
+        r"""
+        :param order: order of the expansion
+        :param dim: number of dimensions
+        """
+        super(LinearPDEBasedExpansionTermsWrangler, self).__init__(order, dim,
+                max_mi)
 
     def get_coefficient_identifiers(self):
         return self.stored_identifiers
 
     def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
-            rscale):
-        coeff_matrix = self.get_coefficient_matrix(rscale)
-        return _spmv(coeff_matrix, stored_kernel_derivatives,
-                     sparse_vectors=False)
+            rscale, sac=None):
+
+        def save_intermediate(expr):
+            if sac is None:
+                return expr
+            return sym.Symbol(sac.assign_unique("projection_temp", expr))
+
+        projection_matrix = self.get_projection_matrix(rscale)
+        return projection_matrix.matvec(stored_kernel_derivatives,
+                                        save_intermediate)
 
     def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients,
-            rscale):
-        # = M^T x, where M = coeff matrix
+            rscale, sac=None):
 
-        coeff_matrix = self.get_coefficient_matrix(rscale)
-        result = [0] * len(self.stored_identifiers)
-        for row, coeff in enumerate(full_mpole_coefficients):
-            for col, val in coeff_matrix[row]:
-                result[col] += coeff * val
-        return result
+        def save_intermediate(expr):
+            if sac is None:
+                return expr
+            return sym.Symbol(sac.assign_unique("compress_temp", expr))
+
+        projection_matrix = self.get_projection_matrix(rscale)
+        return projection_matrix.transpose_matvec(full_mpole_coefficients,
+                                                  save_intermediate)
 
     @property
     def stored_identifiers(self):
-        stored_identifiers, coeff_matrix = self._get_stored_ids_and_coeff_mat()
+        stored_identifiers, _ = self.get_stored_ids_and_unscaled_projection_matrix()
         return stored_identifiers
 
-    @memoize_method
-    def get_coefficient_matrix(self, rscale):
+    def get_pde_as_diff_op(self):
+        r"""
+        Returns the PDE as a :class:`sumpy.expansion.diff_op.DifferentialOperator`
+        object `L` where `L(u) = 0` is the PDE.
         """
-        Return a matrix that expresses every derivative in terms of a
-        set of "stored" derivatives.
 
-        For example, for the recurrence
-
-            u_xx + u_yy + u_zz = 0
-
-        the coefficient matrix features the following entries:
-
-              ... u_xx u_yy ... <= cols = only stored derivatives
-             ==================
-         ...| ...  ...  ... ...
-            |
-        u_zz| ...  -1   -1  ...
-
-           ^ rows = one for every derivative
-        """
-        stored_identifiers, coeff_matrix = self._get_stored_ids_and_coeff_mat()
-
-        full_coeffs = self.get_full_coefficient_identifiers()
-        matrix_rows = []
-        for irow, row in six.iteritems(coeff_matrix):
-            # For eg: (u_xxx / rscale**3) = (u_yy / rscale**2) * coeff1 +
-            #                               (u_xx / rscale**2) * coeff2
-            # is converted to u_xxx = u_yy * (rscale * coeff1) +
-            #                         u_xx * (rscale * coeff2)
-            row_rscale = sum(full_coeffs[irow])
-            matrix_row = []
-            for icol, coeff in row:
-                diff = row_rscale - sum(stored_identifiers[icol])
-                matrix_row.append((icol, coeff * rscale**diff))
-            matrix_rows.append((irow, matrix_row))
-
-        return defaultdict(list, matrix_rows)
+        raise NotImplementedError
 
     @memoize_method
-    def _get_stored_ids_and_coeff_mat(self):
-        stored_identifiers = []
-        identifiers_so_far = {}
-
-        import time
-        start_time = time.time()
-        logger.debug("computing recurrence for Taylor coefficients: start")
-
-        # Sparse matrix, indexed by row
-        coeff_matrix_transpose = defaultdict(list)
-
-        # Build up the matrix transpose by row.
+    def get_stored_ids_and_unscaled_projection_matrix(self):
         from six import iteritems
-        for i, identifier in enumerate(self.get_full_coefficient_identifiers()):
-            expr = self.try_get_recurrence_for_derivative(
-                    identifier, identifiers_so_far)
 
-            if expr is None:
-                # Identifier should be stored
-                coeff_matrix_transpose[len(stored_identifiers)] = [(i, 1)]
-                stored_identifiers.append(identifier)
-            else:
-                expr = dict((identifiers_so_far[ident], val) for ident, val in
-                            iteritems(expr))
-                result = _spmv(coeff_matrix_transpose, expr, sparse_vectors=True)
-                for j, item in iteritems(result):
-                    coeff_matrix_transpose[j].append((i, item))
+        from pytools import ProcessLogger
+        plog = ProcessLogger(logger, "compute PDE for Taylor coefficients")
 
-            identifiers_so_far[identifier] = i
+        mis = self.get_full_coefficient_identifiers()
+        coeff_ident_enumerate_dict = {tuple(mi): i for
+                                            (i, mi) in enumerate(mis)}
 
-        stored_identifiers = stored_identifiers
+        pde_dict = self.get_pde_as_diff_op().mi_to_coeff
+        for ident in pde_dict.keys():
+            if ident not in coeff_ident_enumerate_dict:
+                # Order of the expansion is less than the order of the PDE.
+                # In that case, the compression matrix is the identity matrix
+                # and there's nothing to project
+                from_input_coeffs_by_row = [[(i, 1)] for i in range(len(mis))]
+                from_output_coeffs_by_row = [[] for _ in range(len(mis))]
+                shape = (len(mis), len(mis))
+                op = CSEMatVecOperator(from_input_coeffs_by_row,
+                                       from_output_coeffs_by_row, shape)
+                return mis, op
 
-        coeff_matrix = defaultdict(list)
-        for i, row in iteritems(coeff_matrix_transpose):
-            for j, val in row:
-                coeff_matrix[j].append((i, val))
+        # Calculate the multi-index that appears last in in the PDE in
+        # reverse degree lexicographic order.
+        max_mi_idx = max(coeff_ident_enumerate_dict[ident] for
+                         ident in pde_dict.keys())
+        max_mi = mis[max_mi_idx]
+        max_mi_coeff = pde_dict[max_mi]
+        max_mi_mult = -1/sym.sympify(max_mi_coeff)
 
-        logger.debug("computing recurrence for Taylor coefficients: "
-                     "done after {dur:.2f} seconds"
-                     .format(dur=time.time() - start_time))
+        def is_stored(mi):
+            """
+            A multi_index mi is not stored if mi >= max_mi
+            """
+            return any(mi[d] < max_mi[d] for d in range(self.dim))
+
+        stored_identifiers = []
+
+        from_input_coeffs_by_row = []
+        from_output_coeffs_by_row = []
+        for i, mi in enumerate(mis):
+            # If the multi-index is to be stored, keep the projection matrix
+            # entry empty
+            if is_stored(mi):
+                idx = len(stored_identifiers)
+                stored_identifiers.append(mi)
+                from_input_coeffs_by_row.append([(idx, 1)])
+                from_output_coeffs_by_row.append([])
+                continue
+            diff = [mi[d] - max_mi[d] for d in range(self.dim)]
+
+            # eg: u_xx + u_yy + u_zz is represented as
+            # [((2, 0, 0), 1), ((0, 2, 0), 1), ((0, 0, 2), 1)]
+            assignment = []
+            for other_mi, coeff in iteritems(pde_dict):
+                j = coeff_ident_enumerate_dict[add_mi(other_mi, diff)]
+                if i == j:
+                    # Skip the u_zz part here.
+                    continue
+                # PDE might not have max_mi_coeff = -1, divide by -max_mi_coeff
+                # to get a relation of the form, u_zz = - u_xx - u_yy for Laplace 3D.
+                assignment.append((j, coeff*max_mi_mult))
+            from_input_coeffs_by_row.append([])
+            from_output_coeffs_by_row.append(assignment)
+
+        plog.done()
 
         logger.debug("number of Taylor coefficients was reduced from {orig} to {red}"
                      .format(orig=len(self.get_full_coefficient_identifiers()),
                              red=len(stored_identifiers)))
 
-        return stored_identifiers, coeff_matrix
+        shape = (len(mis), len(stored_identifiers))
+        op = CSEMatVecOperator(from_input_coeffs_by_row,
+                               from_output_coeffs_by_row, shape)
+        return stored_identifiers, op
 
-    def try_get_recurrence_for_derivative(self, deriv, in_terms_of):
+    @memoize_method
+    def get_projection_matrix(self, rscale):
         """
-        :arg deriv: a tuple of integers identifying a derivative for which
-            a recurrence is sought
-        :arg in_terms_of: a container supporting efficient containment testing
-            indicating availability of derivatives for use in recurrences
+        Return a :class:`CSEMatVecOperator` object which exposes a matrix vector
+        multiplication operator for the projection matrix that expresses
+        every derivative in terms of a set of "stored" derivatives.
+
+        For example, for the PDE::
+
+            u_xx + u_yy + u_zz = 0
+
+        the coefficient matrix features the following entries::
+
+                ... u_xx u_yy ... <= cols = only stored derivatives
+                ==================
+             ...| ...  ...  ... ...
+                |
+            u_zz| ...  -1   -1  ...
+
+            ^ rows = one for every derivative
+
+        the projection matrix `M` is the transpose of the coefficient matrix
         """
+        _, projection_matrix = \
+            self.get_stored_ids_and_unscaled_projection_matrix()
 
-        raise NotImplementedError
+        full_coeffs = self.get_full_coefficient_identifiers()
 
-    def get_derivative_taker(self, expr, var_list):
-        from sumpy.tools import LinearRecurrenceBasedMiDerivativeTaker
-        return LinearRecurrenceBasedMiDerivativeTaker(expr, var_list, self)
+        projection_with_rscale = []
+        for row, assignment in \
+                enumerate(projection_matrix.from_output_coeffs_by_row):
+            # For eg: (u_xxx / rscale**3) = (u_yy / rscale**2) * coeff1 +
+            #                               (u_xx / rscale**2) * coeff2
+            # is converted to u_xxx = u_yy * (rscale * coeff1) +
+            #                         u_xx * (rscale * coeff2)
+            row_rscale = sum(full_coeffs[row])
+            from_output_coeffs_with_rscale = []
+            for k, coeff in assignment:
+                diff = row_rscale - sum(full_coeffs[k])
+                mult = rscale**diff
+                from_output_coeffs_with_rscale.append((k, coeff * mult))
+            projection_with_rscale.append(from_output_coeffs_with_rscale)
 
-
-class LaplaceDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
-
-    def try_get_recurrence_for_derivative(self, deriv, in_terms_of):
-        deriv = np.array(deriv, dtype=int)
-
-        for dim in np.where(2 <= deriv)[0]:
-            # Check if we can reduce this dimension in terms of the other
-            # dimensions.
-
-            reduced_deriv = deriv.copy()
-            reduced_deriv[dim] -= 2
-            coeffs = {}
-
-            for other_dim in range(self.dim):
-                if other_dim == dim:
-                    continue
-                needed_deriv = reduced_deriv.copy()
-                needed_deriv[other_dim] += 2
-                needed_deriv = tuple(needed_deriv)
-
-                if needed_deriv not in in_terms_of:
-                    break
-
-                coeffs[needed_deriv] = -1
-            else:
-                return coeffs
+        shape = projection_matrix.shape
+        return CSEMatVecOperator(projection_matrix.from_input_coeffs_by_row,
+                                 projection_with_rscale, shape)
 
 
-class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
+class LaplaceExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
 
-    def __init__(self, order, dim, helmholtz_k_name):
-        super(HelmholtzDerivativeWrangler, self).__init__(order, dim)
+    init_arg_names = ("order", "dim", "max_mi")
+
+    def __init__(self, order, dim, max_mi=None):
+        super(LaplaceExpansionTermsWrangler, self).__init__(order=order, dim=dim,
+            max_mi=max_mi)
+
+    def get_pde_as_diff_op(self):
+        w = make_identity_diff_op(self.dim)
+        return laplacian(w)
+
+
+class HelmholtzExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
+
+    init_arg_names = ("order", "dim", "helmholtz_k_name", "max_mi")
+
+    def __init__(self, order, dim, helmholtz_k_name, max_mi=None):
         self.helmholtz_k_name = helmholtz_k_name
+        super(HelmholtzExpansionTermsWrangler, self).__init__(order=order, dim=dim,
+            max_mi=max_mi)
 
-    def try_get_recurrence_for_derivative(self, deriv, in_terms_of):
-        deriv = np.array(deriv, dtype=int)
+    def get_pde_as_diff_op(self, **kwargs):
+        w = make_identity_diff_op(self.dim)
+        k = sym.Symbol(self.helmholtz_k_name)
+        return (laplacian(w) + k**2 * w)
 
-        for dim in np.where(2 <= deriv)[0]:
-            # Check if we can reduce this dimension in terms of the other
-            # dimensions.
 
-            reduced_deriv = deriv.copy()
-            reduced_deriv[dim] -= 2
-            coeffs = {}
+class BiharmonicExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
 
-            for other_dim in range(self.dim):
-                if other_dim == dim:
-                    continue
-                needed_deriv = reduced_deriv.copy()
-                needed_deriv[other_dim] += 2
-                needed_deriv = tuple(needed_deriv)
+    init_arg_names = ("order", "dim", "max_mi")
 
-                if needed_deriv not in in_terms_of:
-                    break
+    def __init__(self, order, dim, max_mi=None):
+        super(BiharmonicExpansionTermsWrangler, self).__init__(order=order, dim=dim,
+            max_mi=max_mi)
 
-                coeffs[needed_deriv] = -1
-            else:
-                k = sym.Symbol(self.helmholtz_k_name)
-                coeffs[tuple(reduced_deriv)] = -k*k
-                return coeffs
-
+    def get_pde_as_diff_op(self, **kwargs):
+        w = make_identity_diff_op(self.dim)
+        return laplacian(laplacian(w))
 # }}}
 
 
@@ -441,31 +528,33 @@ class HelmholtzDerivativeWrangler(LinearRecurrenceBasedDerivativeWrangler):
 class VolumeTaylorExpansionBase(object):
 
     @classmethod
-    def get_or_make_derivative_wrangler(cls, *key):
+    def get_or_make_expansion_terms_wrangler(cls, *key):
         """
-        This stores the derivative wrangler at the class attribute level because
-        precomputing the derivative wrangler may become expensive.
+        This stores the expansion terms wrangler at the class attribute level
+        because recreating the expansion terms wrangler implicitly empties its
+        caches.
         """
         try:
-            wrangler = cls.derivative_wrangler_cache[key]
+            wrangler = cls.expansion_terms_wrangler_cache[key]
         except KeyError:
-            wrangler = cls.derivative_wrangler_class(*key)
-            cls.derivative_wrangler_cache[key] = wrangler
+            wrangler = cls.expansion_terms_wrangler_class(*key)
+            cls.expansion_terms_wrangler_cache[key] = wrangler
 
         return wrangler
 
     @property
-    def derivative_wrangler(self):
-        return self.get_or_make_derivative_wrangler(*self.derivative_wrangler_key)
+    def expansion_terms_wrangler(self):
+        return self.get_or_make_expansion_terms_wrangler(
+                *self.expansion_terms_wrangler_key)
 
     def get_coefficient_identifiers(self):
         """
         Returns the identifiers of the coefficients that actually get stored.
         """
-        return self.derivative_wrangler.get_coefficient_identifiers()
+        return self.expansion_terms_wrangler.get_coefficient_identifiers()
 
     def get_full_coefficient_identifiers(self):
-        return self.derivative_wrangler.get_full_coefficient_identifiers()
+        return self.expansion_terms_wrangler.get_full_coefficient_identifiers()
 
     @property
     @memoize_method
@@ -479,33 +568,43 @@ class VolumeTaylorExpansionBase(object):
 
 class VolumeTaylorExpansion(VolumeTaylorExpansionBase):
 
-    derivative_wrangler_class = FullDerivativeWrangler
-    derivative_wrangler_cache = {}
+    expansion_terms_wrangler_class = FullExpansionTermsWrangler
+    expansion_terms_wrangler_cache = {}
 
     # not user-facing, be strict about having to pass use_rscale
     def __init__(self, kernel, order, use_rscale):
-        self.derivative_wrangler_key = (order, kernel.dim)
+        self.expansion_terms_wrangler_key = (order, kernel.dim)
 
 
 class LaplaceConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
 
-    derivative_wrangler_class = LaplaceDerivativeWrangler
-    derivative_wrangler_cache = {}
+    expansion_terms_wrangler_class = LaplaceExpansionTermsWrangler
+    expansion_terms_wrangler_cache = {}
 
     # not user-facing, be strict about having to pass use_rscale
     def __init__(self, kernel, order, use_rscale):
-        self.derivative_wrangler_key = (order, kernel.dim)
+        self.expansion_terms_wrangler_key = (order, kernel.dim)
 
 
 class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
 
-    derivative_wrangler_class = HelmholtzDerivativeWrangler
-    derivative_wrangler_cache = {}
+    expansion_terms_wrangler_class = HelmholtzExpansionTermsWrangler
+    expansion_terms_wrangler_cache = {}
 
     # not user-facing, be strict about having to pass use_rscale
     def __init__(self, kernel, order, use_rscale):
         helmholtz_k_name = kernel.get_base_kernel().helmholtz_k_name
-        self.derivative_wrangler_key = (order, kernel.dim, helmholtz_k_name)
+        self.expansion_terms_wrangler_key = (order, kernel.dim, helmholtz_k_name)
+
+
+class BiharmonicConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
+
+    expansion_terms_wrangler_class = BiharmonicExpansionTermsWrangler
+    expansion_terms_wrangler_cache = {}
+
+    # not user-facing, be strict about having to pass use_rscale
+    def __init__(self, kernel, order, use_rscale):
+        self.expansion_terms_wrangler_key = (order, kernel.dim)
 
 # }}}
 
@@ -555,49 +654,58 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
     def get_local_expansion_class(self, base_kernel):
         """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
-        from sumpy.kernel import HelmholtzKernel, LaplaceKernel, YukawaKernel
+        from sumpy.kernel import (HelmholtzKernel, LaplaceKernel, YukawaKernel,
+                BiharmonicKernel, StokesletKernel, StressletKernel)
+
+        from sumpy.expansion.local import (H2DLocalExpansion, Y2DLocalExpansion,
+                HelmholtzConformingVolumeTaylorLocalExpansion,
+                LaplaceConformingVolumeTaylorLocalExpansion,
+                BiharmonicConformingVolumeTaylorLocalExpansion,
+                VolumeTaylorLocalExpansion)
+
         if (isinstance(base_kernel.get_base_kernel(), HelmholtzKernel)
                 and base_kernel.dim == 2):
-            from sumpy.expansion.local import H2DLocalExpansion
             return H2DLocalExpansion
         elif (isinstance(base_kernel.get_base_kernel(), YukawaKernel)
                 and base_kernel.dim == 2):
-            from sumpy.expansion.local import Y2DLocalExpansion
             return Y2DLocalExpansion
         elif isinstance(base_kernel.get_base_kernel(), HelmholtzKernel):
-            from sumpy.expansion.local import \
-                    HelmholtzConformingVolumeTaylorLocalExpansion
             return HelmholtzConformingVolumeTaylorLocalExpansion
         elif isinstance(base_kernel.get_base_kernel(), LaplaceKernel):
-            from sumpy.expansion.local import \
-                    LaplaceConformingVolumeTaylorLocalExpansion
             return LaplaceConformingVolumeTaylorLocalExpansion
+        elif isinstance(base_kernel.get_base_kernel(),
+                (BiharmonicKernel, StokesletKernel, StressletKernel)):
+            return BiharmonicConformingVolumeTaylorLocalExpansion
         else:
-            from sumpy.expansion.local import VolumeTaylorLocalExpansion
             return VolumeTaylorLocalExpansion
 
     def get_multipole_expansion_class(self, base_kernel):
         """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
-        from sumpy.kernel import HelmholtzKernel, LaplaceKernel, YukawaKernel
+        from sumpy.kernel import (HelmholtzKernel, LaplaceKernel, YukawaKernel,
+                BiharmonicKernel, StokesletKernel, StressletKernel)
+
+        from sumpy.expansion.multipole import (H2DMultipoleExpansion,
+                Y2DMultipoleExpansion,
+                LaplaceConformingVolumeTaylorMultipoleExpansion,
+                HelmholtzConformingVolumeTaylorMultipoleExpansion,
+                BiharmonicConformingVolumeTaylorMultipoleExpansion,
+                VolumeTaylorMultipoleExpansion)
+
         if (isinstance(base_kernel.get_base_kernel(), HelmholtzKernel)
                 and base_kernel.dim == 2):
-            from sumpy.expansion.multipole import H2DMultipoleExpansion
             return H2DMultipoleExpansion
         elif (isinstance(base_kernel.get_base_kernel(), YukawaKernel)
                 and base_kernel.dim == 2):
-            from sumpy.expansion.multipole import Y2DMultipoleExpansion
             return Y2DMultipoleExpansion
         elif isinstance(base_kernel.get_base_kernel(), LaplaceKernel):
-            from sumpy.expansion.multipole import (
-                    LaplaceConformingVolumeTaylorMultipoleExpansion)
             return LaplaceConformingVolumeTaylorMultipoleExpansion
         elif isinstance(base_kernel.get_base_kernel(), HelmholtzKernel):
-            from sumpy.expansion.multipole import (
-                    HelmholtzConformingVolumeTaylorMultipoleExpansion)
             return HelmholtzConformingVolumeTaylorMultipoleExpansion
+        elif isinstance(base_kernel.get_base_kernel(),
+                (BiharmonicKernel, StokesletKernel, StressletKernel)):
+            return BiharmonicConformingVolumeTaylorMultipoleExpansion
         else:
-            from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansion
             return VolumeTaylorMultipoleExpansion
 
 # }}}
