@@ -230,7 +230,7 @@ class ExpansionTermsWrangler(object):
 
         max_mi = None
         if isinstance(self, LinearPDEBasedExpansionTermsWrangler):
-            pde_dict = self.get_pde().eq
+            pde_dict = self.get_pde_as_diff_op().mi_to_coeff
             for ident in pde_dict.keys():
                 if ident not in coeff_ident_enumerate_dict:
                     break
