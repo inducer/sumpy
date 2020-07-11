@@ -256,11 +256,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         result = [0] * len(tgt_mis_all)
 
         # O(1) iterations
-        for const_dim in set(d for d, _ in tgt_split):
-            # Use the const_dim as the first dimension to vary so that the below
+        for normal_dir in set(d for d, _ in tgt_split):
+            # Use the normal_dir as the first dimension to vary so that the below
             # algorithm is O(p^{d+1}) for full and O(p^{d}) for compressed
-            dims = [const_dim] + list(range(const_dim)) + \
-                    list(range(const_dim+1, self.dim))
+            dims = [normal_dir] + list(range(normal_dir)) + \
+                    list(range(normal_dir+1, self.dim))
             # Start with source coefficients
             Y = src_coeffs   # noqa: N806
             # O(1) iterations
@@ -281,7 +281,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
             # This is O(p) in full and O(1) in compressed
             for d, tgt_mis in tgt_split:
-                if d != const_dim:
+                if d != normal_dir:
                     continue
                 # O(p^{d-1}) iterations
                 for mi in tgt_mis:

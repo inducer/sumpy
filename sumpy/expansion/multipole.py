@@ -208,16 +208,16 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         for d, src_mi in src_split:
             non_zero_coeffs_per_dim[d] += src_mi
 
-        for const_dim in set(d for d, _ in src_split):
+        for normal_dir in set(d for d, _ in src_split):
             dim_coeffs_to_translate = \
                 [0] * len(src_expansion.get_full_coefficient_identifiers())
-            for mi in non_zero_coeffs_per_dim[const_dim]:
+            for mi in non_zero_coeffs_per_dim[normal_dir]:
                 idx = src_mi_to_index[mi]
                 dim_coeffs_to_translate[idx] = src_coeff_exprs_full[idx]
 
-            # Use the const_dim as the last dimension to vary
-            dims = list(range(const_dim)) + \
-                   list(range(const_dim+1, self.dim)) + [const_dim]
+            # Use the normal_dir as the last dimension to vary
+            dims = list(range(normal_dir)) + \
+                   list(range(normal_dir+1, self.dim)) + [normal_dir]
             for d in dims:
                 temp = [0] * len(src_expansion.get_full_coefficient_identifiers())
                 for i, tgt_mi in enumerate(
