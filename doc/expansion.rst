@@ -3,6 +3,11 @@ Expansions
 
 .. automodule:: sumpy.expansion
 
+Differential Operators
+----------------------
+
+.. automodule:: sumpy.expansion.diff_op
+
 Local Expansions
 ----------------
 
