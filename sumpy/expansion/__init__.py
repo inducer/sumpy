@@ -240,7 +240,7 @@ class CSEMatVecOperator(object):
 
         An object of type ``List[List[Tuple[int, Any]]]``. Each element
         in the list represents a row of the Matrix using a linear combination
-        of values from input vector. Each element represents a
+        of values from the input vector. Each element has the form
         ``(index of input vector, coeff)``.
 
         Number of rows in the matrix represented is equal to the
@@ -249,8 +249,8 @@ class CSEMatVecOperator(object):
     .. attribute:: from_output_coeffs_by_row
 
         An object of type ``List[List[Tuple[int, Any]]]``. Each element
-        in the list represents a row of the Matrix using a linear combination
-        of values from output vector. Each element represents a
+        in the list represents a row of the matrix using a linear combination
+        of values from the output vector. Each element has the form
         ``(index of output vector, coeff)``.
 
     .. attribute:: shape
