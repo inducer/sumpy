@@ -127,90 +127,19 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 for mi in self.get_coefficient_identifiers()]
 
     def evaluate(self, coeffs, bvec, rscale, sac=None):
-        from pytools import factorial
-
         evaluated_coeffs = (
             self.expansion_terms_wrangler.get_full_kernel_derivatives_from_stored(
                 coeffs, rscale, sac=sac))
 
         bvec = [b*rscale**-1 for b in bvec]
-        mi_to_index = dict((mi, i) for i, mi in
-                        enumerate(self.get_full_coefficient_identifiers()))
+        from sumpy.tools import mi_power, mi_factorial
 
-        # Sort multi-indices so that last dimension varies fastest
-        sorted_target_mis = sorted(self.get_full_coefficient_identifiers())
-        dim = self.dim
-
-        # Start with an invalid "seen" multi-index
-        seen_mi = [-1]*dim
-        # Local sum keep the sum of the terms that differ by each dimension
-        local_sum = [0]*dim
-        # Local multiplier keep the scalar that the sum has to be multiplied by
-        # when adding to the sum of the preceding dimension.
-        local_multiplier = [0]*dim
-
-        # For the multi-indices in 3D, local_sum looks like this:
-        #
-        # Multi-index | coef | local_sum                              | local_mult
-        # (0, 0, 0)   |  c0  | 0, 0,                c0                | 0, 1, 1
-        # (0, 0, 1)   |  c1  | 0, 0,                c0+c1*dz          | 0, 1, 1
-        # (0, 0, 2)   |  c2  | 0, 0,                c0+c1*dz+c2*dz^2  | 0, 1, 1
-        # (0, 1, 0)   |  c3  | 0, c0+c1*dz+c2*dz^2, c3                | 0, 1, dy
-        # (0, 1, 1)   |  c4  | 0, c0+c1*dz+c2*dz^2, c3+c4*dz          | 0, 1, dy
-        # (0, 1, 2)   |  c5  | 0, c0+c1*dz+c2*dz^2, c3+c4*dz+c5*dz^2  | 0, 1, dy
-        # (0, 2, 0)   |  c6  | 0, c0+c1*dz+c2*dz^2, c6                | 0, 1, dy^2
-        #             |      |    +dy*(c3+c4*dz+c5*dz^2)              |
-        # (0, 2, 1)   |  c7  | 0, c0+c1*dz+c2*dz^2, c6+c7*dz          | 0, 1, dy^2
-        #             |      |    +dy*(c3+c4*dz+c5*dz^2)              |
-        # (0, 2, 2)   |  c8  | 0, c0+c1*dz+c2*dz^2, c6+c7*dz+x8*dz^2  | 0, 1, dy^2
-        #             |      |    +dy*(c3+c4*dz+c5*dz^2)              |
-        # (1, 0, 0)   |  c8  | c0+c1*dz+c2*dz^2,         0, 0         | 0, dx, 1
-        #             |      |  +dy*(c3+c4*dz+c5*dz^2)                |
-        #             |      |  +dy^2*(c6+c7*dz+c8*dz^2)              |
-
-        for mi in sorted_target_mis:
-
-            # {{{ handle the case where a not-last dimension "clicked over"
-
-            # (where d will be that not-last dimension)
-
-            # Iterate in reverse order of dimensions to properly handle a
-            # "double click-over".
-
-            for d in reversed(range(dim-1)):
-                if seen_mi[d] != mi[d]:
-                    # If the dimension d of mi changed from the previous value
-                    # then the sum for dimension d+1 is complete, add it to
-                    # dimension d after multiplying and restart.
-
-                    local_sum[d] += local_sum[d+1]*local_multiplier[d+1]
-                    local_sum[d+1] = 0
-                    local_multiplier[d+1] = bvec[d]**mi[d] / factorial(mi[d])
-
-            # }}}
-
-            local_sum[dim-1] += evaluated_coeffs[mi_to_index[mi]] * \
-                                    bvec[dim-1]**mi[dim-1] / factorial(mi[dim-1])
-            seen_mi = mi
-
-        for d in reversed(range(dim-1)):
-            local_sum[d] += local_sum[d+1]*local_multiplier[d+1]
-
-        # {{{ simpler, functionally equivalent code
-
-        if 0:
-            from sumpy.tools import mi_power, mi_factorial
-
-            return sum(
-                coeff
-                * mi_power(bvec, mi, evaluate=False)
-                / mi_factorial(mi)
-                for coeff, mi in zip(
-                        evaluated_coeffs, self.get_full_coefficient_identifiers()))
-
-        # }}}
-
-        return local_sum[0]
+        return sum(
+            coeff
+            * mi_power(bvec, mi, evaluate=False)
+            / mi_factorial(mi)
+            for coeff, mi in zip(
+                    evaluated_coeffs, self.get_full_coefficient_identifiers()))
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None):
@@ -301,9 +230,68 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                     lexp_mi_terms.append(
                             coeff * kernel_deriv * tgt_rscale**sum(lexp_mi))
                 result.append(sym.Add(*lexp_mi_terms))
+            logger.info("building translation operator: done")
+            return result
 
-        else:
-            from sumpy.tools import MiDerivativeTaker
+        rscale_ratio = sym.UnevaluatedExpr(tgt_rscale/src_rscale)
+
+        from sumpy.tools import MiDerivativeTaker
+        from math import factorial
+        src_wrangler = src_expansion.expansion_terms_wrangler
+        src_coeffs = (
+            src_wrangler.get_full_kernel_derivatives_from_stored(
+                src_coeff_exprs, src_rscale))
+        src_mis = \
+            src_expansion.expansion_terms_wrangler.get_full_coefficient_identifiers()
+
+        src_mi_to_index = dict((mi, i) for i, mi in enumerate(src_mis))
+
+        tgt_mis_all = \
+            self.expansion_terms_wrangler.get_coefficient_identifiers()
+        tgt_mi_to_index = dict((mi, i) for i, mi in enumerate(tgt_mis_all))
+
+        tgt_split = self.expansion_terms_wrangler._get_coeff_identifier_split()
+
+        p = max(sum(mi) for mi in src_mis)
+        result = [0] * len(tgt_mis_all)
+
+        # O(1) iterations
+        for const_dim in set(d for d, _ in tgt_split):
+            # Use the const_dim as the first dimension to vary so that the below
+            # algorithm is O(p^{d+1}) for full and O(p^{d}) for compressed
+            dims = [const_dim] + list(range(const_dim)) + \
+                    list(range(const_dim+1, self.dim))
+            # Start with source coefficients
+            Y = src_coeffs   # noqa: N806
+            # O(1) iterations
+            for d in dims:
+                C = Y        # noqa: N806
+                Y = [0] * len(src_mis)   # noqa: N806
+                # Only O(p^{d-1}) operations are used in compressed
+                # All of them are used in full.
+                for i, s in enumerate(src_mis):
+                    # O(p) iterations
+                    for q in range(p+1-sum(s)):
+                        src_mi = list(s)
+                        src_mi[d] += q
+                        src_mi = tuple(src_mi)
+                        if src_mi in src_mi_to_index:
+                            Y[i] += (dvec[d]/src_rscale) ** q * \
+                                    C[src_mi_to_index[src_mi]] / factorial(q)
+
+            # This is O(p) in full and O(1) in compressed
+            for d, tgt_mis in tgt_split:
+                if d != const_dim:
+                    continue
+                # O(p^{d-1}) iterations
+                for mi in tgt_mis:
+                    if mi not in src_mi_to_index:
+                        continue
+                    result[tgt_mi_to_index[mi]] = Y[src_mi_to_index[mi]] \
+                                                    * rscale_ratio ** sum(mi)
+
+        # {{{ simpler, functionally equivalent code
+        if 0:
             # Rscale/operand magnitude is fairly sensitive to the order of
             # operations--which is something we don't have fantastic control
             # over at the symbolic level. Scaling dvec, then differentiating,
@@ -320,7 +308,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             result = [
                     (taker.diff(mi).xreplace(replace_dict) * rscale_ratio**sum(mi))
                     for mi in self.get_coefficient_identifiers()]
-
+        # }}}
         logger.info("building translation operator: done")
         return result
 

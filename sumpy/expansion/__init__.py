@@ -210,6 +210,48 @@ class ExpansionTermsWrangler(object):
 
         return type(self)(**new_kwargs)
 
+    @memoize_method
+    def _get_coeff_identifier_split(self):
+        """
+        This splits the coefficients into a O(p) number of disjoint sets
+        so that for each set, all the identifiers have the form,
+        (m_1, m_2, ..., m_{j-1}, c, m_{j+1}, ... , m_d)
+        where c is a constant.
+
+        If this is an instance of LinearPDEBasedExpansionTermsWrangler,
+        then the number of sets will be O(1).
+
+        Returns a List[Tuple[j, List[identifiers]]]
+        """
+        res = []
+        mis = self.get_full_coefficient_identifiers()
+        coeff_ident_enumerate_dict = dict((tuple(mi), i) for
+            (i, mi) in enumerate(mis))
+
+        max_mi = None
+        if isinstance(self, LinearPDEBasedExpansionTermsWrangler):
+            pde_dict = self.get_pde().eq
+            for ident in pde_dict.keys():
+                if ident not in coeff_ident_enumerate_dict:
+                    break
+            else:
+                max_mi_idx = max(coeff_ident_enumerate_dict[ident] for
+                                 ident in pde_dict.keys())
+                max_mi = mis[max_mi_idx]
+
+        if max_mi is None:
+            max_mi = [max(mi[d] for mi in mis) for d in range(self.dim)]
+
+        seen_mis = set()
+        for d in range(self.dim):
+            filtered_mis = [mi for mi in mis if mi[d] < max_mi[d]]
+            for i in range(max_mi[d]):
+                new_mis = [mi for mi in filtered_mis if mi[d] == i
+                             and mi not in seen_mis]
+                seen_mis.update(new_mis)
+                res.append((d, new_mis))
+        return res
+
 
 class FullExpansionTermsWrangler(ExpansionTermsWrangler):
 
