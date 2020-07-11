@@ -239,7 +239,7 @@ class CSEMatVecOperator(object):
     .. attribute:: from_input_coeffs_by_row
 
         An object of type ``List[List[Tuple[int, Any]]]``. Each element
-        in the list represents a row of the Matrix using a linear combination
+        in the list represents a row of the matrix using a linear combination
         of values from the input vector. Each element has the form
         ``(index of input vector, coeff)``.
 
