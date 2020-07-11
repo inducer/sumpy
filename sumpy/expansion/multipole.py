@@ -194,12 +194,11 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
         # In other words, we're better off computing the translation
         # one dimension at a time. If the coefficients in the source
-        # expansion have the form (0, m) and (m, 0), then we calculate
-        # the output from (0, m) with the second dimension as the fastest
-        # varying dimension and then calculate the output from (m, 0)
-        # with the first dimension as the fastest varying dimension.
-        # However, the contribution from (0, 0) is counted twice and we
-        # need to subtract that.
+        # expansion have the form (0, m) and (n, 0), where m>=0, n>=1,
+        # then we calculate the output from (0, m) with the second
+        # dimension as the fastest varying dimension and then calculate
+        # the output from (n, 0) with the first dimension as the fastest
+        # varying dimension.
 
         src_split = \
             src_expansion.expansion_terms_wrangler._get_coeff_identifier_split()

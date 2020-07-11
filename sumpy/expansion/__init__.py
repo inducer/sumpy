@@ -221,7 +221,7 @@ class ExpansionTermsWrangler(object):
         If this is an instance of LinearPDEBasedExpansionTermsWrangler,
         then the number of sets will be O(1).
 
-        Returns a List[Tuple[j, List[identifiers]]]
+        Returns an object of type List[Tuple[int, List[Tupel[int]]]].
         """
         res = []
         mis = self.get_full_coefficient_identifiers()
@@ -231,6 +231,7 @@ class ExpansionTermsWrangler(object):
         max_mi = None
         if isinstance(self, LinearPDEBasedExpansionTermsWrangler):
             pde_dict = self.get_pde_as_diff_op().mi_to_coeff
+
             for ident in pde_dict.keys():
                 if ident not in coeff_ident_enumerate_dict:
                     break
