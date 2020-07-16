@@ -104,7 +104,6 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
                 pymbolic_expr_maps=[
                         knl.get_code_transformer() for knl in self.kernels],
                 retain_names=result_names,
-                complex_dtype=np.complex128  # FIXME
                 )
 
         return loopy_insns, result_names

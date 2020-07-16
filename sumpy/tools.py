@@ -102,13 +102,13 @@ def mi_power(vector, mi, evaluate=True):
     return result
 
 
-def add_to_sac(sac, expr):
+def add_to_sac(sac, expr, prefix="temp"):
     import sumpy.symbolic as sym
     numeric_types = (numbers.Number, sym.Number, int, float, complex)
     if sac is None or isinstance(expr, numeric_types):
         return expr
     else:
-        return sym.Symbol(sac.assign_unique("temp", expr))
+        return sym.Symbol(sac.assign_unique(prefix, expr))
 
 
 class MiDerivativeTaker(object):
@@ -1049,7 +1049,7 @@ def fft(seq, inverse=False, sac=None):
         if isinstance(expr, np.ndarray):
             res = [wrap(a) for a in expr]
             return np.array(res, dtype=object).reshape(expr.shape)
-        return add_to_sac(sac, expr)
+        return add_to_sac(sac, expr, "temp_fft")
 
     if inverse:
         return _ifft(list(seq), wrap_intermediate=wrap).tolist()
@@ -1089,6 +1089,18 @@ def matvec_toeplitz_upper_triangular(first_row, vector):
         terms = tuple(first_row[col-row]*vector[col] for col in range(row, n))
         output[row] = sym.Add(*terms)
     return output
+
+
+def to_complex_dtype(dtype):
+    if dtype == np.complex64:
+        return np.complex64
+    if dtype == np.complex128:
+        return np.complex128
+    if dtype == np.float32:
+        return np.complex64
+    if dtype == np.float64:
+        return np.complex128
+    raise RuntimeError(f"Unknown dtype: {dtype}")
 
 # }}}
 
