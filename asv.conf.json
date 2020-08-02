@@ -75,6 +75,7 @@
         "pip+git+https://github.com/inducer/pymbolic#egg=pymbolic": [""],
         "pip+git+https://gitlab.tiker.net/inducer/boxtree#egg=boxtree": [""],
         "pip+git+https://github.com/inducer/loopy#egg=loopy": [""],
+        "pip" : ["<20.2"],
     },
 
     // Combinations of libraries/python versions can be excluded/included
