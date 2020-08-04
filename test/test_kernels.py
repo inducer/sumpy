@@ -128,7 +128,8 @@ def test_p2p(ctx_factory, exclude_self):
     False,
     True
     ])
-# Sample: test_p2e_with_source_at_center_no_nans(cl._csc, HelmholtzKernel(2), H2DMultipoleExpansion, 4, False)
+# Sample: test_p2e_with_source_at_center_no_nans(
+# cl._csc, HelmholtzKernel(2), H2DMultipoleExpansion, 4, False)
 def test_p2e_with_source_at_center_no_nans(
         ctx_factory, base_knl, expn_class, order, with_source_derivative):
     """Test for absence of NaNs when forming multipole expansions if there is
@@ -163,14 +164,7 @@ def test_p2e_with_source_at_center_no_nans(
     from sumpy import P2EFromSingleBox
     p2e = P2EFromSingleBox(ctx, expn, out_kernels)
 
-    from sumpy.expansion.local import LocalExpansionBase
-    if issubclass(expn_class, LocalExpansionBase):
-        h_values = [1/5, 1/7, 1/20]
-    else:
-        h_values = [1/2, 1/3, 1/5]
-
     nsources = 1
-
     centers = np.array([2, 1, 0][:knl.dim], np.float64)
     sources = (0.*(-0.5+np.random.rand(knl.dim, nsources).astype(np.float64))
                + centers[:, np.newaxis])
