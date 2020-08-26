@@ -222,7 +222,7 @@ class CalculusPatch(object):
         return result
 
     def curl(self, arg):
-        """Take the curl of the vector quantity *arg*.
+        r"""Take the curl of the vector quantity *arg*.
 
         :arg arg: an object array of shape ``(3,)`` containing
             :class:`numpy.ndarray`\ s with shape ``(npoints_total,)``.
