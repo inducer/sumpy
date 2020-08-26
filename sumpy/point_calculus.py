@@ -211,9 +211,9 @@ class CalculusPatch(object):
         return sum(self.diff(iaxis, f_values, 2) for iaxis in range(self.dim))
 
     def div(self, arg):
-        """
+        r"""
         :arg arg: an object array containing
-            :class:`numpy.ndarray` s with shape ``(npoints_total,)``.
+            :class:`numpy.ndarray`\ s with shape ``(npoints_total,)``.
         """
         result = 0
         for i, arg_i in enumerate(arg):
@@ -225,7 +225,7 @@ class CalculusPatch(object):
         """Take the curl of the vector quantity *arg*.
 
         :arg arg: an object array of shape ``(3,)`` containing
-            :class:`numpy.ndarray` s with shape ``(npoints_total,)``.
+            :class:`numpy.ndarray`\ s with shape ``(npoints_total,)``.
         """
         from pytools import levi_civita
         from pytools.obj_array import make_obj_array
