@@ -318,4 +318,5 @@ intersphinx_mapping = {
     'https://documen.tician.de/pytential/': None,
     'https://documen.tician.de/boxtree/': None,
     'https://docs.sympy.org/latest/': None,
+    'https://matplotlib.org/': None,
     }

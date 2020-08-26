@@ -37,9 +37,9 @@ class CalculusPatch(object):
     """Sets up a grid of points on which derivatives can be calculated. Useful
     to verify that an evaluated potential actually solves a PDE.
 
-    .. attribute: dim
+    .. attribute:: dim
 
-    .. attribute: points
+    .. attribute:: points
 
         shape: ``(dim, npoints_total)``
 
@@ -118,7 +118,7 @@ class CalculusPatch(object):
     def basis(self):
         """
         :returns: a :class:`list` containing functions that realize
-            a high-order interpolation basis on the :attr:`points`.
+            a high-order interpolation basis on the :py:attr:`points`.
         """
 
         from pytools import indices_in_shape
