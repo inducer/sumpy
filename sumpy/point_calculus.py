@@ -48,7 +48,7 @@ class CalculusPatch(object):
     .. automethod:: diff
     .. automethod:: dx
     .. automethod:: dy
-    .. automethod:: dy
+    .. automethod:: dz
     .. automethod:: laplace
     .. automethod:: div
     .. automethod:: curl
@@ -116,7 +116,7 @@ class CalculusPatch(object):
         return self._vandermonde_1d()[0]
 
     def basis(self):
-        """"
+        """
         :returns: a :class:`list` containing functions that realize
             a high-order interpolation basis on the :attr:`points`.
         """
@@ -213,7 +213,7 @@ class CalculusPatch(object):
     def div(self, arg):
         """
         :arg arg: an object array containing
-            :class:`numpy.ndarrays` with shape ``(npoints_total,)``.
+            :class:`numpy.ndarray` s with shape ``(npoints_total,)``.
         """
         result = 0
         for i, arg_i in enumerate(arg):
@@ -225,7 +225,7 @@ class CalculusPatch(object):
         """Take the curl of the vector quantity *arg*.
 
         :arg arg: an object array of shape ``(3,)`` containing
-            :class:`numpy.ndarrays` with shape ``(npoints_total,)``.
+            :class:`numpy.ndarray` s with shape ``(npoints_total,)``.
         """
         from pytools import levi_civita
         from pytools.obj_array import make_obj_array

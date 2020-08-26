@@ -428,7 +428,7 @@ class ExpansionPotentialSource(PotentialSource):
 
     .. attribute:: text_kwargs
 
-       Passed to :method:`matplotlib.pyplot.annotate`. Used for customizing the
+       Passed to :meth:`matplotlib.pyplot.annotate`. Used for customizing the
        expansion label. Changing the label text is supported by passing the
        kwarg *s*.  Just for visualization, purely advisory.
     """
