@@ -309,12 +309,13 @@ texinfo_documents = [
 
 
 intersphinx_mapping = {
-    'http://docs.python.org/': None,
-    'http://docs.scipy.org/doc/numpy/': None,
-    'http://documen.tician.de/modepy/': None,
-    'http://documen.tician.de/pyopencl/': None,
-    'http://documen.tician.de/pymbolic/': None,
-    'http://documen.tician.de/loopy/': None,
-    'http://documen.tician.de/pytential/': None,
-    'http://documen.tician.de/boxtree/': None,
+    'https://docs.python.org/3/': None,
+    'https://numpy.org/doc/stable/': None,
+    'https://documen.tician.de/modepy/': None,
+    'https://documen.tician.de/pyopencl/': None,
+    'https://documen.tician.de/pymbolic/': None,
+    'https://documen.tician.de/loopy/': None,
+    'https://documen.tician.de/pytential/': None,
+    'https://documen.tician.de/boxtree/': None,
+    'https://docs.sympy.org/latest/': None,
     }
