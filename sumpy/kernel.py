@@ -81,7 +81,7 @@ class KernelArgument(object):
     """
     .. attribute:: loopy_arg
 
-        A :class:`loopy.Argument` instance describing the type,
+        A :class:`loopy.KernelArgument` instance describing the type,
         name, and other features of this kernel argument when
         passed to a generated piece of code.
     """

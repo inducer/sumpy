@@ -159,7 +159,7 @@ html_sidebars = {
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+# html_static_path = ['_static']
 
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied
@@ -309,12 +309,14 @@ texinfo_documents = [
 
 
 intersphinx_mapping = {
-    'http://docs.python.org/': None,
-    'http://docs.scipy.org/doc/numpy/': None,
-    'http://documen.tician.de/modepy/': None,
-    'http://documen.tician.de/pyopencl/': None,
-    'http://documen.tician.de/pymbolic/': None,
-    'http://documen.tician.de/loopy/': None,
-    'http://documen.tician.de/pytential/': None,
-    'http://documen.tician.de/boxtree/': None,
+    'https://docs.python.org/3/': None,
+    'https://numpy.org/doc/stable/': None,
+    'https://documen.tician.de/modepy/': None,
+    'https://documen.tician.de/pyopencl/': None,
+    'https://documen.tician.de/pymbolic/': None,
+    'https://documen.tician.de/loopy/': None,
+    'https://documen.tician.de/pytential/': None,
+    'https://documen.tician.de/boxtree/': None,
+    'https://docs.sympy.org/latest/': None,
+    'https://matplotlib.org/': None,
     }

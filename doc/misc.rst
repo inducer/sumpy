@@ -1,3 +1,9 @@
+Misc Tools
+==========
+
+.. automodule:: sumpy.tools
+
+
 Installation
 ============
 
