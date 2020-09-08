@@ -164,33 +164,26 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         from sumpy.tools import mi_factorial
 
         src_mi_to_index = dict((mi, i) for i, mi in enumerate(
-            src_expansion.get_full_coefficient_identifiers()))
+            src_expansion.get_coefficient_identifiers()))
 
         tgt_mi_to_index = dict((mi, i) for i, mi in enumerate(
             self.get_full_coefficient_identifiers()))
 
-        src_coeff_exprs_full = \
-            [0]*len(src_expansion.get_full_coefficient_identifiers())
-
-        for i, mi in enumerate(src_expansion.get_coefficient_identifiers()):
-            src_coeff_exprs_full[src_mi_to_index[mi]] = src_coeff_exprs[i] * \
-                sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(mi)
-
         # This algorithm uses the observation that M2M coefficients
         # have the following form in 2D
         #
-        # $B_{m, n} = \sum_{i\le m, j\le n} A_{i, j}
+        # $T_{m, n} = \sum_{i\le m, j\le n} C_{i, j}
         #             d_x^i d_y^j \binom{m}{i} \binom{n}{j}$
         # and can be rewritten as follows.
         #
-        # Let $Y_{m, n} = \sum_{i\le m} A_{i, n} d_x^i \binom{m}{i}$.
+        # Let $Y_{m, n} = \sum_{i\le m} C_{i, n} d_x^i \binom{m}{i}$.
         #
-        # Then, $B_{m, n} = \sum_{j\le n} Y_{m, j} d_y^j \binom{n}{j}$.
+        # Then, $T_{m, n} = \sum_{j\le n} Y_{m, j} d_y^j \binom{n}{j}$.
         #
         # $Y_{m, n}$ are $p^2$ number of temporary variables that are
         # reused for different M2M coefficients and costs $p$ per variable.
         # Total cost for calculating $Y_{m, n}$ is $p^3$ and similar
-        # for $B_{m, n}$
+        # for $T_{m, n}$.
 
         # In other words, we're better off computing the translation
         # one dimension at a time. If the coefficients in the source
@@ -200,58 +193,67 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         # the output from (n, 0) with the first dimension as the fastest
         # varying dimension.
 
-        src_split = \
-            src_expansion.expansion_terms_wrangler._get_coeff_identifier_split()
+        # Note that for calculating Y values, C is the input
+        # and for calculating the final result Y is the input.
+
+
+        tgt_split = \
+            self.expansion_terms_wrangler._get_coeff_identifier_split()
         result = [0] * len(self.get_full_coefficient_identifiers())
 
         # For this algorithm, we need the hyperplanes that are parallel
         # to each other grouped.
         non_zero_coeffs_grouped_by_normal_dir = [[] for d in range(self.dim)]
-        for d, src_mi in src_split:
-            non_zero_coeffs_grouped_by_normal_dir[d] += src_mi
+        for d, tgt_mi in tgt_split:
+            non_zero_coeffs_grouped_by_normal_dir[d] += tgt_mi
 
-        for normal_dir in set(d for d, _ in src_split):
-            dim_coeffs_to_translate = \
-                [0] * len(src_expansion.get_full_coefficient_identifiers())
+        for normal_dir in set(d for d, _ in tgt_split):
+            # In M2M, target order is the same or higher as source order
+            # First, let's write source coefficients in target coefficient
+            # indices and then scale them. Here C is referred by the same
+            # name used in the formulae above.
+            C = [0] * len(self.get_full_coefficient_identifiers())   # noqa: N806
             for mi in non_zero_coeffs_grouped_by_normal_dir[normal_dir]:
-                idx = src_mi_to_index[mi]
-                dim_coeffs_to_translate[idx] = src_coeff_exprs_full[idx]
+                if mi not in src_mi_to_index:
+                    continue
+                src_idx = src_mi_to_index[mi]
+                tgt_idx = tgt_mi_to_index[mi]
+                C[tgt_idx] = src_coeff_exprs[src_idx] * \
+                        sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(mi)
 
             # Use the normal_dir as the last dimension to vary
             dims = list(range(normal_dir)) + \
                    list(range(normal_dir+1, self.dim)) + [normal_dir]
             for d in dims:
-                temp = [0] * len(src_expansion.get_full_coefficient_identifiers())
+                Y = [0] * len(self.get_full_coefficient_identifiers())  # noqa: N806
                 for i, tgt_mi in enumerate(
-                        src_expansion.get_full_coefficient_identifiers()):
-                    src_mis_per_dim = []
+                        self.get_full_coefficient_identifiers()):
+
+                    # Calling this input_mis instead of src_mis because we
+                    # converted the source coefficients to target coefficient
+                    # indices beforehand.
+                    input_mis_per_dim = []
                     for mi_i in range(tgt_mi[d]+1):
                         new_mi = list(tgt_mi)
                         new_mi[d] = mi_i
-                        src_mis_per_dim.append(tuple(new_mi))
+                        input_mis_per_dim.append(tuple(new_mi))
 
-                    for src_mi in src_mis_per_dim:
-                        try:
-                            src_index = src_mi_to_index[src_mi]
-                        except KeyError:
-                            # Omitted coefficients: not life-threatening
-                            continue
-
-                        contrib = dim_coeffs_to_translate[src_index]
+                    for input_mi in input_mis_per_dim:
+                        contrib = Y[tgt_mi_to_index[input_mi]]
                         for idim in range(self.dim):
                             n = tgt_mi[idim]
-                            k = src_mi[idim]
+                            k = input_mi[idim]
                             assert n >= k
                             contrib /= mi_factorial((n-k,))
                             contrib *= \
                                 sym.UnevaluatedExpr(dvec[idim]/tgt_rscale)**(n-k)
 
-                        temp[i] += contrib
+                        Y[i] += contrib
+                # Y is the input in the next iteration
+                C = Y   # noqa: N806
 
-                dim_coeffs_to_translate = temp[:]
-
-            for i, mi in enumerate(src_expansion.get_full_coefficient_identifiers()):
-                result[tgt_mi_to_index[mi]] += dim_coeffs_to_translate[i]
+            for i in range(len(Y)):
+                result[i] += Y[i]
 
         # {{{ simpler, functionally equivalent code
         if 0:
