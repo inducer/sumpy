@@ -204,14 +204,16 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             src_expansion.expansion_terms_wrangler._get_coeff_identifier_split()
         result = [0] * len(self.get_full_coefficient_identifiers())
 
-        non_zero_coeffs_per_dim = [[] for d in range(self.dim)]
+        # For this algorithm, we need the hyperplanes that are parallel
+        # to each other grouped.
+        non_zero_coeffs_grouped_by_orthogonal_axis = [[] for d in range(self.dim)]
         for d, src_mi in src_split:
-            non_zero_coeffs_per_dim[d] += src_mi
+            non_zero_coeffs_grouped_by_orthogonal_axis[d] += src_mi
 
         for normal_dir in set(d for d, _ in src_split):
             dim_coeffs_to_translate = \
                 [0] * len(src_expansion.get_full_coefficient_identifiers())
-            for mi in non_zero_coeffs_per_dim[normal_dir]:
+            for mi in non_zero_coeffs_grouped_by_orthogonal_axis[normal_dir]:
                 idx = src_mi_to_index[mi]
                 dim_coeffs_to_translate[idx] = src_coeff_exprs_full[idx]
 
