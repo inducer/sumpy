@@ -27,6 +27,7 @@ from pytools import memoize_method
 import sumpy.symbolic as sym
 from sumpy.tools import add_mi
 from .diff_op import make_identity_diff_op, laplacian
+from typing import List, Tuple
 
 __doc__ = """
 .. autoclass:: ExpansionBase
@@ -261,6 +262,8 @@ class ExpansionTermsWrangler(object):
         for d, const in hyperplanes:
             coeffs_in_hyperplane = []
             for mi in self.get_coefficient_identifiers():
+                # Check if the multi-index is in this hyperplane and
+                # if it is not in any of the hyperplanes we saw before
                 if mi[d] == const and mi not in seen_mis:
                     coeffs_in_hyperplane.append(mi)
                     seen_mis.add(mi)
