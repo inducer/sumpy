@@ -215,7 +215,7 @@ class ExpansionTermsWrangler(object):
         """
         This splits the coefficients into :math:`O(p)` number of disjoint sets
         so that for each set, all the identifiers have the form,
-        :math:`(m_1, m_2, ..., m_{j-1}, c, m_{j+1}, ... , m_d)`
+        :math:`(m_1, m_2, ..., m_{j-1}, c, m_{j+1}, ... , m_{dim})`
         where :math:`c` is a constant. Geometrically, each set is a hyperplane
         which is orthogonal to one of the main axis.
 
@@ -224,38 +224,48 @@ class ExpansionTermsWrangler(object):
 
         Returns an object of type List[Tuple[int, List[Tuple[int]]]] where
         each element in the outer list represents the hyperplane. Each element
-        is a 2-tuple where the first element in the tuple is the axis number
+        is a 2-tuple where the first element in the tuple is the axis number d
         to which the hyperplane is orthogonal to. Second element in the tuple
         is a list of multi-indices in the hyperplane.
         """
-        res = []
         mis = self.get_full_coefficient_identifiers()
-        coeff_ident_enumerate_dict = dict((tuple(mi), i) for
+        mi_to_index = dict((tuple(mi), i) for
             (i, mi) in enumerate(mis))
 
-        max_mi = None
+        # Each hyperplane stored below is identified by a tuple of the axis
+        # for which it is orthogonal to and the constant `c` described above
+        hyperplanes = []
         if isinstance(self, LinearPDEBasedExpansionTermsWrangler):
             pde_dict = self.get_pde_as_diff_op().mi_to_coeff
 
             for ident in pde_dict.keys():
-                if ident not in coeff_ident_enumerate_dict:
+                # The order of the expansion less than the order of the PDE.
+                # Treat as if full expansion.
+                if ident not in mi_to_index:
                     break
             else:
-                max_mi_idx = max(coeff_ident_enumerate_dict[ident] for
+                max_mi_idx = max(mi_to_index[ident] for
                                  ident in pde_dict.keys())
                 max_mi = mis[max_mi_idx]
+                for d in range(self.dim):
+                    for const in range(max_mi[d]):
+                        hyperplanes.append((d, const))
 
-        if max_mi is None:
-            max_mi = [max(mi[d] for mi in mis) for d in range(self.dim)]
+        if not hyperplanes:
+            d = self.dim - 1
+            for const in range(self.order + 1):
+                hyperplanes.append((d, const))
 
+        res = []
         seen_mis = set()
-        for d in range(self.dim):
-            filtered_mis = [mi for mi in mis if mi[d] < max_mi[d]]
-            for i in range(max_mi[d]):
-                new_mis = [mi for mi in filtered_mis if mi[d] == i
-                             and mi not in seen_mis]
-                seen_mis.update(new_mis)
-                res.append((d, new_mis))
+        for d, const in hyperplanes:
+            coeffs_in_hyperplane = []
+            for mi in self.get_coefficient_identifiers():
+                if mi[d] == const and mi not in seen_mis:
+                    coeffs_in_hyperplane.append(mi)
+                    seen_mis.add(mi)
+            res.append((d, coeffs_in_hyperplane))
+
         return res
 
 
