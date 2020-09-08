@@ -211,17 +211,22 @@ class ExpansionTermsWrangler(object):
         return type(self)(**new_kwargs)
 
     @memoize_method
-    def _get_coeff_identifier_split(self) -> List[Tuple[int, List[Tupel[int]]]]:
+    def _get_coeff_identifier_split(self) -> List[Tuple[int, List[Tuple[int]]]]:
         """
         This splits the coefficients into :math:`O(p)` number of disjoint sets
         so that for each set, all the identifiers have the form,
         :math:`(m_1, m_2, ..., m_{j-1}, c, m_{j+1}, ... , m_d)`
-        where :math:`c` is a constant.
+        where :math:`c` is a constant. Geometrically, each set is a hyperplane
+        which is orthogonal to one of the main axis.
 
         If this is an instance of LinearPDEBasedExpansionTermsWrangler,
         then the number of sets will be :math:`O(1)`.
 
-        Returns an object of type List[Tuple[int, List[Tupel[int]]]].
+        Returns an object of type List[Tuple[int, List[Tuple[int]]]] where
+        each element in the outer list represents the hyperplane. Each element
+        is a 2-tuple where the first element in the tuple is the axis number
+        to which the hyperplane is orthogonal to. Second element in the tuple
+        is a list of multi-indices in the hyperplane.
         """
         res = []
         mis = self.get_full_coefficient_identifiers()
