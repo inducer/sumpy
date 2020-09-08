@@ -211,15 +211,15 @@ class ExpansionTermsWrangler(object):
         return type(self)(**new_kwargs)
 
     @memoize_method
-    def _get_coeff_identifier_split(self):
+    def _get_coeff_identifier_split(self) -> List[Tuple[int, List[Tupel[int]]]]:
         """
-        This splits the coefficients into a O(p) number of disjoint sets
+        This splits the coefficients into :math:`O(p)` number of disjoint sets
         so that for each set, all the identifiers have the form,
-        (m_1, m_2, ..., m_{j-1}, c, m_{j+1}, ... , m_d)
-        where c is a constant.
+        :math:`(m_1, m_2, ..., m_{j-1}, c, m_{j+1}, ... , m_d)`
+        where :math:`c` is a constant.
 
         If this is an instance of LinearPDEBasedExpansionTermsWrangler,
-        then the number of sets will be O(1).
+        then the number of sets will be :math:`O(1)`.
 
         Returns an object of type List[Tuple[int, List[Tupel[int]]]].
         """
