@@ -255,7 +255,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         p = max(sum(mi) for mi in src_mis)
         result = [0] * len(tgt_mis_all)
 
-        # O(1) iterations
+        # O(1) iterations if compressed and O(p) if full
         for normal_dir in set(d for d, _ in tgt_split):
             # Use the normal_dir as the first dimension to vary so that the below
             # algorithm is O(p^{d+1}) for full and O(p^{d}) for compressed
