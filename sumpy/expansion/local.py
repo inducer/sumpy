@@ -246,26 +246,60 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         src_mi_to_index = dict((mi, i) for i, mi in enumerate(src_mis))
 
-        tgt_mis_all = \
+        tgt_mis = \
             self.expansion_terms_wrangler.get_coefficient_identifiers()
-        tgt_mi_to_index = dict((mi, i) for i, mi in enumerate(tgt_mis_all))
+        tgt_mi_to_index = dict((mi, i) for i, mi in enumerate(tgt_mis))
 
         tgt_split = self.expansion_terms_wrangler._get_coeff_identifier_split()
 
         p = max(sum(mi) for mi in src_mis)
-        result = [0] * len(tgt_mis_all)
+        result = [0] * len(tgt_mis)
 
-        # O(1) iterations if compressed and O(p) if full
+        # This algorithm uses the observation that L2L coefficients
+        # have the following form in 2D
+        #
+        # $T_{m, n} = \sum_{i\le p-m, j\le p-n-m-i} C_{i+m, j+n}
+        #             d_x^i d_y^j \binom{i+m}{i} \binom{n+j}{j}$
+        # and can be rewritten as follows.
+        #
+        # Let $Y1_{m, n} = \sum_{j\le p-m-n} C_{m, j+n} d_y^j \binom{j+n}{j}$.
+        #
+        # Then, $T_{m, n} = \sum_{i\le p-m} Y1_{i+m, j} d_x^i \binom{i+m}{i}$.
+        #
+        # Expanding this to 3D,
+        # $T_{m, n, l} = \sum_{i \le p-m, j \le p-n-m-i, k \le p-n-m-l-i-j}
+        #             C_{i+m, j+n, k+l} d_x^i d_y^j d_z^k
+        #             \binom{i+m}{i} \binom{n+j}{j} \binom{l+k}{k}$
+        #
+        # Let,
+        # $Y1_{m, n, l} = \sum_{k\le p-m-n-l} C_{m, n, k+l} d_z^k \binom{k+l}{l}$
+        # and,
+        # $Y2_{m, n, l} = \sum_{j\le p-m-n} Y1_{m, j+n, l} d_y^j \binom{j+n}{n}$.
+        #
+        # Then,
+        # $T_{m, n, l} = \sum_{i\le p-m} Y2_{i+m, n, l} d_x^i \binom{i+m}{m}$.
+        #
+        # Cost of the above algorithm is O(p^4) for full since each value needs
+        # O(p) work and there are O(p^3) values for T, Y1, Y2.
+        # For a hyperplane of coefficients with normal direction `l` fixed,
+        # we need only O(p^2) of $T, Y1, Y2$ and since there are only a constant
+        # number of coefficient hyperplanes in compressed, the algorithm is
+        # O(p^3)
+
+        # We start by iterating through all the axis which is at most 3 iterations
+        # This is one iteration for full because all the O(p) hyperplanes are
+        # parallel to each other.
+        # This is one for compressed with elliptic PDEs because the the O(1)
+        # hyperplanes are parallel to each other
         for normal_dir in set(d for d, _ in tgt_split):
             # Use the normal_dir as the first dimension to vary so that the below
             # algorithm is O(p^{d+1}) for full and O(p^{d}) for compressed
             dims = [normal_dir] + list(range(normal_dir)) + \
                     list(range(normal_dir+1, self.dim))
             # Start with source coefficients
-            Y = src_coeffs   # noqa: N806
+            C = src_coeffs   # noqa: N806
             # O(1) iterations
             for d in dims:
-                C = Y        # noqa: N806
                 Y = [0] * len(src_mis)   # noqa: N806
                 # Only O(p^{d-1}) operations are used in compressed
                 # All of them are used in full.
@@ -278,16 +312,15 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                         if src_mi in src_mi_to_index:
                             Y[i] += (dvec[d]/src_rscale) ** q * \
                                     C[src_mi_to_index[src_mi]] / factorial(q)
+                # Y at the end of the iteration becomes the source coefficients
+                # for the next iteration
+                C = Y        # noqa: N806
 
-            # This is O(p) in full and O(1) in compressed
-            for d, tgt_mis in tgt_split:
-                if d != normal_dir:
-                    continue
-                # O(p^{d-1}) iterations
-                for mi in tgt_mis:
-                    if mi not in src_mi_to_index:
-                        continue
-                    result[tgt_mi_to_index[mi]] = Y[src_mi_to_index[mi]] \
+            for mi in tgt_mis:
+                # In L2L, source level has same or higher order than target level
+                assert mi in src_mi_to_index
+                # Add to result after scaling
+                result[tgt_mi_to_index[mi]] += Y[src_mi_to_index[mi]] \
                                                     * rscale_ratio ** sum(mi)
 
         # {{{ simpler, functionally equivalent code
