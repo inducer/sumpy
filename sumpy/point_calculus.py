@@ -37,9 +37,9 @@ class CalculusPatch(object):
     """Sets up a grid of points on which derivatives can be calculated. Useful
     to verify that an evaluated potential actually solves a PDE.
 
-    .. attribute: dim
+    .. attribute:: dim
 
-    .. attribute: points
+    .. attribute:: points
 
         shape: ``(dim, npoints_total)``
 
@@ -48,7 +48,7 @@ class CalculusPatch(object):
     .. automethod:: diff
     .. automethod:: dx
     .. automethod:: dy
-    .. automethod:: dy
+    .. automethod:: dz
     .. automethod:: laplace
     .. automethod:: div
     .. automethod:: curl
@@ -116,9 +116,9 @@ class CalculusPatch(object):
         return self._vandermonde_1d()[0]
 
     def basis(self):
-        """"
+        """
         :returns: a :class:`list` containing functions that realize
-            a high-order interpolation basis on the :attr:`points`.
+            a high-order interpolation basis on the :py:attr:`points`.
         """
 
         from pytools import indices_in_shape
@@ -211,9 +211,9 @@ class CalculusPatch(object):
         return sum(self.diff(iaxis, f_values, 2) for iaxis in range(self.dim))
 
     def div(self, arg):
-        """
+        r"""
         :arg arg: an object array containing
-            :class:`numpy.ndarrays` with shape ``(npoints_total,)``.
+            :class:`numpy.ndarray`\ s with shape ``(npoints_total,)``.
         """
         result = 0
         for i, arg_i in enumerate(arg):
@@ -222,10 +222,10 @@ class CalculusPatch(object):
         return result
 
     def curl(self, arg):
-        """Take the curl of the vector quantity *arg*.
+        r"""Take the curl of the vector quantity *arg*.
 
         :arg arg: an object array of shape ``(3,)`` containing
-            :class:`numpy.ndarrays` with shape ``(npoints_total,)``.
+            :class:`numpy.ndarray`\ s with shape ``(npoints_total,)``.
         """
         from pytools import levi_civita
         from pytools.obj_array import make_obj_array

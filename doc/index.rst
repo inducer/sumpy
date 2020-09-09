@@ -1,6 +1,8 @@
 Welcome to sumpy's documentation!
 =================================
 
+.. automodule:: sumpy
+
 Example
 -------
 

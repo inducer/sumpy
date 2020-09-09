@@ -25,6 +25,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+__doc__ = """
+
+ Misc tools
+ ==========
+
+ .. autoclass:: BlockIndexRanges
+ .. autoclass:: MatrixBlockIndexRanges
+"""
+
 import six
 from six.moves import range, zip
 from pytools import memoize_method, memoize_in
@@ -342,6 +351,7 @@ class MatrixBlockIndexRanges(object):
     .. automethod:: block_shape
     .. automethod:: block_take
     .. automethod:: get
+    .. autoattribute:: linear_row_indices
     .. automethod:: take
 
     """
@@ -392,8 +402,8 @@ class MatrixBlockIndexRanges(object):
         friends.
 
         :return: a copy of `self` in which all data lives on the host, i.e.
-        all :class:`pyopencl.array.Array` instances are replaces by
-        :class:`numpy.ndarray` instances.
+                 all :class:`pyopencl.array.Array` instances are replaces by
+                 :class:`numpy.ndarray` instances.
         """
         return MatrixBlockIndexRanges(self.cl_context,
                 row=self.row.get(queue=queue),

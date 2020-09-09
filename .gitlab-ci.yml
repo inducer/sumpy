@@ -91,8 +91,6 @@ Documentation:
   - ". ./build-docs.sh"
   tags:
   - python3
-  only:
-  - master
 
 Flake8:
   script:
@@ -105,8 +103,7 @@ Flake8:
 
 Benchmarks:
   script:
-  - sed 's/python=3/python=3.6/' .test-conda-env-py3.yml > .test-conda-env.yml
-  - CONDA_ENVIRONMENT=.test-conda-env.yml
+  - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
   - PROJECT=sumpy
   - PYOPENCL_TEST=portable:pthread
   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-benchmark-py-project.sh
