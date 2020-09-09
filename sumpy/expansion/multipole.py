@@ -238,7 +238,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                         input_mis_per_dim.append(tuple(new_mi))
 
                     for input_mi in input_mis_per_dim:
-                        contrib = Y[tgt_mi_to_index[input_mi]]
+                        contrib = C[tgt_mi_to_index[input_mi]]
                         for idim in range(self.dim):
                             n = tgt_mi[idim]
                             k = input_mi[idim]
