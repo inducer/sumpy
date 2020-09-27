@@ -101,15 +101,16 @@ Flake8:
   except:
   - tags
 
-Benchmarks:
-  script:
-  - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
-  - PROJECT=sumpy
-  - PYOPENCL_TEST=portable:pthread
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-benchmark-py-project.sh
-  - ". ./build-and-benchmark-py-project.sh"
-  tags:
-  - linux
-  - benchmark
-  except:
-  - tags
+# https://github.com/illinois-scicomp/machine-shop-maintenance/issues/4
+# Benchmarks:
+#   script:
+#   - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
+#   - PROJECT=sumpy
+#   - PYOPENCL_TEST=portable:pthread
+#   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-benchmark-py-project.sh
+#   - ". ./build-and-benchmark-py-project.sh"
+#   tags:
+#   - linux
+#   - benchmark
+#   except:
+#   - tags
