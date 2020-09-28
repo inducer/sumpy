@@ -3,8 +3,6 @@ from __future__ import absolute_import
 import numpy as np
 
 
-
-
 def make_fourier_vdm(n, inverse):
     i = np.arange(n, dtype=np.float64)
     imat = i[:, np.newaxis]*i/n
@@ -13,8 +11,6 @@ def make_fourier_vdm(n, inverse):
     if inverse:
         result = result.T.conj()/n
     return result
-
-
 
 
 def make_fourier_mode_extender(m, n, dtype):
@@ -34,8 +30,6 @@ def make_fourier_mode_extender(m, n, dtype):
     result[:num_pos_freq, :num_pos_freq] = eye[:num_pos_freq, :num_pos_freq]
     result[-num_neg_freq:, -num_neg_freq:] = eye[-num_neg_freq:, -num_neg_freq:]
     return result
-
-
 
 
 def make_fourier_interp_matrix(m, n):
