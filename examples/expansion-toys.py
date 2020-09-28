@@ -28,7 +28,7 @@ def main():
         plt.show()
 
     mexp = t.multipole_expand(pt_src, [0, 0], 5)
-    mexp2 = t.multipole_expand(mexp, [0, 0.25])
+    mexp2 = t.multipole_expand(mexp, [0, 0.25])  # noqa: F841
     lexp = t.local_expand(mexp, [3, 0])
     lexp2 = t.local_expand(lexp, [3, 1], 3)
 

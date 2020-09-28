@@ -713,7 +713,7 @@ class SchematicVisitor(object):
 
         if psource.text_kwargs is not None:
             psource_text_kwargs_copy = psource.text_kwargs.copy()
-            label = psource_text_kwargs_copy.pop('s', label)
+            label = psource_text_kwargs_copy.pop("s", label)
             text_kwargs.update(psource_text_kwargs_copy)
 
         shrinkB = 0  # noqa
@@ -721,7 +721,7 @@ class SchematicVisitor(object):
             # Avoid overlapping the tail of the arrow with any expansion labels that
             # are present at the tail.
             import matplotlib as mpl
-            font_size = mpl.rcParams['font.size']
+            font_size = mpl.rcParams["font.size"]
             shrinkB = 7/8 * font_size  # noqa
 
         arrowprops = dict(shrinkB=shrinkB, arrowstyle="<|-")

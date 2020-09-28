@@ -187,11 +187,11 @@ def checked_cse(exprs, symbols=None):
         outf.write("%s\n\n" % max_old)
         outf.write("%s\n" % max_new)
         for i in range(len(exprs)):
-            outf.write("print(\"diff in expr %d:\n\");\n" % i)
+            outf.write('print("diff in expr %d:\n");\n' % i)
             outf.write("print(ratsimp(old_expr%d - new_expr%d));\n" % (i, i))
 
     from subprocess import check_call
-    check_call(["maxima", "--very-quiet", "-r", "load(\"check.mac\");"])
+    check_call(["maxima", "--very-quiet", "-r", 'load("check.mac");'])
 
     return new_assignments, new_exprs
 
