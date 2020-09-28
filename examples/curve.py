@@ -6,11 +6,9 @@ import scipy as sp
 import scipy.fftpack
 
 
-
-
 class CurveGrid:
     def __init__(self, x, y):
-        self.pos = np.vstack([x,y]).copy()
+        self.pos = np.vstack([x, y]).copy()
         xp = self.xp = sp.fftpack.diff(x, period=1)
         yp = self.yp = sp.fftpack.diff(y, period=1)
         xpp = self.xpp = sp.fftpack.diff(xp, period=1)

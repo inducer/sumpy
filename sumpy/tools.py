@@ -492,15 +492,15 @@ class MatrixBlockIndexRanges(object):
                 end
                 """,
                 [
-                    lp.GlobalArg('blkranges', None, shape="nranges + 1"),
+                    lp.GlobalArg("blkranges", None, shape="nranges + 1"),
                     lp.GlobalArg("rowindices", None, shape="nresults"),
                     lp.GlobalArg("colindices", None, shape="nresults"),
                     lp.ValueArg("nresults", None),
-                    '...'
+                    "..."
                 ],
                 name="block_index_knl",
                 default_offset=lp.auto,
-                assumptions='nranges>=1',
+                assumptions="nranges>=1",
                 silenced_warnings="write_race(write_index*)",
                 lang_version=MOST_RECENT_LANGUAGE_VERSION)
             loopy_knl = lp.split_iname(loopy_knl, "irange", 128, outer_tag="g.0")
@@ -576,15 +576,15 @@ class OrderedSet(MutableSet):
 
     def pop(self, last=True):
         if not self:
-            raise KeyError('set is empty')
+            raise KeyError("set is empty")
         key = self.end[1][0] if last else self.end[2][0]
         self.discard(key)
         return key
 
     def __repr__(self):
         if not self:
-            return '%s()' % (self.__class__.__name__,)
-        return '%s(%r)' % (self.__class__.__name__, list(self))
+            return "%s()" % (self.__class__.__name__,)
+        return "%s(%r)" % (self.__class__.__name__, list(self))
 
     def __eq__(self, other):
         if isinstance(other, OrderedSet):

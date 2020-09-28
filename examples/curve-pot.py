@@ -231,7 +231,6 @@ def draw_pot_figure(aspect_ratio,
     else:
         # {{{ 3D plots
 
-
         plotval_vol = vol_pot.real
         plotval_c = curve_pot.real
 
