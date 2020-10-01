@@ -349,7 +349,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
     def get_pde_as_diff_op(self):
         r"""
-        Returns the PDE as a :class:`sumpy.expansion.diff_op.DifferentialOperator`
+        Returns the PDE as a :class:`sumpy.expansion.diff_op.LinearPDESystemOperator`
         object `L` where `L(u) = 0` is the PDE.
         """
 
