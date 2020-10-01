@@ -429,7 +429,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         diff_op = self.get_pde_as_diff_op()
         assert len(diff_op.eqs) == 1
-        pde_dict = diff_op.eqs[0]
+        pde_dict = dict((k.mi, v) for k, v in diff_op.eqs[0].items())
         for ident in pde_dict.keys():
             if ident not in coeff_ident_enumerate_dict:
                 # Order of the expansion is less than the order of the PDE.
