@@ -685,5 +685,111 @@ def is_obj_array_like(ary):
             isinstance(ary, (tuple, list))
             or (isinstance(ary, np.ndarray) and ary.dtype.char == "O"))
 
+def reduced_row_echelon_form(m):
+    """Calculates a reduced row echelon form of a
+    matrix `m`.
+
+    :arg m: a 2D :class:`numpy.ndarray` or a list of lists or a sympy Matrix
+    :return: reduced row echelon form as a 2D :class:`numpy.ndarray`
+             and a list of pivots
+    """
+
+    mat = np.array(m, dtype=object)
+    index = 0
+    nrows = mat.shape[0]
+    ncols = mat.shape[1]
+    pivot_cols = []
+    for i in range(ncols):
+        if index == nrows:
+            break
+        pivot = nrows
+        for k in range(index, nrows):
+            if mat[k, i] != 0 and pivot == nrows:
+                pivot = k
+            if abs(mat[k, i]) == 1:
+                pivot = k
+                break
+        if pivot == nrows:
+            continue
+        if pivot != index:
+            mat[[pivot, index], :] = mat[[index, pivot], :]
+
+        pivot_cols.append(i)
+        scale = mat[index, i]
+        if isinstance(scale, (int, sym.Integer)):
+            scale = int(scale)
+
+        for j in range(mat.shape[1]):
+            elem = mat[index, j]
+            if isinstance(scale, int) and isinstance(elem, (int, sym.Integer)):
+                quo = int(elem) // scale
+                if quo * scale == elem:
+                    mat[index, j] = quo
+                    continue
+            mat[index, j] = sym.sympify(elem)/scale
+
+        for j in range(nrows):
+            if (j == index):
+                continue
+
+            scale = mat[j, i]
+            if scale != 0:
+                mat[j, :] = mat[j, :] - mat[index, :]*scale
+
+        index = index + 1
+
+    return mat, pivot_cols
+
+
+def nullspace(m):
+    """Calculates the nullspace of a matrix `m`.
+
+    :arg m: a 2D :class:`numpy.ndarray` or a list of lists or a sympy Matrix
+    :return: nullspace of `m` as a 2D :class:`numpy.ndarray`
+    """
+    mat, pivot_cols = reduced_row_echelon_form(m)
+    pivot_cols = list(pivot_cols)
+    cols = mat.shape[1]
+
+    free_vars = [i for i in range(cols) if i not in pivot_cols]
+
+    n = []
+    for free_var in free_vars:
+        vec = [0]*cols
+        vec[free_var] = 1
+        for piv_row, piv_col in enumerate(pivot_cols):
+            for pos in pivot_cols[piv_row+1:] + [free_var]:
+                if isinstance(mat[piv_row, pos], sym.Integer):
+                    vec[piv_col] -= int(mat[piv_row, pos])
+                else:
+                    vec[piv_col] -= mat[piv_row, pos]
+        n.append(vec)
+    return np.array(n, dtype=object).T
+
+
+def find_linear_independent_row(nullspace):
+    """
+    This method does elementary row operations to figure out the first row
+    which is linearly dependent on the previous rows. Partial pivoting is not done
+    to find the row with the lowest degree.
+    """
+    ncols = nullspace.shape[1]
+    nrows = min(nullspace.shape[0], ncols+1)
+    augment = np.eye(nrows, nrows, dtype=nullspace.dtype)
+    mat = np.hstack((nullspace[:nrows, :], augment))
+    for i in range(nrows):
+        for j in range(ncols):
+            if mat[i, j] != 0:
+                col = j
+                break
+        else:
+            pde_dict = {}
+            for col in range(ncols, ncols+nrows):
+                if mat[i, col] != 0:
+                    pde_dict[col-ncols] = mat[i, col]
+            return pde_dict
+        for j in range(i+1, nrows):
+            mat[j, :] = mat[j, :]*mat[i, col] - mat[i, :]*mat[j, col]
+    return {}
 
 # vim: fdm=marker
