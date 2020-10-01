@@ -308,6 +308,31 @@ def test_cse_matvec():
     assert np.allclose(expected_result, actual_result)
 
 
+def test_diff_op_stokes():
+
+    from sumpy.expansion.diff_op import (make_identity_diff_op, gradient,
+        divergence, laplacian, concat)
+    from sumpy.symbolic import symbols, Function
+    diff_op = make_identity_diff_op(3, 4)
+    u = diff_op[:3]
+    p = diff_op[3]
+    pde = concat(laplacian(u) - gradient(p), divergence(u))
+
+    actual_output = pde.to_sym()
+    x, y, z = syms = symbols("x0, x1, x2")
+    funcs = symbols("f0, f1, f2, f3", cls=Function)
+    u, v, w, p = [f(*syms) for f in funcs]
+
+    eq1 = u.diff(x, x) + u.diff(y, y) + u.diff(z, z) - p.diff(x)
+    eq2 = v.diff(x, x) + v.diff(y, y) + v.diff(z, z) - p.diff(y)
+    eq3 = w.diff(x, x) + w.diff(y, y) + w.diff(z, z) - p.diff(z)
+    eq4 = u.diff(x) + v.diff(y) + w.diff(z)
+
+    expected_output = [eq1, eq2, eq3, eq4]
+
+    assert expected_output == actual_output
+
+
 # You can test individual routines by typing
 # $ python test_misc.py 'test_p2p(cl.create_some_context)'
 
