@@ -20,9 +20,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from pyrsistent import pmap
-from sumpy.tools import add_mi
 from collections import namedtuple
+from pyrsistent import pmap
+from pytools import memoize_method
+from sumpy.tools import add_mi, find_linear_independent_row
+import logging
+
+logger = logging.getLogger(__name__)
 
 __doc__ = """
 Differential operator interface
@@ -115,6 +119,72 @@ class LinearPDESystemOperator:
                 sym_eq += expr * coeff
             res.append(sym_eq)
         return res
+
+    @memoize_method
+    def as_scalar_pde(self, vec_idx):
+        r"""
+        Returns a scalar PDE corresponding to the component `iexpr`.
+        """
+        from six import iteritems
+        from sumpy.tools import nullspace
+
+        indices = set()
+        for eq in self.eqs:
+            for deriv_ident in eq.keys():
+                indices.add(deriv_ident.vec_idx)
+
+        # this is already a scalar pde
+        if len(indices) == 1 and list(indices)[0] == vec_idx:
+            return self
+
+        from pytools import ProcessLogger
+        plog = ProcessLogger(logger, "computing single PDE for multiple PDEs")
+
+        from pytools import (
+                generate_nonnegative_integer_tuples_summing_to_at_most
+                as gnitstam)
+
+        # slowly increase the order of the derivatives that we take of the
+        # system of PDEs. Once we reach the order of the scalar PDE, this
+        # loop will break
+        for order in range(2, 100):
+            mis = sorted(gnitstam(order, self.dim), key=sum)
+
+            pde_mat = []
+            coeff_ident_enumerate_dict = dict((tuple(mi), i) for
+                                                (i, mi) in enumerate(mis))
+            offset = len(mis)
+
+            # Create a matrix of equations that are derivatives of the
+            # original system of PDEs
+            for mi in mis:
+                for pde_dict in self.eqs:
+                    eq = [0]*(len(mis)*(max(indices)+1))
+                    for ident, coeff in iteritems(pde_dict):
+                        c = tuple(add_mi(ident.mi, mi))
+                        if c not in coeff_ident_enumerate_dict:
+                            break
+                        idx = offset*ident.vec_idx + coeff_ident_enumerate_dict[c]
+                        eq[idx] = coeff
+                    else:
+                        pde_mat.append(eq)
+
+            if len(pde_mat) == 0:
+                continue
+
+            # Get the nullspace of the matrix 
+            n = nullspace(pde_mat)[offset*vec_idx:offset*(vec_idx+1), :]
+            indep_row = find_linear_independent_row(n)
+            if len(indep_row) > 0:
+                pde_dict = {}
+                mult = indep_row[max(indep_row.keys())]
+                for k, v in indep_row.items():
+                    pde_dict[DerivativeIdentifier(mis[k], 0)] = v / mult
+                plog.done()
+                return LinearPDESystemOperator(self.dim, pde_dict)
+
+        plog.done()
+        assert False
 
 
 def laplacian(diff_op):
