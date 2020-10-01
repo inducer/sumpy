@@ -33,7 +33,7 @@ Differential operator interface
 .. autoclass:: DifferentialOperator
 """
 
-DerivativeIdentifier = namedtuple('DerivativeIdentifier', ['mi', 'vec_idx'])
+DerivativeIdentifier = namedtuple("DerivativeIdentifier", ["mi", "vec_idx"])
 
 
 class DifferentialOperator(object):
