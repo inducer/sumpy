@@ -23,7 +23,7 @@ THE SOFTWARE.
 from collections import namedtuple
 from pyrsistent import pmap
 from pytools import memoize
-from sumpy.tools import add_mi, find_linear_independent_row
+from sumpy.tools import add_mi, find_linear_relationship
 import logging
 
 logger = logging.getLogger(__name__)
@@ -35,6 +35,7 @@ Differential operator interface
 .. autoclass:: LinearPDESystemOperator
 .. autoclass:: DerivativeIdentifier
 .. autofunction:: make_identity_diff_op
+.. autofunction:: as_scalar_pde
 """
 
 DerivativeIdentifier = namedtuple("DerivativeIdentifier", ["mi", "vec_idx"])
@@ -184,14 +185,14 @@ def as_scalar_pde(pde, vec_idx):
         # Get the nullspace of the matrix and get the rows related to this
         # vec_idx
         n = nullspace(pde_mat)[offset*vec_idx:offset*(vec_idx+1), :]
-        indep_row = find_linear_independent_row(n)
+        indep_row = find_linear_relationship(n)
         if len(indep_row) > 0:
             pde_dict = {}
             mult = indep_row[max(indep_row.keys())]
             for k, v in indep_row.items():
                 pde_dict[DerivativeIdentifier(mis[k], 0)] = v / mult
             plog.done()
-            return LinearPDESystemOperator(pde.dim, pde_dict)
+            return LinearPDESystemOperator(pde.dim, pmap(pde_dict))
 
     plog.done()
     assert False
