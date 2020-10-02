@@ -134,6 +134,8 @@ class LinearPDESystemOperator(object):
 def as_scalar_pde(pde, vec_idx):
     r"""
     Returns a scalar PDE corresponding to the component `vec_idx`.
+
+    :arg pde: An instance of :class:`LinearPDESystemOperator`
     :arg vec_idx: the index of the vector-valued function that we
                   want as a scalar PDE
     """
