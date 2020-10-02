@@ -36,6 +36,8 @@ from pytools import Record
 
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel,
         BiharmonicKernel, YukawaKernel)
+from sumpy.expansion.diff_op import (make_identity_diff_op, gradient,
+        divergence, laplacian, concat, as_scalar_pde)
 
 
 # {{{ pde check for kernels
@@ -309,9 +311,6 @@ def test_cse_matvec():
 
 
 def test_diff_op_stokes():
-
-    from sumpy.expansion.diff_op import (make_identity_diff_op, gradient,
-        divergence, laplacian, concat)
     from sumpy.symbolic import symbols, Function
     diff_op = make_identity_diff_op(3, 4)
     u = diff_op[:3]
@@ -331,6 +330,22 @@ def test_diff_op_stokes():
     expected_output = [eq1, eq2, eq3, eq4]
 
     assert expected_output == actual_output
+
+
+def test_as_scalar_pde():
+    diff_op = make_identity_diff_op(3, 4)
+    u = diff_op[:3]
+    p = diff_op[3]
+    pde = concat(laplacian(u) - gradient(p), divergence(u))
+
+    # velocity components in Stokes should satisfy Biharmonic
+    for i in range(3):
+        print(as_scalar_pde(pde, i))
+        print(laplacian(laplacian(u[i])))
+        assert as_scalar_pde(pde, i) == laplacian(laplacian(u[0]))
+
+    # pressure should satisfy Laplace
+    assert as_scalar_pde(pde, 3) == laplacian(u[0])
 
 
 # You can test individual routines by typing

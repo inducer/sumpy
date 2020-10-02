@@ -685,6 +685,7 @@ def is_obj_array_like(ary):
             isinstance(ary, (tuple, list))
             or (isinstance(ary, np.ndarray) and ary.dtype.char == "O"))
 
+
 def reduced_row_echelon_form(m):
     """Calculates a reduced row echelon form of a
     matrix `m`.
@@ -767,16 +768,16 @@ def nullspace(m):
     return np.array(n, dtype=object).T
 
 
-def find_linear_independent_row(nullspace):
+def find_linear_relationship(matrix):
     """
     This method does elementary row operations to figure out the first row
     which is linearly dependent on the previous rows. Partial pivoting is not done
     to find the row with the lowest degree.
     """
-    ncols = nullspace.shape[1]
-    nrows = min(nullspace.shape[0], ncols+1)
-    augment = np.eye(nrows, nrows, dtype=nullspace.dtype)
-    mat = np.hstack((nullspace[:nrows, :], augment))
+    ncols = matrix.shape[1]
+    nrows = min(matrix.shape[0], ncols+1)
+    augment = np.eye(nrows, nrows, dtype=matrix.dtype)
+    mat = np.hstack((matrix[:nrows, :], augment))
     for i in range(nrows):
         for j in range(ncols):
             if mat[i, j] != 0:
