@@ -24,77 +24,158 @@ THE SOFTWARE.
 
 from pyrsistent import pmap
 from sumpy.tools import add_mi
+from collections import namedtuple
 
 __doc__ = """
 Differential operator interface
 -------------------------------
 
-.. autoclass:: DifferentialOperator
+.. autoclass:: LinearPDESystemOperator
+.. autoclass:: DerivativeIdentifier
+.. autofunction:: make_identity_diff_op
 """
 
+DerivativeIdentifier = namedtuple("DerivativeIdentifier", ["mi", "vec_idx"])
 
-class DifferentialOperator(object):
+
+class LinearPDESystemOperator(object):
     r"""
-    Represents a scalar, constant-coefficient DifferentialOperator of
-    dimension `dim`. It is represented by a frozen dictionary.
-    The dictionary maps a multi-index given as a tuple to the coefficient.
-    This object is immutable.
+    Represents a constant-coefficient linear differential operator of a
+    vector-valued function with `dim` variables. It is represented by a tuple of
+    immutable dictionaries. The dictionary maps a :class:`DerivativeIdentifier`
+    to the coefficient. This object is immutable.
     """
-    def __init__(self, dim, mi_to_coeff):
+    def __init__(self, dim, *eqs):
         """
-        :arg dim: dimension of the DifferentialOperator
-        :arg mi_to_coeff: A dictionary mapping a multi-index to a coefficient
+        :arg dim: dimension of the LinearPDESystemOperator
+        :arg eqs: A list of dictionaries mapping a :class:`DerivativeIdentifier`
+                  to a coefficient.
         """
         self.dim = dim
-        self.mi_to_coeff = mi_to_coeff
+        self.eqs = tuple(eqs)
 
     def __mul__(self, param):
-        mi_to_coeff = {}
-        for k, v in self.mi_to_coeff.items():
-            mi_to_coeff[k] = v * param
-        return DifferentialOperator(self.dim, pmap(mi_to_coeff))
+        eqs = []
+        for eq in self.eqs:
+            deriv_ident_to_coeff = {}
+            for k, v in eq.items():
+                deriv_ident_to_coeff[k] = v * param
+            eqs.append(pmap(deriv_ident_to_coeff))
+        return LinearPDESystemOperator(self.dim, *eqs)
 
     __rmul__ = __mul__
 
-    def __add__(self, other_pde):
-        assert self.dim == other_pde.dim
-        res = dict(self.mi_to_coeff)
-        for k, v in other_pde.mi_to_coeff.items():
-            if k in res:
-                res[k] += v
-            else:
-                res[k] = v
-        return DifferentialOperator(self.dim, pmap(res))
+    def __add__(self, other_diff_op):
+        assert self.dim == other_diff_op.dim
+        assert len(self.eqs) == len(other_diff_op.eqs)
+        eqs = []
+        for eq, other_eq in zip(self.eqs, other_diff_op.eqs):
+            res = dict(eq)
+            for k, v in other_eq.items():
+                if k in res:
+                    res[k] += v
+                else:
+                    res[k] = v
+            eqs.append(pmap(res))
+        return LinearPDESystemOperator(self.dim, *eqs)
 
     __radd__ = __add__
 
-    def __sub__(self, other_pde):
-        return self + (-1)*other_pde
+    def __sub__(self, other_diff_op):
+        return self + (-1)*other_diff_op
 
     def __repr__(self):
-        return f"DifferentialOperator({self.dim}, {repr(self.mi_to_coeff)})"
+        return f"LinearPDESystemOperator({self.dim}, {repr(self.eqs)})"
+
+    def __getitem__(self, idx):
+        item = self.eqs.__getitem__(idx)
+        if not isinstance(item, tuple):
+            item = (item,)
+        return LinearPDESystemOperator(self.dim, *item)
+
+    def to_sym(self, fnames=None):
+        from sumpy.symbolic import make_sym_vector, Function
+        x = make_sym_vector("x", self.dim)
+
+        if fnames is None:
+            noutputs = 0
+            for eq in self.eqs:
+                for deriv_ident in eq.keys():
+                    noutputs = max(noutputs, deriv_ident.vec_idx)
+            fnames = [f"f{i}" for i in range(noutputs+1)]
+
+        funcs = [Function(fname)(*x) for fname in fnames]
+
+        res = []
+        for eq in self.eqs:
+            sym_eq = 0
+            for deriv_ident, coeff in eq.items():
+                expr = funcs[deriv_ident.vec_idx]
+                for i, val in enumerate(deriv_ident.mi):
+                    for j in range(val):
+                        expr = expr.diff(x[i])
+                sym_eq += expr * coeff
+            res.append(sym_eq)
+        return res
 
 
-def laplacian(pde):
-    dim = pde.dim
-    res = DifferentialOperator(dim, pmap())
+def laplacian(diff_op):
+    dim = diff_op.dim
+    empty = [pmap()] * len(diff_op.eqs)
+    res = LinearPDESystemOperator(dim, *empty)
     for j in range(dim):
         mi = [0]*dim
         mi[j] = 2
-        res = res + diff(pde, tuple(mi))
+        res = res + diff(diff_op, tuple(mi))
     return res
 
 
-def diff(pde, mi):
-    res = {}
-    for mi_to_coeff_mi, v in pde.mi_to_coeff.items():
-        res[add_mi(mi_to_coeff_mi, mi)] = v
-    return DifferentialOperator(pde.dim, pmap(res))
+def diff(diff_op, mi):
+    eqs = []
+    for eq in diff_op.eqs:
+        res = {}
+        for deriv_ident, v in eq.items():
+            new_mi = add_mi(deriv_ident.mi, mi)
+            res[DerivativeIdentifier(new_mi, deriv_ident.vec_idx)] = v
+        eqs.append(pmap(res))
+    return LinearPDESystemOperator(diff_op.dim, *eqs)
 
 
-def make_identity_diff_op(dim):
+def divergence(diff_op):
+    assert len(diff_op.eqs) == diff_op.dim
+    dim = diff_op.dim
+    res = LinearPDESystemOperator(dim, pmap())
+    for i in range(dim):
+        mi = [0]*dim
+        mi[i] = 1
+        res += diff(diff_op[i], tuple(mi))
+    return res
+
+
+def gradient(diff_op):
+    assert len(diff_op.eqs) == 1
+    eqs = []
+    dim = diff_op.dim
+    for i in range(dim):
+        mi = [0]*dim
+        mi[i] = 1
+        eqs.append(diff(diff_op, tuple(mi)).eqs[0])
+    return LinearPDESystemOperator(dim, *eqs)
+
+
+def concat(op1, op2):
+    assert op1.dim == op2.dim
+    eqs = list(op1.eqs)
+    eqs.extend(list(op2.eqs))
+    return LinearPDESystemOperator(op1.dim, *eqs)
+
+
+def make_identity_diff_op(ninput, noutput=1):
     """
-    Returns the identity as a differential operator.
+    Returns the identity as a linear PDE system operator.
+    :arg ninput: number of input variables to the function
+    :arg noutput: number of output values of function
     """
-    mi = tuple([0]*dim)
-    return DifferentialOperator(dim, pmap({mi: 1}))
+    mi = tuple([0]*ninput)
+    eqs = [pmap({DerivativeIdentifier(mi, i): 1}) for i in range(noutput)]
+    return LinearPDESystemOperator(ninput, *eqs)

@@ -349,7 +349,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
     def get_pde_as_diff_op(self):
         r"""
-        Returns the PDE as a :class:`sumpy.expansion.diff_op.DifferentialOperator`
+        Returns the PDE as a :class:`sumpy.expansion.diff_op.LinearPDESystemOperator`
         object `L` where `L(u) = 0` is the PDE.
         """
 
@@ -366,7 +366,9 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         coeff_ident_enumerate_dict = {tuple(mi): i for
                                             (i, mi) in enumerate(mis)}
 
-        pde_dict = self.get_pde_as_diff_op().mi_to_coeff
+        diff_op = self.get_pde_as_diff_op()
+        assert len(diff_op.eqs) == 1
+        pde_dict = dict((k.mi, v) for k, v in diff_op.eqs[0].items())
         for ident in pde_dict.keys():
             if ident not in coeff_ident_enumerate_dict:
                 # Order of the expansion is less than the order of the PDE.
