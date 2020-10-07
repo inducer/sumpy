@@ -332,7 +332,7 @@ def test_diff_op_stokes():
     assert expected_output == actual_output
 
 
-def test_as_scalar_pde():
+def test_as_scalar_pde_stokes():
     diff_op = make_identity_diff_op(3, 4)
     u = diff_op[:3]
     p = diff_op[3]
@@ -350,7 +350,7 @@ def test_as_scalar_pde():
 
 def test_as_scalar_pde_maxwell():
     from sumpy.symbolic import symbols
-    op = make_identity_diff_op(3, 6, include_time=True)
+    op = make_identity_diff_op(3, 6, time_dependent=True)
     E = op[:3]  # noqa: N806
     B = op[3:]  # noqa: N806
     mu, epsilon = symbols("mu, epsilon")
