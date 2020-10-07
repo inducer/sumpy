@@ -40,7 +40,6 @@ from sumpy.expansion.diff_op import (make_identity_diff_op, gradient,
         divergence, laplacian, concat, as_scalar_pde, curl, diff)
 
 
-
 # {{{ pde check for kernels
 
 class BiharmonicKernelInfo:
@@ -352,17 +351,18 @@ def test_as_scalar_pde():
 def test_as_scalar_pde_maxwell():
     from sumpy.symbolic import symbols
     op = make_identity_diff_op(3, 6, include_time=True)
-    E = op[:3]
-    B = op[3:]
+    E = op[:3]  # noqa: N806
+    B = op[3:]  # noqa: N806
     mu, epsilon = symbols("mu, epsilon")
     t = (0, 0, 0, 1)
 
-    pde = concat(curl(E) + diff(B, t),  curl(B) - mu*epsilon*diff(E, t), divergence(E), divergence(B))
+    pde = concat(curl(E) + diff(B, t),  curl(B) - mu*epsilon*diff(E, t),
+                 divergence(E), divergence(B))
     as_scalar_pde(pde, 3)
 
     for i in range(6):
-        assert as_scalar_pde(pde, i) == -1/(mu*epsilon)*laplacian(op[0]) + diff(diff(op[0], t), t)
-
+        assert as_scalar_pde(pde, i) == \
+            -1/(mu*epsilon)*laplacian(op[0]) + diff(diff(op[0], t), t)
 
 
 # You can test individual routines by typing

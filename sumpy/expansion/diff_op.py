@@ -47,8 +47,8 @@ class LinearPDESystemOperator(object):
     r"""
     Represents a constant-coefficient linear differential operator of a
     vector-valued function with `dim` spatial variables. It is represented by a
-    tuple of immutable dictionaries. The dictionary maps a :class:`DerivativeIdentifier`
-    to the coefficient. This object is immutable.
+    tuple of immutable dictionaries. The dictionary maps a
+    :class:`DerivativeIdentifier` to the coefficient. This object is immutable.
     Optionally supports a time variable as the last variable in the multi-index
     of the :class:`DerivativeIdentifier`.
     """
@@ -269,7 +269,8 @@ def curl(pde):
         mis.append(tuple(mi))
 
     for i in range(3):
-        new_pde = diff(pde[(i+2)%3], mis[(i+1)%3]) - diff(pde[(i+1)%3], mis[(i+2)%3])
+        new_pde = diff(pde[(i+2) % 3], mis[(i+1) % 3]) - \
+            diff(pde[(i+1) % 3], mis[(i+2) % 3])
         eqs.append(new_pde.eqs[0])
 
     return LinearPDESystemOperator(pde.dim, *eqs)
