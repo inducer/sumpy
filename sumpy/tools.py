@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import
-
 __copyright__ = """
 Copyright (C) 2012 Andreas Kloeckner
 Copyright (C) 2018 Alexandru Fikl
@@ -34,8 +32,6 @@ __doc__ = """
  .. autoclass:: MatrixBlockIndexRanges
 """
 
-import six
-from six.moves import range, zip
 from pytools import memoize_method, memoize_in
 import numpy as np
 import sumpy.symbolic as sym
@@ -76,7 +72,7 @@ def mi_power(vector, mi, evaluate=True):
     return result
 
 
-class MiDerivativeTaker(object):
+class MiDerivativeTaker:
 
     def __init__(self, expr, var_list):
         assert isinstance(expr, sym.Basic)
@@ -180,7 +176,7 @@ def gather_arguments(kernel_likes):
         for arg in knl.get_args():
             _merge_kernel_arguments(result, arg)
 
-    return sorted(six.itervalues(result), key=lambda arg: arg.name)
+    return sorted(result.values(), key=lambda arg: arg.name)
 
 
 def gather_source_arguments(kernel_likes):
@@ -189,7 +185,7 @@ def gather_source_arguments(kernel_likes):
         for arg in knl.get_args() + knl.get_source_args():
             _merge_kernel_arguments(result, arg)
 
-    return sorted(six.itervalues(result), key=lambda arg: arg.name)
+    return sorted(result.values(), key=lambda arg: arg.name)
 
 
 def gather_loopy_arguments(kernel_likes):
@@ -202,7 +198,7 @@ def gather_loopy_source_arguments(kernel_likes):
 
 # {{{  KernelComputation
 
-class KernelComputation(object):
+class KernelComputation:
     """Common input processing for kernel computations."""
 
     def __init__(self, ctx, kernels, strength_usage,
@@ -283,7 +279,7 @@ def _to_host(x, queue=None):
     return x
 
 
-class BlockIndexRanges(object):
+class BlockIndexRanges:
     """Convenience class for working with blocks of a global array.
 
     .. attribute:: indices
@@ -337,7 +333,7 @@ class BlockIndexRanges(object):
         return x[self.block_indices(i)]
 
 
-class MatrixBlockIndexRanges(object):
+class MatrixBlockIndexRanges:
     """Keep track of different ways to index into matrix blocks.
 
     .. attribute:: row
@@ -583,8 +579,8 @@ class OrderedSet(MutableSet):
 
     def __repr__(self):
         if not self:
-            return "%s()" % (self.__class__.__name__,)
-        return "%s(%r)" % (self.__class__.__name__, list(self))
+            return f"{self.__class__.__name__}()"
+        return "{}({!r})".format(self.__class__.__name__, list(self))
 
     def __eq__(self, other):
         if isinstance(other, OrderedSet):
@@ -594,7 +590,7 @@ class OrderedSet(MutableSet):
 # }}}
 
 
-class KernelCacheWrapper(object):
+class KernelCacheWrapper:
     @memoize_method
     def get_cached_optimized_kernel(self, **kwargs):
         from sumpy import code_cache, CACHING_ENABLED, OPT_ENABLED
@@ -604,14 +600,14 @@ class KernelCacheWrapper(object):
             from sumpy.version import KERNEL_VERSION
             cache_key = (
                     self.get_cache_key()
-                    + tuple(sorted(six.iteritems(kwargs)))
+                    + tuple(sorted(kwargs.items()))
                     + (loopy.version.DATA_MODEL_VERSION,)
                     + (KERNEL_VERSION,)
                     + (OPT_ENABLED,))
 
             try:
                 result = code_cache[cache_key]
-                logger.debug("%s: kernel cache hit [key=%s]" % (
+                logger.debug("{}: kernel cache hit [key={}]".format(
                     self.name, cache_key))
                 return result
             except KeyError:
@@ -619,7 +615,7 @@ class KernelCacheWrapper(object):
 
         logger.info("%s: kernel cache miss" % self.name)
         if CACHING_ENABLED:
-            logger.info("%s: kernel cache miss [key=%s]" % (
+            logger.info("{}: kernel cache miss [key={}]".format(
                 self.name, cache_key))
 
         from pytools import MinRecursionLimit
@@ -649,10 +645,9 @@ def my_syntactic_subs(expr, subst_dict):
     elif isinstance(expr, Subs):
         new_point = tuple(my_syntactic_subs(p, subst_dict) for p in expr.point)
 
-        import six
-        new_subst_dict = dict(
-            (var, subs) for var, subs in six.iteritems(subst_dict)
-            if var not in expr.variables)
+        new_subst_dict = {
+            var: subs for var, subs in subst_dict.items()
+            if var not in expr.variables}
 
         new_expr = my_syntactic_subs(expr.expr, new_subst_dict)
 

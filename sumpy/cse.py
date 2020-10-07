@@ -1,5 +1,3 @@
-from __future__ import print_function, division
-
 __copyright__ = """
 Copyright (C) 2017 Matt Wala
 Copyright (C) 2006-2016 SymPy Development Team
@@ -127,7 +125,7 @@ def postprocess_for_cse(expr, optimizations):
 
 # {{{ opt cse
 
-class FuncArgTracker(object):
+class FuncArgTracker:
     """
     A class which manages a mapping from functions to arguments and an inverse
     mapping from arguments to functions.
@@ -215,7 +213,7 @@ class FuncArgTracker(object):
             if func_i in larger_funcs_container:
                 count_map[func_i] += 1
 
-        return dict((k, v) for k, v in count_map.items() if v >= 2)
+        return {k: v for k, v in count_map.items() if v >= 2}
 
     def get_subset_candidates(self, argset, restrict_to_funcset=None):
         """
@@ -225,8 +223,8 @@ class FuncArgTracker(object):
         """
         iarg = iter(argset)
 
-        indices = set(
-            fi for fi in self.arg_to_funcset[next(iarg)])
+        indices = {
+            fi for fi in self.arg_to_funcset[next(iarg)]}
 
         if restrict_to_funcset is not None:
             indices &= restrict_to_funcset
@@ -252,7 +250,7 @@ class FuncArgTracker(object):
         self.func_to_argset[func_i].update(new_args)
 
 
-class Unevaluated(object):
+class Unevaluated:
 
     def __init__(self, func, args):
         self.func = func
@@ -325,7 +323,7 @@ def match_common_args(func_class, funcs, opt_subs):
                 com_func = Unevaluated(
                         func_class, arg_tracker.get_args_in_value_order(com_args))
                 com_func_number = arg_tracker.get_or_add_value_number(com_func)
-                arg_tracker.update_func_argset(i, diff_i | set([com_func_number]))
+                arg_tracker.update_func_argset(i, diff_i | {com_func_number})
                 changed.add(i)
             else:
                 # Treat the whole expression as a CSE.
@@ -340,13 +338,13 @@ def match_common_args(func_class, funcs, opt_subs):
                 com_func_number = arg_tracker.get_or_add_value_number(funcs[i])
 
             diff_j = arg_tracker.func_to_argset[j].difference(com_args)
-            arg_tracker.update_func_argset(j, diff_j | set([com_func_number]))
+            arg_tracker.update_func_argset(j, diff_j | {com_func_number})
             changed.add(j)
 
             for k in arg_tracker.get_subset_candidates(
                     com_args, common_arg_candidates):
                 diff_k = arg_tracker.func_to_argset[k].difference(com_args)
-                arg_tracker.update_func_argset(k, diff_k | set([com_func_number]))
+                arg_tracker.update_func_argset(k, diff_k | {com_func_number})
                 changed.add(k)
 
         if i in changed:

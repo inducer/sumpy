@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import
-
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -22,7 +20,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from six.moves import range, zip
 
 import loopy as lp
 import numpy as np
@@ -77,7 +74,7 @@ Transforming kernels
 """
 
 
-class KernelArgument(object):
+class KernelArgument:
     """
     .. attribute:: loopy_arg
 
@@ -112,7 +109,7 @@ class KernelArgument(object):
 
 # {{{ basic kernel interface
 
-class Kernel(object):
+class Kernel:
     """Basic kernel interface.
 
     .. attribute:: is_complex_valued
@@ -355,10 +352,10 @@ class ExpressionKernel(Kernel):
             raise ValueError("dist_vec length does not match expected dimension")
 
         from sumpy.symbolic import Symbol
-        expr = expr.xreplace(dict(
-            (Symbol("d%d" % i), dist_vec_i)
+        expr = expr.xreplace({
+            Symbol("d%d" % i): dist_vec_i
             for i, dist_vec_i in enumerate(scaled_dist_vec)
-            ))
+            })
 
         return expr
 
@@ -412,7 +409,7 @@ class LaplaceKernel(ExpressionKernel):
         else:
             raise NotImplementedError("unsupported dimensionality")
 
-        super(LaplaceKernel, self).__init__(
+        super().__init__(
                 dim,
                 expression=expr,
                 global_scaling_const=scaling,
@@ -464,7 +461,7 @@ class BiharmonicKernel(ExpressionKernel):
         else:
             raise RuntimeError("unsupported dimensionality")
 
-        super(BiharmonicKernel, self).__init__(
+        super().__init__(
                 dim,
                 expression=expr,
                 global_scaling_const=scaling,
@@ -504,7 +501,7 @@ class HelmholtzKernel(ExpressionKernel):
         else:
             raise RuntimeError("unsupported dimensionality")
 
-        super(HelmholtzKernel, self).__init__(
+        super().__init__(
                 dim,
                 expression=expr,
                 global_scaling_const=scaling,
@@ -586,7 +583,7 @@ class YukawaKernel(ExpressionKernel):
         else:
             raise RuntimeError("unsupported dimensionality")
 
-        super(YukawaKernel, self).__init__(
+        super().__init__(
                 dim,
                 expression=expr,
                 global_scaling_const=scaling,
@@ -664,7 +661,7 @@ class StokesletKernel(ExpressionKernel):
         self.icomp = icomp
         self.jcomp = jcomp
 
-        super(StokesletKernel, self).__init__(
+        super().__init__(
                 dim,
                 expression=expr,
                 global_scaling_const=scaling,
@@ -729,7 +726,7 @@ class StressletKernel(ExpressionKernel):
         self.jcomp = jcomp
         self.kcomp = kcomp
 
-        super(StressletKernel, self).__init__(
+        super().__init__(
                 dim,
                 expression=expr,
                 global_scaling_const=scaling,
@@ -882,11 +879,11 @@ class DirectionalDerivative(DerivativeBase):
         key_builder.rec(key_hash, self.dir_vec_name)
 
     def __str__(self):
-        return r"%s . \/_%s %s" % (
+        return r"{} . \/_{} {}".format(
                 self.dir_vec_name, self.directional_kind[0], self.inner_kernel)
 
     def __repr__(self):
-        return "%s(%r, %s)" % (
+        return "{}({!r}, {})".format(
                 type(self).__name__,
                 self.inner_kernel,
                 self.dir_vec_name)
@@ -979,12 +976,12 @@ class DirectionalSourceDerivative(DirectionalDerivative):
 
 # {{{ kernel mappers
 
-class KernelMapper(object):
+class KernelMapper:
     def rec(self, kernel):
         try:
             method = getattr(self, kernel.mapper_method)
         except AttributeError:
-            raise RuntimeError("%s cannot handle %s" % (
+            raise RuntimeError("{} cannot handle {}".format(
                 type(self), type(kernel)))
         else:
             return method(kernel)

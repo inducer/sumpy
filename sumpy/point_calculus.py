@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import
-
 __copyright__ = "Copyright (C) 2017 Andreas Kloeckner"
 
 __license__ = """
@@ -33,7 +31,7 @@ __doc__ = """
 """
 
 
-class CalculusPatch(object):
+class CalculusPatch:
     """Sets up a grid of points on which derivatives can be calculated. Useful
     to verify that an evaluated potential actually solves a PDE.
 
@@ -188,7 +186,7 @@ class CalculusPatch(object):
         tgt_axes = (axes[:axis] + "i" + axes[axis:])[:dim]
 
         return np.einsum(
-                "ij,%s->%s" % (src_axes, tgt_axes),
+                f"ij,{src_axes}->{tgt_axes}",
                 self._diff_mat_1d(nderivs),
                 f_values.reshape(*self._pshape)).reshape(-1)
 

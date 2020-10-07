@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import
-
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -29,7 +27,6 @@ __doc__ = """
 """
 
 import numpy as np
-from six.moves import range
 
 
 def separate_by_real_and_imag(data, real_only):
@@ -83,7 +80,7 @@ def make_field_plotter_from_bbox(bbox, h, extend_factor=0):
     return FieldPlotter(center, extent, npoints)
 
 
-class FieldPlotter(object):
+class FieldPlotter:
     """
     .. automethod:: set_matplotlib_limits
     .. automethod:: show_scalar_in_matplotlib
