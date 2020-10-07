@@ -141,7 +141,8 @@ class LinearPDESystemOperator:
 @memoize
 def as_scalar_pde(pde, vec_idx):
     r"""
-    Returns a scalar PDE corresponding to the component `vec_idx`.
+    Returns a scalar PDE that satisfies the `vec_idx` component
+    of a vector-valued function.
 
     :arg pde: An instance of :class:`LinearPDESystemOperator`
     :arg vec_idx: the index of the vector-valued function that we
