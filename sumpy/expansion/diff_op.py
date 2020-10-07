@@ -141,14 +141,13 @@ class LinearPDESystemOperator:
 @memoize
 def as_scalar_pde(pde, vec_idx):
     r"""
-    Returns a scalar PDE that satisfies the `vec_idx` component
-    of a vector-valued function.
+    Returns a scalar PDE that is satisfied by the *vec_idx* component
+    of *pde*.
 
     :arg pde: An instance of :class:`LinearPDESystemOperator`
     :arg vec_idx: the index of the vector-valued function that we
                   want as a scalar PDE
     """
-    from six import iteritems
     from sumpy.tools import nullspace
 
     indices = set()
@@ -185,7 +184,7 @@ def as_scalar_pde(pde, vec_idx):
         for mi in mis:
             for pde_dict in pde.eqs:
                 eq = [0]*(len(mis)*(max(indices)+1))
-                for ident, coeff in iteritems(pde_dict):
+                for ident, coeff in pde_dict.items():
                     c = tuple(add_mi(ident.mi, mi))
                     if c not in coeff_ident_enumerate_dict:
                         break
@@ -286,14 +285,17 @@ def concat(*ops):
     return LinearPDESystemOperator(dim, *eqs)
 
 
-def make_identity_diff_op(ninput, noutput=1, include_time=False):
+def make_identity_diff_op(ninput, noutput=1, time_dependent=False):
     """
     Returns the identity as a linear PDE system operator.
+    if *include_time* is true, then the last dimension of the
+    multi-index is time.
+
     :arg ninput: number of spatial variables of the function
     :arg noutput: number of output values of function
-    :arg include_time: include time as a dimension
+    :arg time_dependent: include time as a dimension
     """
-    if include_time:
+    if time_dependent:
         mi = tuple([0]*(ninput + 1))
     else:
         mi = tuple([0]*ninput)
