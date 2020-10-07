@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import
-
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -22,7 +20,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from six.moves import range, zip
 import sumpy.symbolic as sym
 
 from sumpy.expansion import (
@@ -134,8 +131,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 coeffs, rscale, sac=sac))
 
         bvec = [b*rscale**-1 for b in bvec]
-        mi_to_index = dict((mi, i) for i, mi in
-                        enumerate(self.get_full_coefficient_identifiers()))
+        mi_to_index = {mi: i for i, mi in
+                        enumerate(self.get_full_coefficient_identifiers())}
 
         # Sort multi-indices so that last dimension varies fastest
         sorted_target_mis = sorted(self.get_full_coefficient_identifiers())
@@ -314,7 +311,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             dvec_scaled = [d*src_rscale for d in dvec]
             expr = src_expansion.evaluate(src_coeff_exprs, dvec_scaled,
                         rscale=src_rscale, sac=sac)
-            replace_dict = dict((d, d/src_rscale) for d in dvec)
+            replace_dict = {d: d/src_rscale for d in dvec}
             taker = MiDerivativeTaker(expr, dvec)
             rscale_ratio = sym.UnevaluatedExpr(tgt_rscale/src_rscale)
             result = [
@@ -464,7 +461,7 @@ class H2DLocalExpansion(_FourierBesselLocalExpansion):
         assert (isinstance(kernel.get_base_kernel(), HelmholtzKernel)
                 and kernel.dim == 2)
 
-        super(H2DLocalExpansion, self).__init__(kernel, order, use_rscale)
+        super().__init__(kernel, order, use_rscale)
 
         from sumpy.expansion.multipole import H2DMultipoleExpansion
         self.mpole_expn_class = H2DMultipoleExpansion
@@ -479,7 +476,7 @@ class Y2DLocalExpansion(_FourierBesselLocalExpansion):
         assert (isinstance(kernel.get_base_kernel(), YukawaKernel)
                 and kernel.dim == 2)
 
-        super(Y2DLocalExpansion, self).__init__(kernel, order, use_rscale)
+        super().__init__(kernel, order, use_rscale)
 
         from sumpy.expansion.multipole import Y2DMultipoleExpansion
         self.mpole_expn_class = Y2DMultipoleExpansion

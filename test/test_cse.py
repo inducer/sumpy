@@ -1,5 +1,3 @@
-from __future__ import print_function, division
-
 __copyright__ = """
 Copyright (C) 2017 Matt Wala
 Copyright (C) 2006-2016 SymPy Development Team

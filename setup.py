@@ -97,7 +97,6 @@ setup(name="sumpy",
           "loo.py>=2017.2",
           "boxtree>=2018.1",
           "pytest>=2.3",
-          "six",
           "pyrsistent>=0.16.0",
 
           # If this causes issues, see:
