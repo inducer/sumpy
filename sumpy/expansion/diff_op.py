@@ -44,13 +44,15 @@ DerivativeIdentifier = namedtuple("DerivativeIdentifier", ["mi", "vec_idx"])
 class LinearPDESystemOperator:
     r"""
     Represents a constant-coefficient linear differential operator of a
-    vector-valued function with `dim` variables. It is represented by a tuple of
-    immutable dictionaries. The dictionary maps a :class:`DerivativeIdentifier`
+    vector-valued function with `dim` spatial variables. It is represented by a
+    tuple of immutable dictionaries. The dictionary maps a :class:`DerivativeIdentifier`
     to the coefficient. This object is immutable.
+    Optionally supports a time variable as the last variable in the multi-index
+    of the :class:`DerivativeIdentifier`.
     """
     def __init__(self, dim, *eqs):
         """
-        :arg dim: dimension of the LinearPDESystemOperator
+        :arg dim: Number of spatial dimensions of the LinearPDESystemOperator
         :arg eqs: A list of dictionaries mapping a :class:`DerivativeIdentifier`
                   to a coefficient.
         """
@@ -102,9 +104,17 @@ class LinearPDESystemOperator:
             item = (item,)
         return LinearPDESystemOperator(self.dim, *item)
 
+    @property
+    def total_dims(self):
+        """
+        Returns the total number of dimensions including time
+        """
+        return len(self.eqs[0].keys()[0].mi)
+
     def to_sym(self, fnames=None):
         from sumpy.symbolic import make_sym_vector, Function
-        x = make_sym_vector("x", self.dim)
+        x = list(make_sym_vector("x", self.dim))
+        x += list(make_sym_vector("t", self.total_dims - self.dim))
 
         if fnames is None:
             noutputs = 0
@@ -156,11 +166,13 @@ def as_scalar_pde(pde, vec_idx):
             generate_nonnegative_integer_tuples_summing_to_at_most
             as gnitstam)
 
+    dim = pde.total_dims
+
     # slowly increase the order of the derivatives that we take of the
     # system of PDEs. Once we reach the order of the scalar PDE, this
     # loop will break
     for order in range(2, 100):
-        mis = sorted(gnitstam(order, pde.dim), key=sum)
+        mis = sorted(gnitstam(order, dim), key=sum)
 
         pde_mat = []
         coeff_ident_enumerate_dict = dict((tuple(mi), i) for
@@ -205,7 +217,7 @@ def laplacian(diff_op):
     empty = [pmap()] * len(diff_op.eqs)
     res = LinearPDESystemOperator(dim, *empty)
     for j in range(dim):
-        mi = [0]*dim
+        mi = [0]*diff_op.total_dims
         mi[j] = 2
         res = res + diff(diff_op, tuple(mi))
     return res
@@ -224,10 +236,9 @@ def diff(diff_op, mi):
 
 def divergence(diff_op):
     assert len(diff_op.eqs) == diff_op.dim
-    dim = diff_op.dim
-    res = LinearPDESystemOperator(dim, pmap())
-    for i in range(dim):
-        mi = [0]*dim
+    res = LinearPDESystemOperator(diff_op.dim, pmap())
+    for i in range(diff_op.dim):
+        mi = [0]*diff_op.total_dims
         mi[i] = 1
         res += diff(diff_op[i], tuple(mi))
     return res
@@ -238,25 +249,51 @@ def gradient(diff_op):
     eqs = []
     dim = diff_op.dim
     for i in range(dim):
-        mi = [0]*dim
+        mi = [0]*diff_op.total_dims
         mi[i] = 1
         eqs.append(diff(diff_op, tuple(mi)).eqs[0])
     return LinearPDESystemOperator(dim, *eqs)
 
 
-def concat(op1, op2):
-    assert op1.dim == op2.dim
-    eqs = list(op1.eqs)
-    eqs.extend(list(op2.eqs))
-    return LinearPDESystemOperator(op1.dim, *eqs)
+def curl(pde):
+    assert len(pde.eqs) == 3
+    assert pde.dim == 3
+    eqs = []
+    mis = []
+    for i in range(3):
+        mi = [0]*pde.total_dims
+        mi[i] = 1
+        mis.append(tuple(mi))
+
+    for i in range(3):
+        new_pde = diff(pde[(i+2)%3], mis[(i+1)%3]) - diff(pde[(i+1)%3], mis[(i+2)%3])
+        eqs.append(new_pde.eqs[0])
+
+    return LinearPDESystemOperator(pde.dim, *eqs)
 
 
-def make_identity_diff_op(ninput, noutput=1):
+def concat(*ops):
+    ops = list(ops)
+    assert len(ops) >= 1
+    dim = ops[0].dim
+    for op in ops:
+        assert op.dim == dim
+    eqs = list(ops[0].eqs)
+    for op in ops[1:]:
+        eqs.extend(list(op.eqs))
+    return LinearPDESystemOperator(dim, *eqs)
+
+
+def make_identity_diff_op(ninput, noutput=1, include_time=False):
     """
     Returns the identity as a linear PDE system operator.
-    :arg ninput: number of input variables to the function
+    :arg ninput: number of spatial variables of the function
     :arg noutput: number of output values of function
+    :arg include_time: include time as a dimension
     """
-    mi = tuple([0]*ninput)
+    if include_time:
+        mi = tuple([0]*(ninput + 1))
+    else:
+        mi = tuple([0]*ninput)
     eqs = [pmap({DerivativeIdentifier(mi, i): 1}) for i in range(noutput)]
     return LinearPDESystemOperator(ninput, *eqs)

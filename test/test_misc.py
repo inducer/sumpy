@@ -35,7 +35,8 @@ from pytools import Record
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel,
         BiharmonicKernel, YukawaKernel)
 from sumpy.expansion.diff_op import (make_identity_diff_op, gradient,
-        divergence, laplacian, concat, as_scalar_pde)
+        divergence, laplacian, concat, as_scalar_pde, curl, diff)
+
 
 
 # {{{ pde check for kernels
@@ -344,6 +345,22 @@ def test_as_scalar_pde():
 
     # pressure should satisfy Laplace
     assert as_scalar_pde(pde, 3) == laplacian(u[0])
+
+
+def test_as_scalar_pde_maxwell():
+    from sumpy.symbolic import symbols
+    op = make_identity_diff_op(3, 6, include_time=True)
+    E = op[:3]
+    B = op[3:]
+    mu, epsilon = symbols("mu, epsilon")
+    t = (0, 0, 0, 1)
+
+    pde = concat(curl(E) + diff(B, t),  curl(B) - mu*epsilon*diff(E, t), divergence(E), divergence(B))
+    as_scalar_pde(pde, 3)
+
+    for i in range(6):
+        assert as_scalar_pde(pde, i) == -1/(mu*epsilon)*laplacian(op[0]) + diff(diff(op[0], t), t)
+
 
 
 # You can test individual routines by typing
