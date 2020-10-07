@@ -1,8 +1,3 @@
-from __future__ import division
-from __future__ import absolute_import
-import six
-from six.moves import zip
-
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -41,7 +36,7 @@ Manipulating batches of assignments
 """
 
 
-class _SymbolGenerator(object):
+class _SymbolGenerator:
 
     def __init__(self, taken_symbols):
         self.taken_symbols = taken_symbols
@@ -83,7 +78,7 @@ class _SymbolGenerator(object):
 
 # {{{ collection of assignments
 
-class SymbolicAssignmentCollection(object):
+class SymbolicAssignmentCollection:
     """Represents a collection of assignments::
 
         a = 5*x
@@ -117,8 +112,8 @@ class SymbolicAssignmentCollection(object):
 
     def __str__(self):
         return "\n".join(
-            "%s <- %s" % (name, expr)
-            for name, expr in six.iteritems(self.assignments))
+            f"{name} <- {expr}"
+            for name, expr in self.assignments.items())
 
     def get_all_dependencies(self, var_name):
         """Including recursive dependencies."""
@@ -145,7 +140,7 @@ class SymbolicAssignmentCollection(object):
         return result
 
     def add_assignment(self, name, expr, root_name=None, wrt_set=None):
-        assert isinstance(name, six.string_types)
+        assert isinstance(name, str)
         assert name not in self.assignments
 
         if wrt_set is None:

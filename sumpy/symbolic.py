@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import
-
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -22,9 +20,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-
-import six
-from six.moves import range
 
 import numpy as np
 from pymbolic.mapper import IdentityMapper as IdentityMapperBase
@@ -131,11 +126,11 @@ class _DerivativeKiller(IdentityMapperBase):
 
 
 def _get_assignments_in_maxima(assignments, prefix=""):
-    my_variable_names = set(six.iterkeys(assignments))
+    my_variable_names = set(assignments.keys())
     written_assignments = set()
 
-    prefix_subst_dict = dict(
-            (vn, prefix+vn) for vn in my_variable_names)
+    prefix_subst_dict = {
+            vn: prefix+vn for vn in my_variable_names}
 
     from pymbolic.maxima import MaximaStringifyMapper
     mstr = MaximaStringifyMapper()
@@ -153,12 +148,12 @@ def _get_assignments_in_maxima(assignments, prefix=""):
             if symb.name not in written_assignments:
                 write_assignment(symb.name)
 
-        result.append("%s%s : %s;" % (
+        result.append("{}{} : {};".format(
             prefix, name, mstr(dkill(s2p(
                 assignments[name].subs(prefix_subst_dict))))))
         written_assignments.add(name)
 
-    for name in six.iterkeys(assignments):
+    for name in assignments.keys():
         if name not in written_assignments:
             write_assignment(name)
 
@@ -172,12 +167,12 @@ def checked_cse(exprs, symbols=None):
 
     new_assignments, new_exprs = sym.cse(exprs, **kwargs)
 
-    max_old = _get_assignments_in_maxima(dict(
-            ("old_expr%d" % i, expr)
-            for i, expr in enumerate(exprs)))
-    new_ass_dict = dict(
-            ("new_expr%d" % i, expr)
-            for i, expr in enumerate(new_exprs))
+    max_old = _get_assignments_in_maxima({
+            "old_expr%d" % i: expr
+            for i, expr in enumerate(exprs)})
+    new_ass_dict = {
+            "new_expr%d" % i: expr
+            for i, expr in enumerate(new_exprs)}
     for name, val in new_assignments:
         new_ass_dict[name.name] = val
     max_new = _get_assignments_in_maxima(new_ass_dict)

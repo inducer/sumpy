@@ -1,5 +1,3 @@
-from __future__ import division
-
 __copyright__ = "Copyright (C) 2016 Matt Wala"
 
 __license__ = """
@@ -30,7 +28,7 @@ __doc__ = """
 import numpy as np
 
 
-class FMMLibExpansionOrderFinder(object):
+class FMMLibExpansionOrderFinder:
     r"""Return expansion orders that meet the tolerance for a given level
     using routines wrapped from :mod:`pyfmmlib`.
     """
@@ -80,7 +78,7 @@ class FMMLibExpansionOrderFinder(object):
         return nterms + self.extra_order
 
 
-class SimpleExpansionOrderFinder(object):
+class SimpleExpansionOrderFinder:
     r"""
     This models the Laplace truncation error as:
 

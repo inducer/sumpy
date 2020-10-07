@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import
-
 __copyright__ = """
 Copyright (C) 2017 Andreas Kloeckner
 Copyright (C) 2017 Matt Wala
@@ -24,9 +22,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
-import six  # noqa: F401
-from six.moves import range  # noqa: F401
 
 from pytools import memoize_method
 from numbers import Number
@@ -82,7 +77,7 @@ by users:
 
 # {{{ context
 
-class ToyContext(object):
+class ToyContext:
     """This class functions as a container for generated code and 'behind-the-scenes'
     information.
 
@@ -290,7 +285,7 @@ def _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs):
 
 # {{{ potential source classes
 
-class PotentialSource(object):
+class PotentialSource:
     """A base class for all classes representing potentials that can be
     evaluated anywhere in space.
 
@@ -349,7 +344,7 @@ class ConstantPotential(PotentialSource):
     """
 
     def __init__(self, toy_ctx, value):
-        super(ConstantPotential, self).__init__(toy_ctx)
+        super().__init__(toy_ctx)
         self.value = np.array(value)
 
     def eval(self, targets):
@@ -363,7 +358,7 @@ class OneOnBallPotential(PotentialSource):
     .. automethod:: __init__
     """
     def __init__(self, toy_ctx, center, radius):
-        super(OneOnBallPotential, self).__init__(toy_ctx)
+        super().__init__(toy_ctx)
         self.center = np.asarray(center)
         self.radius = radius
 
@@ -377,7 +372,7 @@ class HalfspaceOnePotential(PotentialSource):
     .. automethod:: __init__
     """
     def __init__(self, toy_ctx, center, axis, side=1):
-        super(HalfspaceOnePotential, self).__init__(toy_ctx)
+        super().__init__(toy_ctx)
         self.center = np.asarray(center)
         self.axis = axis
         self.side = side
@@ -398,7 +393,7 @@ class PointSources(PotentialSource):
     """
 
     def __init__(self, toy_ctx, points, weights, center=None):
-        super(PointSources, self).__init__(toy_ctx)
+        super().__init__(toy_ctx)
 
         self.points = points
         self.weights = weights
@@ -434,7 +429,7 @@ class ExpansionPotentialSource(PotentialSource):
     """
     def __init__(self, toy_ctx, center, rscale, order, coeffs, derived_from,
             radius=None, expn_style=None, text_kwargs=None):
-        super(ExpansionPotentialSource, self).__init__(toy_ctx)
+        super().__init__(toy_ctx)
         self.center = np.asarray(center)
         self.rscale = rscale
         self.order = order
@@ -464,7 +459,7 @@ class LocalExpansion(ExpansionPotentialSource):
 class PotentialExpressionNode(PotentialSource):
     def __init__(self, psources):
         from pytools import single_valued
-        super(PotentialExpressionNode, self).__init__(
+        super().__init__(
                 single_valued(psource.toy_ctx for psource in psources))
 
         self.psources = psources
@@ -665,7 +660,7 @@ def draw_annotation(to_pt, from_pt, label, arrowprops={}, **kwargs):
             arrowprops=my_arrowprops, **kwargs)
 
 
-class SchematicVisitor(object):
+class SchematicVisitor:
     def __init__(self, default_expn_style="circle"):
         self.default_expn_style = default_expn_style
 
@@ -707,7 +702,7 @@ class SchematicVisitor(object):
                 verticalalignment="center",
                 horizontalalignment="center")
 
-        label = "$%s_{%s}$" % (
+        label = "${}_{{{}}}$".format(
                 type(psource).__name__[0].lower().replace("l", "\\ell"),
                 psource.order)
 

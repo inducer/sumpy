@@ -17,7 +17,6 @@ from sumpy.kernel import LaplaceKernel, HelmholtzKernel
 import logging
 logger = logging.getLogger(__name__)
 
-import six
 import pymbolic.mapper.flop_counter
 
 import sumpy.symbolic as sym
@@ -31,7 +30,7 @@ class Param:
         self.order = order
 
     def __repr__(self):
-        return "{}D_order_{}".format(self.dim, self.order)
+        return f"{self.dim}D_order_{self.order}"
 
 
 class TranslationBenchmarkSuite:
@@ -44,7 +43,7 @@ class TranslationBenchmarkSuite:
         Param(3, 10),
     ]
 
-    param_names = ['order']
+    param_names = ["order"]
 
     def setup(self, param):
         logging.basicConfig(level=logging.INFO)
@@ -71,7 +70,7 @@ class TranslationBenchmarkSuite:
         for i, expr in enumerate(result):
             sac.assign_unique("coeff%d" % i, expr)
         sac.run_global_cse()
-        insns = to_loopy_insns(six.iteritems(sac.assignments))
+        insns = to_loopy_insns(sac.assignments.items())
         counter = pymbolic.mapper.flop_counter.CSEAwareFlopCounter()
 
         return sum([counter.rec(insn.expression)+1 for insn in insns])

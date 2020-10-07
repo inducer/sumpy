@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import
-
 __copyright__ = "Copyright (C) 2019 Isuru Fernando"
 
 __license__ = """
@@ -38,7 +36,7 @@ Differential operator interface
 DerivativeIdentifier = namedtuple("DerivativeIdentifier", ["mi", "vec_idx"])
 
 
-class LinearPDESystemOperator(object):
+class LinearPDESystemOperator:
     r"""
     Represents a constant-coefficient linear differential operator of a
     vector-valued function with `dim` variables. It is represented by a tuple of
