@@ -363,6 +363,36 @@ def test_as_scalar_pde_maxwell():
             -1/(mu*epsilon)*laplacian(op[0]) + diff(diff(op[0], t), t)
 
 
+def test_as_scalar_pde_elasticity():
+
+    # Ref: https://doi.org/10.1006/jcph.1996.0102
+
+    diff_op = make_identity_diff_op(2, 5)
+    sigma_x = diff_op[0]
+    sigma_y = diff_op[1]
+    tau = diff_op[2]
+    u = diff_op[3]
+    v = diff_op[4]
+
+    # Use numeric values as the expressions grow exponentially large otherwise
+    lam, mu = 2, 3
+
+    x = (1, 0)
+    y = (0, 1)
+
+    exprs = [
+        diff(sigma_x, x) + diff(tau, y),
+        diff(tau, x) + diff(sigma_y, y),
+        sigma_x - (lam + 2*mu)*diff(u, x) - lam*diff(v, y),
+        sigma_y - (lam + 2*mu)*diff(v, y) - lam*diff(u, x),
+        tau - mu*(diff(u, y) + diff(v, x)),
+    ]
+
+    pde = concat(*exprs)
+    for i in range(5):
+        assert as_scalar_pde(pde, i) == laplacian(laplacian(diff_op[0]))
+
+
 # You can test individual routines by typing
 # $ python test_misc.py 'test_p2p(cl.create_some_context)'
 
