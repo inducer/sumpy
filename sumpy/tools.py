@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import
-
 __copyright__ = """
 Copyright (C) 2012 Andreas Kloeckner
 Copyright (C) 2018 Alexandru Fikl
@@ -34,8 +32,6 @@ __doc__ = """
  .. autoclass:: MatrixBlockIndexRanges
 """
 
-import six
-from six.moves import range, zip
 from pytools import memoize_method, memoize_in
 import numpy as np
 import sumpy.symbolic as sym
@@ -76,7 +72,7 @@ def mi_power(vector, mi, evaluate=True):
     return result
 
 
-class MiDerivativeTaker(object):
+class MiDerivativeTaker:
 
     def __init__(self, expr, var_list):
         assert isinstance(expr, sym.Basic)
@@ -180,7 +176,7 @@ def gather_arguments(kernel_likes):
         for arg in knl.get_args():
             _merge_kernel_arguments(result, arg)
 
-    return sorted(six.itervalues(result), key=lambda arg: arg.name)
+    return sorted(result.values(), key=lambda arg: arg.name)
 
 
 def gather_source_arguments(kernel_likes):
@@ -189,7 +185,7 @@ def gather_source_arguments(kernel_likes):
         for arg in knl.get_args() + knl.get_source_args():
             _merge_kernel_arguments(result, arg)
 
-    return sorted(six.itervalues(result), key=lambda arg: arg.name)
+    return sorted(result.values(), key=lambda arg: arg.name)
 
 
 def gather_loopy_arguments(kernel_likes):
@@ -202,7 +198,7 @@ def gather_loopy_source_arguments(kernel_likes):
 
 # {{{  KernelComputation
 
-class KernelComputation(object):
+class KernelComputation:
     """Common input processing for kernel computations."""
 
     def __init__(self, ctx, kernels, strength_usage,
@@ -283,7 +279,7 @@ def _to_host(x, queue=None):
     return x
 
 
-class BlockIndexRanges(object):
+class BlockIndexRanges:
     """Convenience class for working with blocks of a global array.
 
     .. attribute:: indices
@@ -337,7 +333,7 @@ class BlockIndexRanges(object):
         return x[self.block_indices(i)]
 
 
-class MatrixBlockIndexRanges(object):
+class MatrixBlockIndexRanges:
     """Keep track of different ways to index into matrix blocks.
 
     .. attribute:: row
@@ -492,15 +488,15 @@ class MatrixBlockIndexRanges(object):
                 end
                 """,
                 [
-                    lp.GlobalArg('blkranges', None, shape="nranges + 1"),
+                    lp.GlobalArg("blkranges", None, shape="nranges + 1"),
                     lp.GlobalArg("rowindices", None, shape="nresults"),
                     lp.GlobalArg("colindices", None, shape="nresults"),
                     lp.ValueArg("nresults", None),
-                    '...'
+                    "..."
                 ],
                 name="block_index_knl",
                 default_offset=lp.auto,
-                assumptions='nranges>=1',
+                assumptions="nranges>=1",
                 silenced_warnings="write_race(write_index*)",
                 lang_version=MOST_RECENT_LANGUAGE_VERSION)
             loopy_knl = lp.split_iname(loopy_knl, "irange", 128, outer_tag="g.0")
@@ -576,15 +572,15 @@ class OrderedSet(MutableSet):
 
     def pop(self, last=True):
         if not self:
-            raise KeyError('set is empty')
+            raise KeyError("set is empty")
         key = self.end[1][0] if last else self.end[2][0]
         self.discard(key)
         return key
 
     def __repr__(self):
         if not self:
-            return '%s()' % (self.__class__.__name__,)
-        return '%s(%r)' % (self.__class__.__name__, list(self))
+            return f"{self.__class__.__name__}()"
+        return "{}({!r})".format(self.__class__.__name__, list(self))
 
     def __eq__(self, other):
         if isinstance(other, OrderedSet):
@@ -594,7 +590,7 @@ class OrderedSet(MutableSet):
 # }}}
 
 
-class KernelCacheWrapper(object):
+class KernelCacheWrapper:
     @memoize_method
     def get_cached_optimized_kernel(self, **kwargs):
         from sumpy import code_cache, CACHING_ENABLED, OPT_ENABLED
@@ -604,14 +600,14 @@ class KernelCacheWrapper(object):
             from sumpy.version import KERNEL_VERSION
             cache_key = (
                     self.get_cache_key()
-                    + tuple(sorted(six.iteritems(kwargs)))
+                    + tuple(sorted(kwargs.items()))
                     + (loopy.version.DATA_MODEL_VERSION,)
                     + (KERNEL_VERSION,)
                     + (OPT_ENABLED,))
 
             try:
                 result = code_cache[cache_key]
-                logger.debug("%s: kernel cache hit [key=%s]" % (
+                logger.debug("{}: kernel cache hit [key={}]".format(
                     self.name, cache_key))
                 return result
             except KeyError:
@@ -619,7 +615,7 @@ class KernelCacheWrapper(object):
 
         logger.info("%s: kernel cache miss" % self.name)
         if CACHING_ENABLED:
-            logger.info("%s: kernel cache miss [key=%s]" % (
+            logger.info("{}: kernel cache miss [key={}]".format(
                 self.name, cache_key))
 
         from pytools import MinRecursionLimit
@@ -649,10 +645,9 @@ def my_syntactic_subs(expr, subst_dict):
     elif isinstance(expr, Subs):
         new_point = tuple(my_syntactic_subs(p, subst_dict) for p in expr.point)
 
-        import six
-        new_subst_dict = dict(
-            (var, subs) for var, subs in six.iteritems(subst_dict)
-            if var not in expr.variables)
+        new_subst_dict = {
+            var: subs for var, subs in subst_dict.items()
+            if var not in expr.variables}
 
         new_expr = my_syntactic_subs(expr.expr, new_subst_dict)
 
@@ -685,5 +680,112 @@ def is_obj_array_like(ary):
             isinstance(ary, (tuple, list))
             or (isinstance(ary, np.ndarray) and ary.dtype.char == "O"))
 
+
+def reduced_row_echelon_form(m):
+    """Calculates a reduced row echelon form of a
+    matrix `m`.
+
+    :arg m: a 2D :class:`numpy.ndarray` or a list of lists or a sympy Matrix
+    :return: reduced row echelon form as a 2D :class:`numpy.ndarray`
+             and a list of pivots
+    """
+
+    mat = np.array(m, dtype=object)
+    index = 0
+    nrows = mat.shape[0]
+    ncols = mat.shape[1]
+    pivot_cols = []
+    for i in range(ncols):
+        if index == nrows:
+            break
+        pivot = nrows
+        for k in range(index, nrows):
+            if mat[k, i] != 0 and pivot == nrows:
+                pivot = k
+            if abs(mat[k, i]) == 1:
+                pivot = k
+                break
+        if pivot == nrows:
+            continue
+        if pivot != index:
+            mat[[pivot, index], :] = mat[[index, pivot], :]
+
+        pivot_cols.append(i)
+        scale = mat[index, i]
+        if isinstance(scale, (int, sym.Integer)):
+            scale = int(scale)
+
+        for j in range(mat.shape[1]):
+            elem = mat[index, j]
+            if isinstance(scale, int) and isinstance(elem, (int, sym.Integer)):
+                quo = int(elem) // scale
+                if quo * scale == elem:
+                    mat[index, j] = quo
+                    continue
+            mat[index, j] = sym.sympify(elem)/scale
+
+        for j in range(nrows):
+            if (j == index):
+                continue
+
+            scale = mat[j, i]
+            if scale != 0:
+                mat[j, :] = mat[j, :] - mat[index, :]*scale
+
+        index = index + 1
+
+    return mat, pivot_cols
+
+
+def nullspace(m):
+    """Calculates the nullspace of a matrix `m`.
+
+    :arg m: a 2D :class:`numpy.ndarray` or a list of lists or a sympy Matrix
+    :return: nullspace of `m` as a 2D :class:`numpy.ndarray`
+    """
+    mat, pivot_cols = reduced_row_echelon_form(m)
+    pivot_cols = list(pivot_cols)
+    cols = mat.shape[1]
+
+    free_vars = [i for i in range(cols) if i not in pivot_cols]
+
+    n = []
+    for free_var in free_vars:
+        vec = [0]*cols
+        vec[free_var] = 1
+        for piv_row, piv_col in enumerate(pivot_cols):
+            for pos in pivot_cols[piv_row+1:] + [free_var]:
+                if isinstance(mat[piv_row, pos], sym.Integer):
+                    vec[piv_col] -= int(mat[piv_row, pos])
+                else:
+                    vec[piv_col] -= mat[piv_row, pos]
+        n.append(vec)
+    return np.array(n, dtype=object).T
+
+
+def find_linear_relationship(matrix):
+    """
+    This method does elementary row operations to figure out the first row
+    which is linearly dependent on the previous rows. Partial pivoting is not done
+    to find the row with the lowest degree.
+    """
+    ncols = matrix.shape[1]
+    nrows = min(matrix.shape[0], ncols+1)
+    augment = np.eye(nrows, nrows, dtype=matrix.dtype)
+    mat = np.hstack((matrix[:nrows, :], augment))
+    for i in range(nrows):
+        for j in range(ncols):
+            if mat[i, j] != 0:
+                col = j
+                break
+        else:
+            pde_dict = {}
+            for col in range(ncols, ncols+nrows):
+                if mat[i, col] != 0:
+                    pde_dict[col-ncols] = mat[i, col]
+            return pde_dict
+        for j in range(i+1, nrows):
+            mat[j, :] = mat[j, :]*mat[i, col] - mat[i, :]*mat[j, col]
+    return {}
 
 # vim: fdm=marker

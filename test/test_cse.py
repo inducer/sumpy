@@ -1,5 +1,3 @@
-from __future__ import print_function, division
-
 __copyright__ = """
 Copyright (C) 2017 Matt Wala
 Copyright (C) 2006-2016 SymPy Development Team
@@ -81,8 +79,8 @@ from sumpy.cse import (
     cse, preprocess_for_cse, postprocess_for_cse)
 
 
-w, x, y, z = symbols('w,x,y,z')
-x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12 = symbols('x:13')
+w, x, y, z = symbols("w,x,y,z")
+x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12 = symbols("x:13")
 
 sympyonly = (
     pytest.mark.skipif(USE_SYMENGINE, reason="uses a sympy-only feature"))
@@ -249,8 +247,8 @@ def test_issue_4499():
     # previously, this gave 16 constants
     from sympy.abc import a, b
     from sympy import Tuple, S
-    B = Function('B')  # noqa
-    G = Function('G')  # noqa
+    B = Function("B")  # noqa
+    G = Function("G")  # noqa
     t = Tuple(
         *(a, a + S(1)/2, 2*a, b, 2*a - b + 1, (sqrt(z)/2)**(-2*a + 1)*B(2*a
         - b, sqrt(z))*B(b - 1, sqrt(z))*G(b)*G(2*a - b + 1),  # noqa
@@ -278,10 +276,10 @@ def test_issue_6169():
 def test_cse_Indexed():  # noqa
     from sympy import IndexedBase, Idx
     len_y = 5
-    y = IndexedBase('y', shape=(len_y,))
-    x = IndexedBase('x', shape=(len_y,))
-    Dy = IndexedBase('Dy', shape=(len_y-1,))  # noqa
-    i = Idx('i', len_y-1)
+    y = IndexedBase("y", shape=(len_y,))
+    x = IndexedBase("x", shape=(len_y,))
+    Dy = IndexedBase("Dy", shape=(len_y-1,))  # noqa
+    i = Idx("i", len_y-1)
 
     expr1 = (y[i+1]-y[i])/(x[i+1]-x[i])
     expr2 = 1/(x[i+1]-x[i])
@@ -326,17 +324,17 @@ def test_symbols_exhausted_error():
 def test_issue_7840():
     # daveknippers' example
     C393 = sympify(  # noqa
-        'Piecewise((C391 - 1.65, C390 < 0.5), (Piecewise((C391 - 1.65, \
-        C391 > 2.35), (C392, True)), True))'
+        "Piecewise((C391 - 1.65, C390 < 0.5), (Piecewise((C391 - 1.65, \
+        C391 > 2.35), (C392, True)), True))"
     )
     C391 = sympify(  # noqa
-        'Piecewise((2.05*C390**(-1.03), C390 < 0.5), (2.5*C390**(-0.625), True))'
+        "Piecewise((2.05*C390**(-1.03), C390 < 0.5), (2.5*C390**(-0.625), True))"
     )
-    C393 = C393.subs('C391',C391)  # noqa
+    C393 = C393.subs("C391",C391)  # noqa
     # simple substitution
     sub = {}
-    sub['C390'] = 0.703451854
-    sub['C392'] = 1.01417794
+    sub["C390"] = 0.703451854
+    sub["C392"] = 1.01417794
     ss_answer = C393.subs(sub)
     # cse
     substitutions, new_eqn = cse(C393)

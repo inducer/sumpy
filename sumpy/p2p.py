@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import
-
 __copyright__ = """
 Copyright (C) 2012 Andreas Kloeckner
 Copyright (C) 2018 Alexandru Fikl
@@ -24,9 +22,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
-import six
-from six.moves import range
 
 import numpy as np
 import loopy as lp
@@ -100,8 +95,8 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
         sac.run_global_cse()
 
         from sumpy.codegen import to_loopy_insns
-        loopy_insns = to_loopy_insns(six.iteritems(sac.assignments),
-                vector_names=set(["d"]),
+        loopy_insns = to_loopy_insns(sac.assignments.items(),
+                vector_names={"d"},
                 pymbolic_expr_maps=[
                         knl.get_code_transformer() for knl in self.kernels],
                 retain_names=result_names,

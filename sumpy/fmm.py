@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import
-
 __copyright__ = "Copyright (C) 2013 Andreas Kloeckner"
 
 __license__ = """
@@ -29,8 +27,6 @@ __doc__ = """Integrates :mod:`boxtree` with :mod:`sumpy`.
 """
 
 
-from six.moves import zip
-
 import pyopencl as cl
 import pyopencl.array  # noqa
 
@@ -49,7 +45,7 @@ def level_to_rscale(tree, level):
 
 # {{{ expansion wrangler code container
 
-class SumpyExpansionWranglerCodeContainer(object):
+class SumpyExpansionWranglerCodeContainer:
     """Objects of this type serve as a place to keep the code needed
     for :class:`SumpyExpansionWrangler`. Since :class:`SumpyExpansionWrangler`
     necessarily must have a :class:`pyopencl.CommandQueue`, but this queue
@@ -158,7 +154,7 @@ class UnableToCollectTimingData(UserWarning):
     pass
 
 
-class SumpyTimingFuture(object):
+class SumpyTimingFuture:
 
     def __init__(self, queue, events):
         self.queue = queue
@@ -199,7 +195,7 @@ class SumpyTimingFuture(object):
 
 # {{{ expansion wrangler
 
-class SumpyExpansionWrangler(object):
+class SumpyExpansionWrangler:
     """Implements the :class:`boxtree.fmm.ExpansionWranglerInterface`
     by using :mod:`sumpy` expansions/translations.
 

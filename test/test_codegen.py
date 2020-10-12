@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import, print_function
-
 __copyright__ = "Copyright (C) 2017 Matt Wala"
 
 __license__ = """
@@ -55,10 +53,10 @@ def test_kill_trivial_assignments():
         return Sum(vals)
 
     assert result == [
-        ('nt', x**y),
-        ('u0', _s(6, 1)),
-        ('u1', _s(-6, 1)),
-        ('u2', _s(6*x, 1))]
+        ("nt", x**y),
+        ("u0", _s(6, 1)),
+        ("u1", _s(-6, 1)),
+        ("u2", _s(6*x, 1))]
 
 
 def test_symbolic_assignment_name_uniqueness():
@@ -106,7 +104,7 @@ def test_line_taylor_coeff_growth():
 
 
 # You can test individual routines by typing
-# $ python test_fmm.py 'test_sumpy_fmm(cl.create_some_context)'
+# $ python test_fmm.py "test_sumpy_fmm(cl.create_some_context)"
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

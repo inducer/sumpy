@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import
-
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -46,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 # {{{ base class
 
-class ExpansionBase(object):
+class ExpansionBase:
     """
     .. automethod:: with_kernel
     .. automethod:: __len__
@@ -160,7 +158,7 @@ class ExpansionBase(object):
 
 # {{{ expansion terms wrangler
 
-class ExpansionTermsWrangler(object):
+class ExpansionTermsWrangler:
 
     init_arg_names = ("order", "dim", "max_mi")
 
@@ -198,9 +196,9 @@ class ExpansionTermsWrangler(object):
             all(mi[i] <= self.max_mi[i] for i in range(self.dim))]
 
     def copy(self, **kwargs):
-        new_kwargs = dict(
-                (name, getattr(self, name))
-                for name in self.init_arg_names)
+        new_kwargs = {
+                name: getattr(self, name)
+                for name in self.init_arg_names}
 
         for name in self.init_arg_names:
             new_kwargs[name] = kwargs.pop(name, getattr(self, name))
@@ -287,7 +285,7 @@ class FullExpansionTermsWrangler(ExpansionTermsWrangler):
 
 # {{{ sparse matrix-vector multiplication
 
-class CSEMatVecOperator(object):
+class CSEMatVecOperator:
     """
     A class to facilitate a fast matrix vector multiplication with
     common subexpression eliminated. In compressed Taylor
@@ -373,7 +371,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         :param order: order of the expansion
         :param dim: number of dimensions
         """
-        super(LinearPDEBasedExpansionTermsWrangler, self).__init__(order, dim,
+        super().__init__(order, dim,
                 max_mi)
 
     def get_coefficient_identifiers(self):
@@ -410,7 +408,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
     def get_pde_as_diff_op(self):
         r"""
-        Returns the PDE as a :class:`sumpy.expansion.diff_op.DifferentialOperator`
+        Returns the PDE as a :class:`sumpy.expansion.diff_op.LinearPDESystemOperator`
         object `L` where `L(u) = 0` is the PDE.
         """
 
@@ -418,8 +416,6 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
     @memoize_method
     def get_stored_ids_and_unscaled_projection_matrix(self):
-        from six import iteritems
-
         from pytools import ProcessLogger
         plog = ProcessLogger(logger, "compute PDE for Taylor coefficients")
 
@@ -427,7 +423,9 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         coeff_ident_enumerate_dict = {tuple(mi): i for
                                             (i, mi) in enumerate(mis)}
 
-        pde_dict = self.get_pde_as_diff_op().mi_to_coeff
+        diff_op = self.get_pde_as_diff_op()
+        assert len(diff_op.eqs) == 1
+        pde_dict = {k.mi: v for k, v in diff_op.eqs[0].items()}
         for ident in pde_dict.keys():
             if ident not in coeff_ident_enumerate_dict:
                 # Order of the expansion is less than the order of the PDE.
@@ -472,7 +470,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             # eg: u_xx + u_yy + u_zz is represented as
             # [((2, 0, 0), 1), ((0, 2, 0), 1), ((0, 0, 2), 1)]
             assignment = []
-            for other_mi, coeff in iteritems(pde_dict):
+            for other_mi, coeff in pde_dict.items():
                 j = coeff_ident_enumerate_dict[add_mi(other_mi, diff)]
                 if i == j:
                     # Skip the u_zz part here.
@@ -547,7 +545,7 @@ class LaplaceExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
     init_arg_names = ("order", "dim", "max_mi")
 
     def __init__(self, order, dim, max_mi=None):
-        super(LaplaceExpansionTermsWrangler, self).__init__(order=order, dim=dim,
+        super().__init__(order=order, dim=dim,
             max_mi=max_mi)
 
     def get_pde_as_diff_op(self):
@@ -561,7 +559,7 @@ class HelmholtzExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
 
     def __init__(self, order, dim, helmholtz_k_name, max_mi=None):
         self.helmholtz_k_name = helmholtz_k_name
-        super(HelmholtzExpansionTermsWrangler, self).__init__(order=order, dim=dim,
+        super().__init__(order=order, dim=dim,
             max_mi=max_mi)
 
     def get_pde_as_diff_op(self, **kwargs):
@@ -575,7 +573,7 @@ class BiharmonicExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
     init_arg_names = ("order", "dim", "max_mi")
 
     def __init__(self, order, dim, max_mi=None):
-        super(BiharmonicExpansionTermsWrangler, self).__init__(order=order, dim=dim,
+        super().__init__(order=order, dim=dim,
             max_mi=max_mi)
 
     def get_pde_as_diff_op(self, **kwargs):
@@ -586,7 +584,7 @@ class BiharmonicExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
 
 # {{{ volume taylor
 
-class VolumeTaylorExpansionBase(object):
+class VolumeTaylorExpansionBase:
 
     @classmethod
     def get_or_make_expansion_terms_wrangler(cls, *key):
@@ -620,8 +618,8 @@ class VolumeTaylorExpansionBase(object):
     @property
     @memoize_method
     def _storage_loc_dict(self):
-        return dict((i, idx) for idx, i in
-                    enumerate(self.get_coefficient_identifiers()))
+        return {i: idx for idx, i in
+                    enumerate(self.get_coefficient_identifiers())}
 
     def get_storage_index(self, i):
         return self._storage_loc_dict[i]
@@ -672,7 +670,7 @@ class BiharmonicConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
 
 # {{{ expansion factory
 
-class ExpansionFactoryBase(object):
+class ExpansionFactoryBase:
     """An interface
     .. automethod:: get_local_expansion_class
     .. automethod:: get_multipole_expansion_class

@@ -12,7 +12,7 @@ finally:
     version_file.close()
 
 os.environ["AKPYTHON_EXEC_FROM_WITHIN_WITHIN_SETUP_PY"] = "1"
-exec(compile(version_file_contents, "sumpy/version.py", 'exec'), ver_dic)
+exec(compile(version_file_contents, "sumpy/version.py", "exec"), ver_dic)
 
 
 # {{{ capture git revision at install time
@@ -56,7 +56,7 @@ def write_git_revision(package_name):
     git_rev = find_git_revision(dn)
 
     with open(join(dn, package_name, "_git_rev.py"), "w") as outf:
-        outf.write("GIT_REVISION = %s\n" % repr(git_rev))
+        outf.write('GIT_REVISION = "%s"\n' % git_rev)
 
 
 write_git_revision("sumpy")
@@ -71,19 +71,19 @@ setup(name="sumpy",
       Code-generating FMM etc.
       """,
       classifiers=[
-          'Development Status :: 3 - Alpha',
-          'Intended Audience :: Developers',
-          'Intended Audience :: Other Audience',
-          'Intended Audience :: Science/Research',
-          'License :: OSI Approved :: MIT License',
-          'Natural Language :: English',
-          'Programming Language :: Python',
-          'Topic :: Scientific/Engineering',
-          'Topic :: Scientific/Engineering :: Information Analysis',
-          'Topic :: Scientific/Engineering :: Mathematics',
-          'Topic :: Scientific/Engineering :: Visualization',
-          'Topic :: Software Development :: Libraries',
-          'Topic :: Utilities',
+          "Development Status :: 3 - Alpha",
+          "Intended Audience :: Developers",
+          "Intended Audience :: Other Audience",
+          "Intended Audience :: Science/Research",
+          "License :: OSI Approved :: MIT License",
+          "Natural Language :: English",
+          "Programming Language :: Python",
+          "Topic :: Scientific/Engineering",
+          "Topic :: Scientific/Engineering :: Information Analysis",
+          "Topic :: Scientific/Engineering :: Mathematics",
+          "Topic :: Scientific/Engineering :: Visualization",
+          "Topic :: Software Development :: Libraries",
+          "Topic :: Utilities",
           ],
 
       author="Andreas Kloeckner",
@@ -97,7 +97,6 @@ setup(name="sumpy",
           "loo.py>=2017.2",
           "boxtree>=2018.1",
           "pytest>=2.3",
-          "six",
           "pyrsistent>=0.16.0",
 
           # If this causes issues, see:

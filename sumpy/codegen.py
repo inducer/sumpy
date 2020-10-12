@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import, print_function
-
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -22,14 +20,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from six.moves import range
 
 import numpy as np
 import pyopencl as cl
 import pyopencl.tools  # noqa
 import loopy as lp
 
-import six
 import re
 
 from pymbolic.mapper import IdentityMapper, WalkMapper, CSECachingMapperMixin
@@ -81,15 +77,15 @@ class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
 
 def make_one_step_subst(assignments):
     assignments = dict(assignments)
-    unwanted_vars = set(six.iterkeys(assignments))
+    unwanted_vars = set(assignments.keys())
 
     # Ensure no re-assignments.
     assert len(unwanted_vars) == len(assignments)
 
     from loopy.symbolic import get_dependencies
-    unwanted_deps = dict(
-        (name, get_dependencies(value) & unwanted_vars)
-        for name, value in six.iteritems(assignments))
+    unwanted_deps = {
+        name: get_dependencies(value) & unwanted_vars
+        for name, value in assignments.items()}
 
     # {{{ compute substitution order
 
@@ -323,7 +319,7 @@ def bessel_mangler(kernel, identifier, arg_dtypes):
         return None
 
 
-class BesselGetter(object):
+class BesselGetter:
     def __init__(self, bessel_j_arg_to_top_order):
         self.bessel_j_arg_to_top_order = bessel_j_arg_to_top_order
         self.cse_cache = {}

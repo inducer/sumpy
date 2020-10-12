@@ -1,5 +1,3 @@
-from __future__ import division
-from __future__ import absolute_import
 import pyopencl as cl
 import numpy as np
 import numpy.linalg as la
@@ -230,7 +228,6 @@ def draw_pot_figure(aspect_ratio,
         # }}}
     else:
         # {{{ 3D plots
-
 
         plotval_vol = vol_pot.real
         plotval_c = curve_pot.real

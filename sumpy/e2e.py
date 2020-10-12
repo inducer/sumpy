@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import
-
 __copyright__ = "Copyright (C) 2013 Andreas Kloeckner"
 
 __license__ = """
@@ -21,9 +19,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
-import six
-from six.moves import range
 
 import numpy as np
 import loopy as lp
@@ -117,8 +112,8 @@ class E2EBase(KernelCacheWrapper):
 
         from sumpy.codegen import to_loopy_insns
         return to_loopy_insns(
-                six.iteritems(sac.assignments),
-                vector_names=set(["d"]),
+                sac.assignments.items(),
+                vector_names={"d"},
                 pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
                 retain_names=tgt_coeff_names,
                 complex_dtype=np.complex128  # FIXME

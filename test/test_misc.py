@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import, print_function
-
 __copyright__ = "Copyright (C) 2017 Andreas Kloeckner"
 
 __license__ = """
@@ -36,6 +34,8 @@ from pytools import Record
 
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel,
         BiharmonicKernel, YukawaKernel)
+from sumpy.expansion.diff_op import (make_identity_diff_op, gradient,
+        divergence, laplacian, concat, as_scalar_pde, curl, diff)
 
 
 # {{{ pde check for kernels
@@ -306,6 +306,91 @@ def test_cse_matvec():
     expected_result = m.T @ vec
     actual_result = op.transpose_matvec(vec)
     assert np.allclose(expected_result, actual_result)
+
+
+def test_diff_op_stokes():
+    from sumpy.symbolic import symbols, Function
+    diff_op = make_identity_diff_op(3, 4)
+    u = diff_op[:3]
+    p = diff_op[3]
+    pde = concat(laplacian(u) - gradient(p), divergence(u))
+
+    actual_output = pde.to_sym()
+    x, y, z = syms = symbols("x0, x1, x2")
+    funcs = symbols("f0, f1, f2, f3", cls=Function)
+    u, v, w, p = [f(*syms) for f in funcs]
+
+    eq1 = u.diff(x, x) + u.diff(y, y) + u.diff(z, z) - p.diff(x)
+    eq2 = v.diff(x, x) + v.diff(y, y) + v.diff(z, z) - p.diff(y)
+    eq3 = w.diff(x, x) + w.diff(y, y) + w.diff(z, z) - p.diff(z)
+    eq4 = u.diff(x) + v.diff(y) + w.diff(z)
+
+    expected_output = [eq1, eq2, eq3, eq4]
+
+    assert expected_output == actual_output
+
+
+def test_as_scalar_pde_stokes():
+    diff_op = make_identity_diff_op(3, 4)
+    u = diff_op[:3]
+    p = diff_op[3]
+    pde = concat(laplacian(u) - gradient(p), divergence(u))
+
+    # velocity components in Stokes should satisfy Biharmonic
+    for i in range(3):
+        print(as_scalar_pde(pde, i))
+        print(laplacian(laplacian(u[i])))
+        assert as_scalar_pde(pde, i) == laplacian(laplacian(u[0]))
+
+    # pressure should satisfy Laplace
+    assert as_scalar_pde(pde, 3) == laplacian(u[0])
+
+
+def test_as_scalar_pde_maxwell():
+    from sumpy.symbolic import symbols
+    op = make_identity_diff_op(3, 6, time_dependent=True)
+    E = op[:3]  # noqa: N806
+    B = op[3:]  # noqa: N806
+    mu, epsilon = symbols("mu, epsilon")
+    t = (0, 0, 0, 1)
+
+    pde = concat(curl(E) + diff(B, t),  curl(B) - mu*epsilon*diff(E, t),
+                 divergence(E), divergence(B))
+    as_scalar_pde(pde, 3)
+
+    for i in range(6):
+        assert as_scalar_pde(pde, i) == \
+            -1/(mu*epsilon)*laplacian(op[0]) + diff(diff(op[0], t), t)
+
+
+def test_as_scalar_pde_elasticity():
+
+    # Ref: https://doi.org/10.1006/jcph.1996.0102
+
+    diff_op = make_identity_diff_op(2, 5)
+    sigma_x = diff_op[0]
+    sigma_y = diff_op[1]
+    tau = diff_op[2]
+    u = diff_op[3]
+    v = diff_op[4]
+
+    # Use numeric values as the expressions grow exponentially large otherwise
+    lam, mu = 2, 3
+
+    x = (1, 0)
+    y = (0, 1)
+
+    exprs = [
+        diff(sigma_x, x) + diff(tau, y),
+        diff(tau, x) + diff(sigma_y, y),
+        sigma_x - (lam + 2*mu)*diff(u, x) - lam*diff(v, y),
+        sigma_y - (lam + 2*mu)*diff(v, y) - lam*diff(u, x),
+        tau - mu*(diff(u, y) + diff(v, x)),
+    ]
+
+    pde = concat(*exprs)
+    for i in range(5):
+        assert as_scalar_pde(pde, i) == laplacian(laplacian(diff_op[0]))
 
 
 # You can test individual routines by typing

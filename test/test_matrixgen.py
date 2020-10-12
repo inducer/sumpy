@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import, print_function
-
 __copyright__ = "Copyright (C) 2018 Alexandru Fikl"
 
 __license__ = """
@@ -96,8 +94,8 @@ def _build_block_index(queue, nnodes, nblks, factor):
                             cl.array.to_device(queue, ranges_).with_queue(None))
 
 
-@pytest.mark.parametrize('factor', [1.0, 0.6])
-@pytest.mark.parametrize('lpot_id', [1, 2])
+@pytest.mark.parametrize("factor", [1.0, 0.6])
+@pytest.mark.parametrize("lpot_id", [1, 2])
 def test_qbx_direct(ctx_factory, factor, lpot_id):
     logging.basicConfig(level=logging.INFO)
 
@@ -181,7 +179,7 @@ def test_qbx_direct(ctx_factory, factor, lpot_id):
 
 @pytest.mark.parametrize("exclude_self", [True, False])
 @pytest.mark.parametrize("factor", [1.0, 0.6])
-@pytest.mark.parametrize('lpot_id', [1, 2])
+@pytest.mark.parametrize("lpot_id", [1, 2])
 def test_p2p_direct(ctx_factory, exclude_self, factor, lpot_id):
     logging.basicConfig(level=logging.INFO)
 
@@ -258,7 +256,7 @@ def test_p2p_direct(ctx_factory, exclude_self, factor, lpot_id):
 
 
 # You can test individual routines by typing
-# $ python test_kernels.py 'test_p2p(cl.create_some_context)'
+# $ python test_kernels.py "test_p2p(cl.create_some_context)"
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

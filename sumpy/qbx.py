@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import
-
 __copyright__ = """
 Copyright (C) 2012 Andreas Kloeckner
 Copyright (C) 2018 Alexandru Fikl
@@ -26,8 +24,6 @@ THE SOFTWARE.
 """
 
 
-import six
-from six.moves import range
 import numpy as np
 import loopy as lp
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
@@ -124,8 +120,8 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
 
         from sumpy.codegen import to_loopy_insns
         loopy_insns = to_loopy_insns(
-                six.iteritems(sac.assignments),
-                vector_names=set(["a", "b"]),
+                sac.assignments.items(),
+                vector_names={"a", "b"},
                 pymbolic_expr_maps=[
                     expn.kernel.get_code_transformer() for expn in self.expansions],
                 retain_names=result_names,
@@ -534,7 +530,7 @@ def find_jump_term(kernel, arg_provider):
 
 # {{{ symbolic argument provider
 
-class _JumpTermSymbolicArgumentProvider(object):
+class _JumpTermSymbolicArgumentProvider:
     """This class answers requests by :func:`find_jump_term` for symbolic values
     of quantities needed for the computation of the jump terms and tracks what
     data was requested. This tracking allows assembling the argument list of the

@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import
-
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -22,7 +20,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from six.moves import range, zip
 import sumpy.symbolic as sym  # noqa
 
 from sumpy.symbolic import vector_xreplace
@@ -163,11 +160,11 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
         from sumpy.tools import mi_factorial
 
-        src_mi_to_index = dict((mi, i) for i, mi in enumerate(
-            src_expansion.get_coefficient_identifiers()))
+        src_mi_to_index = {mi: i for i, mi in enumerate(
+            src_expansion.get_coefficient_identifiers())}
 
-        tgt_mi_to_index = dict((mi, i) for i, mi in enumerate(
-            self.get_full_coefficient_identifiers()))
+        tgt_mi_to_index = {mi: i for i, mi in enumerate(
+            self.get_full_coefficient_identifiers())}
 
         # This algorithm uses the observation that M2M coefficients
         # have the following form in 2D
@@ -423,7 +420,7 @@ class H2DMultipoleExpansion(_HankelBased2DMultipoleExpansion):
         assert (isinstance(kernel.get_base_kernel(), HelmholtzKernel)
                 and kernel.dim == 2)
 
-        super(H2DMultipoleExpansion, self).__init__(
+        super().__init__(
                 kernel, order, use_rscale=use_rscale)
 
     def get_bessel_arg_scaling(self):
@@ -436,7 +433,7 @@ class Y2DMultipoleExpansion(_HankelBased2DMultipoleExpansion):
         assert (isinstance(kernel.get_base_kernel(), YukawaKernel)
                 and kernel.dim == 2)
 
-        super(Y2DMultipoleExpansion, self).__init__(
+        super().__init__(
                 kernel, order, use_rscale=use_rscale)
 
     def get_bessel_arg_scaling(self):
