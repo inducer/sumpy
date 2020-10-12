@@ -235,15 +235,15 @@ class ExpansionTermsWrangler:
         # for which it is orthogonal to and the constant `c` described above
         hyperplanes = []
         if isinstance(self, LinearPDEBasedExpansionTermsWrangler):
-            pde_dict = self.get_pde_as_diff_op().mi_to_coeff
+            pde_dict = self.get_pde_as_diff_op().eqs[0]
 
             for ident in pde_dict.keys():
                 # The order of the expansion less than the order of the PDE.
                 # Treat as if full expansion.
-                if ident not in mi_to_index:
+                if ident.mi not in mi_to_index:
                     break
             else:
-                max_mi_idx = max(mi_to_index[ident] for
+                max_mi_idx = max(mi_to_index[ident.mi] for
                                  ident in pde_dict.keys())
                 max_mi = mis[max_mi_idx]
                 for d in range(self.dim):
