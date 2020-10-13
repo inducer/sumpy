@@ -131,14 +131,14 @@ class ToyContext:
         from sumpy import P2EFromSingleBox
         return P2EFromSingleBox(self.cl_context,
                 self.mpole_expn_class(self.no_target_deriv_kernel, order),
-                [self.kernel])
+                kernels=[self.kernel])
 
     @memoize_method
     def get_p2l(self, order):
         from sumpy import P2EFromSingleBox
         return P2EFromSingleBox(self.cl_context,
                 self.local_expn_class(self.no_target_deriv_kernel, order),
-                [self.kernel])
+                kernels=[self.kernel])
 
     @memoize_method
     def get_m2p(self, order):
@@ -197,7 +197,7 @@ def _p2e(psource, center, rscale, order, p2e, expn_class, expn_kwargs):
             box_source_counts_nonchild=box_source_counts_nonchild,
             centers=centers,
             sources=psource.points,
-            strengths=psource.weights,
+            strengths=(psource.weights,),
             rscale=rscale,
             nboxes=1,
             tgt_base_ibox=0,
