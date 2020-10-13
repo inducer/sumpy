@@ -173,7 +173,7 @@ def test_p2e2p(ctx_factory, base_knl, expn_class, order, with_source_derivative)
     expn = expn_class(knl, order=order)
 
     from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P
-    p2e = P2EFromSingleBox(ctx, expn, out_kernels)
+    p2e = P2EFromSingleBox(ctx, expn, [knl])
     e2p = E2PFromSingleBox(ctx, expn, out_kernels)
     p2p = P2P(ctx, out_kernels, exclude_self=False)
 
