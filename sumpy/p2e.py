@@ -106,9 +106,8 @@ class P2EBase(KernelCacheWrapper):
                 self.expansion.coefficients_from_source(avec, None, rscale,
                      sac, kernel=kernel)
             ):
-                coeff_names.append(
-                    sac.assign_unique(f"coeff{i}_{knl_idx}", coeff_i)
-                )
+                sac.add_assignment(f"coeff{i}_{knl_idx}", coeff_i)
+                coeff_names.append(f"coeff{i}_{knl_idx}")
 
         sac.run_global_cse()
 
@@ -151,8 +150,6 @@ class P2EFromSingleBox(P2EBase):
 
                     for isrc
                         <> a[idim] = center[idim] - sources[idim, isrc] {dup=idim}
-
-                        <> strength = strengths[0, isrc]
                         """] + self.get_loopy_instructions() + ["""
                     end
                     """] + [f"""
@@ -271,15 +268,13 @@ class P2EFromCSR(P2EBase):
                         for isrc
                             <> a[idim] = center[idim] - sources[idim, isrc] \
                                     {dup=idim}
-
-                            <> strength = strengths[0, isrc]
                             """] + self.get_loopy_instructions() + ["""
                         end
                     end
                     """] + ["""
                     tgt_expansions[tgt_ibox - tgt_base_ibox, {coeffidx}] = \
                             simul_reduce(sum, (isrc_box, isrc),
-                                strength*coeff{coeffidx}_0) \
+                                {self.get_result_expr(coeffidx)}) \
                             {{id_prefix=write_expn}}
                     """.format(coeffidx=i) for i in range(ncoeffs)] + ["""
                 end
