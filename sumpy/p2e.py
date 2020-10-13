@@ -271,12 +271,12 @@ class P2EFromCSR(P2EBase):
                             """] + self.get_loopy_instructions() + ["""
                         end
                     end
-                    """] + ["""
+                    """] + [f"""
                     tgt_expansions[tgt_ibox - tgt_base_ibox, {coeffidx}] = \
                             simul_reduce(sum, (isrc_box, isrc),
                                 {self.get_result_expr(coeffidx)}) \
                             {{id_prefix=write_expn}}
-                    """.format(coeffidx=i) for i in range(ncoeffs)] + ["""
+                    """ for coeffidx in range(ncoeffs)] + ["""
                 end
                 """],
                 arguments,
