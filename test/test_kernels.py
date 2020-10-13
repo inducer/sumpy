@@ -229,7 +229,7 @@ def test_p2e2p(ctx_factory, base_knl, expn_class, order, with_source_derivative)
                 box_source_counts_nonchild=box_source_counts_nonchild,
                 centers=centers,
                 sources=sources,
-                strengths=strengths,
+                strengths=(strengths,),
                 nboxes=1,
                 tgt_base_ibox=0,
                 rscale=rscale,
@@ -495,7 +495,7 @@ def test_translations(ctx_factory, knl, local_expn_class, mpole_expn_class):
                 box_source_counts_nonchild=p2m_box_source_counts_nonchild,
                 centers=centers,
                 sources=sources,
-                strengths=strengths,
+                strengths=(strengths,),
                 nboxes=nboxes,
                 rscale=m1_rscale,
 

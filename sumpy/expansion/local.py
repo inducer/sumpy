@@ -55,18 +55,21 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
     def get_coefficient_identifiers(self):
         return list(range(self.order+1))
 
-    def coefficients_from_source(self, avec, bvec, rscale, sac=None):
+    def coefficients_from_source(self, avec, bvec, rscale, sac=None, kernel=None):
         # no point in heeding rscale here--just ignore it
         if bvec is None:
             raise RuntimeError("cannot use line-Taylor expansions in a setting "
                     "where the center-target vector is not known at coefficient "
                     "formation")
 
+        if kernel is None:
+            kernel = self.kernel
+
         tau = sym.Symbol("tau")
 
         avec_line = avec + tau*bvec
 
-        line_kernel = self.kernel.get_expression(avec_line)
+        line_kernel = kernel.get_expression(avec_line)
 
         from sumpy.symbolic import USE_SYMENGINE
 
@@ -75,8 +78,8 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
             deriv_taker = MiDerivativeTaker(line_kernel, (tau,))
 
             return [my_syntactic_subs(
-                        self.kernel.postprocess_at_target(
-                            self.kernel.postprocess_at_source(
+                        kernel.postprocess_at_target(
+                            kernel.postprocess_at_source(
                                 deriv_taker.diff(i),
                                 avec), bvec),
                         {tau: 0})
@@ -89,8 +92,8 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
             #
             # See also https://gitlab.tiker.net/inducer/pytential/merge_requests/12
 
-            return [self.kernel.postprocess_at_target(
-                        self.kernel.postprocess_at_source(
+            return [kernel.postprocess_at_target(
+                        kernel.postprocess_at_source(
                             line_kernel.diff("tau", i), avec),
                         bvec)
                     .subs("tau", 0)
@@ -113,10 +116,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
     Coefficients represent derivative values of the kernel.
     """
 
-    def coefficients_from_source(self, avec, bvec, rscale, sac=None):
+    def coefficients_from_source(self, avec, bvec, rscale, sac=None, kernel=None):
         from sumpy.tools import MiDerivativeTaker
-        ppkernel = self.kernel.postprocess_at_source(
-                self.kernel.get_expression(avec), avec)
+        if kernel is None:
+            kernel = self.kernel
+        ppkernel = kernel.postprocess_at_source(kernel.get_expression(avec), avec)
 
         taker = MiDerivativeTaker(ppkernel, avec)
         return [
@@ -372,9 +376,11 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
     def get_coefficient_identifiers(self):
         return list(range(-self.order, self.order+1))
 
-    def coefficients_from_source(self, avec, bvec, rscale, sac=None):
+    def coefficients_from_source(self, avec, bvec, rscale, sac=None, kernel=None):
         if not self.use_rscale:
             rscale = 1
+        if kernel is None:
+            kernel = self.kernel
 
         from sumpy.symbolic import sym_real_norm_2
         hankel_1 = sym.Function("hankel_1")
@@ -384,7 +390,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         # The coordinates are negated since avec points from source to center.
         source_angle_rel_center = sym.atan2(-avec[1], -avec[0])
         avec_len = sym_real_norm_2(avec)
-        return [self.kernel.postprocess_at_source(
+        return [kernel.postprocess_at_source(
                     hankel_1(c, arg_scale * avec_len)
                     * rscale ** abs(c)
                     * sym.exp(sym.I * c * source_angle_rel_center), avec)
