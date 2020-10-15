@@ -82,7 +82,9 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
         sac = SymbolicAssignmentCollection()
 
         coeff_names = []
+        code_transformers = [self.expansion.get_code_transformer()]
         for knl_idx, kernel in enumerate(self.kernels):
+            code_transformers.append(kernel.get_code_transformer())
             for i, coeff_i in enumerate(
                 self.expansion.coefficients_from_source(avec, None, rscale,
                      sac, kernel=kernel)
@@ -96,7 +98,7 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
         return to_loopy_insns(
                 sac.assignments.items(),
                 vector_names={"a"},
-                pymbolic_expr_maps=[self.expansion.get_code_transformer()],
+                pymbolic_expr_maps=code_transformers,
                 retain_names=coeff_names,
                 complex_dtype=np.complex128  # FIXME
                 )
@@ -163,7 +165,7 @@ class P2EFromSingleBox(P2EBase):
                     lp.ValueArg("nboxes,aligned_nboxes,tgt_base_ibox", np.int32),
                     lp.ValueArg("nsources", np.int32),
                     "..."
-                ] + gather_loopy_source_arguments([self.expansion]),
+                ] + gather_loopy_source_arguments(self.kernels + [self.expansion]),
                 name=self.name,
                 assumptions="nsrc_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
@@ -233,7 +235,7 @@ class P2EFromCSR(P2EBase):
                         np.int32),
                     lp.ValueArg("nsources", np.int32),
                     "..."
-                ] + gather_loopy_source_arguments([self.expansion]))
+                ] + gather_loopy_source_arguments(self.kernels + [self.expansion]))
 
         loopy_knl = lp.make_kernel(
                 [
