@@ -104,7 +104,8 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
                 )
 
     def get_cache_key(self):
-        return (type(self).__name__, self.name, self.expansion)
+        return (type(self).__name__, self.name, self.expansion, tuple(self.kernels),
+                tuple(self.strength_usage))
 
     def get_result_expr(self, icoeff):
         expr = 0
