@@ -372,7 +372,7 @@ class SumpyExpansionWrangler:
                     self.queue,
                     source_boxes=source_boxes[start:stop],
                     centers=self.tree.box_centers,
-                    strengths=(src_weights,),
+                    strengths=src_weights,
                     tgt_expansions=mpoles_view,
                     tgt_base_ibox=level_start_ibox,
 
@@ -457,7 +457,7 @@ class SumpyExpansionWrangler:
                 target_boxes=target_boxes,
                 source_box_starts=source_box_starts,
                 source_box_lists=source_box_lists,
-                strength=(src_weights,),
+                strength=src_weights,
                 result=pot,
 
                 **kwargs)
@@ -588,7 +588,7 @@ class SumpyExpansionWrangler:
                     source_box_starts=starts[start:stop+1],
                     source_box_lists=lists,
                     centers=self.tree.box_centers,
-                    strengths=(src_weights,),
+                    strengths=src_weights,
 
                     tgt_expansions=target_local_exps_view,
                     tgt_base_ibox=target_level_start_ibox,

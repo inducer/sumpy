@@ -210,7 +210,8 @@ def test_p2e_multiple(ctx_factory, base_knl, expn_class):
             out_host=True, **extra_source_kwargs)
         expected_result += mpoles
 
-    assert np.allclose(actual_result, expected_result)
+    norm = la.norm(actual_result - expected_result)/la.norm(expected_result)
+    assert norm < 1e-12
 
 
 @pytest.mark.parametrize("order", [4])
