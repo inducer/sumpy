@@ -227,8 +227,8 @@ class ExpansionTermsWrangler:
         to which the hyperplane is orthogonal. The second element in the tuple
         is a list of multi-indices in the hyperplane corresponding to the stored
         coefficients.
-        
-        E.g. for Laplace 3D order 4, the result could be:: 
+
+        E.g. for Laplace 3D order 4, the result could be::
         [
           (2, [(0, 0, 0), (1, 0, 0), (2, 0, 0), (3, 0, 0), (0, 1, 0), (1, 1, 0),
                (2, 1, 0), (0, 2, 0), (1, 2, 0), (0, 3, 0)]),
