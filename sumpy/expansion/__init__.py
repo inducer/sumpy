@@ -215,17 +215,25 @@ class ExpansionTermsWrangler:
         This splits the coefficients into :math:`O(p)` number of disjoint sets
         so that for each set, all the identifiers have the form,
         :math:`(m_1, m_2, ..., m_{j-1}, c, m_{j+1}, ... , m_{dim})`
-        where :math:`c` is a constant. Geometrically, each set is a hyperplane
-        which is orthogonal to one of the main axis.
+        where :math:`c` is a constant. Geometrically, each set is an axis-aligned
+        hyperplane.
 
         If this is an instance of LinearPDEBasedExpansionTermsWrangler,
         then the number of sets will be :math:`O(1)`.
 
-        Returns an object of type List[Tuple[int, List[Tuple[int]]]] where
-        each element in the outer list represents the hyperplane. Each element
-        is a 2-tuple where the first element in the tuple is the axis number d
-        to which the hyperplane is orthogonal to. Second element in the tuple
-        is a list of multi-indices in the hyperplane.
+        In the returned object ``[(axis, [mi_1, mi2, ...]), ...]``,
+        each element in the outer list represents a hyperplane. Each element
+        is a 2-tuple where the first element in the tuple is the axis number *axis*
+        to which the hyperplane is orthogonal. The second element in the tuple
+        is a list of multi-indices in the hyperplane corresponding to the stored
+        coefficients.
+        
+        E.g. for Laplace 3D order 4, the result could be:: 
+        [
+          (2, [(0, 0, 0), (1, 0, 0), (2, 0, 0), (3, 0, 0), (0, 1, 0), (1, 1, 0),
+               (2, 1, 0), (0, 2, 0), (1, 2, 0), (0, 3, 0)]),
+          (2, [(0, 0, 1), (1, 0, 1), (2, 0, 1), (0, 1, 1), (1, 1, 1), (0, 2, 1)]),
+        ]
         """
         mis = self.get_full_coefficient_identifiers()
         mi_to_index = dict((tuple(mi), i) for
