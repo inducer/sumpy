@@ -257,11 +257,13 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         #
         # $T_{m, n} = \sum_{i\le p-m, j\le p-n-m-i} C_{i+m, j+n}
         #             d_x^i d_y^j \binom{i+m}{i} \binom{n+j}{j}$
-        # and can be rewritten as follows.
+        # where $C$ denotes a coefficient of the local expansion around the old
+        # center and $T$ is the translated coefficient.
+        # $T$ can be rewritten as follows.
         #
         # Let $Y1_{m, n} = \sum_{j\le p-m-n} C_{m, j+n} d_y^j \binom{j+n}{j}$.
         #
-        # Then, $T_{m, n} = \sum_{i\le p-m} Y1_{i+m, j} d_x^i \binom{i+m}{i}$.
+        # Then, $T_{m, n} = \sum_{i\le p-m} Y1_{i+m, n} d_x^i \binom{i+m}{i}$.
         #
         # Expanding this to 3D,
         # $T_{m, n, l} = \sum_{i \le p-m, j \le p-n-m-i, k \le p-n-m-l-i-j}
@@ -276,18 +278,18 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         # Then,
         # $T_{m, n, l} = \sum_{i\le p-m} Y2_{i+m, n, l} d_x^i \binom{i+m}{m}$.
         #
-        # Cost of the above algorithm is O(p^4) for full since each value needs
-        # O(p) work and there are O(p^3) values for T, Y1, Y2.
+        # Cost of the above algorithm is $O(p^4)$ for full since each value needs
+        # $O(p)$ work and there are $O(p^3)$ values for $T, Y1, Y2$.
         # For a hyperplane of coefficients with normal direction `l` fixed,
-        # we need only O(p^2) of $T, Y1, Y2$ and since there are only a constant
+        # we need only $O(p^2)$ of $T, Y1, Y2$ and since there are only a constant
         # number of coefficient hyperplanes in compressed, the algorithm is
-        # O(p^3)
+        # $O(p^3)$
 
-        # We start by iterating through all the axis which is at most 3 iterations
-        # This is one iteration for full because all the O(p) hyperplanes are
-        # parallel to each other.
-        # This is one for compressed with elliptic PDEs because the the O(1)
-        # hyperplanes are parallel to each other
+        # We start by iterating through all the axis which is at most 3 iterations.
+        # Number of iterations is one for full because all the $O(p)$ hyperplanes
+        # are parallel to each other.
+        # Number of iterations is one for compressed with elliptic PDEs because the
+        # $O(1)$ hyperplanes are parallel to each other
         for normal_dir in set(d for d, _ in tgt_split):
             # Use the normal_dir as the first dimension to vary so that the below
             # algorithm is O(p^{d+1}) for full and O(p^{d}) for compressed
