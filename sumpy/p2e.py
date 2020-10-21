@@ -57,16 +57,22 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
           number of strength arrays that need to be passed.
           Default: all kernels use the same strength.
         """
-        if kernels is None:
-            kernels = [expansion.kernel]
-
-        KernelComputation.__init__(self, ctx=ctx, kernels=kernels,
-                strength_usage=strength_usage, value_dtypes=None,
-                name=name, options=options, device=device)
-
-        from sumpy.kernel import TargetDerivativeRemover
+        from sumpy.kernel import TargetDerivativeRemover, SourceDerivativeRemover
         expansion = expansion.with_kernel(
                 TargetDerivativeRemover()(expansion.kernel))
+        expansion = expansion.with_kernel(
+                SourceDerivativeRemover()(expansion.kernel))
+
+        if kernels is None:
+            in_kernels = [expansion.kernel]
+        else:
+            in_kernels = kernels
+            for knl in in_kernels:
+                assert knl.get_base_kernel() == expansion.kernel
+
+        KernelComputation.__init__(self, ctx=ctx, in_kernels=in_kernels,
+            out_kernels=[], strength_usage=strength_usage, value_dtypes=None,
+            name=name, options=options, device=device)
 
         self.expansion = expansion
         self.dim = expansion.dim
@@ -83,7 +89,7 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
 
         coeff_names = []
         code_transformers = [self.expansion.get_code_transformer()]
-        for knl_idx, kernel in enumerate(self.kernels):
+        for knl_idx, kernel in enumerate(self.in_kernels):
             code_transformers.append(kernel.get_code_transformer())
             for i, coeff_i in enumerate(
                 self.expansion.coefficients_from_source(avec, None, rscale,
@@ -104,13 +110,13 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
                 )
 
     def get_cache_key(self):
-        return (type(self).__name__, self.name, self.expansion, tuple(self.kernels),
+        return (type(self).__name__, self.name, self.expansion, tuple(self.in_kernels),
                 tuple(self.strength_usage))
 
     def get_result_expr(self, icoeff):
         expr = 0
         isrc = pymbolic.var("isrc")
-        for i in range(len(self.kernels)):
+        for i in range(len(self.in_kernels)):
             strength_num = self.strength_usage[i]
             expr += pymbolic.var(f"coeff{icoeff}_{i}") * \
                         pymbolic.var("strengths")[strength_num, isrc]
@@ -166,7 +172,7 @@ class P2EFromSingleBox(P2EBase):
                     lp.ValueArg("nboxes,aligned_nboxes,tgt_base_ibox", np.int32),
                     lp.ValueArg("nsources", np.int32),
                     "..."
-                ] + gather_loopy_source_arguments(self.kernels + [self.expansion]),
+                ] + gather_loopy_source_arguments(self.in_kernels + [self.expansion]),
                 name=self.name,
                 assumptions="nsrc_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
@@ -236,7 +242,7 @@ class P2EFromCSR(P2EBase):
                         np.int32),
                     lp.ValueArg("nsources", np.int32),
                     "..."
-                ] + gather_loopy_source_arguments(self.kernels + [self.expansion]))
+                ] + gather_loopy_source_arguments(self.in_kernels + [self.expansion]))
 
         loopy_knl = lp.make_kernel(
                 [

@@ -52,9 +52,9 @@ Particle-to-particle
 # {{{ p2p base class
 
 class P2PBase(KernelComputation, KernelCacheWrapper):
-    def __init__(self, ctx, kernels, exclude_self, strength_usage=None,
+    def __init__(self, ctx, out_kernels, exclude_self, strength_usage=None,
             value_dtypes=None,
-            options=[], name=None, device=None):
+            options=[], name=None, device=None, in_kernels=None):
         """
         :arg kernels: list of :class:`sumpy.kernel.Kernel` instances
         :arg strength_usage: A list of integers indicating which expression
@@ -62,18 +62,37 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
           number of strength arrays that need to be passed.
           Default: all kernels use the same strength.
         """
-        KernelComputation.__init__(self, ctx, kernels, strength_usage,
-                value_dtypes,
-                name, options, device)
+        from pytools import single_valued
+        from sumpy.kernels import (TargetDerivativeRemover,
+                SourceDerivativeRemover)
+        tdr = TargetDerivativeRemover()
+        sdr = SourceDerivativeRemover()
+
+        if in_kernels is None:
+            in_kernels = [single_valued(tdr(knl) for knl in out_kernels)]
+            out_kernels = [sdr(knl) for knl in out_kernels]
+        else:
+            for knl in in_kernels:
+                assert(tdr(knl) == knl)
+            for knl in out_kernels:
+                assert(sdr(knl) == knl)
+
+        base_in_kernel = single_valued(sdr(knl) for knl in in_kernels)
+        base_out_kernel = single_valued(tdr(knl) for knl in out_kernels)
+        assert base_in_kernel == base_out_kernel
+
+        KernelComputation.__init__(self, ctx, out_kernels, in_kernels,
+                strength_usage, value_dtypes, name, options, device)
 
         self.exclude_self = exclude_self
 
-        from pytools import single_valued
-        self.dim = single_valued(knl.dim for knl in self.kernels)
+        self.dim = single_valued(knl.dim for knl in \
+            list(self.out_kernels) + list(self.in_kernels))
 
     def get_cache_key(self):
-        return (type(self).__name__, tuple(self.kernels), self.exclude_self,
-                tuple(self.strength_usage), tuple(self.value_dtypes))
+        return (type(self).__name__, tuple(self.out_kernels), self.exclude_self,
+                tuple(self.strength_usage), tuple(self.value_dtypes),
+                tuple(self.in_kernels))
 
     def get_loopy_insns_and_result_names(self):
         from sumpy.symbolic import make_sym_vector
@@ -82,15 +101,36 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
 
-        result_names = [
-                sac.assign_unique("knl%d" % i,
-                    knl.postprocess_at_target(
-                        knl.postprocess_at_source(
-                            knl.get_expression(dvec),
-                            dvec),
-                        dvec)
-                    )
-                for i, knl in enumerate(self.kernels)]
+        if len(self.in_kernels) == 1:
+            in_knl = self.in_kernels[0]
+            result_names = []
+            for i, out_knl in enumerate(self.out_kernels):
+                result_names.append(
+                    sac.assign_unique("knl%d" % i,
+                        out_knl.postprocess_at_target(
+                            in_knl.postprocess_at_source(
+                                in_knl.get_expression(dvec),
+                                dvec),
+                            dvec)))
+        else:
+            out_multipliers = get_kernel_scaling_assignments()
+            result_names = []
+            for i, out_knl in enumerate(self.out_kernels):
+                expr_sum = 0
+                for in_knl in enumerate(self.in_kernels):
+                    expr = in_knl.postprocess_at_source(
+                                in_knl.get_expression(dvec),
+                                dvec)
+                    expr *= 
+                expr_sum = out_knl.postprocess_at_target(expr_sum)
+                result_names.append(
+                    sac.assign_unique("knl%d" % i,
+                        out_knl.postprocess_at_target(
+                            in_knl.postprocess_at_source(
+                                in_knl.get_expression(dvec),
+                                dvec),
+                            dvec)))
+                
 
         sac.run_global_cse()
 
@@ -104,6 +144,12 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
                 )
 
         return loopy_insns, result_names
+
+    def get_kernel_scaling_or_not(self, kernel_idx):
+        if len(self.in_kernels) == 1:
+            return f"knl_{kernel_idx}_scaling"
+        else:
+            return 1
 
     def get_strength_or_not(self, isrc, kernel_idx):
         return var("strength").index((self.strength_usage[kernel_idx], isrc))

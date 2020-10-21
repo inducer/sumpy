@@ -60,7 +60,9 @@ class SumpyExpansionWranglerCodeContainer:
     def __init__(self, cl_context,
             multipole_expansion_factory,
             local_expansion_factory,
-            out_kernels, exclude_self=False, use_rscale=None):
+            out_kernels, exclude_self=False, use_rscale=None,
+            strength_usage=None, in_kernels=None,
+        ):
         """
         :arg multipole_expansion_factory: a callable of a single argument (order)
             that returns a multipole expansion.
@@ -68,9 +70,12 @@ class SumpyExpansionWranglerCodeContainer:
             that returns a local expansion.
         :arg out_kernels: a list of output kernels
         :arg exclude_self: whether the self contribution should be excluded
+        :arg strength_usage: passed unchanged to p2l, p2m and p2p.
+        :arg in_kernels: passed unchanged to p2l, p2m and p2p.
         """
         self.multipole_expansion_factory = multipole_expansion_factory
         self.local_expansion_factory = local_expansion_factory
+        self.in_kernels = in_kernels
         self.out_kernels = out_kernels
         self.exclude_self = exclude_self
         self.use_rscale = use_rscale
@@ -93,12 +98,12 @@ class SumpyExpansionWranglerCodeContainer:
     @memoize_method
     def p2m(self, tgt_order):
         return P2EFromSingleBox(self.cl_context,
-                self.multipole_expansion(tgt_order))
+                self.multipole_expansion(tgt_order), strenth_usage=strength_usage)
 
     @memoize_method
     def p2l(self, tgt_order):
         return P2EFromCSR(self.cl_context,
-                self.local_expansion(tgt_order))
+                self.local_expansion(tgt_order), strength_usage=strength_usage)
 
     @memoize_method
     def m2m(self, src_order, tgt_order):
@@ -133,7 +138,8 @@ class SumpyExpansionWranglerCodeContainer:
     @memoize_method
     def p2p(self):
         return P2PFromCSR(self.cl_context, self.out_kernels,
-                          exclude_self=self.exclude_self)
+                          exclude_self=self.exclude_self,
+                          strength_usage=strength_usage)
 
     def get_wrangler(self, queue, tree, dtype, fmm_level_to_order,
             source_extra_kwargs={},
