@@ -82,9 +82,7 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
         sac = SymbolicAssignmentCollection()
 
         coeff_names = []
-        code_transformers = [self.expansion.get_code_transformer()]
         for knl_idx, kernel in enumerate(self.kernels):
-            code_transformers.append(kernel.get_code_transformer())
             for i, coeff_i in enumerate(
                 self.expansion.coefficients_from_source(kernel, avec, None, rscale,
                      sac)
@@ -93,6 +91,9 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
                 coeff_names.append(f"coeff{i}_{knl_idx}")
 
         sac.run_global_cse()
+
+        code_transformers = [self.expansion.get_code_transformer()] \
+            + [kernel.get_code_transformer() for kernel in self.kernels]
 
         from sumpy.codegen import to_loopy_insns
         return to_loopy_insns(
