@@ -119,7 +119,7 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
         isrc = pymbolic.var("isrc")
         return sum(pymbolic.var(f"coeff{icoeff}_{i}")
                     * pymbolic.var("strengths")[self.strength_usage[i], isrc]
-                for i in range(len(self.kernels)))
+                for i in range(len(self.in_kernels)))
 
 # }}}
 
