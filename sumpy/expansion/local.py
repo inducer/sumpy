@@ -285,21 +285,22 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         # number of coefficient hyperplanes in compressed, the algorithm is
         # $O(p^3)$
 
-        # We start by iterating through all the axes which is at most 3 iterations (in <=3D).
+        # We start by iterating through all the axes which is at most 3 iterations
+        # (in <=3D).
         # The number of iterations is one for full because all the $O(p)$ hyperplanes
         # are parallel to each other.
-        # The number of iterations is one for compressed expansions with elliptic PDEs because the
-        # $O(1)$ hyperplanes are parallel to each other.
+        # The number of iterations is one for compressed expansions with
+        # elliptic PDEs because the $O(1)$ hyperplanes are parallel to each other.
         for axis in set(d for d, _ in tgt_split):
             # Use the axis as the first dimension to vary so that the below
             # algorithm is O(p^{d+1}) for full and O(p^{d}) for compressed
             dims = [axis] + list(range(axis)) + \
                     list(range(axis+1, self.dim))
             # Start with source coefficients. Gets updated after each axis.
-            C = src_coeffs   # noqa: N806
+            cur_dim_input_coeffs = src_coeffs   # noqa: N806
             # O(1) iterations
             for d in dims:
-                Y = [0] * len(src_mis)   # noqa: N806
+                cur_dim_output_coeffs = [0] * len(src_mis)
                 # Only O(p^{d-1}) operations are used in compressed
                 # All of them are used in full.
                 for i, s in enumerate(src_mis):
@@ -309,18 +310,20 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                         src_mi[d] += q
                         src_mi = tuple(src_mi)
                         if src_mi in src_mi_to_index:
-                            Y[i] += (dvec[d]/src_rscale) ** q * \
-                                    C[src_mi_to_index[src_mi]] / factorial(q)
+                            cur_dim_output_coeffs[i] += (dvec[d]/src_rscale)**q * \
+                                     cur_dim_input_coeffs[src_mi_to_index[src_mi]] \
+                                     / factorial(q)
                 # Y at the end of the iteration becomes the source coefficients
                 # for the next iteration
-                C = Y        # noqa: N806
+                cur_dim_input_coeffs = cur_dim_output_coeffs
 
             for mi in tgt_mis:
                 # In L2L, source level has same or higher order than target level
                 assert mi in src_mi_to_index
                 # Add to result after scaling
-                result[tgt_mi_to_index[mi]] += Y[src_mi_to_index[mi]] \
-                                                    * rscale_ratio ** sum(mi)
+                result[tgt_mi_to_index[mi]] += \
+                    cur_dim_output_coeffs[src_mi_to_index[mi]] \
+                        * rscale_ratio ** sum(mi)
 
         # {{{ simpler, functionally equivalent code
         if 0:
