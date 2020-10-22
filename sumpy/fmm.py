@@ -351,7 +351,7 @@ class SumpyExpansionWrangler:
 
     def form_multipoles(self,
             level_start_source_box_nrs, source_boxes,
-            src_weights):
+            src_weight_vecs):
         mpoles = self.multipole_expansion_zeros()
 
         kwargs = self.extra_kwargs.copy()
@@ -372,7 +372,7 @@ class SumpyExpansionWrangler:
                     self.queue,
                     source_boxes=source_boxes[start:stop],
                     centers=self.tree.box_centers,
-                    strengths=src_weights,
+                    strengths=src_weight_vecs,
                     tgt_expansions=mpoles_view,
                     tgt_base_ibox=level_start_ibox,
 
@@ -443,7 +443,7 @@ class SumpyExpansionWrangler:
         return (mpoles, SumpyTimingFuture(self.queue, events))
 
     def eval_direct(self, target_boxes, source_box_starts,
-            source_box_lists, src_weights):
+            source_box_lists, src_weight_vecs):
         pot = self.output_zeros()
 
         kwargs = self.extra_kwargs.copy()
@@ -457,7 +457,7 @@ class SumpyExpansionWrangler:
                 target_boxes=target_boxes,
                 source_box_starts=source_box_starts,
                 source_box_lists=source_box_lists,
-                strength=src_weights,
+                strength=src_weight_vecs,
                 result=pot,
 
                 **kwargs)
@@ -563,7 +563,7 @@ class SumpyExpansionWrangler:
 
     def form_locals(self,
             level_start_target_or_target_parent_box_nrs,
-            target_or_target_parent_boxes, starts, lists, src_weights):
+            target_or_target_parent_boxes, starts, lists, src_weight_vecs):
         local_exps = self.local_expansion_zeros()
 
         kwargs = self.extra_kwargs.copy()
@@ -588,7 +588,7 @@ class SumpyExpansionWrangler:
                     source_box_starts=starts[start:stop+1],
                     source_box_lists=lists,
                     centers=self.tree.box_centers,
-                    strengths=src_weights,
+                    strengths=src_weight_vecs,
 
                     tgt_expansions=target_local_exps_view,
                     tgt_base_ibox=target_level_start_ibox,
