@@ -58,20 +58,21 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
           Default: all kernels use the same strength.
         """
         from sumpy.kernel import TargetDerivativeRemover, SourceDerivativeRemover
-        expansion = expansion.with_kernel(
-                TargetDerivativeRemover()(expansion.kernel))
-        expansion = expansion.with_kernel(
-                SourceDerivativeRemover()(expansion.kernel))
+        tdr = TargetDerivativeRemover()
+        sdr = SourceDerivativeRemover()
+        expansion = expansion.with_kernel(tdr(expansion.kernel))
+        expansion = expansion.with_kernel(sdr(expansion.kernel))
 
         if kernels is None:
-            in_kernels = [expansion.kernel]
+            kernels = [tdr(expansion.kernel)]
         else:
-            in_kernels = kernels
-            for knl in in_kernels:
-                assert knl.get_base_kernel() == expansion.kernel
+            kernels = kernels
+            for knl in kernels:
+                assert tdr(knl) == knl
+                assert sdr(knl) == expansion.kernel
 
-        KernelComputation.__init__(self, ctx=ctx, in_kernels=in_kernels,
-            out_kernels=[], strength_usage=strength_usage, value_dtypes=None,
+        KernelComputation.__init__(self, ctx=ctx, out_kernels=[], in_kernels=kernels,
+            strength_usage=strength_usage, value_dtypes=None,
             name=name, options=options, device=device)
 
         self.expansion = expansion
@@ -110,8 +111,8 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
                 )
 
     def get_cache_key(self):
-        return (type(self).__name__, self.name, self.expansion, tuple(self.in_kernels),
-                tuple(self.strength_usage))
+        return (type(self).__name__, self.name, self.expansion,
+                tuple(self.in_kernels), tuple(self.strength_usage))
 
     def get_result_expr(self, icoeff):
         expr = 0

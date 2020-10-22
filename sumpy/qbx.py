@@ -86,20 +86,21 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
     def __init__(self, ctx, expansions, strength_usage=None,
             value_dtypes=None,
             options=[], name=None, device=None):
-        KernelComputation.__init__(self, ctx, expansions, strength_usage,
-                value_dtypes,
-                name, options, device)
+        KernelComputation.__init__(self, ctx=ctx, out_kernels=expansions,
+                strength_usage=strength_usage, in_kernels=expansions,
+                value_dtypes=value_dtypes,
+                name=name, options=options, device=device)
 
         from pytools import single_valued
         self.dim = single_valued(knl.dim for knl in self.expansions)
 
     def get_cache_key(self):
-        return (type(self).__name__, tuple(self.kernels),
+        return (type(self).__name__, tuple(self.expansions),
                 tuple(self.strength_usage), tuple(self.value_dtypes))
 
     @property
     def expansions(self):
-        return self.kernels
+        return self.out_kernels
 
     def get_loopy_insns_and_result_names(self):
         from sumpy.symbolic import make_sym_vector
@@ -156,7 +157,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                     None, shape="ntargets"),
                 lp.ValueArg("nsources", None),
                 lp.ValueArg("ntargets", None)]
-                + gather_loopy_source_arguments(self.kernels))
+                + gather_loopy_source_arguments(self.expansions))
 
     def get_kernel(self):
         raise NotImplementedError
@@ -212,7 +213,7 @@ class LayerPotential(LayerPotentialBase):
             for i in range(self.strength_count)]
             + [lp.GlobalArg("result_%d" % i,
                 None, shape="ntargets", order="C")
-            for i in range(len(self.kernels))])
+            for i in range(len(self.expansions))])
 
         loopy_knl = lp.make_kernel(["""
             {[itgt, isrc, idim]: \

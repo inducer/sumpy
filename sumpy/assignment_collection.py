@@ -149,6 +149,7 @@ class SymbolicAssignmentCollection:
             root_name = name
 
         self.assignments[name] = sym.sympify(expr)
+        return name
 
     def assign_unique(self, name_base, expr):
         """Assign *expr* to a new variable whose name is based on *name_base*.

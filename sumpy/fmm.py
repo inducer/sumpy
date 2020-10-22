@@ -79,6 +79,7 @@ class SumpyExpansionWranglerCodeContainer:
         self.out_kernels = out_kernels
         self.exclude_self = exclude_self
         self.use_rscale = use_rscale
+        self.strength_usage = strength_usage
 
         self.cl_context = cl_context
 
@@ -98,12 +99,16 @@ class SumpyExpansionWranglerCodeContainer:
     @memoize_method
     def p2m(self, tgt_order):
         return P2EFromSingleBox(self.cl_context,
-                self.multipole_expansion(tgt_order), strenth_usage=strength_usage)
+                kernels=self.in_kernels,
+                expansion=self.multipole_expansion(tgt_order),
+                strength_usage=self.strength_usage)
 
     @memoize_method
     def p2l(self, tgt_order):
         return P2EFromCSR(self.cl_context,
-                self.local_expansion(tgt_order), strength_usage=strength_usage)
+                kernels=self.in_kernels,
+                expansion=self.local_expansion(tgt_order),
+                strength_usage=self.strength_usage)
 
     @memoize_method
     def m2m(self, src_order, tgt_order):
@@ -137,9 +142,10 @@ class SumpyExpansionWranglerCodeContainer:
 
     @memoize_method
     def p2p(self):
-        return P2PFromCSR(self.cl_context, self.out_kernels,
+        return P2PFromCSR(self.cl_context, out_kernels=self.out_kernels,
+                          in_kernels=self.in_kernels,
                           exclude_self=self.exclude_self,
-                          strength_usage=strength_usage)
+                          strength_usage=self.strength_usage)
 
     def get_wrangler(self, queue, tree, dtype, fmm_level_to_order,
             source_extra_kwargs={},
