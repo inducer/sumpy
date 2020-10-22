@@ -199,17 +199,17 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
         # For this algorithm, we need those hyperplanes grouped together 
         # that are parallel to each other.
-        non_zero_coeffs_grouped_by_normal_dir = [[] for d in range(self.dim)]
+        non_zero_coeffs_grouped_by_axis = [[] for d in range(self.dim)]
         for d, tgt_mi in tgt_split:
-            non_zero_coeffs_grouped_by_normal_dir[d] += tgt_mi
+            non_zero_coeffs_grouped_by_axis[d] += tgt_mi
 
-        for normal_dir in set(d for d, _ in tgt_split):
+        for axis in set(d for d, _ in tgt_split):
             # In M2M, target order is the same or higher as source order.
             # First, let's write source coefficients in target coefficient
             # indices and then scale them. Here C is referred by the same
             # name used in the formulae above.
             C = [0] * len(self.get_full_coefficient_identifiers())   # noqa: N806
-            for mi in non_zero_coeffs_grouped_by_normal_dir[normal_dir]:
+            for mi in non_zero_coeffs_grouped_by_axis[axis]:
                 if mi not in src_mi_to_index:
                     continue
                 src_idx = src_mi_to_index[mi]
@@ -217,9 +217,9 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                 C[tgt_idx] = src_coeff_exprs[src_idx] * \
                         sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(mi)
 
-            # Use the normal_dir as the last dimension to vary
-            dims = list(range(normal_dir)) + \
-                   list(range(normal_dir+1, self.dim)) + [normal_dir]
+            # Use the axis as the last dimension to vary
+            dims = list(range(axis)) + \
+                   list(range(axis+1, self.dim)) + [axis]
             for d in dims:
                 # We build the full target multipole and then compress it, below.
                 Y = [0] * len(self.get_full_coefficient_identifiers())  # noqa: N806

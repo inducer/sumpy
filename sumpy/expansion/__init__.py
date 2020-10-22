@@ -249,6 +249,10 @@ class ExpansionTermsWrangler:
                 # Treat as if full expansion.
                 pass
             else:
+                # Calculate the multi-index that appears last in in the PDE in
+                # reverse degree lexicographic order (degrevlex).
+                # The monomial ordering used here which is degrevlex, must match
+                # the monomial ordering used in LinearPDEBasedExpansionTermsWrangler
                 max_mi_idx = max(mi_to_index[ident.mi] for
                                  ident in pde_dict.keys())
                 max_mi = mis[max_mi_idx]
