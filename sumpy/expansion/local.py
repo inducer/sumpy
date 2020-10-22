@@ -290,11 +290,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         # are parallel to each other.
         # The number of iterations is one for compressed expansions with elliptic PDEs because the
         # $O(1)$ hyperplanes are parallel to each other.
-        for normal_dir in set(d for d, _ in tgt_split):
-            # Use the normal_dir as the first dimension to vary so that the below
+        for axis in set(d for d, _ in tgt_split):
+            # Use the axis as the first dimension to vary so that the below
             # algorithm is O(p^{d+1}) for full and O(p^{d}) for compressed
-            dims = [normal_dir] + list(range(normal_dir)) + \
-                    list(range(normal_dir+1, self.dim))
+            dims = [axis] + list(range(axis)) + \
+                    list(range(axis+1, self.dim))
             # Start with source coefficients. Gets updated after each axis.
             C = src_coeffs   # noqa: N806
             # O(1) iterations
