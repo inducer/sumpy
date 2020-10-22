@@ -190,9 +190,6 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         # the output from (n, 0) with the first dimension as the fastest
         # varying dimension.
 
-        # Note that for calculating Y values, C is the input
-        # and for calculating the final result Y is the input.
-
         tgt_split = \
             self.expansion_terms_wrangler._get_coeff_identifier_split()
         result = [0] * len(self.get_full_coefficient_identifiers())
