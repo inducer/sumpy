@@ -49,7 +49,7 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
     """Common input processing for kernel computations."""
 
     def __init__(self, ctx, expansion, kernels=None,
-            options=[], name=None, device=None, strength_usage=None):
+            name=None, device=None, strength_usage=None):
         """
         :arg expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
         :arg strength_usage: A list of integers indicating which expression
@@ -62,7 +62,7 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
 
         KernelComputation.__init__(self, ctx=ctx, kernels=kernels,
                 strength_usage=strength_usage, value_dtypes=None,
-                name=name, options=options, device=device)
+                name=name, device=device)
 
         from sumpy.kernel import TargetDerivativeRemover
         expansion = expansion.with_kernel(

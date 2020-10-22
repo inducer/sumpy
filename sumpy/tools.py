@@ -202,7 +202,7 @@ class KernelComputation:
     """Common input processing for kernel computations."""
 
     def __init__(self, ctx, kernels, strength_usage,
-            value_dtypes, name, options=[], device=None):
+            value_dtypes, name, device=None):
         """
         :arg kernels: list of :class:`sumpy.kernel.Kernel` instances
             :class:`sumpy.kernel.TargetDerivative` wrappers should be

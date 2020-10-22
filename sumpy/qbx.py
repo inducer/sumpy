@@ -86,10 +86,10 @@ def expand(expansion_nr, sac, expansion, avec, bvec):
 class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
     def __init__(self, ctx, expansions, strength_usage=None,
             value_dtypes=None,
-            options=[], name=None, device=None):
+            name=None, device=None):
         KernelComputation.__init__(self, ctx, expansions, strength_usage,
                 value_dtypes,
-                name, options, device)
+                name, device)
 
         from pytools import single_valued
         self.dim = single_valued(knl.dim for knl in self.expansions)

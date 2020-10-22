@@ -44,7 +44,7 @@ Expansion-to-particle
 
 class E2PBase(KernelCacheWrapper):
     def __init__(self, ctx, expansion, kernels,
-            options=[], name=None, device=None):
+            name=None, device=None):
         """
         :arg expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
         :arg strength_usage: A list of integers indicating which expression
@@ -68,7 +68,6 @@ class E2PBase(KernelCacheWrapper):
         self.ctx = ctx
         self.expansion = expansion
         self.kernels = kernels
-        self.options = options
         self.name = name or self.default_name
         self.device = device
 

@@ -48,7 +48,7 @@ Expansion-to-expansion
 
 class E2EBase(KernelCacheWrapper):
     def __init__(self, ctx, src_expansion, tgt_expansion,
-            options=[], name=None, device=None):
+            name=None, device=None):
         """
         :arg expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
         :arg strength_usage: A list of integers indicating which expression
@@ -79,7 +79,6 @@ class E2EBase(KernelCacheWrapper):
         self.ctx = ctx
         self.src_expansion = src_expansion
         self.tgt_expansion = tgt_expansion
-        self.options = options
         self.name = name or self.default_name
         self.device = device
 
