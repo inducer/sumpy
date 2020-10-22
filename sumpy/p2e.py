@@ -108,13 +108,10 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
                 tuple(self.strength_usage))
 
     def get_result_expr(self, icoeff):
-        expr = 0
         isrc = pymbolic.var("isrc")
-        for i in range(len(self.kernels)):
-            strength_num = self.strength_usage[i]
-            expr += pymbolic.var(f"coeff{icoeff}_{i}") * \
-                        pymbolic.var("strengths")[strength_num, isrc]
-        return expr
+        return sum(pymbolic.var(f"coeff{icoeff}_{i}")
+                    * pymbolic.var("strengths")[self.strength_usage[i], isrc]
+                for i in range(len(self.kernels)))
 
 # }}}
 
