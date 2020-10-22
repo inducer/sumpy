@@ -65,7 +65,8 @@ def stringify_expn_index(i):
 def expand(expansion_nr, sac, expansion, avec, bvec):
     rscale = sym.Symbol("rscale")
 
-    coefficients = expansion.coefficients_from_source(expansion, avec, bvec, rscale)
+    coefficients = expansion.coefficients_from_source(expansion.kernel,
+                                                      avec, bvec, rscale)
 
     assigned_coeffs = [
             sym.Symbol(
