@@ -124,35 +124,35 @@ class ToyContext:
     @memoize_method
     def get_p2p(self):
         from sumpy.p2p import P2P
-        return P2P(self.cl_context, [self.kernel], exclude_self=False)
+        return P2P(self.cl_context, (self.kernel,), exclude_self=False)
 
     @memoize_method
     def get_p2m(self, order):
         from sumpy import P2EFromSingleBox
         return P2EFromSingleBox(self.cl_context,
                 self.mpole_expn_class(self.no_target_deriv_kernel, order),
-                kernels=[self.kernel])
+                kernels=(self.kernel,))
 
     @memoize_method
     def get_p2l(self, order):
         from sumpy import P2EFromSingleBox
         return P2EFromSingleBox(self.cl_context,
                 self.local_expn_class(self.no_target_deriv_kernel, order),
-                kernels=[self.kernel])
+                kernels=(self.kernel,))
 
     @memoize_method
     def get_m2p(self, order):
         from sumpy import E2PFromSingleBox
         return E2PFromSingleBox(self.cl_context,
                 self.mpole_expn_class(self.no_target_deriv_kernel, order),
-                [self.kernel])
+                (self.kernel,))
 
     @memoize_method
     def get_l2p(self, order):
         from sumpy import E2PFromSingleBox
         return E2PFromSingleBox(self.cl_context,
                 self.local_expn_class(self.no_target_deriv_kernel, order),
-                [self.kernel])
+                (self.kernel,))
 
     @memoize_method
     def get_m2m(self, from_order, to_order):
