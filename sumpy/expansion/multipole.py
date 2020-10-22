@@ -183,8 +183,8 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         # for $T_{m, n}$.
 
         # In other words, we're better off computing the translation
-        # one dimension at a time. If the coefficient-identifying multi-indices in the source
-        # expansion have the form (0, m) and (n, 0), where m>=0, n>=1,
+        # one dimension at a time. If the coefficient-identifying multi-indices
+        # in the source expansion have the form (0, m) and (n, 0), where m>=0, n>=1,
         # then we calculate the output from (0, m) with the second
         # dimension as the fastest varying dimension and then calculate
         # the output from (n, 0) with the first dimension as the fastest
@@ -202,7 +202,8 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             # First, let's write source coefficients in target coefficient
             # indices and then scale them. Here C is referred by the same
             # name used in the formulae above.
-            C = [0] * len(self.get_full_coefficient_identifiers())   # noqa: N806
+            cur_dim_input_coeffs = \
+                [0] * len(self.get_full_coefficient_identifiers())
             for d, mi in tgt_split:
                 if d != axis:
                     continue
@@ -210,10 +211,10 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                     continue
                 src_idx = src_mi_to_index[mi]
                 tgt_idx = tgt_mi_to_index[mi]
-                C[tgt_idx] = src_coeff_exprs[src_idx] * \
+                cur_dim_input_coeffs[tgt_idx] = src_coeff_exprs[src_idx] * \
                         sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(mi)
 
-            if all(coeff == 0 for coeff in C):
+            if all(coeff == 0 for coeff in cur_dim_input_coeffs):
                 continue
 
             # Use the axis as the last dimension to vary
@@ -221,7 +222,8 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                    list(range(axis+1, self.dim)) + [axis]
             for d in dims:
                 # We build the full target multipole and then compress it, below.
-                Y = [0] * len(self.get_full_coefficient_identifiers())  # noqa: N806
+                cur_dim_output_coeffs = \
+                    [0] * len(self.get_full_coefficient_identifiers())
                 for i, tgt_mi in enumerate(
                         self.get_full_coefficient_identifiers()):
 
@@ -232,7 +234,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                         input_mi = list(tgt_mi)
                         input_mi[d] = mi_i
                         input_mi = tuple(input_mi)
-                        contrib = C[tgt_mi_to_index[input_mi]]
+                        contrib = cur_dim_input_coeffs[tgt_mi_to_index[input_mi]]
                         for idim in range(self.dim):
                             n = tgt_mi[idim]
                             k = input_mi[idim]
@@ -241,12 +243,12 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                             contrib *= \
                                 sym.UnevaluatedExpr(dvec[idim]/tgt_rscale)**(n-k)
 
-                        Y[i] += contrib
-                # Y is the input in the next iteration
-                C = Y   # noqa: N806
+                        cur_dim_output_coeffs[i] += contrib
+                # cur_dim_output_coeffs is the input in the next iteration
+                cur_dim_input_coeffs = cur_dim_output_coeffs
 
-            for i in range(len(Y)):
-                result[i] += Y[i]
+            for i in range(len(cur_dim_output_coeffs)):
+                result[i] += cur_dim_output_coeffs[i]
 
         # {{{ simpler, functionally equivalent code
         if 0:

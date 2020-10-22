@@ -449,7 +449,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 return mis, op
 
         # Calculate the multi-index that appears last in in the PDE in
-        # reverse degree lexicographic order.
+        # reverse degree lexicographic order (degrevlex).
         max_mi_idx = max(coeff_ident_enumerate_dict[ident] for
                          ident in pde_dict.keys())
         max_mi = mis[max_mi_idx]
