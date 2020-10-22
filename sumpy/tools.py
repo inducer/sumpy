@@ -246,7 +246,7 @@ class KernelComputation:
         self.context = ctx
         self.device = device
 
-        self.kernels = kernels
+        self.kernels = tuple(kernels)
         self.value_dtypes = value_dtypes
         self.strength_usage = strength_usage
         self.strength_count = strength_count
