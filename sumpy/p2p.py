@@ -53,8 +53,7 @@ Particle-to-particle
 
 class P2PBase(KernelComputation, KernelCacheWrapper):
     def __init__(self, ctx, out_kernels, exclude_self, strength_usage=None,
-            value_dtypes=None,
-            options=[], name=None, device=None, in_kernels=None):
+            value_dtypes=None, name=None, device=None, in_kernels=None):
         """
         :arg kernels: list of :class:`sumpy.kernel.Kernel` instances
         :arg strength_usage: A list of integers indicating which expression
@@ -83,7 +82,7 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
 
         KernelComputation.__init__(self, ctx=ctx, out_kernels=out_kernels,
             in_kernels=in_kernels, strength_usage=strength_usage,
-            value_dtypes=value_dtypes, name=name, options=options, device=device)
+            value_dtypes=value_dtypes, name=name, device=device)
 
         self.exclude_self = exclude_self
         self.in_kernels = in_kernels

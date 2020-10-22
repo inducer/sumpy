@@ -49,7 +49,7 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
     """Common input processing for kernel computations."""
 
     def __init__(self, ctx, expansion, kernels=None,
-            options=[], name=None, device=None, strength_usage=None):
+            name=None, device=None, strength_usage=None):
         """
         :arg expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
         :arg strength_usage: A list of integers indicating which expression
@@ -73,7 +73,7 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
 
         KernelComputation.__init__(self, ctx=ctx, out_kernels=[], in_kernels=kernels,
             strength_usage=strength_usage, value_dtypes=None,
-            name=name, options=options, device=device)
+            name=name, device=device)
 
         self.expansion = expansion
         self.dim = expansion.dim
@@ -89,17 +89,18 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
         sac = SymbolicAssignmentCollection()
 
         coeff_names = []
-        code_transformers = [self.expansion.get_code_transformer()]
         for knl_idx, kernel in enumerate(self.in_kernels):
-            code_transformers.append(kernel.get_code_transformer())
             for i, coeff_i in enumerate(
-                self.expansion.coefficients_from_source(avec, None, rscale,
-                     sac, kernel=kernel)
+                self.expansion.coefficients_from_source(kernel, avec, None, rscale,
+                     sac)
             ):
                 sac.add_assignment(f"coeff{i}_{knl_idx}", coeff_i)
                 coeff_names.append(f"coeff{i}_{knl_idx}")
 
         sac.run_global_cse()
+
+        code_transformers = [self.expansion.get_code_transformer()] \
+            + [kernel.get_code_transformer() for kernel in self.in_kernels]
 
         from sumpy.codegen import to_loopy_insns
         return to_loopy_insns(
@@ -115,13 +116,10 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
                 tuple(self.in_kernels), tuple(self.strength_usage))
 
     def get_result_expr(self, icoeff):
-        expr = 0
         isrc = pymbolic.var("isrc")
-        for i in range(len(self.in_kernels)):
-            strength_num = self.strength_usage[i]
-            expr += pymbolic.var(f"coeff{icoeff}_{i}") * \
-                        pymbolic.var("strengths")[strength_num, isrc]
-        return expr
+        return sum(pymbolic.var(f"coeff{icoeff}_{i}")
+                    * pymbolic.var("strengths")[self.strength_usage[i], isrc]
+                for i in range(len(self.kernels)))
 
 # }}}
 
@@ -173,7 +171,7 @@ class P2EFromSingleBox(P2EBase):
                     lp.ValueArg("nboxes,aligned_nboxes,tgt_base_ibox", np.int32),
                     lp.ValueArg("nsources", np.int32),
                     "..."
-                ] + gather_loopy_source_arguments(self.in_kernels + [self.expansion]),
+                ] + gather_loopy_source_arguments(self.in_kernels + (self.expansion,)),
                 name=self.name,
                 assumptions="nsrc_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
@@ -243,7 +241,7 @@ class P2EFromCSR(P2EBase):
                         np.int32),
                     lp.ValueArg("nsources", np.int32),
                     "..."
-                ] + gather_loopy_source_arguments(self.in_kernels + [self.expansion]))
+                ] + gather_loopy_source_arguments(self.in_kernels + (self.expansion,)))
 
         loopy_knl = lp.make_kernel(
                 [

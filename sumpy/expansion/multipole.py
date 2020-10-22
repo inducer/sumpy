@@ -53,7 +53,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
     Coefficients represent the terms in front of the kernel derivatives.
     """
 
-    def coefficients_from_source(self, avec, bvec, rscale, sac=None, kernel=None):
+    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
         from sumpy.kernel import DirectionalSourceDerivative
         if kernel is None:
             kernel = self.kernel
@@ -285,7 +285,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
     def get_coefficient_identifiers(self):
         return list(range(-self.order, self.order+1))
 
-    def coefficients_from_source(self, avec, bvec, rscale, sac=None, kernel=None):
+    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
         if not self.use_rscale:
             rscale = 1
 

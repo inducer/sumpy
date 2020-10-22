@@ -65,7 +65,8 @@ def stringify_expn_index(i):
 def expand(expansion_nr, sac, expansion, avec, bvec):
     rscale = sym.Symbol("rscale")
 
-    coefficients = expansion.coefficients_from_source(avec, bvec, rscale)
+    coefficients = expansion.coefficients_from_source(expansion.kernel,
+                                                      avec, bvec, rscale)
 
     assigned_coeffs = [
             sym.Symbol(
@@ -84,12 +85,10 @@ def expand(expansion_nr, sac, expansion, avec, bvec):
 
 class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
     def __init__(self, ctx, expansions, strength_usage=None,
-            value_dtypes=None,
-            options=[], name=None, device=None):
+            value_dtypes=None, name=None, device=None):
         KernelComputation.__init__(self, ctx=ctx, out_kernels=expansions,
                 strength_usage=strength_usage, in_kernels=expansions,
-                value_dtypes=value_dtypes,
-                name=name, options=options, device=device)
+                value_dtypes=value_dtypes, name=name, device=device)
 
         from pytools import single_valued
         self.dim = single_valued(knl.dim for knl in self.expansions)
