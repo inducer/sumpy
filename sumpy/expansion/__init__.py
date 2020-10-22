@@ -236,32 +236,30 @@ class ExpansionTermsWrangler:
         ]
         """
         mis = self.get_full_coefficient_identifiers()
-        mi_to_index = dict((tuple(mi), i) for
-            (i, mi) in enumerate(mis))
+        mi_to_index = {mi: i for i, mi in enumerate(mis)}
 
         # Each hyperplane stored below is identified by a tuple of the axis
-        # for which it is orthogonal to and the constant `c` described above
+        # to which it is orthogonal to and the constant `c` described above
         hyperplanes = []
         if isinstance(self, LinearPDEBasedExpansionTermsWrangler):
-            pde_dict = self.get_pde_as_diff_op().eqs[0]
+            pde_dict, = self.get_pde_as_diff_op().eqs
 
-            for ident in pde_dict.keys():
-                # The order of the expansion less than the order of the PDE.
+            if not all(ident.mi in mi_to_index for ident in pde_dict):
+                # The order of the expansion is less than the order of the PDE.
                 # Treat as if full expansion.
-                if ident.mi not in mi_to_index:
-                    break
+                pass
             else:
                 max_mi_idx = max(mi_to_index[ident.mi] for
                                  ident in pde_dict.keys())
                 max_mi = mis[max_mi_idx]
-                for d in range(self.dim):
-                    for const in range(max_mi[d]):
-                        hyperplanes.append((d, const))
+                hyperplanes.extend(
+                    (d, const)
+                    for d in range(self.dim)
+                    for const in range(max_mi[d]))
 
         if not hyperplanes:
             d = self.dim - 1
-            for const in range(self.order + 1):
-                hyperplanes.append((d, const))
+            hyperplanes.extend((d, const) for const in range(self.order + 1))
 
         res = []
         seen_mis = set()

@@ -177,13 +177,13 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         #
         # Then, $T_{m, n} = \sum_{j\le n} Y_{m, j} d_y^j \binom{n}{j}$.
         #
-        # $Y_{m, n}$ are $p^2$ number of temporary variables that are
+        # $Y_{m, n}$ are $p^2$ temporary variables that are
         # reused for different M2M coefficients and costs $p$ per variable.
         # Total cost for calculating $Y_{m, n}$ is $p^3$ and similar
         # for $T_{m, n}$.
 
         # In other words, we're better off computing the translation
-        # one dimension at a time. If the coefficients in the source
+        # one dimension at a time. If the coefficient-identifying multi-indices in the source
         # expansion have the form (0, m) and (n, 0), where m>=0, n>=1,
         # then we calculate the output from (0, m) with the second
         # dimension as the fastest varying dimension and then calculate
@@ -197,14 +197,14 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             self.expansion_terms_wrangler._get_coeff_identifier_split()
         result = [0] * len(self.get_full_coefficient_identifiers())
 
-        # For this algorithm, we need the hyperplanes that are parallel
-        # to each other grouped.
+        # For this algorithm, we need those hyperplanes grouped together 
+        # that are parallel to each other.
         non_zero_coeffs_grouped_by_normal_dir = [[] for d in range(self.dim)]
         for d, tgt_mi in tgt_split:
             non_zero_coeffs_grouped_by_normal_dir[d] += tgt_mi
 
         for normal_dir in set(d for d, _ in tgt_split):
-            # In M2M, target order is the same or higher as source order
+            # In M2M, target order is the same or higher as source order.
             # First, let's write source coefficients in target coefficient
             # indices and then scale them. Here C is referred by the same
             # name used in the formulae above.
@@ -221,6 +221,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             dims = list(range(normal_dir)) + \
                    list(range(normal_dir+1, self.dim)) + [normal_dir]
             for d in dims:
+                # We build the full target multipole and then compress it, below.
                 Y = [0] * len(self.get_full_coefficient_identifiers())  # noqa: N806
                 for i, tgt_mi in enumerate(
                         self.get_full_coefficient_identifiers()):

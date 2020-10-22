@@ -241,11 +241,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         src_mis = \
             src_expansion.expansion_terms_wrangler.get_full_coefficient_identifiers()
 
-        src_mi_to_index = dict((mi, i) for i, mi in enumerate(src_mis))
+        src_mi_to_index = {mi: i for i, mi in enumerate(src_mis)}
 
         tgt_mis = \
             self.expansion_terms_wrangler.get_coefficient_identifiers()
-        tgt_mi_to_index = dict((mi, i) for i, mi in enumerate(tgt_mis))
+        tgt_mi_to_index = {mi: i for i, mi in enumerate(tgt_mis)}
 
         tgt_split = self.expansion_terms_wrangler._get_coeff_identifier_split()
 
@@ -285,17 +285,17 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         # number of coefficient hyperplanes in compressed, the algorithm is
         # $O(p^3)$
 
-        # We start by iterating through all the axis which is at most 3 iterations.
-        # Number of iterations is one for full because all the $O(p)$ hyperplanes
+        # We start by iterating through all the axes which is at most 3 iterations (in <=3D).
+        # The number of iterations is one for full because all the $O(p)$ hyperplanes
         # are parallel to each other.
-        # Number of iterations is one for compressed with elliptic PDEs because the
-        # $O(1)$ hyperplanes are parallel to each other
+        # The number of iterations is one for compressed expansions with elliptic PDEs because the
+        # $O(1)$ hyperplanes are parallel to each other.
         for normal_dir in set(d for d, _ in tgt_split):
             # Use the normal_dir as the first dimension to vary so that the below
             # algorithm is O(p^{d+1}) for full and O(p^{d}) for compressed
             dims = [normal_dir] + list(range(normal_dir)) + \
                     list(range(normal_dir+1, self.dim))
-            # Start with source coefficients
+            # Start with source coefficients. Gets updated after each axis.
             C = src_coeffs   # noqa: N806
             # O(1) iterations
             for d in dims:
