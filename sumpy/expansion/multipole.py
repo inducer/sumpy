@@ -27,7 +27,7 @@ from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
     HelmholtzConformingVolumeTaylorExpansion,
     BiharmonicConformingVolumeTaylorExpansion)
-from pytools import cartesian_product
+from pytools import cartesian_product, factorial
 
 import logging
 logger = logging.getLogger(__name__)
@@ -197,25 +197,24 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             self.expansion_terms_wrangler._get_coeff_identifier_split()
         result = [0] * len(self.get_full_coefficient_identifiers())
 
-        # For this algorithm, we need those hyperplanes grouped together 
-        # that are parallel to each other.
-        non_zero_coeffs_grouped_by_axis = [[] for d in range(self.dim)]
-        for d, tgt_mi in tgt_split:
-            non_zero_coeffs_grouped_by_axis[d] += tgt_mi
-
-        for axis in set(d for d, _ in tgt_split):
+        for axis in range(self.dim):
             # In M2M, target order is the same or higher as source order.
             # First, let's write source coefficients in target coefficient
             # indices and then scale them. Here C is referred by the same
             # name used in the formulae above.
             C = [0] * len(self.get_full_coefficient_identifiers())   # noqa: N806
-            for mi in non_zero_coeffs_grouped_by_axis[axis]:
+            for d, mi in tgt_split:
+                if d != axis:
+                    continue
                 if mi not in src_mi_to_index:
                     continue
                 src_idx = src_mi_to_index[mi]
                 tgt_idx = tgt_mi_to_index[mi]
                 C[tgt_idx] = src_coeff_exprs[src_idx] * \
                         sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(mi)
+
+            if all(coeff == 0 for coeff in C):
+                continue
 
             # Use the axis as the last dimension to vary
             dims = list(range(axis)) + \
@@ -229,19 +228,16 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                     # Calling this input_mis instead of src_mis because we
                     # converted the source coefficients to target coefficient
                     # indices beforehand.
-                    input_mis_per_dim = []
                     for mi_i in range(tgt_mi[d]+1):
-                        new_mi = list(tgt_mi)
-                        new_mi[d] = mi_i
-                        input_mis_per_dim.append(tuple(new_mi))
-
-                    for input_mi in input_mis_per_dim:
+                        input_mi = list(tgt_mi)
+                        input_mi[d] = mi_i
+                        input_mi = tuple(input_mi)
                         contrib = C[tgt_mi_to_index[input_mi]]
                         for idim in range(self.dim):
                             n = tgt_mi[idim]
                             k = input_mi[idim]
                             assert n >= k
-                            contrib /= mi_factorial((n-k,))
+                            contrib /= factorial(n-k)
                             contrib *= \
                                 sym.UnevaluatedExpr(dvec[idim]/tgt_rscale)**(n-k)
 
