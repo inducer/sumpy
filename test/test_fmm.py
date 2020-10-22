@@ -198,6 +198,95 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class):
     pconv_verifier()
 
 
+def test_unified_single_and_double(ctx_factory):
+    logging.basicConfig(level=logging.INFO)
+
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    knl = LaplaceKernel(2)
+    local_expn_class = LaplaceConformingVolumeTaylorLocalExpansion
+    mpole_expn_class = LaplaceConformingVolumeTaylorMultipoleExpansion
+
+    nsources = 1000
+    ntargets = 300
+    dtype = np.float64
+
+    from boxtree.tools import (
+            make_normal_particle_array as p_normal)
+
+    sources = p_normal(queue, nsources, knl.dim, dtype, seed=15)
+    offset = np.zeros(knl.dim)
+    offset[0] = 0.1
+
+    targets = (
+                p_normal(queue, ntargets, knl.dim, dtype, seed=18)
+                + offset)
+
+    del offset
+
+    from boxtree import TreeBuilder
+    tb = TreeBuilder(ctx)
+
+    tree, _ = tb(queue, sources, targets=targets,
+            max_particles_in_box=30, debug=True)
+
+    from boxtree.traversal import FMMTraversalBuilder
+    tbuild = FMMTraversalBuilder(ctx)
+    trav, _ = tbuild(queue, tree, debug=True)
+
+    from pyopencl.clrandom import PhiloxGenerator
+    rng = PhiloxGenerator(ctx, seed=44)
+    weights = (
+        rng.uniform(queue, nsources, dtype=np.float64),
+        rng.uniform(queue, nsources, dtype=np.float64),
+    )
+
+    logger.info("computing direct (reference) result")
+
+    dtype = np.float64
+    order = 3
+
+    from functools import partial
+    from sumpy.kernel import DirectionalSourceDerivative, AxisTargetDerivative
+
+    deriv_knl = DirectionalSourceDerivative(knl, "dir_vec")
+
+    out_kernels = [knl, AxisTargetDerivative(0, knl)]
+    in_kernel_vecs = [[knl], [deriv_knl], [knl, deriv_knl]]
+    strength_usages = [[0], [1], [0, 1]]
+
+    alpha = np.linspace(0, 2*np.pi, nsources, np.float64)
+    dir_vec = np.vstack([np.cos(alpha), np.sin(alpha)])
+
+    results = []
+    for in_kernels, strength_usage in zip(in_kernel_vecs, strength_usages):
+        source_extra_kwargs = {}
+        if deriv_knl in in_kernels:
+            source_extra_kwargs["dir_vec"] = dir_vec
+        from sumpy.fmm import SumpyExpansionWranglerCodeContainer
+        wcc = SumpyExpansionWranglerCodeContainer(
+                ctx,
+                partial(mpole_expn_class, knl),
+                partial(local_expn_class, knl),
+                out_kernels=out_kernels, in_kernels=in_kernels,
+                strength_usage=strength_usage)
+        wrangler = wcc.get_wrangler(queue, tree, dtype,
+                fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
+                source_extra_kwargs=source_extra_kwargs)
+
+        from boxtree.fmm import drive_fmm
+
+        pot = drive_fmm(trav, wrangler, weights)
+        results.append(np.array([pot[0].get(), pot[1].get()]))
+
+    ref_pot = results[0] + results[1]
+    pot = results[2]
+    rel_err = la.norm(pot - ref_pot, np.inf) / la.norm(ref_pot, np.inf)
+
+    assert rel_err < 1e-12
+
+
 def test_sumpy_fmm_timing_data_collection(ctx_factory):
     logging.basicConfig(level=logging.INFO)
 
