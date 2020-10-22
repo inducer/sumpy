@@ -86,8 +86,8 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
         for knl_idx, kernel in enumerate(self.kernels):
             code_transformers.append(kernel.get_code_transformer())
             for i, coeff_i in enumerate(
-                self.expansion.coefficients_from_source(avec, None, rscale,
-                     sac, kernel=kernel)
+                self.expansion.coefficients_from_source(kernel, avec, None, rscale,
+                     sac)
             ):
                 sac.add_assignment(f"coeff{i}_{knl_idx}", coeff_i)
                 coeff_names.append(f"coeff{i}_{knl_idx}")

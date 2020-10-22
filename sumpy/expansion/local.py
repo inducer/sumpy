@@ -55,15 +55,12 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
     def get_coefficient_identifiers(self):
         return list(range(self.order+1))
 
-    def coefficients_from_source(self, avec, bvec, rscale, sac=None, kernel=None):
+    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
         # no point in heeding rscale here--just ignore it
         if bvec is None:
             raise RuntimeError("cannot use line-Taylor expansions in a setting "
                     "where the center-target vector is not known at coefficient "
                     "formation")
-
-        if kernel is None:
-            kernel = self.kernel
 
         tau = sym.Symbol("tau")
 
@@ -116,10 +113,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
     Coefficients represent derivative values of the kernel.
     """
 
-    def coefficients_from_source(self, avec, bvec, rscale, sac=None, kernel=None):
+    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
         from sumpy.tools import MiDerivativeTaker
-        if kernel is None:
-            kernel = self.kernel
         ppkernel = kernel.postprocess_at_source(kernel.get_expression(avec), avec)
 
         taker = MiDerivativeTaker(ppkernel, avec)
@@ -376,11 +371,9 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
     def get_coefficient_identifiers(self):
         return list(range(-self.order, self.order+1))
 
-    def coefficients_from_source(self, avec, bvec, rscale, sac=None, kernel=None):
+    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
         if not self.use_rscale:
             rscale = 1
-        if kernel is None:
-            kernel = self.kernel
 
         from sumpy.symbolic import sym_real_norm_2
         hankel_1 = sym.Function("hankel_1")
