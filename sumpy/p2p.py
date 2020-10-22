@@ -174,9 +174,6 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
         from sumpy.symbolic import Symbol
         return Symbol(f"strength_{self.strength_usage[kernel_idx]}")
 
-    def get_kernel_exprs(self, result_names):
-        return []
-
     def get_default_src_tgt_arguments(self):
         from sumpy.tools import gather_loopy_source_arguments
         return ([
