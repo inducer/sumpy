@@ -197,7 +197,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         for axis in range(self.dim):
             # In M2M, target order is the same or higher as source order.
             # First, let's write source coefficients in target coefficient
-            # indices and then scale them. Here C is referred by the same
+            # indices and then adjust rscale. Here C is referred by the same
             # name used in the formulae above.
             cur_dim_input_coeffs = \
                 [0] * len(self.get_full_coefficient_identifiers())
