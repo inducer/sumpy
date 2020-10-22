@@ -201,15 +201,16 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             # name used in the formulae above.
             cur_dim_input_coeffs = \
                 [0] * len(self.get_full_coefficient_identifiers())
-            for d, mi in tgt_split:
+            for d, mis in tgt_split:
                 if d != axis:
                     continue
-                if mi not in src_mi_to_index:
-                    continue
-                src_idx = src_mi_to_index[mi]
-                tgt_idx = tgt_mi_to_index[mi]
-                cur_dim_input_coeffs[tgt_idx] = src_coeff_exprs[src_idx] * \
-                        sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(mi)
+                for mi in mis:
+                    if mi not in src_mi_to_index:
+                        continue
+                    src_idx = src_mi_to_index[mi]
+                    tgt_idx = tgt_mi_to_index[mi]
+                    cur_dim_input_coeffs[tgt_idx] = src_coeff_exprs[src_idx] * \
+                            sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(mi)
 
             if all(coeff == 0 for coeff in cur_dim_input_coeffs):
                 continue
