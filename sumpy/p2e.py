@@ -234,7 +234,7 @@ class P2EFromCSR(P2EBase):
                         np.int32),
                     lp.ValueArg("nsources", np.int32),
                     "..."
-                ] + gather_loopy_source_arguments(self.kernels + (self.expansion,))
+                ] + gather_loopy_source_arguments(self.kernels + (self.expansion,)))
 
         loopy_knl = lp.make_kernel(
                 [
