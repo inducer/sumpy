@@ -194,9 +194,9 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         #  C 0 0 0        C 0 0 0       0 0 0 0
         #  C C C C C      C 0 0 0 0     0 C C C C
         #
-        # The calculations done when translating target first hyperplane of
-        # the source coefficients are shown below in the graph. Each arrow
-        # represents a O(1) calculation.
+        # The calculations done when translating first hyperplane of the
+        # source coefficients (C) to target coefficients (T) are shown
+        # below in the graph. Each connecions represents a O(1) calculation.
         #
         #  ┌──C             T
         #  │  │
@@ -211,7 +211,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         #     └──────┘│
         #     └───────┘
         #
-        # By using temporaries, this can be reduced as shown below.
+        # By using temporaries (Y), this can be reduced as shown below.
         #
         #  ┌─C           Y             T
         #  │ │
