@@ -183,6 +183,58 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         # Total cost for calculating $Y_{m, n}$ is $p^3$ and similar
         # for $T_{m, n}$.
 
+        # Let's take a 2D example u_xy + u_x + u_y = 0
+        # In the diagram below, C depicts a non zero source coefficient
+        # We divide these into two hyperplanes
+        #
+        #  C              C             0
+        #  C 0            C 0           0 0
+        #  C 0 0       =  C 0 0      +  0 0 0
+        #  C 0 0 0        C 0 0 0       0 0 0 0
+        #  C C C C C      C 0 0 0 0     0 C C C C
+        #
+        # When calculating target coefficients for the first hyperplane
+        # below diagram shows the calculations done. Each arrow
+        # represents a O(1) calculation.
+        #
+        #  ┌─C           Y             T
+        #  │ │
+        #  │┌C 0     ->  Y 0       ->  T T
+        #  │││           └─┘
+        #  ││C 0 0       Y 0 0         T T T
+        #  │││           └─┴─┘
+        #  └└C 0 0 0     Y 0 0 0       T T T T
+        #                └─┴─┴─┘
+        #
+        # Note that in the above calculation data is propagated upwards
+        # in the first pass and then rightwards in the second pass.
+        # Data propagation with zeros are not shown as they are not calculated.
+        # If the propagation was done rightwards first and upwards second
+        # number of calculations are higher as shown below.
+        #
+        #    C             ┌─Y           T
+        #                  │ │
+        #    C 0       ->  │┌Y┌Y     ->  T T
+        #    └─┘           │││││
+        #    C 0 0         ││Y│Y Y       T T T
+        #    └─┴─┘         │││││ │
+        #    C 0 0 0       └└Y└Y Y Y     T T T T
+        #    └─┴─┴─┘
+        #
+        # For the second hyperplane, data is propogated rightwards first
+        # and then upwards second which is opposite to that of the first
+        # hyperplane.
+        #
+        #    0              0            0
+        #
+        #    0 0       ->   0┌0      ->  0 T
+        #                    ││
+        #    0 0 0          0│0 0        0 T T
+        #                    ││ │
+        #    0 C-C-C        0└Y Y Y      0 T T T
+        #      ├─┘ │
+        #      └───┘
+        #
         # In other words, we're better off computing the translation
         # one dimension at a time. If the coefficient-identifying multi-indices
         # in the source expansion have the form (0, m) and (n, 0), where m>=0, n>=1,
@@ -217,7 +269,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             if all(coeff == 0 for coeff in cur_dim_input_coeffs):
                 continue
 
-            # Use the axis as the last dimension to vary
+            # Therefore, we use the orthogonal axis as the last dimension to vary
             dims = list(range(axis)) + \
                    list(range(axis+1, self.dim)) + [axis]
             for d in dims:
