@@ -318,12 +318,15 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 cur_dim_input_coeffs = cur_dim_output_coeffs
 
             for mi in tgt_mis:
-                # In L2L, source level has same or higher order than target level
-                assert mi in src_mi_to_index
-                # Add to result after scaling
-                result[tgt_mi_to_index[mi]] += \
-                    cur_dim_output_coeffs[src_mi_to_index[mi]] \
-                        * rscale_ratio ** sum(mi)
+                # In L2L, source level usually has same or higher order than target
+                # level. If not, extra coeffs in target level are zero filled.
+                if mi not in src_mi_to_index:
+                    result[tgt_mi_to_index[mi]] = 0
+                else:
+                    # Add to result after scaling
+                    result[tgt_mi_to_index[mi]] += \
+                        cur_dim_output_coeffs[src_mi_to_index[mi]] \
+                            * rscale_ratio ** sum(mi)
 
         # {{{ simpler, functionally equivalent code
         if 0:
