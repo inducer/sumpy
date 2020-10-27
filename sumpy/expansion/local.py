@@ -326,7 +326,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                     # Add to result after scaling
                     result[tgt_mi_to_index[mi]] += \
                         cur_dim_output_coeffs[src_mi_to_index[mi]] \
-                            * rscale_ratio ** sum(mi)
+                        * rscale_ratio ** sum(mi)
 
         # {{{ simpler, functionally equivalent code
         if 0:
