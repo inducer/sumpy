@@ -181,11 +181,12 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         # $Y_{m, n}$ are $p^2$ temporary variables that are
         # reused for different M2M coefficients and costs $p$ per variable.
         # Total cost for calculating $Y_{m, n}$ is $p^3$ and similar
-        # for $T_{m, n}$.
+        # for $T_{m, n}$. For compressed Taylor series this can be done
+        # more efficiently.
 
-        # Let's take a 2D example u_xy + u_x + u_y = 0
-        # In the diagram below, C depicts a non zero source coefficient
-        # We divide these into two hyperplanes
+        # Let's take the example u_xy + u_x + u_y = 0.
+        # In the diagram below, C depicts a non zero source coefficient.
+        # We divide these into two hyperplanes.
         #
         #  C              C             0
         #  C 0            C 0           0 0
@@ -193,18 +194,34 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         #  C 0 0 0        C 0 0 0       0 0 0 0
         #  C C C C C      C 0 0 0 0     0 C C C C
         #
-        # When calculating target coefficients for the first hyperplane
-        # below diagram shows the calculations done. Each arrow
+        # The calculations done when translating target first hyperplane of
+        # the source coefficients are shown below in the graph. Each arrow
         # represents a O(1) calculation.
+        #
+        #  ┌──C             T
+        #  │  │
+        #  │┌─C-0       ->  T T
+        #  ││ │ │
+        #  ││ ┌─┘┌────┐
+        #  ││┌C-0┘0──┐│     T T T
+        #  │││└───┘  ││
+        #  └└└C-0 0 0││     T T T T
+        #     └───┘ │││
+        #     └─────┘││
+        #     └──────┘│
+        #     └───────┘
+        #
+        # By using temporaries, this can be reduced as shown below.
         #
         #  ┌─C           Y             T
         #  │ │
-        #  │┌C 0     ->  Y 0       ->  T T
-        #  │││           └─┘
-        #  ││C 0 0       Y 0 0         T T T
-        #  │││           └─┴─┘
+        #  │┌C 0     ->  Y-0       ->  T T
+        #  │││
+        #  ││C 0 0       Y-0 0         T T T
+        #  │││           └───┘
         #  └└C 0 0 0     Y 0 0 0       T T T T
-        #                └─┴─┴─┘
+        #                └───┘ │
+        #                └─────┘
         #
         # Note that in the above calculation data is propagated upwards
         # in the first pass and then rightwards in the second pass.
@@ -214,12 +231,13 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         #
         #    C             ┌─Y           T
         #                  │ │
-        #    C 0       ->  │┌Y┌Y     ->  T T
-        #    └─┘           │││││
-        #    C 0 0         ││Y│Y Y       T T T
-        #    └─┴─┘         │││││ │
-        #    C 0 0 0       └└Y└Y Y Y     T T T T
-        #    └─┴─┴─┘
+        #    C-0       ->  │┌Y┌Y     ->  T T
+        #                  │││││
+        #    C-0 0         ││Y│Y Y       T T T
+        #    └───┘         │││││ │
+        #    C-0 0 0       └└Y└Y Y Y     T T T T
+        #    └───┘ │
+        #    └─────┘
         #
         # For the second hyperplane, data is propogated rightwards first
         # and then upwards second which is opposite to that of the first
@@ -232,7 +250,6 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         #    0 0 0          0│0 0        0 T T
         #                    ││ │
         #    0 C-C-C        0└Y Y Y      0 T T T
-        #      ├─┘ │
         #      └───┘
         #
         # In other words, we're better off computing the translation
