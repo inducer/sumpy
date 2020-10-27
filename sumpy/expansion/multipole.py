@@ -27,6 +27,7 @@ from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
     HelmholtzConformingVolumeTaylorExpansion,
     BiharmonicConformingVolumeTaylorExpansion)
+from sumpy.tools import mi_set_axis
 from pytools import cartesian_product, factorial
 
 import logging
@@ -229,17 +230,13 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                     # converted the source coefficients to target coefficient
                     # indices beforehand.
                     for mi_i in range(tgt_mi[d]+1):
-                        input_mi = list(tgt_mi)
-                        input_mi[d] = mi_i
-                        input_mi = tuple(input_mi)
+                        input_mi = mi_set_axis(tgt_mi, d, mi_i)
                         contrib = cur_dim_input_coeffs[tgt_mi_to_index[input_mi]]
-                        for idim in range(self.dim):
-                            n = tgt_mi[idim]
-                            k = input_mi[idim]
+                        for n, k, dist in zip(tgt_mi, input_mi, dvec):
                             assert n >= k
                             contrib /= factorial(n-k)
                             contrib *= \
-                                sym.UnevaluatedExpr(dvec[idim]/tgt_rscale)**(n-k)
+                                sym.UnevaluatedExpr(dist/tgt_rscale)**(n-k)
 
                         cur_dim_output_coeffs[i] += contrib
                 # cur_dim_output_coeffs is the input in the next iteration

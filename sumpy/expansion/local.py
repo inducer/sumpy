@@ -27,6 +27,8 @@ from sumpy.expansion import (
     HelmholtzConformingVolumeTaylorExpansion,
     BiharmonicConformingVolumeTaylorExpansion)
 
+from sumpy.tools import mi_increment_axis
+
 
 class LocalExpansionBase(ExpansionBase):
     pass
@@ -297,7 +299,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             dims = [axis] + list(range(axis)) + \
                     list(range(axis+1, self.dim))
             # Start with source coefficients. Gets updated after each axis.
-            cur_dim_input_coeffs = src_coeffs   # noqa: N806
+            cur_dim_input_coeffs = src_coeffs
             # O(1) iterations
             for d in dims:
                 cur_dim_output_coeffs = [0] * len(src_mis)
@@ -306,9 +308,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 for i, s in enumerate(src_mis):
                     # O(p) iterations
                     for q in range(p+1-sum(s)):
-                        src_mi = list(s)
-                        src_mi[d] += q
-                        src_mi = tuple(src_mi)
+                        src_mi = mi_increment_axis(s, d, q)
                         if src_mi in src_mi_to_index:
                             cur_dim_output_coeffs[i] += (dvec[d]/src_rscale)**q * \
                                      cur_dim_input_coeffs[src_mi_to_index[src_mi]] \
