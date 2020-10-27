@@ -196,16 +196,17 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         result = [0] * len(self.get_full_coefficient_identifiers())
 
         for axis in range(self.dim):
-            # In M2M, target order is the same or higher as source order.
             # First, let's write source coefficients in target coefficient
-            # indices and then adjust rscale. Here C is referred by the same
-            # name used in the formulae above.
+            # indices. If target order is lower than source order, then
+            # we will discard higher order terms from source coefficients.
             cur_dim_input_coeffs = \
                 [0] * len(self.get_full_coefficient_identifiers())
             for d, mis in tgt_split:
                 if d != axis:
                     continue
                 for mi in mis:
+                    # When target order is higher than source order, we assume
+                    # that the higher order source coefficients were zero.
                     if mi not in src_mi_to_index:
                         continue
                     src_idx = src_mi_to_index[mi]
