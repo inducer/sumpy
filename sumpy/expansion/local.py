@@ -304,7 +304,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             for d in dims:
                 cur_dim_output_coeffs = [0] * len(src_mis)
                 # Only O(p^{d-1}) operations are used in compressed
-                # All of them are used in full.
+                # O(p^d) operations are used in full
                 for i, s in enumerate(src_mis):
                     # O(p) iterations
                     for q in range(p+1-sum(s)):
