@@ -456,7 +456,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         so that
         .. math::
 
-            c_{\text{full}} = M^T c_{\text{stored}}.
+            c^{\text{local}}_{\text{full}} = M^T c^{\text{local}}_{\text{stored}}.
+            c^{\text{mpole}}_{\text{stored}} = M c^{\text{mpole}}_{\text{full}}.
         """
         _, projection_matrix = \
             self.get_stored_ids_and_unscaled_projection_matrix()
