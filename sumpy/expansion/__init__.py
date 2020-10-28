@@ -456,7 +456,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         so that
         .. math::
 
-            c^{\text{local}}_{\text{full}} = M^T c^{\text{local}}_{\text{stored}}.
+            c^{\text{local}}_{\text{full}} = M^T c^{\text{local}}_{\text{stored}}.\\
             c^{\text{mpole}}_{\text{stored}} = M c^{\text{mpole}}_{\text{full}}.
         """
         _, projection_matrix = \
