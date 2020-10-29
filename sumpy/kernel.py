@@ -561,7 +561,7 @@ class YukawaKernel(ExpressionKernel):
         # where K is a modified Bessel function of the second kind.
         #
         # [1] https://en.wikipedia.org/wiki/Green%27s_function
-        # [2] http://dlmf.nist.gov/10.27#E8
+        # [2] https://dlmf.nist.gov/10.27#E8
         # [3] https://dlmf.nist.gov/10.47#E2
         # [4] https://dlmf.nist.gov/10.49
 

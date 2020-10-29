@@ -427,7 +427,7 @@ class BesselDerivativeReplacer(CSECachingMapperMixin, IdentityMapper):
             import sympy as sym
 
             # AS (9.1.31)
-            # http://dlmf.nist.gov/10.6.7
+            # https://dlmf.nist.gov/10.6.7
             if order >= 0:
                 order_str = str(order)
             else:
