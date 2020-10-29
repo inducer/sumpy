@@ -21,7 +21,7 @@ Sumpy relies on
 * `numpy <http://pypi.python.org/pypi/numpy>`_ for arrays
 * `boxtree <http://pypi.python.org/pypi/boxtree>`_ for FMM tree building
 * `sumpy <http://pypi.python.org/pypi/sumpy>`_ for expansions and analytical routines
-* `loopy <http://pypi.python.org/pypi/loo.py>`_ for fast array operations
+* `loopy <http://pypi.python.org/pypi/loopy>`_ for fast array operations
 * `pytest <http://pypi.python.org/pypi/pytest>`_ for automated testing
 
 and, indirectly,
