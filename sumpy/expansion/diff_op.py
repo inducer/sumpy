@@ -23,7 +23,7 @@ THE SOFTWARE.
 from collections import namedtuple
 from pyrsistent import pmap
 from pytools import memoize
-from sumpy.tools import add_mi, find_linear_relationship
+from sumpy.tools import add_mi
 import logging
 
 logger = logging.getLogger(__name__)
@@ -138,7 +138,146 @@ class LinearPDESystemOperator:
         return res
 
 
+def _convert_to_matrix(module, *gens):
+    import sympy
+    result = []
+    for syzygy in module:
+        row = []
+        for dmp in syzygy.data:
+            row.append(sympy.Poly(dmp.to_dict(), *gens, domain=sympy.EX).as_expr())
+        result.append(row)
+    return sympy.Matrix(result)
+
+
 @memoize
+def _get_all_scalar_pdes(pde):
+    r"""
+    Returns a scalar PDE for each component of a ``pde``.
+
+    To do this, we first convert a system of PDEs into a matrix where each
+    row represents one PDE of the system of PDEs and each column represents
+    a component. We convert a derivative to a polynomial expression and
+    multiply that by the coefficient and enter that value into the matrix.
+
+    eg:
+
+    \[
+      \frac{\partial^2 u}{\partial x^2} + 2 \frac{\partial^2 v}{\partial x y} = 0 \\
+      3 * \frac{\partial^2 u}{\partial y^2} + \frac{\partial^2 v}{\partial x^2} = 0
+    \]
+    is converted into,
+    \[
+      \begin{bmatrix}
+        x^2   & 2xy \\
+        2y^2  & x^2
+      \end{bmatrix}
+    \]
+
+    Let $r_i$ be the rows of the above matrix.  In order find a scalar PDE for
+    the first component, we need to find some polynomials,
+    $a_1, a_2, \ldots, a_n$ such that the vector $\sum_i a_i r_i$ has zeros
+    except for the first component. In other words, we need to find a vector of
+    polynomials such that the inner product of it with each of the columns except
+    for the first column is zero.
+    i.e. $a_1, a_2, \ldots, a_n$ is a syzygy of all columns except for the first
+    column.
+
+    To calculate this, we first calculate the syzygy module of each column and
+    intersect them together. As a result we will get a set of syzygies
+    and the vector $a_1, a_2, \ldots, a_n$ is a combination of them.
+    For each syzygy, we calculate the inner product with the first column to get
+    a polynomial that represents a scalar PDE for the first component.
+    When there are multiple such scalar PDEs, we want to get a combination of them
+    that has the smallest positive degree.
+    To do this, we calculate a groebner basis of the polynomials. We use the
+    Groebner basis property that the largest monomial of each polynomial generated
+    by set of polynomials is divisible by the largest monomial of some polynomial
+    in the Groebner basis. Therefore the solution we are looking for is in the
+    Groebner basis and we choose the one that has the smallest positive degree.
+    """
+    import sympy
+    gens = [sympy.symbols(f"_x{i}") for i in range(pde.dim)]
+    gens += [sympy.symbols(f"_t{i}") for i in range(pde.total_dims - pde.dim)]
+
+    max_vec_idx = 0
+    for eq in pde.eqs:
+        for deriv_ident in eq.keys():
+            max_vec_idx = max(max_vec_idx, deriv_ident.vec_idx)
+
+    pde_system_mat = sympy.zeros(len(pde.eqs), max_vec_idx + 1)
+    for row, eq in enumerate(pde.eqs):
+        for deriv_ident, coeff in eq.items():
+            deriv_as_poly = 1
+            for i, val in enumerate(deriv_ident.mi):
+                deriv_as_poly *= gens[i]**val
+            pde_system_mat[row, deriv_ident.vec_idx] += coeff * deriv_as_poly
+
+    ring = sympy.EX.old_poly_ring(*gens)
+    column_ideals = [ring.free_module(1).submodule(*pde_system_mat[:, i].tolist())
+            for i in range(pde_system_mat.shape[1])]
+    column_syzygy_modules = [ideal.syzygy_module() for ideal in column_ideals]
+
+    ring = sympy.EX.old_poly_ring(*gens)
+    ncols = len(column_syzygy_modules)
+
+    # For each column i, we need to get the intersection of all the syzygy modules
+    # except for the ith module. For n number of modules, this is n*(n-2) work.
+    # To reduce that we first calculate the intersection from the left adding one
+    # module every iteration and store them. We then calculate the intersection
+    # from the right adding one module every iteration and store them. Then
+    # for each column we calculate the intersection of the left modules and the
+    # right modules. This requires only 3*(n-2) work.
+    left_intersections = [None]*ncols
+    right_intersections = [None]*ncols
+
+    def intersect(a, b):
+        if a is None:
+            return b
+        if b is None:
+            return a
+        return a.intersect(b)
+
+    for i in range(1, ncols):
+        left_intersections[i] = \
+            intersect(left_intersections[i-1], column_syzygy_modules[i-1])
+    for i in reversed(range(0, ncols-1)):
+        right_intersections[i] = \
+            intersect(right_intersections[i+1], column_syzygy_modules[i+1])
+
+    # At the end, calculate the intersection of the left modules and right modules
+    # and calculate a groebner basis for it.
+    module_intersections = [
+        intersect(left_intersections[i], right_intersections[i])._groebner_vec()
+        for i in range(ncols)
+    ]
+    # For each column in the PDE system matrix, we multiply that column by
+    # the syzygy module intersection to get a set of scalar PDEs for that
+    # column.
+    scalar_pdes_vec = [
+        (_convert_to_matrix(module_intersections[i], *gens) * pde_system_mat)[:, i]
+        for i in range(ncols)
+    ]
+    results = []
+    for col in range(ncols):
+        scalar_pdes = scalar_pdes_vec[col]
+
+        minimal = None
+        for scalar_pde in scalar_pdes:
+            p = sympy.Poly(sympy.simplify(scalar_pde), *gens, domain=sympy.EX)
+            if not p.degree() > 0:
+                continue
+            if minimal is None or p.degree() < minimal.degree():
+                minimal = p
+
+        scalar_pde = minimal.monic()
+        pde_dict = {}
+        for mi, coeff in zip(scalar_pde.monoms(), scalar_pde.coeffs()):
+            pde_dict[DerivativeIdentifier(mi, 0)] = coeff
+        results.append(LinearPDESystemOperator(pde.dim, pmap(pde_dict)))
+
+    return results
+
+
 def as_scalar_pde(pde, vec_idx):
     r"""
     Returns a scalar PDE that is satisfied by the *vec_idx* component
@@ -148,8 +287,6 @@ def as_scalar_pde(pde, vec_idx):
     :arg vec_idx: the index of the vector-valued function that we
                   want as a scalar PDE
     """
-    from sumpy.tools import nullspace
-
     indices = set()
     for eq in pde.eqs:
         for deriv_ident in eq.keys():
@@ -159,57 +296,7 @@ def as_scalar_pde(pde, vec_idx):
     if len(indices) == 1 and list(indices)[0] == vec_idx:
         return pde
 
-    from pytools import ProcessLogger
-    plog = ProcessLogger(logger, "computing single PDE for multiple PDEs")
-
-    from pytools import (
-            generate_nonnegative_integer_tuples_summing_to_at_most
-            as gnitstam)
-
-    dim = pde.total_dims
-
-    # slowly increase the order of the derivatives that we take of the
-    # system of PDEs. Once we reach the order of the scalar PDE, this
-    # loop will break
-    for order in range(2, 100):
-        mis = sorted(gnitstam(order, dim), key=sum)
-
-        pde_mat = []
-        coeff_ident_enumerate_dict = dict((tuple(mi), i) for
-                                            (i, mi) in enumerate(mis))
-        offset = len(mis)
-
-        # Create a matrix of equations that are derivatives of the
-        # original system of PDEs
-        for mi in mis:
-            for pde_dict in pde.eqs:
-                eq = [0]*(len(mis)*(max(indices)+1))
-                for ident, coeff in pde_dict.items():
-                    c = tuple(add_mi(ident.mi, mi))
-                    if c not in coeff_ident_enumerate_dict:
-                        break
-                    idx = offset*ident.vec_idx + coeff_ident_enumerate_dict[c]
-                    eq[idx] = coeff
-                else:
-                    pde_mat.append(eq)
-
-        if len(pde_mat) == 0:
-            continue
-
-        # Get the nullspace of the matrix and get the rows related to this
-        # vec_idx
-        n = nullspace(pde_mat)[offset*vec_idx:offset*(vec_idx+1), :]
-        indep_row = find_linear_relationship(n)
-        if len(indep_row) > 0:
-            pde_dict = {}
-            mult = indep_row[max(indep_row.keys())]
-            for k, v in indep_row.items():
-                pde_dict[DerivativeIdentifier(mis[k], 0)] = v / mult
-            plog.done()
-            return LinearPDESystemOperator(pde.dim, pmap(pde_dict))
-
-    plog.done()
-    assert False
+    return _get_all_scalar_pdes(pde)[vec_idx]
 
 
 def laplacian(diff_op):
