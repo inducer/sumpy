@@ -37,8 +37,6 @@ from sumpy.kernel import (LaplaceKernel, HelmholtzKernel,
 from sumpy.expansion.diff_op import (make_identity_diff_op, gradient,
         divergence, laplacian, concat, as_scalar_pde, curl, diff)
 
-import logging
-logger = logging.getLogger(__name__)
 
 # {{{ pde check for kernels
 
