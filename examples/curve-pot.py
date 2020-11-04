@@ -91,7 +91,7 @@ def draw_pot_figure(aspect_ratio,
 
     # r,a,b match the corresponding letters from G. J. Rodin and O. Steinbach,
     # Boundary Element Preconditioners for problems defined on slender domains.
-    # http://dx.doi.org/10.1137/S1064827500372067
+    # https://dx.doi.org/10.1137/S1064827500372067
 
     a = 1
     b = 1/aspect_ratio

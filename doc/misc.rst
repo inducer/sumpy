@@ -12,7 +12,7 @@ This command should install :mod:`sumpy`::
     pip install sumpy
 
 You may need to run this with :command:`sudo`.
-If you don't already have `pip <https://pypi.python.org/pypi/pip>`_,
+If you don't already have `pip <https://pypi.org/project/pip>`_,
 run this beforehand::
 
     curl -O https://raw.github.com/pypa/pip/master/contrib/get-pip.py
@@ -101,7 +101,7 @@ Frequently Asked Questions
 ==========================
 
 The FAQ is maintained collaboratively on the
-`Wiki FAQ page <http://wiki.tiker.net/Sumpy/FrequentlyAskedQuestions>`_.
+`Wiki FAQ page <https://wiki.tiker.net/Sumpy/FrequentlyAskedQuestions>`_.
 
 Acknowledgments
 ===============

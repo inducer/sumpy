@@ -520,7 +520,7 @@ class MatrixBlockIndexRanges:
 
 # {{{ OrderedSet
 
-# Source: http://code.activestate.com/recipes/576694-orderedset/
+# Source: https://code.activestate.com/recipes/576694-orderedset/
 # Author: Raymond Hettinger
 # License: MIT
 

@@ -433,7 +433,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
     @memoize_method
     def get_projection_matrix(self, rscale):
-        """
+        r"""
         Return a :class:`CSEMatVecOperator` object which exposes a matrix vector
         multiplication operator for the projection matrix that expresses
         every derivative in terms of a set of "stored" derivatives.
@@ -452,7 +452,12 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
             ^ rows = one for every derivative
 
-        the projection matrix `M` is the transpose of the coefficient matrix
+        the projection matrix `M` is the transpose of the coefficient matrix,
+        so that
+        .. math::
+
+            c^{\text{local}}_{\text{full}} = M^T c^{\text{local}}_{\text{stored}}.\\
+            c^{\text{mpole}}_{\text{stored}} = M c^{\text{mpole}}_{\text{full}}.
         """
         _, projection_matrix = \
             self.get_stored_ids_and_unscaled_projection_matrix()
