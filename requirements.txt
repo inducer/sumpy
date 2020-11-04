@@ -6,5 +6,5 @@ git+https://github.com/inducer/pymbolic#egg=pymbolic
 git+https://github.com/inducer/islpy#egg=islpy
 git+https://github.com/inducer/pyopencl#egg=pyopencl
 git+https://github.com/isuruf/boxtree@multi_p2e#egg=boxtree
-git+https://github.com/inducer/loopy#egg=loo.py
+git+https://github.com/inducer/loopy#egg=loopy
 git+https://github.com/inducer/pyfmmlib#egg=pyfmmlib
