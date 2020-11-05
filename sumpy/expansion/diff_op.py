@@ -196,6 +196,7 @@ def _get_all_scalar_pdes(pde):
     Groebner basis and we choose the one that has the smallest positive degree.
     """
     import sympy
+    from sympy.polys.orderings import grevlex
     gens = [sympy.symbols(f"_x{i}") for i in range(pde.dim)]
     gens += [sympy.symbols(f"_t{i}") for i in range(pde.total_dims - pde.dim)]
 
@@ -212,8 +213,9 @@ def _get_all_scalar_pdes(pde):
                 deriv_as_poly *= gens[i]**val
             pde_system_mat[row, deriv_ident.vec_idx] += coeff * deriv_as_poly
 
-    ring = sympy.EX.old_poly_ring(*gens)
-    column_ideals = [ring.free_module(1).submodule(*pde_system_mat[:, i].tolist())
+    ring = sympy.EX.old_poly_ring(*gens, order=grevlex)
+    column_ideals = [ring.free_module(1).submodule(*pde_system_mat[:, i].tolist(),
+                        order=grevlex)
             for i in range(pde_system_mat.shape[1])]
     column_syzygy_modules = [ideal.syzygy_module() for ideal in column_ideals]
 
