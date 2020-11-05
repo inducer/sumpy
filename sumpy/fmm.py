@@ -61,8 +61,7 @@ class SumpyExpansionWranglerCodeContainer:
             multipole_expansion_factory,
             local_expansion_factory,
             out_kernels, exclude_self=False, use_rscale=None,
-            strength_usage=None, in_kernels=None,
-        ):
+            strength_usage=None, in_kernels=None):
         """
         :arg multipole_expansion_factory: a callable of a single argument (order)
             that returns a multipole expansion.

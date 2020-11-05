@@ -160,8 +160,8 @@ class P2EFromSingleBox(P2EBase):
                 [
                     lp.GlobalArg("sources", None, shape=(self.dim, "nsources"),
                         dim_tags="sep,c"),
-                    lp.GlobalArg("strengths", None, shape="strength_count, nsources",
-                        dim_tags="sep,C"),
+                    lp.GlobalArg("strengths", None,
+                        shape="strength_count, nsources", dim_tags="sep,C"),
                     lp.GlobalArg("box_source_starts,box_source_counts_nonchild",
                         None, shape=None),
                     lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
@@ -171,7 +171,8 @@ class P2EFromSingleBox(P2EBase):
                     lp.ValueArg("nboxes,aligned_nboxes,tgt_base_ibox", np.int32),
                     lp.ValueArg("nsources", np.int32),
                     "..."
-                ] + gather_loopy_source_arguments(self.in_kernels + (self.expansion,)),
+                ] + gather_loopy_source_arguments(self.in_kernels
+                        + (self.expansion,)),
                 name=self.name,
                 assumptions="nsrc_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
@@ -241,7 +242,8 @@ class P2EFromCSR(P2EBase):
                         np.int32),
                     lp.ValueArg("nsources", np.int32),
                     "..."
-                ] + gather_loopy_source_arguments(self.in_kernels + (self.expansion,)))
+                ] + gather_loopy_source_arguments(self.in_kernels
+                        + (self.expansion,)))
 
         loopy_knl = lp.make_kernel(
                 [

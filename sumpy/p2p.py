@@ -26,7 +26,6 @@ THE SOFTWARE.
 import numpy as np
 import loopy as lp
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
-from pymbolic import var
 
 from sumpy.tools import (
         KernelComputation, KernelCacheWrapper, is_obj_array_like)
@@ -88,7 +87,7 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
         self.in_kernels = in_kernels
         self.out_kernels = out_kernels
 
-        self.dim = single_valued(knl.dim for knl in \
+        self.dim = single_valued(knl.dim for knl in
             list(self.out_kernels) + list(self.in_kernels))
 
     def get_cache_key(self):
@@ -138,7 +137,7 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
 
         result_names = [
             sac.add_assignment(f"{result_name_prefix}_{i}", expr)
-               for i, expr in enumerate(exprs)
+            for i, expr in enumerate(exprs)
         ]
 
         sac.run_global_cse()
@@ -161,7 +160,8 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
                 for i, name in enumerate(result_names)]
 
             from pymbolic.primitives import If, Variable
-            assignments = [assign.copy(expression=If(Variable("is_self"), 0, assign.expression)) for assign in assignments]
+            assignments = [assign.copy(expression=If(Variable("is_self"), 0,
+                            assign.expression)) for assign in assignments]
         else:
             assignments = []
 
@@ -241,7 +241,7 @@ class P2P(P2PBase):
             + [f"""
                 result[{iknl}, itgt] = knl_{iknl}_scaling * \
                     simul_reduce(sum, isrc, pair_result_{iknl}) {{inames=itgt}}
-               """  for iknl in range(len(self.out_kernels))]
+               """ for iknl in range(len(self.out_kernels))]
             + ["end"],
             arguments,
             assumptions="nsources>=1 and ntargets>=1",
