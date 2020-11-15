@@ -1,10 +1,10 @@
 numpy
 sympy==1.1.1
 pyrsistent
-git+https://github.com/inducer/pytools#egg=pytools
-git+https://github.com/inducer/pymbolic#egg=pymbolic
-git+https://github.com/inducer/islpy#egg=islpy
-git+https://github.com/inducer/pyopencl#egg=pyopencl
-git+https://github.com/isuruf/boxtree#egg=boxtree
-git+https://github.com/inducer/loopy#egg=loopy
+git+https://github.com/inducer/pytools.git#egg=pytools
+git+https://github.com/inducer/pymbolic.git#egg=pymbolic
+git+https://github.com/inducer/islpy.git#egg=islpy
+git+https://github.com/inducer/pyopencl.git#egg=pyopencl
+git+https://github.com/inducer/boxtree.git#egg=boxtree
+git+https://github.com/inducer/loopy.git#egg=loopy
 git+https://github.com/inducer/pyfmmlib#egg=pyfmmlib
