@@ -89,7 +89,7 @@ def test_line_taylor_coeff_growth():
     expn = LineTaylorLocalExpansion(LaplaceKernel(2), order)
     avec = make_sym_vector("a", 2)
     bvec = make_sym_vector("b", 2)
-    coeffs = expn.coefficients_from_source(avec, bvec, rscale=1)
+    coeffs = expn.coefficients_from_source(expn.kernel, avec, bvec, rscale=1)
 
     sym2pymbolic = SympyToPymbolicMapper()
     coeffs_pymbolic = [sym2pymbolic(c) for c in coeffs]

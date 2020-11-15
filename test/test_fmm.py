@@ -179,7 +179,7 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class):
 
         from boxtree.fmm import drive_fmm
 
-        pot, = drive_fmm(trav, wrangler, weights)
+        pot, = drive_fmm(trav, wrangler, (weights,))
 
         from sumpy import P2P
         p2p = P2P(ctx, out_kernels, exclude_self=False)
@@ -249,7 +249,7 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory):
     from boxtree.fmm import drive_fmm
 
     timing_data = {}
-    pot, = drive_fmm(trav, wrangler, weights, timing_data=timing_data)
+    pot, = drive_fmm(trav, wrangler, (weights,), timing_data=timing_data)
     print(timing_data)
     assert timing_data
 
@@ -308,7 +308,7 @@ def test_sumpy_fmm_exclude_self(ctx_factory):
 
     from boxtree.fmm import drive_fmm
 
-    pot, = drive_fmm(trav, wrangler, weights)
+    pot, = drive_fmm(trav, wrangler, (weights,))
 
     from sumpy import P2P
     p2p = P2P(ctx, out_kernels, exclude_self=True)

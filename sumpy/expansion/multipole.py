@@ -53,9 +53,10 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
     Coefficients represent the terms in front of the kernel derivatives.
     """
 
-    def coefficients_from_source(self, avec, bvec, rscale, sac=None):
+    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
         from sumpy.kernel import DirectionalSourceDerivative
-        kernel = self.kernel
+        if kernel is None:
+            kernel = self.kernel
 
         from sumpy.tools import mi_power, mi_factorial
 
@@ -284,9 +285,12 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
     def get_coefficient_identifiers(self):
         return list(range(-self.order, self.order+1))
 
-    def coefficients_from_source(self, avec, bvec, rscale, sac=None):
+    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
         if not self.use_rscale:
             rscale = 1
+
+        if kernel is None:
+            kernel = self.kernel
 
         from sumpy.symbolic import sym_real_norm_2
         bessel_j = sym.Function("bessel_j")
@@ -297,7 +301,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
         # The coordinates are negated since avec points from source to center.
         source_angle_rel_center = sym.atan2(-avec[1], -avec[0])
         return [
-                self.kernel.postprocess_at_source(
+                kernel.postprocess_at_source(
                     bessel_j(c, arg_scale * avec_len)
                     / rscale ** abs(c)
                     * sym.exp(sym.I * c * -source_angle_rel_center),
