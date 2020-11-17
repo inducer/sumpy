@@ -65,12 +65,13 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
             kernels = [tdr(expansion.kernel)]
         else:
             kernels = kernels
-            for knl in kernels:
-                assert tdr(knl) == knl
-                assert sdr(knl) == expansion.kernel
 
         expansion = expansion.with_kernel(tdr(expansion.kernel))
         expansion = expansion.with_kernel(sdr(expansion.kernel))
+
+        for knl in kernels:
+            assert tdr(knl) == knl
+            assert sdr(knl) == expansion.kernel
 
         KernelComputation.__init__(self, ctx=ctx, out_kernels=[], in_kernels=kernels,
             strength_usage=strength_usage, value_dtypes=None,
