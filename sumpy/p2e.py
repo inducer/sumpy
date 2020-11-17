@@ -60,8 +60,6 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
         from sumpy.kernel import TargetDerivativeRemover, SourceDerivativeRemover
         tdr = TargetDerivativeRemover()
         sdr = SourceDerivativeRemover()
-        expansion = expansion.with_kernel(tdr(expansion.kernel))
-        expansion = expansion.with_kernel(sdr(expansion.kernel))
 
         if kernels is None:
             kernels = [tdr(expansion.kernel)]
@@ -70,6 +68,9 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
             for knl in kernels:
                 assert tdr(knl) == knl
                 assert sdr(knl) == expansion.kernel
+
+        expansion = expansion.with_kernel(tdr(expansion.kernel))
+        expansion = expansion.with_kernel(sdr(expansion.kernel))
 
         KernelComputation.__init__(self, ctx=ctx, out_kernels=[], in_kernels=kernels,
             strength_usage=strength_usage, value_dtypes=None,
