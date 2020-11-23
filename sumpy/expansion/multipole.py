@@ -109,14 +109,14 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             self.expansion_terms_wrangler.get_stored_mpole_coefficients_from_full(
                 result, rscale, sac=sac))
 
-    def get_scaled_multipole(self, expr, bvec, rscale, nderivatives,
+    def get_scaled_multipole(self, kernel, expr, bvec, rscale, nderivatives,
             nderivatives_for_scaling=None):
         if nderivatives_for_scaling is None:
             nderivatives_for_scaling = nderivatives
 
         if self.kernel.has_efficient_scale_adjustment:
             return (
-                    self.kernel.adjust_for_kernel_scaling(
+                    kernel.adjust_for_kernel_scaling(
                         vector_xreplace(
                             expr,
                             bvec, bvec * rscale**-1),
@@ -125,22 +125,22 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         else:
             return (rscale**nderivatives_for_scaling * expr)
 
-    def evaluate(self, coeffs, bvec, rscale, sac=None):
+    def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         if not self.use_rscale:
             rscale = 1
 
-        taker = self.get_kernel_derivative_taker(bvec)
+        taker = self.get_kernel_derivative_taker(kernel, bvec)
 
         result = sym.Add(*tuple(
                 coeff
-                * self.get_scaled_multipole(taker.diff(mi), bvec, rscale, sum(mi))
+                * self.get_scaled_multipole(kernel, taker.diff(mi), bvec, rscale, sum(mi))
                 for coeff, mi in zip(coeffs, self.get_coefficient_identifiers())))
 
-        return result
+        return kernel.postprocess_at_target(result, bvec)
 
-    def get_kernel_derivative_taker(self, bvec):
+    def get_kernel_derivative_taker(self, kernel, bvec):
         from sumpy.tools import MiDerivativeTaker
-        return MiDerivativeTaker(self.kernel.get_expression(bvec), bvec)
+        return MiDerivativeTaker(kernel.get_expression(bvec), bvec)
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None):
@@ -308,7 +308,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
                     avec)
                 for c in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec, rscale, sac=None):
+    def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         if not self.use_rscale:
             rscale = 1
 
@@ -320,7 +320,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
         arg_scale = self.get_bessel_arg_scaling()
 
         return sum(coeffs[self.get_storage_index(c)]
-                   * self.kernel.postprocess_at_target(
+                   * kernel.postprocess_at_target(
                        hankel_1(c, arg_scale * bvec_len)
                        * rscale ** abs(c)
                        * sym.exp(sym.I * c * target_angle_rel_center), bvec)

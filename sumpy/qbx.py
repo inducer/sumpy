@@ -76,7 +76,7 @@ def expand(expansion_nr, sac, expansion, avec, bvec):
             for i in expansion.get_coefficient_identifiers()]
 
     return sac.assign_unique("expn%d_result" % expansion_nr,
-            expansion.evaluate(assigned_coeffs, bvec, rscale))
+            expansion.evaluate(expansion.kernel, assigned_coeffs, bvec, rscale))
 
 
 # {{{ layer potential computation

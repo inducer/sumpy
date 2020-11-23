@@ -96,12 +96,13 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
                     .subs("tau", 0)
                     for i in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec, rscale, sac=None):
+    def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         # no point in heeding rscale here--just ignore it
         from pytools import factorial
-        return sym.Add(*(
+        result = sym.Add(*(
                 coeffs[self.get_storage_index(i)] / factorial(i)
                 for i in self.get_coefficient_identifiers()))
+        return kernel.postprocess_at_target(result, bvec)
 
 # }}}
 
@@ -122,14 +123,14 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 taker.diff(mi) * rscale ** sum(mi)
                 for mi in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec, rscale, sac=None):
+    def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         from pytools import factorial
 
         evaluated_coeffs = (
             self.expansion_terms_wrangler.get_full_kernel_derivatives_from_stored(
                 coeffs, rscale, sac=sac))
 
-        bvec = [b*rscale**-1 for b in bvec]
+        bvec_scaled = [b*rscale**-1 for b in bvec]
         mi_to_index = {mi: i for i, mi in
                         enumerate(self.get_full_coefficient_identifiers())}
 
@@ -181,12 +182,12 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
                     local_sum[d] += local_sum[d+1]*local_multiplier[d+1]
                     local_sum[d+1] = 0
-                    local_multiplier[d+1] = bvec[d]**mi[d] / factorial(mi[d])
+                    local_multiplier[d+1] = bvec_scaled[d]**mi[d] / factorial(mi[d])
 
             # }}}
 
             local_sum[dim-1] += evaluated_coeffs[mi_to_index[mi]] * \
-                                    bvec[dim-1]**mi[dim-1] / factorial(mi[dim-1])
+                                    bvec_scaled[dim-1]**mi[dim-1] / factorial(mi[dim-1])
             seen_mi = mi
 
         for d in reversed(range(dim-1)):
@@ -197,16 +198,17 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         if 0:
             from sumpy.tools import mi_power, mi_factorial
 
-            return sum(
+            result = sum(
                 coeff
-                * mi_power(bvec, mi, evaluate=False)
+                * mi_power(bvec_scaled, mi, evaluate=False)
                 / mi_factorial(mi)
                 for coeff, mi in zip(
                         evaluated_coeffs, self.get_full_coefficient_identifiers()))
 
         # }}}
 
-        return local_sum[0]
+        result = local_sum[0]
+        return kernel.postprocess_at_target(result, bvec)
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None):
@@ -232,7 +234,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # This code speeds up derivative taking by caching all kernel
             # derivatives.
 
-            taker = src_expansion.get_kernel_derivative_taker(dvec)
+            taker = src_expansion.get_kernel_derivative_taker(src_expansion.kernel, dvec)
 
             from sumpy.tools import add_mi
 
@@ -289,6 +291,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                             sum(tgtplusderiv_coeff_id)-sum(lexp_mi)
                     kernel_deriv = (
                             src_expansion.get_scaled_multipole(
+                                src_expansion.kernel,
                                 taker.diff(tgtplusderiv_coeff_id),
                                 dvec, src_rscale,
                                 nderivatives=sum(tgtplusderiv_coeff_id),
@@ -308,7 +311,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # This moves the two cancelling "rscales" closer to each other at
             # the end in the hope of helping rscale magnitude.
             dvec_scaled = [d*src_rscale for d in dvec]
-            expr = src_expansion.evaluate(src_coeff_exprs, dvec_scaled,
+            expr = src_expansion.evaluate(src_expansion.kernel, src_coeff_exprs, dvec_scaled,
                         rscale=src_rscale, sac=sac)
             replace_dict = {d: d/src_rscale for d in dvec}
             taker = MiDerivativeTaker(expr, dvec)
@@ -389,7 +392,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                     * sym.exp(sym.I * c * source_angle_rel_center), avec)
                     for c in self.get_coefficient_identifiers()]
 
-    def evaluate(self, coeffs, bvec, rscale, sac=None):
+    def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         if not self.use_rscale:
             rscale = 1
 
@@ -401,7 +404,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         arg_scale = self.get_bessel_arg_scaling()
 
         return sum(coeffs[self.get_storage_index(c)]
-                   * self.kernel.postprocess_at_target(
+                   * kernel.postprocess_at_target(
                        bessel_j(c, arg_scale * bvec_len)
                        / rscale ** abs(c)
                        * sym.exp(sym.I * c * -target_angle_rel_center), bvec)

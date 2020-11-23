@@ -109,7 +109,7 @@ class ExpansionBase:
         """
         raise NotImplementedError
 
-    def coefficients_from_source(self, avec, bvec, rscale, sac=None):
+    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
         """Form an expansion from a source point.
 
         :arg avec: vector from source to center.
@@ -123,7 +123,7 @@ class ExpansionBase:
         """
         raise NotImplementedError
 
-    def evaluate(self, coeffs, bvec, rscale, sac=None):
+    def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         """
         :return: a :mod:`sympy` expression corresponding
             to the evaluated expansion with the coefficients

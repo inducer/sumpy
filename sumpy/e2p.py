@@ -62,8 +62,9 @@ class E2PBase(KernelCacheWrapper):
         expansion = expansion.with_kernel(
                 sdr(expansion.kernel))
 
+        kernels = [sdr(knl) for knl in kernels]
         for knl in kernels:
-            assert sdr(tdr(knl)) == expansion.kernel
+            assert tdr(knl) == expansion.kernel
 
         self.ctx = ctx
         self.expansion = expansion
@@ -85,11 +86,10 @@ class E2PBase(KernelCacheWrapper):
 
         coeff_exprs = [sym.Symbol("coeff%d" % i)
                 for i in range(len(self.expansion.get_coefficient_identifiers()))]
-        value = self.expansion.evaluate(coeff_exprs, bvec, rscale, sac=sac)
 
         result_names = [
             sac.assign_unique("result_%d_p" % i,
-                knl.postprocess_at_target(value, bvec))
+                self.expansion.evaluate(knl, coeff_exprs, bvec, rscale, sac=sac))
             for i, knl in enumerate(self.kernels)
             ]
 
