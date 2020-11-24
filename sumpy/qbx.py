@@ -160,7 +160,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
         return loopy_insns, result_names
 
     def get_strength_or_not(self, isrc, kernel_idx):
-        return var("strength_%d" % self.strength_usage[kernel_idx]).index(isrc)
+        return var("strength_%d_isrc" % self.strength_usage[kernel_idx])
 
     def get_kernel_exprs(self, result_names):
         exprs = [var(name) for i, name in enumerate(result_names)]
@@ -253,6 +253,8 @@ class LayerPotential(LayerPotentialBase):
             + ["<> a[idim] = center[idim, itgt] - src[idim, isrc] {dup=idim}"]
             + ["<> b[idim] = tgt[idim, itgt] - center[idim, itgt] {dup=idim}"]
             + ["<> rscale = expansion_radii[itgt]"]
+            + [f"<> strength_{i}_isrc = strength_{i}[isrc]" for i in
+                    range(self.strength_count)]
             + loopy_insns + kernel_exprs
             + ["""
                 result_{i}[itgt] = knl_{i}_scaling * \
