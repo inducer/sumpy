@@ -75,11 +75,10 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
             deriv_taker = MiDerivativeTaker(line_kernel, (tau,))
 
             return [my_syntactic_subs(
-                        kernel.postprocess_at_target(
-                            kernel.postprocess_at_source(
-                                deriv_taker.diff(i),
-                                avec), bvec),
-                        {tau: 0})
+                        kernel.postprocess_at_source(
+                            deriv_taker.diff(i),
+                            avec),
+                    {tau: 0})
                     for i in self.get_coefficient_identifiers()]
         else:
             # Workaround for sympy. The automatic distribution after
@@ -89,10 +88,8 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
             #
             # See also https://gitlab.tiker.net/inducer/pytential/merge_requests/12
 
-            return [kernel.postprocess_at_target(
-                        kernel.postprocess_at_source(
-                            line_kernel.diff("tau", i), avec),
-                        bvec)
+            return [kernel.postprocess_at_source(
+                            line_kernel.diff("tau", i), avec)
                     .subs("tau", 0)
                     for i in self.get_coefficient_identifiers()]
 
@@ -102,7 +99,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
         result = sym.Add(*(
                 coeffs[self.get_storage_index(i)] / factorial(i)
                 for i in self.get_coefficient_identifiers()))
-        return kernel.postprocess_at_target(result, bvec)
+        return result
 
 # }}}
 
@@ -187,7 +184,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # }}}
 
             local_sum[dim-1] += evaluated_coeffs[mi_to_index[mi]] * \
-                                    bvec_scaled[dim-1]**mi[dim-1] / factorial(mi[dim-1])
+                                bvec_scaled[dim-1]**mi[dim-1] / factorial(mi[dim-1])
             seen_mi = mi
 
         for d in reversed(range(dim-1)):
@@ -234,7 +231,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # This code speeds up derivative taking by caching all kernel
             # derivatives.
 
-            taker = src_expansion.get_kernel_derivative_taker(src_expansion.kernel, dvec)
+            taker = src_expansion.get_kernel_derivative_taker(src_expansion.kernel,
+                dvec)
 
             from sumpy.tools import add_mi
 
@@ -274,7 +272,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                         src_coeff_exprs,
                         src_expansion.get_coefficient_identifiers()):
                     embedded_coeffs[
-                            tgtplusderiv_ident_to_index[add_mi(lexp_mi, term)]] \
+                        tgtplusderiv_ident_to_index[add_mi(lexp_mi, term)]] \
                                     = coeff
 
                 # Compress the embedded coefficient set
@@ -311,8 +309,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # This moves the two cancelling "rscales" closer to each other at
             # the end in the hope of helping rscale magnitude.
             dvec_scaled = [d*src_rscale for d in dvec]
-            expr = src_expansion.evaluate(src_expansion.kernel, src_coeff_exprs, dvec_scaled,
-                        rscale=src_rscale, sac=sac)
+            expr = src_expansion.evaluate(src_expansion.kernel, src_coeff_exprs,
+                        dvec_scaled, rscale=src_rscale, sac=sac)
             replace_dict = {d: d/src_rscale for d in dvec}
             taker = MiDerivativeTaker(expr, dvec)
             rscale_ratio = sym.UnevaluatedExpr(tgt_rscale/src_rscale)

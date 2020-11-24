@@ -53,6 +53,7 @@ class ExpansionBase:
     .. automethod:: __eq__
     .. automethod:: __ne__
     """
+    init_arg_names = ("kernel", "order", "use_rscale")
 
     def __init__(self, kernel, order, use_rscale=None):
         # Don't be tempted to remove target derivatives here.
@@ -151,6 +152,21 @@ class ExpansionBase:
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+    def copy(self, **kwargs):
+        new_kwargs = {
+                name: getattr(self, name)
+                for name in self.init_arg_names}
+
+        for name in self.init_arg_names:
+            new_kwargs[name] = kwargs.pop(name, getattr(self, name))
+
+        if kwargs:
+            raise TypeError("unexpected keyword arguments '%s'"
+                % ", ".join(kwargs))
+
+        return type(self)(**new_kwargs)
+
 
 # }}}
 
