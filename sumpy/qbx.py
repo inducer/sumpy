@@ -183,8 +183,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                     None, shape="ntargets"),
                 lp.ValueArg("nsources", None),
                 lp.ValueArg("ntargets", None)]
-                + gather_loopy_source_arguments(self.out_kernels + self.in_kernels)
-                + gather_loopy_source_arguments((self.expansion,)))
+                + gather_loopy_source_arguments(self.out_kernels + self.in_kernels))
 
     def get_kernel(self):
         raise NotImplementedError
