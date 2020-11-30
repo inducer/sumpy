@@ -73,7 +73,8 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
             assert tdr(knl) == knl
             assert sdr(knl) == expansion.kernel
 
-        KernelComputation.__init__(self, ctx=ctx, out_kernels=[], in_kernels=kernels,
+        KernelComputation.__init__(self, ctx=ctx, target_kernels=[],
+            source_kernels=kernels,
             strength_usage=strength_usage, value_dtypes=None,
             name=name, device=device)
 
@@ -91,7 +92,7 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
         sac = SymbolicAssignmentCollection()
 
         coeff_names = []
-        for knl_idx, kernel in enumerate(self.in_kernels):
+        for knl_idx, kernel in enumerate(self.source_kernels):
             for i, coeff_i in enumerate(
                 self.expansion.coefficients_from_source(kernel, avec, None, rscale,
                      sac)
@@ -102,7 +103,7 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
         sac.run_global_cse()
 
         code_transformers = [self.expansion.get_code_transformer()] \
-            + [kernel.get_code_transformer() for kernel in self.in_kernels]
+            + [kernel.get_code_transformer() for kernel in self.source_kernels]
 
         from sumpy.codegen import to_loopy_insns
         return to_loopy_insns(
@@ -115,13 +116,13 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
 
     def get_cache_key(self):
         return (type(self).__name__, self.name, self.expansion,
-                tuple(self.in_kernels), tuple(self.strength_usage))
+                tuple(self.source_kernels), tuple(self.strength_usage))
 
     def get_result_expr(self, icoeff):
         isrc = pymbolic.var("isrc")
         return sum(pymbolic.var(f"coeff{icoeff}_{i}")
                     * pymbolic.var("strengths")[self.strength_usage[i], isrc]
-                for i in range(len(self.in_kernels)))
+                for i in range(len(self.source_kernels)))
 
 # }}}
 
@@ -173,7 +174,7 @@ class P2EFromSingleBox(P2EBase):
                     lp.ValueArg("nboxes,aligned_nboxes,tgt_base_ibox", np.int32),
                     lp.ValueArg("nsources", np.int32),
                     "..."
-                ] + gather_loopy_source_arguments(self.in_kernels
+                ] + gather_loopy_source_arguments(self.source_kernels
                         + (self.expansion,)),
                 name=self.name,
                 assumptions="nsrc_boxes>=1",
@@ -244,7 +245,7 @@ class P2EFromCSR(P2EBase):
                         np.int32),
                     lp.ValueArg("nsources", np.int32),
                     "..."
-                ] + gather_loopy_source_arguments(self.in_kernels
+                ] + gather_loopy_source_arguments(self.source_kernels
                         + (self.expansion,)))
 
         loopy_knl = lp.make_kernel(

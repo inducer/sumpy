@@ -69,40 +69,40 @@ def stringify_expn_index(i):
 class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
     def __init__(self, ctx, expansion, strength_usage=None,
             value_dtypes=None, name=None, device=None,
-            in_kernels=None, out_kernels=None):
+            source_kernels=None, target_kernels=None):
 
         from sumpy.kernel import SourceDerivativeRemover, TargetDerivativeRemover
         from pytools import single_valued
         sdr = SourceDerivativeRemover()
         tdr = TargetDerivativeRemover()
-        if in_kernels is None and out_kernels is None:
+        if source_kernels is None and target_kernels is None:
             from warnings import warn
             warn("A list for the second argument of the constructor is deprecated."
-                "Use a single expansion and pass in_kernels and out_kernels",
+                "Use a single expansion and pass source_kernels and target_kernels",
                 DeprecationWarning, stacklevel=2)
-            in_kernel = single_valued(tdr(exp.kernel) for exp in expansion)
-            base_kernel = sdr(in_kernel)
-            out_kernels = tuple(sdr(exp.kernel) for exp in expansion)
-            in_kernels = (in_kernel,)
+            source_kernel = single_valued(tdr(exp.kernel) for exp in expansion)
+            base_kernel = sdr(source_kernel)
+            target_kernels = tuple(sdr(exp.kernel) for exp in expansion)
+            source_kernels = (source_kernel,)
             expansion = expansion[0].copy(kernel=base_kernel)
 
-        KernelComputation.__init__(self, ctx=ctx, out_kernels=out_kernels,
-                strength_usage=strength_usage, in_kernels=in_kernels,
+        KernelComputation.__init__(self, ctx=ctx, target_kernels=target_kernels,
+                strength_usage=strength_usage, source_kernels=source_kernels,
                 value_dtypes=value_dtypes, name=name, device=device)
 
-        self.dim = single_valued(knl.dim for knl in self.out_kernels)
+        self.dim = single_valued(knl.dim for knl in self.target_kernels)
         self.expansion = expansion
 
     def get_cache_key(self):
-        return (type(self).__name__, self.expansion, tuple(self.out_kernels),
-                tuple(self.in_kernels), tuple(self.strength_usage),
+        return (type(self).__name__, self.expansion, tuple(self.target_kernels),
+                tuple(self.source_kernels), tuple(self.strength_usage),
                 tuple(self.value_dtypes))
 
     def _expand(self, sac, avec, bvec, rscale, isrc):
         coefficients = np.zeros(len(self.expansion), dtype=object)
         from sumpy.symbolic import PymbolicToSympyMapper
         conv = PymbolicToSympyMapper()
-        for idx, knl in enumerate(self.in_kernels):
+        for idx, knl in enumerate(self.source_kernels):
             strength = conv(self.get_strength_or_not(isrc, idx))
             coefficients += np.array([coeff * strength for
                                 i, coeff in enumerate(
@@ -112,7 +112,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
         return list(coefficients)
 
     def _evaluate(self, sac, avec, bvec, rscale, expansion_nr, coefficients):
-        expn = self.out_kernels[expansion_nr]
+        expn = self.target_kernels[expansion_nr]
         assigned_coeffs = [
             sym.Symbol(
                 sac.assign_unique("expn%dcoeff%s" % (
@@ -139,14 +139,14 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
 
         coefficients = self._expand(sac, avec, bvec, rscale, isrc_sym)
         result_names = [self._evaluate(sac, avec, bvec, rscale, i, coefficients)
-                        for i in range(len(self.out_kernels))]
+                        for i in range(len(self.target_kernels))]
 
         logger.info("compute expansion expressions: done")
 
         sac.run_global_cse()
 
         pymbolic_expr_maps = [knl.get_code_transformer() for knl in (
-            self.out_kernels + self.in_kernels)]
+            self.target_kernels + self.source_kernels)]
 
         from sumpy.codegen import to_loopy_insns
         loopy_insns = to_loopy_insns(
@@ -183,7 +183,8 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                     None, shape="ntargets"),
                 lp.ValueArg("nsources", None),
                 lp.ValueArg("ntargets", None)]
-                + gather_loopy_source_arguments(self.out_kernels + self.in_kernels))
+                + gather_loopy_source_arguments(
+                    self.target_kernels + self.source_kernels))
 
     def get_kernel(self):
         raise NotImplementedError
@@ -239,7 +240,7 @@ class LayerPotential(LayerPotentialBase):
             for i in range(self.strength_count)]
             + [lp.GlobalArg("result_%d" % i,
                 None, shape="ntargets", order="C")
-            for i in range(len(self.out_kernels))])
+            for i in range(len(self.target_kernels))])
 
         loopy_knl = lp.make_kernel(["""
             {[itgt, isrc, idim]: \
@@ -260,7 +261,7 @@ class LayerPotential(LayerPotentialBase):
                     simul_reduce(sum, isrc, pair_result_{i}) \
                         {{id_prefix=write_lpot,inames=itgt}}
                 """.format(i=iknl)
-                for iknl in range(len(self.out_kernels))]
+                for iknl in range(len(self.target_kernels))]
             + ["end"],
             arguments,
             name=self.name,
@@ -271,7 +272,7 @@ class LayerPotential(LayerPotentialBase):
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-        for expn in self.out_kernels + self.in_kernels:
+        for expn in self.target_kernels + self.source_kernels:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
@@ -334,7 +335,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
                     knl_{i}_scaling * pair_result_{i} \
                         {{inames=isrc:itgt}}
                 """.format(i=iknl)
-                for iknl in range(len(self.out_kernels))]
+                for iknl in range(len(self.target_kernels))]
             + ["end"],
             arguments,
             name=self.name,
@@ -344,7 +345,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-        for expn in self.in_kernels + self.out_kernels:
+        for expn in self.source_kernels + self.target_kernels:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
@@ -409,7 +410,7 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
                     result_{i}[imat] = knl_{i}_scaling * pair_result_{i} \
                             {{id_prefix=write_lpot}}
                 """.format(i=iknl)
-                for iknl in range(len(self.out_kernels))]
+                for iknl in range(len(self.target_kernels))]
             + ["end"],
             arguments,
             name=self.name,
@@ -423,7 +424,7 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
         loopy_knl = lp.add_dtypes(loopy_knl,
             dict(nsources=np.int32, ntargets=np.int32))
 
-        for expn in self.in_kernels + self.out_kernels:
+        for expn in self.source_kernels + self.target_kernels:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl

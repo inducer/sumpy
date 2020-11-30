@@ -165,14 +165,14 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class):
 
     from functools import partial
     for order in order_values:
-        out_kernels = [knl]
+        target_kernels = [knl]
 
         from sumpy.fmm import SumpyExpansionWranglerCodeContainer
         wcc = SumpyExpansionWranglerCodeContainer(
                 ctx,
                 partial(mpole_expn_class, knl),
                 partial(local_expn_class, knl),
-                out_kernels)
+                target_kernels)
         wrangler = wcc.get_wrangler(queue, tree, dtype,
                 fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
                 kernel_extra_kwargs=extra_kwargs)
@@ -182,7 +182,7 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class):
         pot, = drive_fmm(trav, wrangler, (weights,))
 
         from sumpy import P2P
-        p2p = P2P(ctx, out_kernels, exclude_self=False)
+        p2p = P2P(ctx, target_kernels, exclude_self=False)
         evt, (ref_pot,) = p2p(queue, targets, sources, (weights,),
                 **extra_kwargs)
 
@@ -252,24 +252,24 @@ def test_unified_single_and_double(ctx_factory):
 
     deriv_knl = DirectionalSourceDerivative(knl, "dir_vec")
 
-    out_kernels = [knl, AxisTargetDerivative(0, knl)]
-    in_kernel_vecs = [[knl], [deriv_knl], [knl, deriv_knl]]
+    target_kernels = [knl, AxisTargetDerivative(0, knl)]
+    source_kernel_vecs = [[knl], [deriv_knl], [knl, deriv_knl]]
     strength_usages = [[0], [1], [0, 1]]
 
     alpha = np.linspace(0, 2*np.pi, nsources, np.float64)
     dir_vec = np.vstack([np.cos(alpha), np.sin(alpha)])
 
     results = []
-    for in_kernels, strength_usage in zip(in_kernel_vecs, strength_usages):
+    for source_kernels, strength_usage in zip(source_kernel_vecs, strength_usages):
         source_extra_kwargs = {}
-        if deriv_knl in in_kernels:
+        if deriv_knl in source_kernels:
             source_extra_kwargs["dir_vec"] = dir_vec
         from sumpy.fmm import SumpyExpansionWranglerCodeContainer
         wcc = SumpyExpansionWranglerCodeContainer(
                 ctx,
                 partial(mpole_expn_class, knl),
                 partial(local_expn_class, knl),
-                out_kernels=out_kernels, in_kernels=in_kernels,
+                target_kernels=target_kernels, source_kernels=source_kernels,
                 strength_usage=strength_usage)
         wrangler = wcc.get_wrangler(queue, tree, dtype,
                 fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
@@ -322,7 +322,7 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory):
     rng = PhiloxGenerator(ctx)
     weights = rng.uniform(queue, nsources, dtype=np.float64)
 
-    out_kernels = [knl]
+    target_kernels = [knl]
 
     from functools import partial
 
@@ -331,7 +331,7 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory):
             ctx,
             partial(mpole_expn_class, knl),
             partial(local_expn_class, knl),
-            out_kernels)
+            target_kernels)
 
     wrangler = wcc.get_wrangler(queue, tree, dtype,
             fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order)
@@ -379,7 +379,7 @@ def test_sumpy_fmm_exclude_self(ctx_factory):
     target_to_source = np.arange(tree.ntargets, dtype=np.int32)
     self_extra_kwargs = {"target_to_source": target_to_source}
 
-    out_kernels = [knl]
+    target_kernels = [knl]
 
     from functools import partial
 
@@ -388,7 +388,7 @@ def test_sumpy_fmm_exclude_self(ctx_factory):
             ctx,
             partial(mpole_expn_class, knl),
             partial(local_expn_class, knl),
-            out_kernels,
+            target_kernels,
             exclude_self=True)
 
     wrangler = wcc.get_wrangler(queue, tree, dtype,
@@ -400,7 +400,7 @@ def test_sumpy_fmm_exclude_self(ctx_factory):
     pot, = drive_fmm(trav, wrangler, (weights,))
 
     from sumpy import P2P
-    p2p = P2P(ctx, out_kernels, exclude_self=True)
+    p2p = P2P(ctx, target_kernels, exclude_self=True)
     evt, (ref_pot,) = p2p(queue, sources, sources, (weights,),
             **self_extra_kwargs)
 

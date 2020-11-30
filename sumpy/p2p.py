@@ -51,8 +51,8 @@ Particle-to-particle
 # {{{ p2p base class
 
 class P2PBase(KernelComputation, KernelCacheWrapper):
-    def __init__(self, ctx, out_kernels, exclude_self, strength_usage=None,
-            value_dtypes=None, name=None, device=None, in_kernels=None):
+    def __init__(self, ctx, target_kernels, exclude_self, strength_usage=None,
+            value_dtypes=None, name=None, device=None, source_kernels=None):
         """
         :arg kernels: list of :class:`sumpy.kernel.Kernel` instances
         :arg strength_usage: A list of integers indicating which expression
@@ -66,34 +66,34 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
         tdr = TargetDerivativeRemover()
         sdr = SourceDerivativeRemover()
 
-        if in_kernels is None:
-            in_kernels = [single_valued(tdr(knl) for knl in out_kernels)]
-            out_kernels = [sdr(knl) for knl in out_kernels]
+        if source_kernels is None:
+            source_kernels = [single_valued(tdr(knl) for knl in target_kernels)]
+            target_kernels = [sdr(knl) for knl in target_kernels]
         else:
-            for knl in in_kernels:
+            for knl in source_kernels:
                 assert(tdr(knl) == knl)
-            for knl in out_kernels:
+            for knl in target_kernels:
                 assert(sdr(knl) == knl)
 
-        base_in_kernel = single_valued(sdr(knl) for knl in in_kernels)
-        base_out_kernel = single_valued(tdr(knl) for knl in out_kernels)
-        assert base_in_kernel == base_out_kernel
+        base_source_kernel = single_valued(sdr(knl) for knl in source_kernels)
+        base_target_kernel = single_valued(tdr(knl) for knl in target_kernels)
+        assert base_source_kernel == base_target_kernel
 
-        KernelComputation.__init__(self, ctx=ctx, out_kernels=out_kernels,
-            in_kernels=in_kernels, strength_usage=strength_usage,
+        KernelComputation.__init__(self, ctx=ctx, target_kernels=target_kernels,
+            source_kernels=source_kernels, strength_usage=strength_usage,
             value_dtypes=value_dtypes, name=name, device=device)
 
         self.exclude_self = exclude_self
-        self.in_kernels = in_kernels
-        self.out_kernels = out_kernels
+        self.source_kernels = source_kernels
+        self.target_kernels = target_kernels
 
         self.dim = single_valued(knl.dim for knl in
-            list(self.out_kernels) + list(self.in_kernels))
+            list(self.target_kernels) + list(self.source_kernels))
 
     def get_cache_key(self):
-        return (type(self).__name__, tuple(self.out_kernels), self.exclude_self,
+        return (type(self).__name__, tuple(self.target_kernels), self.exclude_self,
                 tuple(self.strength_usage), tuple(self.value_dtypes),
-                tuple(self.in_kernels))
+                tuple(self.source_kernels))
 
     def get_loopy_insns_and_result_names(self):
         from sumpy.symbolic import make_sym_vector
@@ -106,10 +106,10 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
 
         isrc_sym = var("isrc")
 
-        if len(self.in_kernels) == 1:
-            in_knl = self.in_kernels[0]
+        if len(self.source_kernels) == 1:
+            in_knl = self.source_kernels[0]
             exprs = []
-            for i, out_knl in enumerate(self.out_kernels):
+            for i, out_knl in enumerate(self.target_kernels):
                 expr = out_knl.postprocess_at_target(
                         in_knl.postprocess_at_source(
                             in_knl.get_expression(dvec),
@@ -119,9 +119,9 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
                 exprs.append(expr)
         else:
             exprs = []
-            for i, out_knl in enumerate(self.out_kernels):
+            for i, out_knl in enumerate(self.target_kernels):
                 expr_sum = 0
-                for j, in_knl in enumerate(self.in_kernels):
+                for j, in_knl in enumerate(self.source_kernels):
                     expr = in_knl.postprocess_at_source(
                                 in_knl.get_expression(dvec),
                                 dvec)
@@ -146,8 +146,8 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
         loopy_insns = to_loopy_insns(sac.assignments.items(),
                 vector_names={"d"},
                 pymbolic_expr_maps=(
-                    [knl.get_code_transformer() for knl in self.in_kernels]
-                    + [knl.get_code_transformer() for knl in self.out_kernels]),
+                    [knl.get_code_transformer() for knl in self.source_kernels]
+                    + [knl.get_code_transformer() for knl in self.target_kernels]),
                 retain_names=result_names,
                 complex_dtype=np.complex128  # FIXME
                 )
@@ -185,7 +185,7 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
                 lp.ValueArg("ntargets", None)]
                 + ([lp.GlobalArg("target_to_source", None, shape=("ntargets",))]
                     if self.exclude_self else [])
-                + gather_loopy_source_arguments(self.in_kernels))
+                + gather_loopy_source_arguments(self.source_kernels))
 
     def get_kernel(self):
         raise NotImplementedError
@@ -241,7 +241,7 @@ class P2P(P2PBase):
             + [f"""
                 result[{iknl}, itgt] = knl_{iknl}_scaling * \
                     simul_reduce(sum, isrc, pair_result_{iknl}) {{inames=itgt}}
-               """ for iknl in range(len(self.out_kernels))]
+               """ for iknl in range(len(self.target_kernels))]
             + ["end"],
             arguments,
             assumptions="nsources>=1 and ntargets>=1",
@@ -249,12 +249,12 @@ class P2P(P2PBase):
             fixed_parameters=dict(
                 dim=self.dim,
                 nstrengths=self.strength_count,
-                nresults=len(self.out_kernels)),
+                nresults=len(self.target_kernels)),
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
-        for knl in self.out_kernels:
+        for knl in self.target_kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
@@ -303,7 +303,7 @@ class P2PMatrixGenerator(P2PBase):
             + [f"""
                 result_{iknl}[itgt, isrc] = knl_{iknl}_scaling \
                     * pair_result_{iknl} {{inames=isrc:itgt}}
-                """ for iknl in range(len(self.out_kernels))]
+                """ for iknl in range(len(self.target_kernels))]
             + ["end"],
             arguments,
             assumptions="nsources>=1 and ntargets>=1",
@@ -313,7 +313,7 @@ class P2PMatrixGenerator(P2PBase):
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
-        for knl in self.out_kernels:
+        for knl in self.target_kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
@@ -374,7 +374,7 @@ class P2PMatrixBlockGenerator(P2PBase):
                     result_{iknl}[imat] = \
                         knl_{iknl}_scaling * pair_result_{iknl} \
                             {{id_prefix=write_p2p}}
-                """ for iknl in range(len(self.out_kernels))]
+                """ for iknl in range(len(self.target_kernels))]
             + ["end"],
             arguments,
             assumptions="nresult>=1",
@@ -387,7 +387,7 @@ class P2PMatrixBlockGenerator(P2PBase):
         loopy_knl = lp.add_dtypes(loopy_knl,
             dict(nsources=np.int32, ntargets=np.int32))
 
-        for knl in self.out_kernels:
+        for knl in self.target_kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
@@ -507,7 +507,7 @@ class P2PFromCSR(P2PBase):
                         knl_{iknl}_scaling * \
                         simul_reduce(sum, isrc, pair_result_{iknl}) \
                         {{id_prefix=write_csr}}
-                """ for iknl in range(len(self.out_kernels))]
+                """ for iknl in range(len(self.target_kernels))]
             + ["""
                     end
                 end
@@ -520,7 +520,7 @@ class P2PFromCSR(P2PBase):
             fixed_parameters=dict(
                 dim=self.dim,
                 nstrengths=self.strength_count,
-                nkernels=len(self.out_kernels)),
+                nkernels=len(self.target_kernels)),
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = lp.add_dtypes(loopy_knl,
@@ -530,7 +530,7 @@ class P2PFromCSR(P2PBase):
         loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
         loopy_knl = lp.tag_array_axes(loopy_knl, "sources", "sep,C")
 
-        for knl in self.out_kernels:
+        for knl in self.target_kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
