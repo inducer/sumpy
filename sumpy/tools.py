@@ -232,7 +232,7 @@ class KernelComputation:
         # {{{ process strength_usage
 
         if strength_usage is None:
-            strength_usage = [0] * len(source_kernels)
+            strength_usage = list(range(len(source_kernels)))
 
         if len(source_kernels) != len(strength_usage):
             raise ValueError("exprs and strength_usage must have the same length")
