@@ -59,8 +59,9 @@ of them in the process.
 
 .. autoclass:: DerivativeBase
 .. autoclass:: AxisTargetDerivative
-.. autoclass:: DirectionalTargetDerivative
+.. autoclass:: AxisSourceDerivative
 .. autoclass:: DirectionalSourceDerivative
+.. autoclass:: DirectionalTargetDerivative
 
 Transforming kernels
 --------------------
@@ -68,7 +69,9 @@ Transforming kernels
 .. autoclass:: KernelMapper
 .. autoclass:: KernelCombineMapper
 .. autoclass:: KernelIdentityMapper
+.. autoclass:: AxisSourceDerivativeRemover
 .. autoclass:: AxisTargetDerivativeRemover
+.. autoclass:: SourceDerivativeRemover
 .. autoclass:: TargetDerivativeRemover
 .. autoclass:: DerivativeCounter
 """
@@ -823,6 +826,32 @@ class DerivativeBase(KernelWrapper):
     pass
 
 
+class AxisSourceDerivative(DerivativeBase):
+    init_arg_names = ("axis", "inner_kernel")
+
+    def __init__(self, axis, inner_kernel):
+        KernelWrapper.__init__(self, inner_kernel)
+        self.axis = axis
+
+    def __getinitargs__(self):
+        return (self.axis, self.inner_kernel)
+
+    def __str__(self):
+        return "d/dy%d %s" % (self.axis, self.inner_kernel)
+
+    def __repr__(self):
+        return "AxisSourceDerivative(%d, %r)" % (self.axis, self.inner_kernel)
+
+    def postprocess_at_source(self, expr, bvec):
+        expr = self.inner_kernel.postprocess_at_target(expr, bvec)
+        return expr.diff(bvec[self.axis])
+
+    def replace_inner_kernel(self, new_inner_kernel):
+        return type(self)(self.axis, new_inner_kernel)
+
+    mapper_method = "map_axis_source_derivative"
+
+
 class AxisTargetDerivative(DerivativeBase):
     init_arg_names = ("axis", "inner_kernel")
 
@@ -1018,6 +1047,7 @@ class KernelCombineMapper(KernelMapper):
 
     map_directional_target_derivative = map_axis_target_derivative
     map_directional_source_derivative = map_axis_target_derivative
+    map_axis_source_derivative = map_axis_target_derivative
 
 
 class KernelIdentityMapper(KernelMapper):
@@ -1032,7 +1062,9 @@ class KernelIdentityMapper(KernelMapper):
     map_stresslet_kernel = map_expression_kernel
 
     def map_axis_target_derivative(self, kernel):
-        return AxisTargetDerivative(kernel.axis, self.rec(kernel.inner_kernel))
+        return type(kernel)(kernel.axis, self.rec(kernel.inner_kernel))
+
+    map_axis_source_derivative = map_axis_target_derivative
 
     def map_directional_target_derivative(self, kernel):
         return type(kernel)(
@@ -1040,6 +1072,11 @@ class KernelIdentityMapper(KernelMapper):
                 kernel.dir_vec_name)
 
     map_directional_source_derivative = map_directional_target_derivative
+
+
+class AxisSourceDerivativeRemover(KernelIdentityMapper):
+    def map_axis_source_derivative(self, kernel):
+        return self.rec(kernel.inner_kernel)
 
 
 class AxisTargetDerivativeRemover(KernelIdentityMapper):
@@ -1052,7 +1089,7 @@ class TargetDerivativeRemover(AxisTargetDerivativeRemover):
         return self.rec(kernel.inner_kernel)
 
 
-class SourceDerivativeRemover(KernelIdentityMapper):
+class SourceDerivativeRemover(AxisSourceDerivativeRemover):
     def map_directional_source_derivative(self, kernel):
         return self.rec(kernel.inner_kernel)
 
@@ -1076,6 +1113,7 @@ class DerivativeCounter(KernelCombineMapper):
 
     map_directional_target_derivative = map_axis_target_derivative
     map_directional_source_derivative = map_axis_target_derivative
+    map_axis_source_derivative = map_axis_target_derivative
 
 # }}}
 
