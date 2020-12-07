@@ -55,7 +55,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
     """
 
     def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
-        from sumpy.kernel import DirectionalSourceDerivative
+        from sumpy.kernel import KernelWrapper
         if kernel is None:
             kernel = self.kernel
 
@@ -64,42 +64,11 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         if not self.use_rscale:
             rscale = 1
 
-        if isinstance(kernel, DirectionalSourceDerivative):
-            from sumpy.symbolic import make_sym_vector
-
-            dir_vecs = []
-            tmp_kernel = kernel
-            while isinstance(tmp_kernel, DirectionalSourceDerivative):
-                dir_vecs.append(make_sym_vector(tmp_kernel.dir_vec_name, kernel.dim))
-                tmp_kernel = tmp_kernel.inner_kernel
-
-            if kernel.get_base_kernel() is not tmp_kernel:
-                raise NotImplementedError("Unknown kernel wrapper.")
-
-            nderivs = len(dir_vecs)
-
-            coeff_identifiers = self.get_full_coefficient_identifiers()
-            result = [0] * len(coeff_identifiers)
-
-            for i, mi in enumerate(coeff_identifiers):
-                # One source derivative is the dot product of the gradient and
-                # directional vector.
-                # For multiple derivatives, gradient of gradients is taken.
-                # For eg: in 3D, 2 source derivatives gives 9 terms and
-                # cartesian_product below enumerates these 9 terms.
-                for deriv_terms in cartesian_product(*[range(kernel.dim)]*nderivs):
-                    prod = 1
-                    derivative_mi = list(mi)
-                    for nderivative, deriv_dim in enumerate(deriv_terms):
-                        prod *= -derivative_mi[deriv_dim]
-                        prod *= dir_vecs[nderivative][deriv_dim]
-                        derivative_mi[deriv_dim] -= 1
-                    if any(v < 0 for v in derivative_mi):
-                        continue
-                    result[i] += mi_power(avec, derivative_mi) * prod
-
-            for i, mi in enumerate(coeff_identifiers):
-                result[i] /= (mi_factorial(mi) * rscale ** sum(mi))
+        if isinstance(kernel, KernelWrapper):
+            result = [
+                    kernel.postprocess_at_source(mi_power(avec, mi), avec)
+                    / mi_factorial(mi) / rscale ** sum(mi)
+                    for mi in self.get_full_coefficient_identifiers()]
         else:
             avec = [sym.UnevaluatedExpr(a * rscale**-1) for a in avec]
 
