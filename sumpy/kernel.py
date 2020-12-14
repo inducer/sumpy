@@ -842,9 +842,13 @@ class AxisSourceDerivative(DerivativeBase):
     def __repr__(self):
         return "AxisSourceDerivative(%d, %r)" % (self.axis, self.inner_kernel)
 
-    def postprocess_at_source(self, expr, bvec):
-        expr = self.inner_kernel.postprocess_at_target(expr, bvec)
-        return expr.diff(bvec[self.axis])
+    def postprocess_at_source(self, expr, avec):
+        expr = self.inner_kernel.postprocess_at_source(expr, avec)
+        return -expr.diff(avec[self.axis])
+
+    def replace_base_kernel(self, new_base_kernel):
+        return type(self)(self.axis,
+            self.inner_kernel.replace_base_kernel(new_base_kernel))
 
     def replace_inner_kernel(self, new_inner_kernel):
         return type(self)(self.axis, new_inner_kernel)

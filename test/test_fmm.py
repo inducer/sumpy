@@ -443,7 +443,7 @@ def test_sumpy_axis_source_derivative(ctx_factory):
     trav, _ = tbuild(queue, tree, debug=True)
 
     from pyopencl.clrandom import PhiloxGenerator
-    rng = PhiloxGenerator(ctx)
+    rng = PhiloxGenerator(ctx, seed=12)
     weights = rng.uniform(queue, nsources, dtype=np.float64)
 
     target_to_source = np.arange(tree.ntargets, dtype=np.int32)
@@ -455,31 +455,31 @@ def test_sumpy_axis_source_derivative(ctx_factory):
     from sumpy.kernel import AxisTargetDerivative, AxisSourceDerivative
 
     pots = []
-    for deriv_class in [AxisTargetDerivative, AxisSourceDerivative]:
-        out_kernel = deriv_class(0, knl)
-    
+    for tgt_knl, src_knl in [(AxisTargetDerivative(0, knl), knl),
+            (knl, AxisSourceDerivative(0, knl))]:
+
         wcc = SumpyExpansionWranglerCodeContainer(
                 ctx,
-                partial(mpole_expn_class, out_kernel),
-                partial(local_expn_class, out_kernel),
-                [out_kernel],
+                partial(mpole_expn_class, knl),
+                partial(local_expn_class, knl),
+                target_kernels=[tgt_knl],
+                source_kernels=[src_knl],
                 exclude_self=True)
-    
+
         wrangler = wcc.get_wrangler(queue, tree, dtype,
                 fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
                 self_extra_kwargs=self_extra_kwargs)
-        
+
         from boxtree.fmm import drive_fmm
-        
+
         pot, = drive_fmm(trav, wrangler, (weights,))
         pots.append(pot.get())
-
-    print(pots[0][0], pots[0][1])
 
     rel_err = la.norm(pots[0] + pots[1]) / la.norm(pots[0])
     logger.info("order %d -> relative l2 error: %g" % (order, rel_err))
 
-    assert np.isclose(rel_err, 0, atol=1e-7)
+    assert np.isclose(rel_err, 0, atol=1e-5)
+
 
 # You can test individual routines by typing
 # $ python test_fmm.py 'test_sumpy_fmm(cl.create_some_context)'
