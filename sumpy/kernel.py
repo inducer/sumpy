@@ -122,8 +122,6 @@ class Kernel:
     .. automethod:: prepare_loopy_kernel
     .. automethod:: get_code_transformer
     .. automethod:: get_expression
-    .. attribute:: has_efficient_scale_adjustment
-    .. automethod:: adjust_for_kernel_scaling
     .. automethod:: postprocess_at_source
     .. automethod:: postprocess_at_target
     .. automethod:: get_global_scaling_const
@@ -198,76 +196,19 @@ class Kernel:
         r"""Return a :mod:`sympy` expression for the kernel."""
         raise NotImplementedError
 
-    has_efficient_scale_adjustment = False
-
-    def adjust_for_kernel_scaling(self, expr, rscale, nderivatives):
-        r"""
-        Consider a Taylor multipole expansion:
-
-        .. math::
-
-            f (x - y) = \sum_{i = 0}^{\infty} (\partial_y^i f) (x - y) \big|_{y = c}
-           \frac{(y - c)^i}{i!} .
-
-        Now suppose we would like to use a scaled version :math:`g` of the
-        kernel :math:`f`:
-
-        .. math::
-
-            \begin{eqnarray*}
-              f (x) & = & g (x / \alpha),\\
-              f^{(i)} (x) & = & \frac{1}{\alpha^i} g^{(i)} (x / \alpha) .
-            \end{eqnarray*}
-
-        where :math:`\alpha` is chosen to be on a length scale similar to
-        :math:`x` (for example by choosing :math:`\alpha` proporitional to the
-        size of the box for which the expansion is intended) so that :math:`x /
-        \alpha` is roughly of unit magnitude, to avoid arithmetic issues with
-        small arguments. This yields
-
-        .. math::
-
-            f (x - y) = \sum_{i = 0}^{\infty} (\partial_y^i g)
-            \left( \frac{x - y}{\alpha} \right) \Bigg|_{y = c}
-            \cdot
-            \frac{(y - c)^i}{\alpha^i \cdot i!}.
-
-        Observe that the :math:`(y - c)` term is now scaled to unit magnitude,
-        as is the argument of :math:`g`.
-
-        With :math:`\xi = x / \alpha`, we find
-
-        .. math::
-
-            \begin{eqnarray*}
-              g (\xi) & = & f (\alpha \xi),\\
-              g^{(i)} (\xi) & = & \alpha^i f^{(i)} (\alpha \xi) .
-            \end{eqnarray*}
-
-        Generically for all kernels, :math:`f^{(i)} (\alpha \xi)` is computable
-        by taking a sufficient number of symbolic derivatives of :math:`f` and
-        providing :math:`\alpha \xi = x` as the argument.
-
-        Now, for some kernels, like :math:`f (x) = C \log x`, the powers of
-        :math:`\alpha^i` from the chain rule cancel with the ones from the
-        argument substituted into the kernel derivative:
-
-        .. math::
-
-            g^{(i)} (\xi) = \alpha^i f^{(i)} (\alpha \xi) = C' \cdot \alpha^i \cdot
-            \frac{1}{(\alpha x)^i} \quad (i > 0),
-
-        making them what you might call *scale-invariant*. In this case, one
-        may set :attr:`has_efficient_scale_adjustment`. For these kernels only,
-        :meth:`adjust_for_kernel_scaling` provides a shortcut for scaled kernel
-        derivative computation. Given :math:`f^{(i)}` as *expr*, it directly
-        returns an expression for :math:`g^{(i)}`, where :math:`i` is given
-        as *nderivatives*.
-
-        :arg rscale: The scaling parameter :math:`\alpha` above.
+    def _diff(self, expr, vec, mi):
+        """Take the derivative of an expression or a MiDerivativeTakerWrapper
         """
-
-        raise NotImplementedError
+        from sumpy.tools import MiDerivativeTakerWrapper, add_mi
+        if isinstance(expr, MiDerivativeTakerWrapper):
+            taker, init_mi = expr
+            return taker.diff(add_mi(mi, init_mi))
+        else:
+            for i in range(self.dim):
+                if mi[i] == 0:
+                    continue
+                expr = expr.diff(vec[i], mi[i])
+            return expr
 
     def postprocess_at_source(self, expr, avec):
         """Transform a kernel evaluation or expansion expression in a place
@@ -277,7 +218,12 @@ class Kernel:
         The typical use of this function is to apply source-variable
         derivatives to the kernel.
         """
-        return expr
+        expr_dict = {(0,)*self.dim: 1}
+        expr_dict = self.get_derivative_transformation_at_source(expr_dict)
+        result = 0
+        for mi, coeff in expr_dict.items():
+            result += coeff * self._diff(expr, avec, mi)
+        return result
 
     def postprocess_at_target(self, expr, bvec):
         """Transform a kernel evaluation or expansion expression in a place
@@ -287,7 +233,36 @@ class Kernel:
         The typical use of this function is to apply target-variable
         derivatives to the kernel.
         """
-        return expr
+        expr_dict = {(0,)*self.dim: 1}
+        expr_dict = self.get_derivative_transformation_at_target(expr_dict)
+        result = 0
+        for mi, coeff in expr_dict.items():
+            result += coeff * self._diff(expr, bvec, mi)
+        return result
+
+    def get_derivative_transformation_at_source(self, expr_dict):
+        r"""Get the derivative transformation of the expression at source
+        represented by the dictionary expr_dict which is mapping from multi-index
+        `mi` to coefficient `coeff`.
+        Expression represented by the dictionary `expr_dict` is
+        :math:`\sum_{mi} \frac{\partial^mi}{x^mi}G * coeff`. Returns an
+        expression of the same type.
+
+        This function is meant to be overridden by child classes where necessary.
+        """
+        return expr_dict
+
+    def get_derivative_transformation_at_target(self, expr_dict):
+        r"""Get the derivative transformation of the expression at target
+        represented by the dictionary expr_dict which is mapping from multi-index
+        `mi` to coefficient `coeff`.
+        Expression represented by the dictionary `expr_dict` is
+        :math:`\sum_{mi} \frac{\partial^mi}{x^mi}G * coeff`. Returns an
+        expression of the same type.
+
+        This function is meant to be overridden by child classes where necessary.
+        """
+        return expr_dict
 
     def get_global_scaling_const(self):
         r"""Return a global scaling constant of the kernel.
@@ -423,22 +398,6 @@ class LaplaceKernel(ExpressionKernel):
                 expression=expr,
                 global_scaling_const=scaling,
                 is_complex_valued=False)
-
-    has_efficient_scale_adjustment = True
-
-    def adjust_for_kernel_scaling(self, expr, rscale, nderivatives):
-        if self.dim == 2:
-            if nderivatives == 0:
-                import sumpy.symbolic as sp
-                return (expr + sp.log(rscale))
-            else:
-                return expr
-
-        elif self.dim == 3:
-            return expr / rscale
-
-        else:
-            raise NotImplementedError("unsupported dimensionality")
 
     def __getinitargs__(self):
         return (self.dim,)
@@ -787,19 +746,11 @@ class KernelWrapper(Kernel):
     def get_expression(self, scaled_dist_vec):
         return self.inner_kernel.get_expression(scaled_dist_vec)
 
-    @property
-    def has_efficient_scale_adjustment(self):
-        return self.inner_kernel.has_efficient_scale_adjustment
+    def get_derivative_transformation_at_source(self, expr_dict):
+        return self.inner_kernel.get_derivative_transformation_at_source(expr_dict)
 
-    def adjust_for_kernel_scaling(self, expr, rscale, nderivatives):
-        return self.inner_kernel.adjust_for_kernel_scaling(
-                expr, rscale, nderivatives)
-
-    def postprocess_at_source(self, expr, avec):
-        return self.inner_kernel.postprocess_at_source(expr, avec)
-
-    def postprocess_at_target(self, expr, avec):
-        return self.inner_kernel.postprocess_at_target(expr, avec)
+    def get_derivative_transformation_at_target(self, expr_dict):
+        return self.inner_kernel.get_derivative_transformation_at_target(expr_dict)
 
     def get_global_scaling_const(self):
         return self.inner_kernel.get_global_scaling_const()
@@ -846,6 +797,16 @@ class AxisSourceDerivative(DerivativeBase):
         expr = self.inner_kernel.postprocess_at_source(expr, avec)
         return -expr.diff(avec[self.axis])
 
+    def get_derivative_transformation_at_source(self, expr_dict):
+        expr_dict = self.inner_kernel.get_derivative_transformation_at_source(
+            expr_dict)
+        result = dict()
+        for mi, coeff in expr_dict.items():
+            new_mi = list(mi)
+            new_mi[self.axis] += 1
+            result[tuple(new_mi)] = coeff
+        return result
+
     def replace_base_kernel(self, new_base_kernel):
         return type(self)(self.axis,
             self.inner_kernel.replace_base_kernel(new_base_kernel))
@@ -872,9 +833,15 @@ class AxisTargetDerivative(DerivativeBase):
     def __repr__(self):
         return "AxisTargetDerivative(%d, %r)" % (self.axis, self.inner_kernel)
 
-    def postprocess_at_target(self, expr, bvec):
-        expr = self.inner_kernel.postprocess_at_target(expr, bvec)
-        return expr.diff(bvec[self.axis])
+    def get_derivative_transformation_at_target(self, expr_dict):
+        expr_dict = self.inner_kernel.get_derivative_transformation_at_target(
+            expr_dict)
+        result = dict()
+        for mi, coeff in expr_dict.items():
+            new_mi = list(mi)
+            new_mi[self.axis] += 1
+            result[tuple(new_mi)] = coeff
+        return result
 
     def replace_base_kernel(self, new_base_kernel):
         return type(self)(self.axis,
@@ -954,18 +921,21 @@ class DirectionalTargetDerivative(DirectionalDerivative):
 
         return transform
 
-    def postprocess_at_target(self, expr, bvec):
-        expr = self.inner_kernel.postprocess_at_target(expr, bvec)
-
-        dim = len(bvec)
-        assert dim == self.dim
-
+    def get_derivative_transformation_at_target(self, expr_dict):
         from sumpy.symbolic import make_sym_vector as make_sympy_vector
-        dir_vec = make_sympy_vector(self.dir_vec_name, dim)
+        dir_vec = make_sympy_vector(self.dir_vec_name, self.dim)
 
-        # bvec = tgt-center
-        return sum(dir_vec[axis]*expr.diff(bvec[axis])
-                for axis in range(dim))
+        expr_dict = self.inner_kernel.get_derivative_transformation_at_target(
+            expr_dict)
+
+        # bvec = tgt - center
+        result = defaultdict(lambda: 0)
+        for mi, coeff in expr_dict.items():
+            for axis in range(self.dim):
+                new_mi = list(mi)
+                new_mi[axis] += 1
+                result[tuple(new_mi)] += coeff * dir_vec[axis]
+        return result
 
     def get_source_args(self):
         return [
@@ -996,18 +966,21 @@ class DirectionalSourceDerivative(DirectionalDerivative):
 
         return transform
 
-    def postprocess_at_source(self, expr, avec):
-        expr = self.inner_kernel.postprocess_at_source(expr, avec)
-
-        dimensions = len(avec)
-        assert dimensions == self.dim
-
+    def get_derivative_transformation_at_source(self, expr_dict):
         from sumpy.symbolic import make_sym_vector as make_sympy_vector
-        dir_vec = make_sympy_vector(self.dir_vec_name, dimensions)
+        dir_vec = make_sympy_vector(self.dir_vec_name, self.dim)
+
+        expr_dict = self.inner_kernel.get_derivative_transformation_at_source(
+            expr_dict)
 
         # avec = center-src -> minus sign from chain rule
-        return sum(-dir_vec[axis]*expr.diff(avec[axis])
-                for axis in range(dimensions))
+        result = defaultdict(lambda: 0)
+        for mi, coeff in expr_dict.items():
+            for axis in range(self.dim):
+                new_mi = list(mi)
+                new_mi[axis] += 1
+                result[tuple(new_mi)] += -coeff * dir_vec[axis]
+        return result
 
     def get_source_args(self):
         return [

@@ -72,28 +72,107 @@ def mi_power(vector, mi, evaluate=True):
     return result
 
 
-class MiDerivativeTaker:
+def add_to_sac(sac, expr):
+    import sumpy.symbolic as sym
+    if sac is not None:
+        return sym.Symbol(sac.assign_unique("temp", expr))
+    else:
+        return expr
 
-    def __init__(self, expr, var_list):
+
+class MiDerivativeTaker(object):
+
+    def __init__(self, expr, var_list, rscale=1, sac=None):
+        r"""
+        A class to take scaled derivatives of the symbolic expression
+        expr w.r.t. variables var_list and the scaling parameter rscale.
+
+        Consider a Taylor multipole expansion:
+
+        .. math::
+
+            f (x - y) = \sum_{i = 0}^{\infty} (\partial_y^i f) (x - y) \big|_{y = c}
+           \frac{(y - c)^i}{i!} .
+
+        Now suppose we would like to use a scaled version :math:`g` of the
+        kernel :math:`f`:
+
+        .. math::
+
+            \begin{eqnarray*}
+              f (x) & = & g (x / \alpha),\\
+              f^{(i)} (x) & = & \frac{1}{\alpha^i} g^{(i)} (x / \alpha) .
+            \end{eqnarray*}
+
+        where :math:`\alpha` is chosen to be on a length scale similar to
+        :math:`x` (for example by choosing :math:`\alpha` proporitional to the
+        size of the box for which the expansion is intended) so that :math:`x /
+        \alpha` is roughly of unit magnitude, to avoid arithmetic issues with
+        small arguments. This yields
+
+        .. math::
+
+            f (x - y) = \sum_{i = 0}^{\infty} (\partial_y^i g)
+            \left( \frac{x - y}{\alpha} \right) \Bigg|_{y = c}
+            \cdot
+            \frac{(y - c)^i}{\alpha^i \cdot i!}.
+
+        Observe that the :math:`(y - c)` term is now scaled to unit magnitude,
+        as is the argument of :math:`g`.
+
+        With :math:`\xi = x / \alpha`, we find
+
+        .. math::
+
+            \begin{eqnarray*}
+              g (\xi) & = & f (\alpha \xi),\\
+              g^{(i)} (\xi) & = & \alpha^i f^{(i)} (\alpha \xi) .
+            \end{eqnarray*}
+
+        Generically for all kernels, :math:`f^{(i)} (\alpha \xi)` is computable
+        by taking a sufficient number of symbolic derivatives of :math:`f` and
+        providing :math:`\alpha \xi = x` as the argument.
+
+        Now, for some kernels, like :math:`f (x) = C \log x`, the powers of
+        :math:`\alpha^i` from the chain rule cancel with the ones from the
+        argument substituted into the kernel derivatives:
+
+        .. math::
+
+            g^{(i)} (\xi) = \alpha^i f^{(i)} (\alpha \xi) = C' \cdot \alpha^i \cdot
+            \frac{1}{(\alpha x)^i} \quad (i > 0),
+
+        making them what you might call *scale-invariant*.
+
+        This derivative taker returns :math:`g^{(i)}(\xi) = \alpha^i f^{(i)}`
+        given :math:`f^{(0)}` as *expr* and :math:`\alpha` as *rscale*.
+        """
+
         assert isinstance(expr, sym.Basic)
         self.var_list = var_list
         empty_mi = (0,) * len(var_list)
         self.cache_by_mi = {empty_mi: expr}
+        self.rscale = rscale
+        self.sac = sac
+        self.dim = len(self.var_list)
+        self.orig_expr = expr
 
     def mi_dist(self, a, b):
         return np.array(a, dtype=int) - np.array(b, dtype=int)
 
     def diff(self, mi):
         try:
-            expr = self.cache_by_mi[mi]
+            return self.cache_by_mi[mi]
         except KeyError:
-            current_mi = self.get_closest_cached_mi(mi)
-            expr = self.cache_by_mi[current_mi]
+            pass
 
-            for next_deriv, next_mi in self.get_derivative_taking_sequence(
-                    current_mi, mi):
-                expr = expr.diff(next_deriv)
-                self.cache_by_mi[next_mi] = expr
+        current_mi = self.get_closest_cached_mi(mi)
+        expr = self.cache_by_mi[current_mi]
+
+        for next_deriv, next_mi in self.get_derivative_taking_sequence(
+                current_mi, mi):
+            expr = expr.diff(next_deriv) * self.rscale
+            self.cache_by_mi[next_mi] = expr
 
         return expr
 
@@ -110,6 +189,161 @@ class MiDerivativeTaker:
                 for other_mi in self.cache_by_mi.keys()
                 if (np.array(mi) >= np.array(other_mi)).all()),
             key=lambda other_mi: sum(self.mi_dist(mi, other_mi)))
+
+
+class LaplaceDerivativeTaker(MiDerivativeTaker):
+
+    def __init__(self, expr, var_list, rscale=1, sac=None):
+        super(LaplaceDerivativeTaker, self).__init__(expr, var_list, rscale, sac)
+        self.scaled_var_list = [add_to_sac(self.sac, v/rscale) for v in var_list]
+        self.scaled_r = add_to_sac(self.sac,
+                sym.sqrt(sum(v**2 for v in self.scaled_var_list)))
+
+    def diff(self, mi):
+        # Return zero for negative values. Makes the algorithm readable.
+        if min(mi) < 0:
+            return 0
+        try:
+            return self.cache_by_mi[mi]
+        except KeyError:
+            pass
+
+        dim = self.dim
+        if max(mi) == 1:
+            return MiDerivativeTaker.diff(self, mi)
+        d = -1
+        for i in range(dim):
+            if mi[i] >= 2:
+                d = i
+                break
+        assert d >= 0
+        expr = 0
+        for i in range(dim):
+            mi_minus_one = list(mi)
+            mi_minus_one[i] -= 1
+            mi_minus_one = tuple(mi_minus_one)
+            mi_minus_two = list(mi)
+            mi_minus_two[i] -= 2
+            mi_minus_two = tuple(mi_minus_two)
+            x = self.scaled_var_list[i]
+            n = mi[i]
+            if i == d:
+                if dim == 3:
+                    expr -= (2*n - 1) * x * self.diff(mi_minus_one)
+                    expr -= (n - 1)**2 * self.diff(mi_minus_two)
+                else:
+                    expr -= 2 * x * (n - 1) * self.diff(mi_minus_one)
+                    expr -= (n - 1) * (n - 2) * self.diff(mi_minus_two)
+                    if n == 2 and sum(mi) == 2:
+                        expr += 1
+            else:
+                expr -= 2 * n * x * self.diff(mi_minus_one)
+                expr -= n * (n - 1) * self.diff(mi_minus_two)
+        expr /= self.scaled_r**2
+        expr = add_to_sac(self.sac, expr)
+        self.cache_by_mi[mi] = expr
+        return expr
+
+
+class RadialDerivativeTaker(MiDerivativeTaker):
+
+    def __init__(self, expr, var_list, rscale=1, sac=None):
+        """
+        Takes the derivatives of a radial function.
+        """
+        import sumpy.symbolic as sym
+        super(RadialDerivativeTaker, self).__init__(expr, var_list, rscale, sac)
+        empty_mi = (0,) * len(var_list)
+        self.cache_by_mi_q = {(empty_mi, 0): expr}
+        self.r = sym.sqrt(sum(v**2 for v in var_list))
+        rsym = sym.Symbol("_r")
+        r_expr = expr.xreplace({self.r**2: rsym**2})
+        self.is_radial = not any(r_expr.has(v) for v in var_list)
+
+    def diff(self, mi, q=0):
+        """
+        See [1] for the algorithm
+
+        [1]: Tausch, J., 2003. The fast multipole method for arbitrary Green's
+             functions. Contemporary Mathematics, 329, pp.307-314.
+        """
+        if not self.is_radial:
+            assert q == 0
+            return MiDerivativeTaker.diff(self, mi)
+
+        try:
+            return self.cache_by_mi_q[(mi, q)]
+        except KeyError:
+            pass
+
+        for i in range(self.dim):
+            if mi[i] == 1:
+                mi_minus_one = list(mi)
+                mi_minus_one[i] = 0
+                mi_minus_one = tuple(mi_minus_one)
+                expr = self.var_list[i] * self.diff(mi_minus_one, q=q+1)
+                expr *= self.rscale
+                self.cache_by_mi_q[(mi, q)] = expr
+                return expr
+
+        for i in range(self.dim):
+            if mi[i] >= 2:
+                mi_minus_one = list(mi)
+                mi_minus_one[i] -= 1
+                mi_minus_one = tuple(mi_minus_one)
+                mi_minus_two = list(mi)
+                mi_minus_two[i] -= 2
+                mi_minus_two = tuple(mi_minus_two)
+                expr = (mi[i]-1)*self.diff(mi_minus_two, q=q+1) * self.rscale
+                expr += self.var_list[i] * self.diff(mi_minus_one, q=q+1)
+                expr *= self.rscale
+                expr = add_to_sac(self.sac, expr)
+                self.cache_by_mi_q[(mi, q)] = expr
+                return expr
+
+        assert mi == (0,)*self.dim
+        assert q > 0
+
+        prev_expr = self.diff(mi, q=q-1)
+        # Need to get expr.diff(r)/r, but we can only do expr.diff(x)
+        # Use expr.diff(x) = expr.diff(r) * x / r
+        expr = prev_expr.diff(self.var_list[0])/self.var_list[0]
+        # We need to distribute the division above
+        expr = expr.expand(deep=False)
+        self.cache_by_mi_q[(mi, q)] = expr
+        return expr
+
+
+class HelmholtzDerivativeTaker(RadialDerivativeTaker):
+
+    def diff(self, mi, q=0):
+        import sumpy.symbolic as sym
+        if q < 2 or mi != (0,)*self.dim:
+            return RadialDerivativeTaker.diff(self, mi, q)
+        try:
+            return self.cache_by_mi_q[(mi, q)]
+        except KeyError:
+            pass
+
+        if self.dim == 2:
+            # See https://dlmf.nist.gov/10.6.E6
+            # and https://dlmf.nist.gov/10.6#E1
+            k = self.orig_expr.args[1] / self.r
+            print("k", k)
+            expr = -  2 * (q - 1) * self.diff(mi, q - 1)
+            expr += - k**2 * self.diff(mi, q - 2)
+            expr /= self.r**2
+        else:
+            # See reference [1] in RadialDerivativeTaker.diff
+            k = (self.orig_expr * self.r).args[-1] / sym.I / self.r
+            expr = -(2*q - 1)/self.r**2 * self.diff(mi, q - 1)
+            expr += -k**2 / self.r * self.diff(mi, q - 2)
+        self.cache_by_mi_q[(mi, q)] = expr
+        return expr
+
+
+MiDerivativeTakerWrapper = namedtuple('MiDerivativeTakerWrapper',
+                                      ['taker', 'initial_mi'])
 
 # }}}
 
