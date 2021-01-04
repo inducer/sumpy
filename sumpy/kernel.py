@@ -27,7 +27,7 @@ from pymbolic.mapper import IdentityMapper, CSECachingMapperMixin
 from sumpy.symbolic import pymbolic_real_norm_2
 from pymbolic.primitives import make_sym_vector
 from pymbolic import var
-
+from collections import defaultdict
 
 __doc__ = """
 Kernel interface

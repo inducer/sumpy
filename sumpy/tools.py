@@ -45,6 +45,8 @@ from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 import logging
 logger = logging.getLogger(__name__)
 
+from collections import namedtuple
+
 
 # {{{ multi_index helpers
 

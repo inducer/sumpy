@@ -27,6 +27,7 @@ from sumpy.expansion import (
     HelmholtzConformingVolumeTaylorExpansion,
     BiharmonicConformingVolumeTaylorExpansion)
 
+from pytools import single_valued
 
 class LocalExpansionBase(ExpansionBase):
     pass
@@ -71,8 +72,8 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
         from sumpy.symbolic import USE_SYMENGINE
 
         if USE_SYMENGINE:
-            from sumpy.tools import MiDerivativeTaker, my_syntactic_subs
-            deriv_taker = MiDerivativeTaker(line_kernel, (tau,))
+            from sumpy.tools import my_syntactic_subs
+            deriv_taker = self.get_kernel_derivative_taker(line_kernel, (tau,), sac)
 
             return [my_syntactic_subs(
                         kernel.postprocess_at_source(
@@ -112,13 +113,28 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
     """
 
     def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
-        from sumpy.tools import MiDerivativeTaker
-        ppkernel = kernel.postprocess_at_source(kernel.get_expression(avec), avec)
+        from sumpy.tools import MiDerivativeTakerWrapper
 
-        taker = MiDerivativeTaker(ppkernel, avec)
-        return [
-                taker.diff(mi) * rscale ** sum(mi)
-                for mi in self.get_coefficient_identifiers()]
+        result = []
+        taker = self.get_kernel_derivative_taker(avec, rscale, sac)
+        expr_dict = {(0,)*self.dim: 1}
+        expr_dict = kernel.get_derivative_transformation_at_source(expr_dict)
+        pp_nderivatives = single_valued(sum(mi) for mi in expr_dict.keys())
+
+        for mi in self.get_coefficient_identifiers():
+            wrapper = MiDerivativeTakerWrapper(taker, mi)
+            mi_expr = self.kernel.postprocess_at_source(wrapper, avec)
+            # By passing `rscale` to the derivative taker we are taking a scaled
+            # version of the derivative which is `expr.diff(mi)*rscale**sum(mi)`
+            # which might be implemented efficiently for kernels like Laplace.
+            # One caveat is that `postprocess_at_source` might take more
+            # derivatives which would multiply the expression by more `rscale`s
+            # than necessary as the derivative taker does not know about
+            # `postprocess_at_source`. This is corrected by dividing by `rscale`.
+            expr = mi_expr / rscale ** pp_nderivatives
+            result.append(expr)
+
+        return result
 
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         from pytools import factorial
@@ -127,15 +143,17 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             self.expansion_terms_wrangler.get_full_kernel_derivatives_from_stored(
                 coeffs, rscale, sac=sac))
 
-        bvec = [b*rscale**-1 for b in bvec]
+        bvec_scaled = [b*rscale**-1 for b in bvec]
         from sumpy.tools import mi_power, mi_factorial
 
-        return sum(
+        result = sum(
             coeff
-            * mi_power(bvec, mi, evaluate=False)
+            * mi_power(bvec_scaled, mi, evaluate=False)
             / mi_factorial(mi)
             for coeff, mi in zip(
                     evaluated_coeffs, self.get_full_coefficient_identifiers()))
+
+        return kernel.postprocess_at_target(result, bvec)
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None):
@@ -162,7 +180,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # derivatives.
 
             taker = src_expansion.get_kernel_derivative_taker(src_expansion.kernel,
-                dvec)
+                dvec, sac)
 
             from sumpy.tools import add_mi
 
@@ -217,13 +235,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                         continue
                     nderivatives_for_scaling = \
                             sum(tgtplusderiv_coeff_id)-sum(lexp_mi)
-                    kernel_deriv = (
-                            src_expansion.get_scaled_multipole(
-                                src_expansion.kernel,
-                                taker.diff(tgtplusderiv_coeff_id),
-                                dvec, src_rscale,
-                                nderivatives=sum(tgtplusderiv_coeff_id),
-                                nderivatives_for_scaling=nderivatives_for_scaling))
+                    kernel_deriv = taker.diff(tgtplusderiv_coeff_id) * \
+                            src_rscale**nderivatives_for_scaling
 
                     lexp_mi_terms.append(
                             coeff * kernel_deriv * tgt_rscale**sum(lexp_mi))
@@ -233,7 +246,6 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         rscale_ratio = sym.UnevaluatedExpr(tgt_rscale/src_rscale)
 
-        from sumpy.tools import MiDerivativeTaker
         from math import factorial
         src_wrangler = src_expansion.expansion_terms_wrangler
         src_coeffs = (
@@ -335,6 +347,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # to compensate for differentiating which is done at the end.
             # This moves the two cancelling "rscales" closer to each other at
             # the end in the hope of helping rscale magnitude.
+            from sumpy.tools import MiDerivativeTaker
             dvec_scaled = [d*src_rscale for d in dvec]
             expr = src_expansion.evaluate(src_expansion.kernel, src_coeff_exprs,
                         dvec_scaled, rscale=src_rscale, sac=sac)

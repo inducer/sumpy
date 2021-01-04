@@ -78,37 +78,28 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             self.expansion_terms_wrangler.get_stored_mpole_coefficients_from_full(
                 result, rscale, sac=sac))
 
-    def get_scaled_multipole(self, kernel, expr, bvec, rscale, nderivatives,
-            nderivatives_for_scaling=None):
-        if nderivatives_for_scaling is None:
-            nderivatives_for_scaling = nderivatives
-
-        if self.kernel.has_efficient_scale_adjustment:
-            return (
-                    kernel.adjust_for_kernel_scaling(
-                        vector_xreplace(
-                            expr,
-                            bvec, bvec * rscale**-1),
-                        rscale, nderivatives)
-                    / rscale ** (nderivatives - nderivatives_for_scaling))
-        else:
-            return (rscale**nderivatives_for_scaling * expr)
-
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
+        from sumpy.tools import MiDerivativeTakerWrapper
+        from pytools import single_valued
         if not self.use_rscale:
             rscale = 1
 
-        taker = self.get_kernel_derivative_taker(kernel, bvec)
+        taker = self.get_kernel_derivative_taker(bvec, rscale, sac)
+        expr_dict = {(0,)*self.dim: 1}
+        expr_dict = kernel.get_derivative_transformation_at_target(expr_dict)
+        pp_nderivatives = single_valued(sum(mi) for mi in expr_dict.keys())
 
-        result = sym.Add(*tuple(coeff * self.get_scaled_multipole(kernel,
-                    taker.diff(mi), bvec, rscale, sum(mi))
-                for coeff, mi in zip(coeffs, self.get_coefficient_identifiers())))
+        result = []
+        for coeff, mi in zip(coeffs, self.get_coefficient_identifiers()):
+            wrapper = MiDerivativeTakerWrapper(taker, mi)
+            mi_expr = kernel.postprocess_at_target(wrapper, bvec)
+            # For details about this correction, see the explanation at
+            # VolumeTaylorLocalExpansionBase.coefficients_from_source
+            expr = coeff * mi_expr / rscale**pp_nderivatives
+            result.append(expr)
 
-        return kernel.postprocess_at_target(result, bvec)
-
-    def get_kernel_derivative_taker(self, kernel, bvec):
-        from sumpy.tools import MiDerivativeTaker
-        return MiDerivativeTaker(kernel.get_expression(bvec), bvec)
+        result = sym.Add(*tuple(result))
+        return result
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None):
