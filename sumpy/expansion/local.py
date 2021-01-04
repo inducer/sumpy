@@ -72,8 +72,8 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
         from sumpy.symbolic import USE_SYMENGINE
 
         if USE_SYMENGINE:
-            from sumpy.tools import my_syntactic_subs
-            deriv_taker = self.get_kernel_derivative_taker(line_kernel, (tau,), sac)
+            from sumpy.tools import MiDerivativeTaker, my_syntactic_subs
+            deriv_taker = MiDerivativeTaker(line_kernel, (tau,), sac=sac, rscale=1)
 
             return [my_syntactic_subs(
                         kernel.postprocess_at_source(
@@ -184,8 +184,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # This code speeds up derivative taking by caching all kernel
             # derivatives.
 
-            taker = src_expansion.get_kernel_derivative_taker(src_expansion.kernel,
-                dvec, sac)
+            taker = src_expansion.get_kernel_derivative_taker(dvec=dvec, sac=sac,
+                rscale=src_rscale)
 
             from sumpy.tools import add_mi
 
@@ -238,13 +238,10 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                                                         stored_coeffs):
                     if coeff == 0:
                         continue
-                    nderivatives_for_scaling = \
-                            sum(tgtplusderiv_coeff_id)-sum(lexp_mi)
-                    kernel_deriv = taker.diff(tgtplusderiv_coeff_id) * \
-                            src_rscale**nderivatives_for_scaling
-
+                    kernel_deriv = taker.diff(tgtplusderiv_coeff_id)
+                    rscale_ratio = tgt_rscale / src_rscale
                     lexp_mi_terms.append(
-                            coeff * kernel_deriv * tgt_rscale**sum(lexp_mi))
+                            coeff * kernel_deriv * rscale_ratio**sum(lexp_mi))
                 result.append(sym.Add(*lexp_mi_terms))
             logger.info("building translation operator: done")
             return result

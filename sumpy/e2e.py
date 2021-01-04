@@ -105,7 +105,7 @@ class E2EBase(KernelCacheWrapper):
                 for i, coeff_i in enumerate(
                     self.tgt_expansion.translate_from(
                         self.src_expansion, src_coeff_exprs, src_rscale,
-                        dvec, tgt_rscale, sac=sac))]
+                        dvec=dvec, tgt_rscale=tgt_rscale, sac=sac))]
 
         sac.run_global_cse()
 
