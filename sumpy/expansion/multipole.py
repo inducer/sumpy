@@ -27,7 +27,7 @@ from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
     HelmholtzConformingVolumeTaylorExpansion,
     BiharmonicConformingVolumeTaylorExpansion)
-from pytools import factorial
+from pytools import factorial, single_valued
 
 import logging
 logger = logging.getLogger(__name__)
@@ -55,9 +55,6 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
     def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
         from sumpy.kernel import KernelWrapper
-        if kernel is None:
-            kernel = self.kernel
-
         from sumpy.tools import mi_power, mi_factorial
 
         if not self.use_rscale:
@@ -80,7 +77,6 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         from sumpy.tools import MiDerivativeTakerWrapper
-        from pytools import single_valued
         if not self.use_rscale:
             rscale = 1
 

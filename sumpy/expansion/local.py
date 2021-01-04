@@ -115,6 +115,9 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
     def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
         from sumpy.tools import MiDerivativeTakerWrapper
 
+        if not self.use_rscale:
+            rscale = 1
+
         result = []
         taker = self.get_kernel_derivative_taker(avec, rscale, sac)
         expr_dict = {(0,)*self.dim: 1}
@@ -123,7 +126,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         for mi in self.get_coefficient_identifiers():
             wrapper = MiDerivativeTakerWrapper(taker, mi)
-            mi_expr = self.kernel.postprocess_at_source(wrapper, avec)
+            mi_expr = kernel.postprocess_at_source(wrapper, avec)
             # By passing `rscale` to the derivative taker we are taking a scaled
             # version of the derivative which is `expr.diff(mi)*rscale**sum(mi)`
             # which might be implemented efficiently for kernels like Laplace.
@@ -138,6 +141,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         from pytools import factorial
+        if not self.use_rscale:
+            rscale = 1
 
         evaluated_coeffs = (
             self.expansion_terms_wrangler.get_full_kernel_derivatives_from_stored(

@@ -793,10 +793,6 @@ class AxisSourceDerivative(DerivativeBase):
     def __repr__(self):
         return "AxisSourceDerivative(%d, %r)" % (self.axis, self.inner_kernel)
 
-    def postprocess_at_source(self, expr, avec):
-        expr = self.inner_kernel.postprocess_at_source(expr, avec)
-        return -expr.diff(avec[self.axis])
-
     def get_derivative_transformation_at_source(self, expr_dict):
         expr_dict = self.inner_kernel.get_derivative_transformation_at_source(
             expr_dict)
@@ -804,7 +800,7 @@ class AxisSourceDerivative(DerivativeBase):
         for mi, coeff in expr_dict.items():
             new_mi = list(mi)
             new_mi[self.axis] += 1
-            result[tuple(new_mi)] = coeff
+            result[tuple(new_mi)] = -coeff
         return result
 
     def replace_base_kernel(self, new_base_kernel):
