@@ -86,7 +86,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
     def get_cache_key(self):
         return (type(self).__name__, self.expansion, tuple(self.target_kernels),
                 tuple(self.source_kernels), tuple(self.strength_usage),
-                tuple(self.value_dtypes), self.device)
+                tuple(self.value_dtypes))
 
     def _expand(self, sac, avec, bvec, rscale, isrc):
         coefficients = np.zeros(len(self.expansion), dtype=object)

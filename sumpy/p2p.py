@@ -94,7 +94,7 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
     def get_cache_key(self):
         return (type(self).__name__, tuple(self.target_kernels), self.exclude_self,
                 tuple(self.strength_usage), tuple(self.value_dtypes),
-                tuple(self.source_kernels), self.device)
+                tuple(self.source_kernels))
 
     def get_loopy_insns_and_result_names(self):
         from sumpy.symbolic import make_sym_vector
