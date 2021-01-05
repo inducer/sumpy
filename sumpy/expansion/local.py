@@ -96,10 +96,9 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         # no point in heeding rscale here--just ignore it
         from pytools import factorial
-        result = sym.Add(*(
+        return sym.Add(*(
                 coeffs[self.get_storage_index(i)] / factorial(i)
                 for i in self.get_coefficient_identifiers()))
-        return result
 
 # }}}
 
