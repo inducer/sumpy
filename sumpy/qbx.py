@@ -71,10 +71,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
             value_dtypes=None, name=None, device=None,
             source_kernels=None, target_kernels=None):
 
-        from sumpy.kernel import SourceDerivativeRemover, TargetDerivativeRemover
         from pytools import single_valued
-        sdr = SourceDerivativeRemover()
-        tdr = TargetDerivativeRemover()
 
         KernelComputation.__init__(self, ctx=ctx, target_kernels=target_kernels,
                 strength_usage=strength_usage, source_kernels=source_kernels,
