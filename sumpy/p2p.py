@@ -54,7 +54,10 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
     def __init__(self, ctx, target_kernels, exclude_self, strength_usage=None,
             value_dtypes=None, name=None, device=None, source_kernels=None):
         """
-        :arg kernels: list of :class:`sumpy.kernel.Kernel` instances
+        :arg target_kernels: list of :class:`sumpy.kernel.Kernel` instances
+          with only target derivatives.
+        :arg source_kernels: list of :class:`sumpy.kernel.Kernel` instances
+          with only source derivatives.
         :arg strength_usage: A list of integers indicating which expression
           uses which source strength indicator. This implicitly specifies the
           number of strength arrays that need to be passed.
