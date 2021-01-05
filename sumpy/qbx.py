@@ -96,7 +96,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
     def get_cache_key(self):
         return (type(self).__name__, self.expansion, tuple(self.target_kernels),
                 tuple(self.source_kernels), tuple(self.strength_usage),
-                tuple(self.value_dtypes))
+                tuple(self.value_dtypes), self.device)
 
     def _expand(self, sac, avec, bvec, rscale, isrc):
         coefficients = np.zeros(len(self.expansion), dtype=object)
@@ -183,8 +183,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                     None, shape="ntargets"),
                 lp.ValueArg("nsources", None),
                 lp.ValueArg("ntargets", None)]
-                + gather_loopy_source_arguments(
-                    self.target_kernels + self.source_kernels))
+                + gather_loopy_source_arguments(self.source_kernels))
 
     def get_kernel(self):
         raise NotImplementedError
