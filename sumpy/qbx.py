@@ -75,16 +75,6 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
         from pytools import single_valued
         sdr = SourceDerivativeRemover()
         tdr = TargetDerivativeRemover()
-        if source_kernels is None and target_kernels is None:
-            from warnings import warn
-            warn("A list for the second argument of the constructor is deprecated."
-                "Use a single expansion and pass source_kernels and target_kernels",
-                DeprecationWarning, stacklevel=2)
-            source_kernel = single_valued(tdr(exp.kernel) for exp in expansion)
-            base_kernel = sdr(source_kernel)
-            target_kernels = tuple(sdr(exp.kernel) for exp in expansion)
-            source_kernels = (source_kernel,)
-            expansion = expansion[0].copy(kernel=base_kernel)
 
         KernelComputation.__init__(self, ctx=ctx, target_kernels=target_kernels,
                 strength_usage=strength_usage, source_kernels=source_kernels,
