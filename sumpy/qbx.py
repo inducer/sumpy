@@ -272,8 +272,8 @@ class LayerPotential(LayerPotentialBase):
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-        for expn in self.target_kernels + self.source_kernels:
-            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+        for knl in self.target_kernels + self.source_kernels:
+            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
 
