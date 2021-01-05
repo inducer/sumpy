@@ -424,8 +424,8 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
         loopy_knl = lp.add_dtypes(loopy_knl,
             dict(nsources=np.int32, ntargets=np.int32))
 
-        for expn in self.source_kernels + self.target_kernels:
-            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+        for knl in self.source_kernels + self.target_kernels:
+            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
 
