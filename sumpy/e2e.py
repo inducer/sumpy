@@ -217,8 +217,8 @@ class E2EFromCSR(E2EBase):
                 lang_version=MOST_RECENT_LANGUAGE_VERSION
                 )
 
-        for expn in [self.src_expansion, self.tgt_expansion]:
-            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+        for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
+            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
@@ -337,8 +337,8 @@ class E2EFromChildren(E2EBase):
                 fixed_parameters=dict(dim=self.dim, nchildren=2**self.dim),
                 lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
-        for expn in [self.src_expansion, self.tgt_expansion]:
-            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+        for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
+            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
@@ -441,8 +441,8 @@ class E2EFromParent(E2EBase):
                 fixed_parameters=dict(dim=self.dim, nchildren=2**self.dim),
                 lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
-        for expn in [self.src_expansion, self.tgt_expansion]:
-            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+        for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
+            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 

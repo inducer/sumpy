@@ -183,7 +183,8 @@ class P2EFromSingleBox(P2EBase):
                     strength_count=self.strength_count),
                 lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
-        loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
+        for knl in self.source_kernels:
+            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         return loopy_knl
@@ -291,7 +292,8 @@ class P2EFromCSR(P2EBase):
                     strength_count=self.strength_count),
                 lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
-        loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
+        for knl in self.source_kernels:
+            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         return loopy_knl
