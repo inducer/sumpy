@@ -71,20 +71,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
             value_dtypes=None, name=None, device=None,
             source_kernels=None, target_kernels=None):
 
-        from sumpy.kernel import SourceDerivativeRemover, TargetDerivativeRemover
         from pytools import single_valued
-        sdr = SourceDerivativeRemover()
-        tdr = TargetDerivativeRemover()
-        if source_kernels is None and target_kernels is None:
-            from warnings import warn
-            warn("A list for the second argument of the constructor is deprecated."
-                "Use a single expansion and pass source_kernels and target_kernels",
-                DeprecationWarning, stacklevel=2)
-            source_kernel = single_valued(tdr(exp.kernel) for exp in expansion)
-            base_kernel = sdr(source_kernel)
-            target_kernels = tuple(sdr(exp.kernel) for exp in expansion)
-            source_kernels = (source_kernel,)
-            expansion = expansion[0].copy(kernel=base_kernel)
 
         KernelComputation.__init__(self, ctx=ctx, target_kernels=target_kernels,
                 strength_usage=strength_usage, source_kernels=source_kernels,
@@ -96,7 +83,8 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
     def get_cache_key(self):
         return (type(self).__name__, self.expansion, tuple(self.target_kernels),
                 tuple(self.source_kernels), tuple(self.strength_usage),
-                tuple(self.value_dtypes))
+                tuple(self.value_dtypes),
+                self.device.hashable_model_and_version_identifier)
 
     def _expand(self, sac, avec, bvec, rscale, isrc):
         coefficients = np.zeros(len(self.expansion), dtype=object)
@@ -183,8 +171,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                     None, shape="ntargets"),
                 lp.ValueArg("nsources", None),
                 lp.ValueArg("ntargets", None)]
-                + gather_loopy_source_arguments(
-                    self.target_kernels + self.source_kernels))
+                + gather_loopy_source_arguments(self.source_kernels))
 
     def get_kernel(self):
         raise NotImplementedError
@@ -272,8 +259,8 @@ class LayerPotential(LayerPotentialBase):
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-        for expn in self.target_kernels + self.source_kernels:
-            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+        for knl in self.target_kernels + self.source_kernels:
+            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
 
@@ -424,8 +411,8 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
         loopy_knl = lp.add_dtypes(loopy_knl,
             dict(nsources=np.int32, ntargets=np.int32))
 
-        for expn in self.source_kernels + self.target_kernels:
-            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+        for knl in self.source_kernels + self.target_kernels:
+            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
 

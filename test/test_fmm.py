@@ -199,6 +199,11 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class):
 
 
 def test_unified_single_and_double(ctx_factory):
+    """
+    Test that running one FMM for single layer + double layer gives the
+    same result as running one FMM for each and adding the results together
+    at the end
+    """
     logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_factory()

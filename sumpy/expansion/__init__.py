@@ -82,9 +82,6 @@ class ExpansionBase:
     def is_complex_valued(self):
         return self.kernel.is_complex_valued
 
-    def prepare_loopy_kernel(self, loopy_knl):
-        return self.kernel.prepare_loopy_kernel(loopy_knl)
-
     def get_code_transformer(self):
         return self.kernel.get_code_transformer()
 

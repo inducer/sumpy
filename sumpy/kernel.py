@@ -119,6 +119,7 @@ class Kernel:
     .. attribute:: dim
 
     .. automethod:: get_base_kernel
+    .. automethod:: replace_base_kernel
     .. automethod:: prepare_loopy_kernel
     .. automethod:: get_code_transformer
     .. automethod:: get_expression

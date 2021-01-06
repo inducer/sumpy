@@ -66,8 +66,7 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
         else:
             kernels = kernels
 
-        expansion = expansion.with_kernel(tdr(expansion.kernel))
-        expansion = expansion.with_kernel(sdr(expansion.kernel))
+        expansion = expansion.with_kernel(sdr(tdr(expansion.kernel)))
 
         for knl in kernels:
             assert tdr(knl) == knl
@@ -184,7 +183,8 @@ class P2EFromSingleBox(P2EBase):
                     strength_count=self.strength_count),
                 lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
-        loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
+        for knl in self.source_kernels:
+            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         return loopy_knl
@@ -292,7 +292,8 @@ class P2EFromCSR(P2EBase):
                     strength_count=self.strength_count),
                 lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
-        loopy_knl = self.expansion.prepare_loopy_kernel(loopy_knl)
+        for knl in self.source_kernels:
+            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         return loopy_knl
