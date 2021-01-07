@@ -90,14 +90,14 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
 
+        strengths = [pymbolic.var(f"strength{i}" for i in range(len(self.source_kernels))]
+        coeffs = self.expansion.coefficients_from_source(self.source_kernels, avec,
+                    None, rscale, strengths, sac=sac)
+
         coeff_names = []
-        for knl_idx, kernel in enumerate(self.source_kernels):
-            for i, coeff_i in enumerate(
-                self.expansion.coefficients_from_source(kernel, avec, None, rscale,
-                     sac)
-            ):
-                sac.add_assignment(f"coeff{i}_{knl_idx}", coeff_i)
-                coeff_names.append(f"coeff{i}_{knl_idx}")
+        for i, coeff in enumerate(coeffs):
+            sac.add_assignment(f"coeff_{knl_idx}", coeff)
+            coeff_names.append(f"coeff_{knl_idx}")
 
         sac.run_global_cse()
 
@@ -118,10 +118,7 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
                 tuple(self.source_kernels), tuple(self.strength_usage))
 
     def get_result_expr(self, icoeff):
-        isrc = pymbolic.var("isrc")
-        return sum(pymbolic.var(f"coeff{icoeff}_{i}")
-                    * pymbolic.var("strengths")[self.strength_usage[i], isrc]
-                for i in range(len(self.source_kernels)))
+        return pymbolic.var("result_p2e")
 
 # }}}
 
@@ -152,9 +149,10 @@ class P2EFromSingleBox(P2EBase):
                         <> a[idim] = center[idim] - sources[idim, isrc] {dup=idim}
                         """] + self.get_loopy_instructions() + ["""
                     end
-                    """] + [f"""
+                    """] + [f"<> strength_{i} = strengths[{i}, isrc]" for
+                        i in set(self.strength_usage)] + [f"""
                     tgt_expansions[src_ibox-tgt_base_ibox, {coeffidx}] = \
-                        simul_reduce(sum, isrc, {self.get_result_expr(coeffidx)}) \
+                        simul_reduce(sum, isrc, coeff{coeffidx}) \
                             {{id_prefix=write_expn}}
                     """ for coeffidx in range(ncoeffs)] + ["""
                 end
@@ -272,13 +270,13 @@ class P2EFromCSR(P2EBase):
                         for isrc
                             <> a[idim] = center[idim] - sources[idim, isrc] \
                                     {dup=idim}
-                            """] + self.get_loopy_instructions() + ["""
+                    """] + [f"<> strength_{i} = strengths[{i}, isrc]" for
+                        i in set(self.strength_usage)] + self.get_loopy_instructions() + ["""
                         end
                     end
-                    """] + [f"""
                     tgt_expansions[tgt_ibox - tgt_base_ibox, {coeffidx}] = \
                             simul_reduce(sum, (isrc_box, isrc),
-                                {self.get_result_expr(coeffidx)}) \
+                                coeff{coeffidx}) \
                             {{id_prefix=write_expn}}
                     """ for coeffidx in range(ncoeffs)] + ["""
                 end

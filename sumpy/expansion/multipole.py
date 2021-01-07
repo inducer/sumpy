@@ -53,27 +53,35 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
     Coefficients represent the terms in front of the kernel derivatives.
     """
 
-    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
+    def coefficients_from_source_vec(self, kernels, avec, bvec, rscale, weights, sac=None):
         from sumpy.kernel import KernelWrapper
         from sumpy.tools import mi_power, mi_factorial
+
 
         if not self.use_rscale:
             rscale = 1
 
-        if isinstance(kernel, KernelWrapper):
-            result = [
-                    kernel.postprocess_at_source(mi_power(avec, mi), avec)
-                    / mi_factorial(mi) / rscale ** sum(mi)
-                    for mi in self.get_full_coefficient_identifiers()]
-        else:
-            avec = [sym.UnevaluatedExpr(a * rscale**-1) for a in avec]
+        result = [0]*len(self.get_full_coefficient_identifiers())
+        for kernel, weight in zip(kernels, weights):
+            if isinstance(kernel, KernelWrapper):
+                coeffs = [
+                        kernel.postprocess_at_source(mi_power(avec, mi), avec)
+                        / rscale ** sum(mi)
+                        for mi in self.get_full_coefficient_identifiers()]
+            else:
+                avec = [sym.UnevaluatedExpr(a * rscale**-1) for a in avec]
+                coeffs = [mi_power(avec, mi)
+                          for mi in self.get_full_coefficient_identifiers()]
 
-            result = [
-                    mi_power(avec, mi) / mi_factorial(mi)
-                    for mi in self.get_full_coefficient_identifiers()]
+            for i, mi in enumerate(self.get_full_coefficient_identifiers()):
+                result[i] += coeffs[i] * weight / mi_factorial(mi)
         return (
             self.expansion_terms_wrangler.get_stored_mpole_coefficients_from_full(
                 result, rscale, sac=sac))
+
+    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
+        return self.coefficients_from_source_vec((kernel,), avec, bvec,
+                rscale, (1,), sac=sac)
 
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         from sumpy.tools import MiDerivativeTakerWrapper

@@ -122,6 +122,25 @@ class ExpansionBase:
         """
         raise NotImplementedError
 
+    def coefficients_from_source_vec(self, kernels, avec, bvec, rscale, weights, sac=None):
+        """Form an expansion with a linear combination of kernels and weights.
+
+        :arg avec: vector from source to center.
+        :arg bvec: vector from center to target. Not usually necessary,
+            except for line-Taylor expansion.
+        :arg sac: a symbolic assignment collection where temporary
+            expressions are stored.
+
+        :returns: a list of :mod:`sympy` expressions representing
+            the coefficients of the expansion.
+        """
+        result = [0]*get_coefficient_identifiers()
+        for knl, weight in zip(kernels, weights):
+            coeffs = self.coefficients_from_source(knl, avec, bvec, rscale, sac=sac)
+            for i in range(len(result)):
+                result[i] += weight * coeffs[i]
+        return result
+
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         """
         :return: a :mod:`sympy` expression corresponding
