@@ -117,11 +117,8 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
         return (type(self).__name__, self.name, self.expansion,
                 tuple(self.source_kernels), tuple(self.strength_usage))
 
-    def get_result_expr(self, icoeff):
-        return pymbolic.var("result_p2e")
 
 # }}}
-
 
 # {{{ P2E from single box (P2M, likely)
 
