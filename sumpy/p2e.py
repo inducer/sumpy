@@ -90,14 +90,14 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
 
-        strengths = [pymbolic.var(f"strength{i}" for i in range(len(self.source_kernels))]
-        coeffs = self.expansion.coefficients_from_source(self.source_kernels, avec,
+        strengths = [sp.Symbol(f"strength_{i}") for i in range(len(self.source_kernels))]
+        coeffs = self.expansion.coefficients_from_source_vec(self.source_kernels, avec,
                     None, rscale, strengths, sac=sac)
 
         coeff_names = []
         for i, coeff in enumerate(coeffs):
-            sac.add_assignment(f"coeff_{knl_idx}", coeff)
-            coeff_names.append(f"coeff_{knl_idx}")
+            sac.add_assignment(f"coeff{i}", coeff)
+            coeff_names.append(f"coeff{i}")
 
         sac.run_global_cse()
 
@@ -270,13 +270,13 @@ class P2EFromCSR(P2EBase):
                         for isrc
                             <> a[idim] = center[idim] - sources[idim, isrc] \
                                     {dup=idim}
-                    """] + [f"<> strength_{i} = strengths[{i}, isrc]" for
-                        i in set(self.strength_usage)] + self.get_loopy_instructions() + ["""
+                    """] + [f"""
+                             <> strength_{i} = strengths[{i}, isrc]
+                             """ for i in set(self.strength_usage)] + self.get_loopy_instructions() + ["""
                         end
-                    end
+                    end"""] + [f"""
                     tgt_expansions[tgt_ibox - tgt_base_ibox, {coeffidx}] = \
-                            simul_reduce(sum, (isrc_box, isrc),
-                                coeff{coeffidx}) \
+                            simul_reduce(sum, (isrc_box, isrc), coeff{coeffidx}) \
                             {{id_prefix=write_expn}}
                     """ for coeffidx in range(ncoeffs)] + ["""
                 end

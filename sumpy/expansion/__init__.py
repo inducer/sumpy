@@ -134,7 +134,7 @@ class ExpansionBase:
         :returns: a list of :mod:`sympy` expressions representing
             the coefficients of the expansion.
         """
-        result = [0]*get_coefficient_identifiers()
+        result = [0]*len(self)
         for knl, weight in zip(kernels, weights):
             coeffs = self.coefficients_from_source(knl, avec, bvec, rscale, sac=sac)
             for i in range(len(result)):
