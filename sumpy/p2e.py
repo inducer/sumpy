@@ -90,7 +90,7 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
 
-        strengths = [sp.Symbol(f"strength_{i}") for i in range(len(self.source_kernels))]
+        strengths = [sp.Symbol(f"strength_{i}") for i in self.strength_usage]
         coeffs = self.expansion.coefficients_from_source_vec(self.source_kernels, avec,
                     None, rscale, strengths, sac=sac)
 
