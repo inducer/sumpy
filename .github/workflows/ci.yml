@@ -28,6 +28,7 @@ jobs:
         name: Documentation
         runs-on: ubuntu-latest
         steps:
+        -   uses: actions/checkout@v2
         -   name: "Main Script"
             run: |
                 CONDA_ENVIRONMENT=.test-conda-env-py3.yml
