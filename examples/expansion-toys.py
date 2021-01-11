@@ -4,7 +4,7 @@ import numpy as np
 from sumpy.visualization import FieldPlotter
 try:
     import matplotlib.pyplot as plt
-except ImportError:
+except ModuleNotFoundError:
     plt = None
 
 
