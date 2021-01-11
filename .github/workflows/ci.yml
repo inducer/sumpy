@@ -63,7 +63,6 @@ jobs:
         name: Conda Examples
         runs-on: ubuntu-latest
         steps:
-        steps:
         -   uses: actions/checkout@v2
         -   name: "Main Script"
             run: |
