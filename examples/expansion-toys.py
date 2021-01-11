@@ -2,7 +2,10 @@ import pyopencl as cl
 import sumpy.toys as t
 import numpy as np
 from sumpy.visualization import FieldPlotter
-import matplotlib.pyplot as plt
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    plt = None
 
 
 def main():
@@ -22,7 +25,7 @@ def main():
 
     fp = FieldPlotter([3, 0], extent=8)
 
-    if 0:
+    if 0 and plt is not None:
         t.logplot(fp, pt_src, cmap="jet")
         plt.colorbar()
         plt.show()
@@ -37,7 +40,7 @@ def main():
     diff = lexp2 - pt_src
 
     print(t.l_inf(diff, 1.2, center=lexp2.center))
-    if 1:
+    if 1 and plt is not None:
         t.logplot(fp, diff, cmap="jet", vmin=-3, vmax=0)
         plt.colorbar()
         plt.show()
