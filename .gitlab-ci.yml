@@ -84,6 +84,19 @@ Pytest POCL Titan X:
     reports:
       junit: test/pytest.xml
 
+Examples Conda:
+  script: |
+    grep -v symengine .test-conda-env-py3.yml > .test-conda-env.yml
+    CONDA_ENVIRONMENT=.test-conda-env.yml
+    curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/ci-support.sh
+    . ci-support.sh
+    build_py_project_in_conda_env
+    run_examples
+  tags:
+  - large-node
+  except:
+  - tags
+
 Documentation:
   script:
   - EXTRA_INSTALL="pybind11 numpy mako"
