@@ -139,7 +139,7 @@ def draw_pot_figure(aspect_ratio,
             * center_dist*native_curve.normal)
 
     #native_curve.plot()
-    #pt.show()
+    #plt.show()
 
     volpot_kwargs = knl_kwargs.copy()
     lpot_kwargs = knl_kwargs.copy()
@@ -176,7 +176,7 @@ def draw_pot_figure(aspect_ratio,
         op = LinearOperator((nsrc, nsrc), apply_lpot)
         mat = build_matrix(op, dtype=np.complex128)
         w, v = la.eig(mat)
-        pt.plot(w.real, "o-")
+        plt.plot(w.real, "o-")
         #import sys; sys.exit(0)
         return
 
@@ -201,10 +201,10 @@ def draw_pot_figure(aspect_ratio,
     if 0:
         # {{{ plot on-surface potential in 2D
 
-        pt.plot(curve_pot, label="pot")
-        pt.plot(density, label="dens")
-        pt.legend()
-        pt.show()
+        plt.plot(curve_pot, label="pot")
+        plt.plot(density, label="dens")
+        plt.legend()
+        plt.show()
 
         # }}}
 
@@ -215,23 +215,23 @@ def draw_pot_figure(aspect_ratio,
     if 0:
         # {{{ 2D false-color plot
 
-        pt.clf()
+        plt.clf()
         plotval = np.log10(1e-20+np.abs(vol_pot))
         im = fp.show_scalar_in_matplotlib(plotval.real)
         from matplotlib.colors import Normalize
         im.set_norm(Normalize(vmin=-2, vmax=1))
 
         src = native_curve.pos
-        pt.plot(src[:, 0], src[:, 1], "o-k")
+        plt.plot(src[:, 0], src[:, 1], "o-k")
         # close the curve
-        pt.plot(src[-1::-len(src)+1, 0], src[-1::-len(src)+1, 1], "o-k")
+        plt.plot(src[-1::-len(src)+1, 0], src[-1::-len(src)+1, 1], "o-k")
 
-        #pt.gca().set_aspect("equal", "datalim")
-        cb = pt.colorbar(shrink=0.9)
+        #plt.gca().set_aspect("equal", "datalim")
+        cb = plt.colorbar(shrink=0.9)
         cb.set_label(r"$\log_{10}(\mathdefault{Error})$")
         #from matplotlib.ticker import NullFormatter
-        #pt.gca().xaxis.set_major_formatter(NullFormatter())
-        #pt.gca().yaxis.set_major_formatter(NullFormatter())
+        #plt.gca().xaxis.set_major_formatter(NullFormatter())
+        #plt.gca().yaxis.set_major_formatter(NullFormatter())
         fp.set_matplotlib_limits()
 
         # }}}
@@ -274,14 +274,14 @@ if __name__ == "__main__":
     draw_pot_figure(aspect_ratio=1, nsrc=100, novsmp=100, helmholtz_k=(35+4j)*0.3,
             what_operator="D", what_operator_lpot="D", force_center_side=1)
 
-#    pt.savefig("eigvals-ext-nsrc100-novsmp100.pdf")
-    #pt.clf()
+#    plt.savefig("eigvals-ext-nsrc100-novsmp100.pdf")
+    #plt.clf()
     #draw_pot_figure(aspect_ratio=1, nsrc=100, novsmp=100, helmholtz_k=0,
     #        what_operator="D", what_operator_lpot="D", force_center_side=-1)
-    #pt.savefig("eigvals-int-nsrc100-novsmp100.pdf")
-    #pt.clf()
+    #plt.savefig("eigvals-int-nsrc100-novsmp100.pdf")
+    #plt.clf()
     #draw_pot_figure(aspect_ratio=1, nsrc=100, novsmp=200, helmholtz_k=0,
     #        what_operator="D", what_operator_lpot="D", force_center_side=-1)
-    #pt.savefig("eigvals-int-nsrc100-novsmp200.pdf")
+    #plt.savefig("eigvals-int-nsrc100-novsmp200.pdf")
 
 # vim: fdm=marker
