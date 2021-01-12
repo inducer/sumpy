@@ -29,10 +29,6 @@ jobs:
         runs-on: ubuntu-latest
         steps:
         -   uses: actions/checkout@v2
-        -
-            uses: actions/setup-python@v1
-            with:
-                python-version: '3.x'
         -   name: "Main Script"
             run: |
                 CONDA_ENVIRONMENT=.test-conda-env-py3.yml
@@ -41,8 +37,8 @@ jobs:
                 build_py_project_in_conda_env
                 build_docs
 
-    pytest3:
-        name: Conda Pytest Py3
+    pytest:
+        name: Conda Pytest
         runs-on: ubuntu-latest
         steps:
         -   uses: actions/checkout@v2
@@ -53,8 +49,8 @@ jobs:
                 curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project-within-miniconda.sh
                 . ./build-and-test-py-project-within-miniconda.sh
 
-    pytest3symengine:
-        name: Conda Pytest Py3 Symengine
+    pytest_symengine:
+        name: Conda Pytest Symengine
         runs-on: ubuntu-latest
         steps:
         -   uses: actions/checkout@v2
@@ -63,5 +59,20 @@ jobs:
                 CONDA_ENVIRONMENT=.test-conda-env-py3.yml
                 curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project-within-miniconda.sh
                 . ./build-and-test-py-project-within-miniconda.sh
+
+    examples:
+        name: Conda Examples
+        runs-on: ubuntu-latest
+        steps:
+        -   uses: actions/checkout@v2
+        -   name: "Main Script"
+            run: |
+                grep -v symengine .test-conda-env-py3.yml > .test-conda-env.yml
+                CONDA_ENVIRONMENT=.test-conda-env.yml
+                curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/ci-support.sh
+                . ci-support.sh
+                EXTRA_INSTALL="pyvisfile scipy"
+                build_py_project_in_conda_env
+                run_examples
 
 # vim: sw=4
