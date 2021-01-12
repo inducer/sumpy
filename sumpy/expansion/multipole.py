@@ -264,13 +264,17 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             self.expansion_terms_wrangler._get_coeff_identifier_split()
         result = [0] * len(self.get_full_coefficient_identifiers())
 
+        # axis morally iterates over 'hyperplane directions'
         for axis in range(self.dim):
+            # {{{ index gymnastics
+
             # First, let's write source coefficients in target coefficient
             # indices. If target order is lower than source order, then
             # we will discard higher order terms from source coefficients.
             cur_dim_input_coeffs = \
                 [0] * len(self.get_full_coefficient_identifiers())
             for d, mis in tgt_split:
+                # Only consider hyperplanes perpendicular to *axis*.
                 if d != axis:
                     continue
                 for mi in mis:
@@ -286,11 +290,18 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             if all(coeff == 0 for coeff in cur_dim_input_coeffs):
                 continue
 
+            # }}}
+
+            # {{{ translation
+
             # Therefore, we use the orthogonal axis as the last dimension to vary
             dims = list(range(axis)) + \
                    list(range(axis+1, self.dim)) + [axis]
+
+            # d is the axis along which we translate.
             for d in dims:
-                # We build the full target multipole and then compress it, below.
+                # We build the full target multipole and then compress it
+                # at the very end.
                 cur_dim_output_coeffs = \
                     [0] * len(self.get_full_coefficient_identifiers())
                 for i, tgt_mi in enumerate(
@@ -311,6 +322,8 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                         cur_dim_output_coeffs[i] += contrib
                 # cur_dim_output_coeffs is the input in the next iteration
                 cur_dim_input_coeffs = cur_dim_output_coeffs
+
+            # }}}
 
             for i in range(len(cur_dim_output_coeffs)):
                 result[i] += cur_dim_output_coeffs[i]
