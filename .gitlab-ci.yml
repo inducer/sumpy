@@ -90,6 +90,7 @@ Examples Conda:
     CONDA_ENVIRONMENT=.test-conda-env.yml
     curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/ci-support.sh
     . ci-support.sh
+    EXTRA_INSTALL="pyvisfile scipy"
     build_py_project_in_conda_env
     run_examples
   tags:

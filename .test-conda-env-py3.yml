@@ -15,6 +15,3 @@ dependencies:
 - python-symengine=0.6.0
 - pyfmmlib
 - pyrsistent
-
-# Only needed for examples
-- scipy
