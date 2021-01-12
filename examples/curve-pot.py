@@ -14,17 +14,19 @@ except ModuleNotFoundError:
 
 
 def process_kernel(knl, what_operator):
+    target_knl = knl
+    source_knl = knl
     if what_operator == "S":
         pass
     elif what_operator == "S0":
         from sumpy.kernel import TargetDerivative
-        knl = TargetDerivative(0, knl)
+        target_knl = TargetDerivative(0, knl)
     elif what_operator == "S1":
         from sumpy.kernel import TargetDerivative
-        knl = TargetDerivative(1, knl)
+        target_knl = TargetDerivative(1, knl)
     elif what_operator == "D":
         from sumpy.kernel import DirectionalSourceDerivative
-        knl = DirectionalSourceDerivative(knl)
+        source_knl = DirectionalSourceDerivative(knl)
     # DirectionalTargetDerivative (temporarily?) removed
     # elif what_operator == "S'":
     #     from sumpy.kernel import DirectionalTargetDerivative
@@ -32,7 +34,7 @@ def process_kernel(knl, what_operator):
     else:
         raise RuntimeError("unrecognized operator '%s'" % what_operator)
 
-    return knl
+    return source_knl, target_knl
 
 
 def draw_pot_figure(aspect_ratio,
@@ -83,15 +85,17 @@ def draw_pot_figure(aspect_ratio,
         expn_class = LineTaylorLocalExpansion
         knl_kwargs = {}
 
-    vol_knl = process_kernel(knl, what_operator)
-    p2p = P2P(ctx, [vol_knl], exclude_self=False,
+    vol_source_knl, vol_target_knl = process_kernel(knl, what_operator)
+    p2p = P2P(ctx, source_kernels=(vol_source_knl,),
+            target_kernels=(vol_target_knl,),
+            exclude_self=False,
             value_dtypes=np.complex128)
 
-    lpot_knl = process_kernel(knl, what_operator_lpot)
+    lpot_source_knl, lpot_target_knl = process_kernel(knl, what_operator_lpot)
 
     from sumpy.qbx import LayerPotential
-    lpot = LayerPotential(ctx, [
-        expn_class(lpot_knl, order=order)],
+    lpot = LayerPotential(ctx, expansion=expn_class(knl, order=order),
+            source_kernels=(lpot_source_knl,), target_kernels=(lpot_target_knl,),
             value_dtypes=np.complex128)
 
     # }}}
