@@ -210,7 +210,7 @@ class ExpansionTermsWrangler:
         return type(self)(**new_kwargs)
 
     @memoize_method
-    def _get_coeff_identifier_split(self) -> List[Tuple[int, List[Tuple[int]]]]:
+    def _split_coeffs_into_hyperplanes(self) -> List[Tuple[int, List[Tuple[int]]]]:
         """
         This splits the coefficients into :math:`O(p)` number of disjoint sets
         so that for each set, all the identifiers have the form,

@@ -261,7 +261,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         # varying dimension.
 
         tgt_split = \
-            self.expansion_terms_wrangler._get_coeff_identifier_split()
+            self.expansion_terms_wrangler._split_coeffs_into_hyperplanes()
         result = [0] * len(self.get_full_coefficient_identifiers())
 
         # axis morally iterates over 'hyperplane directions'

@@ -249,7 +249,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             self.expansion_terms_wrangler.get_coefficient_identifiers()
         tgt_mi_to_index = {mi: i for i, mi in enumerate(tgt_mis)}
 
-        tgt_split = self.expansion_terms_wrangler._get_coeff_identifier_split()
+        tgt_split = self.expansion_terms_wrangler._split_coeffs_into_hyperplanes()
 
         p = max(sum(mi) for mi in src_mis)
         result = [0] * len(tgt_mis)
