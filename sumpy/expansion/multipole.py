@@ -196,7 +196,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         #
         # The calculations done when translating first hyperplane of the
         # source coefficients (C) to target coefficients (T) are shown
-        # below in the graph. Each connecions represents a O(1) calculation.
+        # below in the graph. Each connections represents a O(1) calculation.
         #
         #  ┌──C             T
         #  │  │
