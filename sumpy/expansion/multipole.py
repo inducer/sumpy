@@ -198,29 +198,30 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         # source coefficients (C) to target coefficients (T) are shown
         # below in the graph. Each connecions represents a O(1) calculation.
         #
-        #  ┌──C             T
-        #  │  │
-        #  │┌─C-0       ->  T T
-        #  ││ │ │
-        #  ││ ┌─┘┌────┐
-        #  ││┌C-0┘0──┐│     T T T
-        #  │││└───┘  ││
-        #  └└└C-0 0 0││     T T T T
-        #     └───┘ │││
-        #     └─────┘││
-        #     └──────┘│
-        #     └───────┘
+        #  ┌─→C             T
+        #  │  ↑
+        #  │┌→C→0←─────┐->  T T
+        #  ││ ↑ ↑      │
+        #  ││ ┌─┘┌────┐│
+        #  ││↱C→0↲0←─┐││    T T T
+        #  │││└───⬏  │││
+        #  └└└C→0 0 0│││    T T T T
+        #     └───⬏ ↑│││
+        #     └─────┘│││
+        #     └──────┘││
+        #     └───────┘│
+        #     └────────┘
         #
         # By using temporaries (Y), this can be reduced as shown below.
         #
-        #  ┌─C           Y             T
-        #  │ │
-        #  │┌C 0     ->  Y-0       ->  T T
-        #  │││
+        #  ┌→C           Y             T
+        #  │ ↑
+        #  │↱C 0     ->  Y-0       ->  T T
+        #  ││↑
         #  ││C 0 0       Y-0 0         T T T
-        #  │││           └───┘
+        #  ││↑           └───⬏
         #  └└C 0 0 0     Y 0 0 0       T T T T
-        #                └───┘ │
+        #                └───⬏ ↑
         #                └─────┘
         #
         # Note that in the above calculation data is propagated upwards
@@ -229,14 +230,14 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         # If the propagation was done rightwards first and upwards second
         # number of calculations are higher as shown below.
         #
-        #    C             ┌─Y           T
-        #                  │ │
-        #    C-0       ->  │┌Y┌Y     ->  T T
-        #                  │││││
+        #    C             ┌→Y           T
+        #                  │ ↑
+        #    C-0       ->  │↱Y↱Y     ->  T T
+        #                  ││↑│↑
         #    C-0 0         ││Y│Y Y       T T T
-        #    └───┘         │││││ │
+        #    └───⬏         ││↑│↑ ↑
         #    C-0 0 0       └└Y└Y Y Y     T T T T
-        #    └───┘ │
+        #    └───⬏ ↑
         #    └─────┘
         #
         # For the second hyperplane, data is propogated rightwards first
@@ -245,12 +246,12 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         #
         #    0              0            0
         #
-        #    0 0       ->   0┌0      ->  0 T
-        #                    ││
+        #    0 0       ->   0↱0      ->  0 T
+        #                    │↑
         #    0 0 0          0│0 0        0 T T
-        #                    ││ │
+        #                    │↑ ↑
         #    0 C-C-C        0└Y Y Y      0 T T T
-        #      └───┘
+        #      └───⬏
         #
         # In other words, we're better off computing the translation
         # one dimension at a time. If the coefficient-identifying multi-indices
