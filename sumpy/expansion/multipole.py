@@ -260,7 +260,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         # the output from (n, 0) with the first dimension as the fastest
         # varying dimension.
 
-        tgt_split = \
+        tgt_hyperplanes = \
             self.expansion_terms_wrangler._split_coeffs_into_hyperplanes()
         result = [0] * len(self.get_full_coefficient_identifiers())
 
@@ -273,7 +273,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             # we will discard higher order terms from source coefficients.
             cur_dim_input_coeffs = \
                 [0] * len(self.get_full_coefficient_identifiers())
-            for d, mis in tgt_split:
+            for d, mis in tgt_hyperplanes:
                 # Only consider hyperplanes perpendicular to *axis*.
                 if d != axis:
                     continue
