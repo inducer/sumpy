@@ -141,7 +141,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                     evaluated_coeffs, self.get_full_coefficient_identifiers()))
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale, sac=None):
+            dvec, tgt_rscale, sac=None, _fast_version=True):
         logger.info("building translation operator: %s(%d) -> %s(%d): start"
                 % (type(src_expansion).__name__,
                     src_expansion.order,
@@ -329,7 +329,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                         * rscale_ratio ** sum(mi)
 
         # {{{ simpler, functionally equivalent code
-        if 0:
+        if not _fast_version:
             # Rscale/operand magnitude is fairly sensitive to the order of
             # operations--which is something we don't have fantastic control
             # over at the symbolic level. Scaling dvec, then differentiating,

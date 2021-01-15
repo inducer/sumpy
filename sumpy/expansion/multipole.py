@@ -143,7 +143,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         return MiDerivativeTaker(self.kernel.get_expression(bvec), bvec)
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale, sac=None):
+            dvec, tgt_rscale, sac=None, _fast_version=True):
         if not isinstance(src_expansion, type(self)):
             raise RuntimeError("do not know how to translate %s to "
                     "Taylor multipole expansion"
@@ -330,7 +330,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                 result[i] += cur_dim_output_coeffs[i]
 
         # {{{ simpler, functionally equivalent code
-        if 0:
+        if not _fast_version:
             src_mi_to_index = dict((mi, i) for i, mi in enumerate(
                 src_expansion.get_coefficient_identifiers()))
             result = [0] * len(self.get_full_coefficient_identifiers())
