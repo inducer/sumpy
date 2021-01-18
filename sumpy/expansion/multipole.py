@@ -216,9 +216,9 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         #
         #  ┌→C           Y             T
         #  │ ↑
-        #  │↱C 0     ->  Y-0       ->  T T
+        #  │↱C 0     ->  Y→0       ->  T T
         #  ││↑
-        #  ││C 0 0       Y-0 0         T T T
+        #  ││C 0 0       Y→0 0         T T T
         #  ││↑           └───⬏
         #  └└C 0 0 0     Y 0 0 0       T T T T
         #                └───⬏ ↑
@@ -232,7 +232,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         #
         #    C             ┌→Y           T
         #                  │ ↑
-        #    C-0       ->  │↱Y↱Y     ->  T T
+        #    C→0       ->  │↱Y↱Y     ->  T T
         #                  ││↑│↑
         #    C-0 0         ││Y│Y Y       T T T
         #    └───⬏         ││↑│↑ ↑
@@ -250,7 +250,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         #                    │↑
         #    0 0 0          0│0 0        0 T T
         #                    │↑ ↑
-        #    0 C-C-C        0└Y Y Y      0 T T T
+        #    0 C→C→C        0└Y Y Y      0 T T T
         #      └───⬏
         #
         # In other words, we're better off computing the translation
