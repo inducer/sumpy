@@ -254,31 +254,42 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         p = max(sum(mi) for mi in src_mis)
         result = [0] * len(tgt_mis)
 
+        # Local expansion around the old center gives us that,
+        #
+        # $ u = \sum_{|q| \le p} (x-c_1)^q \frac{C_q}{q!} $
+        #
+        # where $c_1$ is the old center and $q$ is a multi-index,
+        # $p$ is the order and $C_q$ is a coefficient of the local expansion around
+        # the center $c_1$.
+        #
+        # Differentiating, we get,
+        #
+        # $ D_{r} u = \sum_{|q| \le p} \frac{C_{q}}{(q-r)!} (x - c_1)^{q - r}$.
+        #
         # This algorithm uses the observation that L2L coefficients
         # have the following form in 2D
         #
         # $T_{m, n} = \sum_{i\le p-m, j\le p-n-m-i} C_{i+m, j+n}
-        #             d_x^i d_y^j \binom{i+m}{i} \binom{n+j}{j}$
-        # where $C$ denotes a coefficient of the local expansion around the old
-        # center and $T$ is the translated coefficient.
-        # $T$ can be rewritten as follows.
+        #                   d_x^i d_y^j \frac{1}{i! j!}$
         #
-        # Let $Y1_{m, n} = \sum_{j\le p-m-n} C_{m, j+n} d_y^j \binom{j+n}{j}$.
+        # where $d$ is the distance between the centers and $T$ is the translated
+        # coefficient. $T$ can be rewritten as follows.
         #
-        # Then, $T_{m, n} = \sum_{i\le p-m} Y1_{i+m, n} d_x^i \binom{i+m}{i}$.
+        # Let $Y1_{m, n} = \sum_{j\le p-m-n} C_{m, j+n} d_y^j \frac{1}{j!}$.
+        #
+        # Then, $T_{m, n} = \sum_{i\le p-m} Y1_{i+m, n} d_x^i \frac{1}{i!}$.
         #
         # Expanding this to 3D,
         # $T_{m, n, l} = \sum_{i \le p-m, j \le p-n-m-i, k \le p-n-m-l-i-j}
-        #             C_{i+m, j+n, k+l} d_x^i d_y^j d_z^k
-        #             \binom{i+m}{i} \binom{n+j}{j} \binom{l+k}{k}$
+        #             C_{i+m, j+n, k+l} d_x^i d_y^j d_z^k \frac{1}{i! j! k!}$
         #
         # Let,
-        # $Y1_{m, n, l} = \sum_{k\le p-m-n-l} C_{m, n, k+l} d_z^k \binom{k+l}{l}$
+        # $Y1_{m, n, l} = \sum_{k\le p-m-n-l} C_{m, n, k+l} d_z^k \frac{1}{l!}$
         # and,
-        # $Y2_{m, n, l} = \sum_{j\le p-m-n} Y1_{m, j+n, l} d_y^j \binom{j+n}{n}$.
+        # $Y2_{m, n, l} = \sum_{j\le p-m-n} Y1_{m, j+n, l} d_y^j \frac{1}{n!}$.
         #
         # Then,
-        # $T_{m, n, l} = \sum_{i\le p-m} Y2_{i+m, n, l} d_x^i \binom{i+m}{m}$.
+        # $T_{m, n, l} = \sum_{i\le p-m} Y2_{i+m, n, l} d_x^i \frac{1}{m!}$.
         #
         # Cost of the above algorithm is $O(p^4)$ for full since each value needs
         # $O(p)$ work and there are $O(p^3)$ values for $T, Y1, Y2$.
