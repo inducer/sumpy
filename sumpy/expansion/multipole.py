@@ -194,9 +194,10 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         #  C 0 0 0        C 0 0 0       0 0 0 0
         #  C C C C C      C 0 0 0 0     0 C C C C
         #
-        # The calculations done when translating first hyperplane of the
+        # The calculations done when naively translating first hyperplane of the
         # source coefficients (C) to target coefficients (T) are shown
-        # below in the graph. Each connection represents a O(1) calculation.
+        # below in the graph. Each connection represents a O(1) calculation,
+        # and the arrows go "up and to the right".
         #
         #  ┌─→C             T
         #  │  ↑
@@ -283,6 +284,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                     # that the higher order source coefficients were zero.
                     if mi not in src_mi_to_index:
                         continue
+                    
                     src_idx = src_mi_to_index[mi]
                     tgt_idx = tgt_mi_to_index[mi]
                     cur_dim_input_coeffs[tgt_idx] = src_coeff_exprs[src_idx] * \

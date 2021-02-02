@@ -304,7 +304,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         # are parallel to each other.
         # The number of iterations is one for compressed expansions with
         # elliptic PDEs because the $O(1)$ hyperplanes are parallel to each other.
-        for axis in set(d for d, _ in tgt_split):
+        for axis in {d for d, _ in tgt_split}:
             # Use the axis as the first dimension to vary so that the below
             # algorithm is O(p^{d+1}) for full and O(p^{d}) for compressed
             dims = [axis] + list(range(axis)) + \
@@ -316,12 +316,12 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 cur_dim_output_coeffs = [0] * len(src_mis)
                 # Only O(p^{d-1}) operations are used in compressed
                 # O(p^d) operations are used in full
-                for i, s in enumerate(src_mis):
+                for out_i, out_mi in enumerate(src_mis):
                     # O(p) iterations
-                    for q in range(p+1-sum(s)):
-                        src_mi = mi_increment_axis(s, d, q)
+                    for q in range(p+1-sum(out_mi)):
+                        src_mi = mi_increment_axis(out_mi, d, q)
                         if src_mi in src_mi_to_index:
-                            cur_dim_output_coeffs[i] += (dvec[d]/src_rscale)**q * \
+                            cur_dim_output_coeffs[out_i] += (dvec[d]/src_rscale)**q * \
                                      cur_dim_input_coeffs[src_mi_to_index[src_mi]] \
                                      / factorial(q)
                 # Y at the end of the iteration becomes the source coefficients
