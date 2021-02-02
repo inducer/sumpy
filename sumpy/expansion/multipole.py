@@ -235,9 +235,9 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         #                  │ ↑
         #    C→0       ->  │↱Y↱Y     ->  T T
         #                  ││↑│↑
-        #    C-0 0         ││Y│Y Y       T T T
+        #    C→0 0         ││Y│Y Y       T T T
         #    └───⬏         ││↑│↑ ↑
-        #    C-0 0 0       └└Y└Y Y Y     T T T T
+        #    C→0 0 0       └└Y└Y Y Y     T T T T
         #    └───⬏ ↑
         #    └─────┘
         #
@@ -297,7 +297,8 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
             # {{{ translation
 
-            # Therefore, we use the orthogonal axis as the last dimension to vary
+            # As explained above using the unicode art, we use the orthogonal axis
+            # as the last dimension to vary to reduce the number of operations.
             dims = list(range(axis)) + \
                    list(range(axis+1, self.dim)) + [axis]
 
