@@ -321,9 +321,9 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                     for q in range(p+1-sum(out_mi)):
                         src_mi = mi_increment_axis(out_mi, d, q)
                         if src_mi in src_mi_to_index:
-                            cur_dim_output_coeffs[out_i] += (dvec[d]/src_rscale)**q * \
-                                     cur_dim_input_coeffs[src_mi_to_index[src_mi]] \
-                                     / factorial(q)
+                            cur_dim_output_coeffs[out_i] += (dvec[d]/src_rscale)**q \
+                                * cur_dim_input_coeffs[src_mi_to_index[src_mi]] \
+                                / factorial(q)
                 # Y at the end of the iteration becomes the source coefficients
                 # for the next iteration
                 cur_dim_input_coeffs = cur_dim_output_coeffs

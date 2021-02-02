@@ -284,7 +284,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                     # that the higher order source coefficients were zero.
                     if mi not in src_mi_to_index:
                         continue
-                    
+
                     src_idx = src_mi_to_index[mi]
                     tgt_idx = tgt_mi_to_index[mi]
                     cur_dim_input_coeffs[tgt_idx] = src_coeff_exprs[src_idx] * \
