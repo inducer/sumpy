@@ -27,7 +27,8 @@ from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
     HelmholtzConformingVolumeTaylorExpansion,
     BiharmonicConformingVolumeTaylorExpansion)
-from pytools import cartesian_product
+from sumpy.tools import mi_set_axis
+from pytools import cartesian_product, factorial
 
 import logging
 logger = logging.getLogger(__name__)
@@ -142,7 +143,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         return MiDerivativeTaker(kernel.get_expression(bvec), bvec)
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale, sac=None):
+            dvec, tgt_rscale, sac=None, _fast_version=True):
         if not isinstance(src_expansion, type(self)):
             raise RuntimeError("do not know how to translate %s to "
                     "Taylor multipole expansion"
@@ -166,67 +167,209 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         tgt_mi_to_index = {mi: i for i, mi in enumerate(
             self.get_full_coefficient_identifiers())}
 
-        src_coeff_exprs = list(src_coeff_exprs)
-        for i, mi in enumerate(src_expansion.get_coefficient_identifiers()):
-            src_coeff_exprs[i] *= sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(mi)
-
-        result = [0] * len(self.get_full_coefficient_identifiers())
-
         # This algorithm uses the observation that M2M coefficients
         # have the following form in 2D
         #
-        # $B_{m, n} = \sum_{i\le m, j\le n} A_{i, j}
+        # $T_{m, n} = \sum_{i\le m, j\le n} C_{i, j}
         #             d_x^i d_y^j \binom{m}{i} \binom{n}{j}$
         # and can be rewritten as follows.
         #
-        # Let $T_{m, n} = \sum_{i\le m} A_{i, n} d_x^i \binom{m}{i}$.
+        # Let $Y_{m, n} = \sum_{i\le m} C_{i, n} d_x^i \binom{m}{i}$.
         #
-        # Then, $B_{m, n} = \sum_{j\le n} T_{m, j} d_y^j \binom{n}{j}$.
+        # Then, $T_{m, n} = \sum_{j\le n} Y_{m, j} d_y^j \binom{n}{j}$.
         #
-        # $T_{m, n}$ are $p^2$ number of temporary variables that are
+        # $Y_{m, n}$ are $p^2$ temporary variables that are
         # reused for different M2M coefficients and costs $p$ per variable.
-        # Total cost for calculating $T_{m, n}$ is $p^3$ and similar
-        # for $B_{m, n}$
+        # Total cost for calculating $Y_{m, n}$ is $p^3$ and similar
+        # for $T_{m, n}$. For compressed Taylor series this can be done
+        # more efficiently.
 
+        # Let's take the example u_xy + u_x + u_y = 0.
+        # In the diagram below, C depicts a non zero source coefficient.
+        # We divide these into two hyperplanes.
+        #
+        #  C              C             0
+        #  C 0            C 0           0 0
+        #  C 0 0       =  C 0 0      +  0 0 0
+        #  C 0 0 0        C 0 0 0       0 0 0 0
+        #  C C C C C      C 0 0 0 0     0 C C C C
+        #
+        # The calculations done when naively translating first hyperplane of the
+        # source coefficients (C) to target coefficients (T) are shown
+        # below in the graph. Each connection represents a O(1) calculation,
+        # and the arrows go "up and to the right".
+        #
+        #  ┌─→C             T
+        #  │  ↑
+        #  │┌→C→0←─────┐->  T T
+        #  ││ ↑ ↑      │
+        #  ││ ┌─┘┌────┐│
+        #  ││↱C→0↲0←─┐││    T T T
+        #  │││└───⬏  │││
+        #  └└└C→0 0 0│││    T T T T
+        #     └───⬏ ↑│││
+        #     └─────┘│││
+        #     └──────┘││
+        #     └───────┘│
+        #     └────────┘
+        #
+        # By using temporaries (Y), this can be reduced as shown below.
+        #
+        #  ┌→C           Y             T
+        #  │ ↑
+        #  │↱C 0     ->  Y→0       ->  T T
+        #  ││↑
+        #  ││C 0 0       Y→0 0         T T T
+        #  ││↑           └───⬏
+        #  └└C 0 0 0     Y 0 0 0       T T T T
+        #                └───⬏ ↑
+        #                └─────┘
+        #
+        # Note that in the above calculation data is propagated upwards
+        # in the first pass and then rightwards in the second pass.
+        # Data propagation with zeros are not shown as they are not calculated.
+        # If the propagation was done rightwards first and upwards second
+        # number of calculations are higher as shown below.
+        #
+        #    C             ┌→Y           T
+        #                  │ ↑
+        #    C→0       ->  │↱Y↱Y     ->  T T
+        #                  ││↑│↑
+        #    C→0 0         ││Y│Y Y       T T T
+        #    └───⬏         ││↑│↑ ↑
+        #    C→0 0 0       └└Y└Y Y Y     T T T T
+        #    └───⬏ ↑
+        #    └─────┘
+        #
+        # For the second hyperplane, data is propogated rightwards first
+        # and then upwards second which is opposite to that of the first
+        # hyperplane.
+        #
+        #    0              0            0
+        #
+        #    0 0       ->   0↱0      ->  0 T
+        #                    │↑
+        #    0 0 0          0│0 0        0 T T
+        #                    │↑ ↑
+        #    0 C→C→C        0└Y Y Y      0 T T T
+        #      └───⬏
+        #
         # In other words, we're better off computing the translation
-        # one dimension at a time. This is realized here by using
-        # the output from one dimension as the input to the next.
-        # per_dim_coeffs_to_translate serves as the array of input
-        # coefficients for each dimension's translation.
+        # one dimension at a time. If the coefficient-identifying multi-indices
+        # in the source expansion have the form (0, m) and (n, 0), where m>=0, n>=1,
+        # then we calculate the output from (0, m) with the second
+        # dimension as the fastest varying dimension and then calculate
+        # the output from (n, 0) with the first dimension as the fastest
+        # varying dimension.
 
-        dim_coeffs_to_translate = src_coeff_exprs
+        tgt_hyperplanes = \
+            self.expansion_terms_wrangler._split_coeffs_into_hyperplanes()
+        result = [0] * len(self.get_full_coefficient_identifiers())
 
-        mi_to_index = src_mi_to_index
-        for d in range(self.dim):
+        # axis morally iterates over 'hyperplane directions'
+        for axis in range(self.dim):
+            # {{{ index gymnastics
+
+            # First, let's write source coefficients in target coefficient
+            # indices. If target order is lower than source order, then
+            # we will discard higher order terms from source coefficients.
+            cur_dim_input_coeffs = \
+                [0] * len(self.get_full_coefficient_identifiers())
+            for d, mis in tgt_hyperplanes:
+                # Only consider hyperplanes perpendicular to *axis*.
+                if d != axis:
+                    continue
+                for mi in mis:
+                    # When target order is higher than source order, we assume
+                    # that the higher order source coefficients were zero.
+                    if mi not in src_mi_to_index:
+                        continue
+
+                    src_idx = src_mi_to_index[mi]
+                    tgt_idx = tgt_mi_to_index[mi]
+                    cur_dim_input_coeffs[tgt_idx] = src_coeff_exprs[src_idx] * \
+                            sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(mi)
+
+            if all(coeff == 0 for coeff in cur_dim_input_coeffs):
+                continue
+
+            # }}}
+
+            # {{{ translation
+
+            # As explained above using the unicode art, we use the orthogonal axis
+            # as the last dimension to vary to reduce the number of operations.
+            dims = list(range(axis)) + \
+                   list(range(axis+1, self.dim)) + [axis]
+
+            # d is the axis along which we translate.
+            for d in dims:
+                # We build the full target multipole and then compress it
+                # at the very end.
+                cur_dim_output_coeffs = \
+                    [0] * len(self.get_full_coefficient_identifiers())
+                for i, tgt_mi in enumerate(
+                        self.get_full_coefficient_identifiers()):
+
+                    # Calling this input_mis instead of src_mis because we
+                    # converted the source coefficients to target coefficient
+                    # indices beforehand.
+                    for mi_i in range(tgt_mi[d]+1):
+                        input_mi = mi_set_axis(tgt_mi, d, mi_i)
+                        contrib = cur_dim_input_coeffs[tgt_mi_to_index[input_mi]]
+                        for n, k, dist in zip(tgt_mi, input_mi, dvec):
+                            assert n >= k
+                            contrib /= factorial(n-k)
+                            contrib *= \
+                                sym.UnevaluatedExpr(dist/tgt_rscale)**(n-k)
+
+                        cur_dim_output_coeffs[i] += contrib
+                # cur_dim_output_coeffs is the input in the next iteration
+                cur_dim_input_coeffs = cur_dim_output_coeffs
+
+            # }}}
+
+            for i in range(len(cur_dim_output_coeffs)):
+                result[i] += cur_dim_output_coeffs[i]
+
+        # {{{ simpler, functionally equivalent code
+        if not _fast_version:
+            src_mi_to_index = dict((mi, i) for i, mi in enumerate(
+                src_expansion.get_coefficient_identifiers()))
             result = [0] * len(self.get_full_coefficient_identifiers())
+
+            for i, mi in enumerate(src_expansion.get_coefficient_identifiers()):
+                src_coeff_exprs[i] *= mi_factorial(mi)
+
+            from pytools import generate_nonnegative_integer_tuples_below as gnitb
+
             for i, tgt_mi in enumerate(
                     self.get_full_coefficient_identifiers()):
 
-                src_mis_per_dim = []
-                for mi_i in range(tgt_mi[d]+1):
-                    new_mi = list(tgt_mi)
-                    new_mi[d] = mi_i
-                    src_mis_per_dim.append(tuple(new_mi))
+                tgt_mi_plus_one = tuple(mi_i + 1 for mi_i in tgt_mi)
 
-                for src_mi in src_mis_per_dim:
+                for src_mi in gnitb(tgt_mi_plus_one):
                     try:
-                        src_index = mi_to_index[src_mi]
+                        src_index = src_mi_to_index[src_mi]
                     except KeyError:
                         # Omitted coefficients: not life-threatening
                         continue
 
-                    contrib = dim_coeffs_to_translate[src_index]
+                    contrib = src_coeff_exprs[src_index]
+
                     for idim in range(self.dim):
                         n = tgt_mi[idim]
                         k = src_mi[idim]
                         assert n >= k
-                        contrib /= mi_factorial((n-k,))
-                        contrib *= sym.UnevaluatedExpr(dvec[idim]/tgt_rscale)**(n-k)
+                        from sympy import binomial
+                        contrib *= (binomial(n, k)
+                                * sym.UnevaluatedExpr(dvec[idim]/tgt_rscale)**(n-k))
 
-                    result[i] += contrib
+                    result[i] += (contrib
+                        * sym.UnevaluatedExpr(src_rscale/tgt_rscale)**sum(src_mi))
 
-            dim_coeffs_to_translate = result[:]
-            mi_to_index = tgt_mi_to_index
+                result[i] /= mi_factorial(tgt_mi)
+        # }}}
 
         logger.info("building translation operator: done")
         return (

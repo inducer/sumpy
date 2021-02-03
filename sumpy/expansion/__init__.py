@@ -25,6 +25,7 @@ from pytools import memoize_method
 import sumpy.symbolic as sym
 from sumpy.tools import add_mi
 from .diff_op import make_identity_diff_op, laplacian
+from typing import List, Tuple
 
 __doc__ = """
 .. autoclass:: ExpansionBase
@@ -221,6 +222,78 @@ class ExpansionTermsWrangler:
 
         return type(self)(**new_kwargs)
 
+    @memoize_method
+    def _split_coeffs_into_hyperplanes(self) -> List[Tuple[int, List[Tuple[int]]]]:
+        r"""
+        This splits the coefficients into :math:`O(p)` disjoint sets
+        so that for each set, all the identifiers have the form,
+        :math:`(m_1, m_2, ..., m_{j-1}, c, m_{j+1}, ... , m_{\text{dim}})`
+        where :math:`c` is a constant. Geometrically, each set is an axis-aligned
+        hyperplane.
+
+        If this is an instance of :class:`LinearPDEBasedExpansionTermsWrangler`,
+        then the number of sets will be :math:`O(1)`.
+
+        In the returned object ``[(axis, [mi_1, mi2, ...]), ...]``,
+        each element in the outer list represents a hyperplane. Each element
+        is a 2-tuple where the first element in the tuple is the axis number *axis*
+        to which the hyperplane is orthogonal. The second element in the tuple
+        is a list of multi-indices in the hyperplane corresponding to the stored
+        coefficients.
+
+        E.g. for Laplace 3D order 4, the result could be::
+        [
+          (2, [(0, 0, 0), (1, 0, 0), (2, 0, 0), (3, 0, 0), (0, 1, 0), (1, 1, 0),
+               (2, 1, 0), (0, 2, 0), (1, 2, 0), (0, 3, 0)]),
+          (2, [(0, 0, 1), (1, 0, 1), (2, 0, 1), (0, 1, 1), (1, 1, 1), (0, 2, 1)]),
+        ]
+        """
+        mis = self.get_full_coefficient_identifiers()
+        mi_to_index = {mi: i for i, mi in enumerate(mis)}
+
+        # Each hyperplane stored below is identified by a tuple of the axis
+        # to which it is orthogonal to and the constant `c` described above
+        hyperplanes = []
+        if isinstance(self, LinearPDEBasedExpansionTermsWrangler):
+            pde_dict, = self.get_pde_as_diff_op().eqs
+
+            if not all(ident.mi in mi_to_index for ident in pde_dict):
+                # The order of the expansion is less than the order of the PDE.
+                # Treat as if full expansion.
+                pass
+            else:
+                # Calculate the multi-index that appears last in in the PDE in
+                # reverse degree lexicographic order (degrevlex).
+                # The monomial ordering used here which is degrevlex, must match
+                # the monomial ordering used in LinearPDEBasedExpansionTermsWrangler
+                max_mi_idx = max(mi_to_index[ident.mi] for
+                                 ident in pde_dict.keys())
+                max_mi = mis[max_mi_idx]
+                hyperplanes.extend(
+                    (d, const)
+                    for d in range(self.dim)
+                    for const in range(max_mi[d]))
+
+        if not hyperplanes:
+            d = self.dim - 1
+            hyperplanes.extend((d, const) for const in range(self.order + 1))
+
+        res = []
+        seen_mis = set()
+        for d, const in hyperplanes:
+            coeffs_in_hyperplane = []
+            for mi in self.get_coefficient_identifiers():
+                # Check if the multi-index is in this hyperplane and
+                # if it is not in any of the hyperplanes we saw before
+                # (This rejects coefficients that might be in multiple
+                # hyperplanes, such as near the origin.)
+                if mi[d] == const and mi not in seen_mis:
+                    coeffs_in_hyperplane.append(mi)
+                    seen_mis.add(mi)
+            res.append((d, coeffs_in_hyperplane))
+
+        return res
+
 
 class FullExpansionTermsWrangler(ExpansionTermsWrangler):
 
@@ -391,7 +464,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 return mis, op
 
         # Calculate the multi-index that appears last in in the PDE in
-        # reverse degree lexicographic order.
+        # reverse degree lexicographic order (degrevlex).
         max_mi_idx = max(coeff_ident_enumerate_dict[ident] for
                          ident in pde_dict.keys())
         max_mi = mis[max_mi_idx]
