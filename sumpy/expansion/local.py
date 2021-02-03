@@ -122,21 +122,21 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 for mi in self.get_coefficient_identifiers()]
 
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
-        from pytools import factorial
-
         evaluated_coeffs = (
             self.expansion_terms_wrangler.get_full_kernel_derivatives_from_stored(
                 coeffs, rscale, sac=sac))
 
-        bvec = [b*rscale**-1 for b in bvec]
+        bvec_scaled = [b*rscale**-1 for b in bvec]
         from sumpy.tools import mi_power, mi_factorial
 
-        return sum(
+        result = sum(
             coeff
-            * mi_power(bvec, mi, evaluate=False)
+            * mi_power(bvec_scaled, mi, evaluate=False)
             / mi_factorial(mi)
             for coeff, mi in zip(
                     evaluated_coeffs, self.get_full_coefficient_identifiers()))
+
+        return kernel.postprocess_at_target(result, bvec)
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, _fast_version=True):
