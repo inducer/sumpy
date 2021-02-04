@@ -430,11 +430,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
             rscale, sac=None):
 
-        def save_intermediate(expr):
-            if sac is None:
-                return expr
-            return sym.Symbol(sac.assign_unique("projection_temp", expr))
-
+        from sumpy.tools import add_to_sac
+        save_intermediate = lambda x: add_to_sac(sac, x)
         projection_matrix = self.get_projection_matrix(rscale)
         return projection_matrix.matvec(stored_kernel_derivatives,
                                         save_intermediate)
@@ -442,11 +439,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients,
             rscale, sac=None):
 
-        def save_intermediate(expr):
-            if sac is None:
-                return expr
-            return sym.Symbol(sac.assign_unique("compress_temp", expr))
-
+        from sumpy.tools import add_to_sac
+        save_intermediate = lambda x: add_to_sac(sac, x)
         projection_matrix = self.get_projection_matrix(rscale)
         return projection_matrix.transpose_matvec(full_mpole_coefficients,
                                                   save_intermediate)

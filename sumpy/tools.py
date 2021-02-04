@@ -76,10 +76,15 @@ def mi_power(vector, mi, evaluate=True):
 
 def add_to_sac(sac, expr):
     import sumpy.symbolic as sym
-    if sac is not None:
-        return sym.Symbol(sac.assign_unique("temp", expr))
-    else:
+    if sac is None:
+        raise RuntimeError("")
         return expr
+
+    if isinstance(expr, (sym.Number, sym.Symbol)):
+        return expr
+
+    name = sac.assign_unique("temp", expr)
+    return sym.Symbol(name)
 
 
 class MiDerivativeTaker(object):
