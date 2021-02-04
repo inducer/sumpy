@@ -359,8 +359,8 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
         return expr
 
 
-MiDerivativeTakerWrapper = namedtuple('MiDerivativeTakerWrapper',
-                                      ['taker', 'initial_mi'])
+MiDerivativeTakerWrapper = namedtuple("MiDerivativeTakerWrapper",
+                                      ["taker", "initial_mi"])
 
 # }}}
 
