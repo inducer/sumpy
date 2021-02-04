@@ -70,8 +70,8 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                         / rscale ** sum(mi)
                         for mi in self.get_full_coefficient_identifiers()]
             else:
-                avec = [sym.UnevaluatedExpr(a * rscale**-1) for a in avec]
-                coeffs = [mi_power(avec, mi)
+                avec_scaled = [sym.UnevaluatedExpr(a * rscale**-1) for a in avec]
+                coeffs = [mi_power(avec_scaled, mi)
                           for mi in self.get_full_coefficient_identifiers()]
 
             for i, mi in enumerate(self.get_full_coefficient_identifiers()):
