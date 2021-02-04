@@ -28,7 +28,9 @@ from sumpy.expansion import (
     HelmholtzConformingVolumeTaylorExpansion,
     BiharmonicConformingVolumeTaylorExpansion)
 
+from sumpy.tools import mi_increment_axis
 from pytools import single_valued
+
 
 class LocalExpansionBase(ExpansionBase):
     pass
@@ -204,8 +206,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         return kernel.postprocess_at_target(result, bvec)
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale, sac=None):
-        logger.info("building translation operator for %s: %s(%d) -> %s(%d): start"
+            dvec, tgt_rscale, sac=None, _fast_version=True):
+        logger.info("building translation operator: %s(%d) -> %s(%d): start"
                 % (src_expansion.kernel,
                     type(src_expansion).__name__,
                     src_expansion.order,
@@ -306,36 +308,47 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             self.expansion_terms_wrangler.get_coefficient_identifiers()
         tgt_mi_to_index = {mi: i for i, mi in enumerate(tgt_mis)}
 
-        tgt_split = self.expansion_terms_wrangler._get_coeff_identifier_split()
+        tgt_split = self.expansion_terms_wrangler._split_coeffs_into_hyperplanes()
 
         p = max(sum(mi) for mi in src_mis)
         result = [0] * len(tgt_mis)
 
+        # Local expansion around the old center gives us that,
+        #
+        # $ u = \sum_{|q| \le p} (x-c_1)^q \frac{C_q}{q!} $
+        #
+        # where $c_1$ is the old center and $q$ is a multi-index,
+        # $p$ is the order and $C_q$ is a coefficient of the local expansion around
+        # the center $c_1$.
+        #
+        # Differentiating, we get,
+        #
+        # $ D_{r} u = \sum_{|q| \le p} \frac{C_{q}}{(q-r)!} (x - c_1)^{q - r}$.
+        #
         # This algorithm uses the observation that L2L coefficients
         # have the following form in 2D
         #
         # $T_{m, n} = \sum_{i\le p-m, j\le p-n-m-i} C_{i+m, j+n}
-        #             d_x^i d_y^j \binom{i+m}{i} \binom{n+j}{j}$
-        # where $C$ denotes a coefficient of the local expansion around the old
-        # center and $T$ is the translated coefficient.
-        # $T$ can be rewritten as follows.
+        #                   d_x^i d_y^j \frac{1}{i! j!}$
         #
-        # Let $Y1_{m, n} = \sum_{j\le p-m-n} C_{m, j+n} d_y^j \binom{j+n}{j}$.
+        # where $d$ is the distance between the centers and $T$ is the translated
+        # coefficient. $T$ can be rewritten as follows.
         #
-        # Then, $T_{m, n} = \sum_{i\le p-m} Y1_{i+m, n} d_x^i \binom{i+m}{i}$.
+        # Let $Y1_{m, n} = \sum_{j\le p-m-n} C_{m, j+n} d_y^j \frac{1}{j!}$.
+        #
+        # Then, $T_{m, n} = \sum_{i\le p-m} Y1_{i+m, n} d_x^i \frac{1}{i!}$.
         #
         # Expanding this to 3D,
         # $T_{m, n, l} = \sum_{i \le p-m, j \le p-n-m-i, k \le p-n-m-l-i-j}
-        #             C_{i+m, j+n, k+l} d_x^i d_y^j d_z^k
-        #             \binom{i+m}{i} \binom{n+j}{j} \binom{l+k}{k}$
+        #             C_{i+m, j+n, k+l} d_x^i d_y^j d_z^k \frac{1}{i! j! k!}$
         #
         # Let,
-        # $Y1_{m, n, l} = \sum_{k\le p-m-n-l} C_{m, n, k+l} d_z^k \binom{k+l}{l}$
+        # $Y1_{m, n, l} = \sum_{k\le p-m-n-l} C_{m, n, k+l} d_z^k \frac{1}{l!}$
         # and,
-        # $Y2_{m, n, l} = \sum_{j\le p-m-n} Y1_{m, j+n, l} d_y^j \binom{j+n}{n}$.
+        # $Y2_{m, n, l} = \sum_{j\le p-m-n} Y1_{m, j+n, l} d_y^j \frac{1}{n!}$.
         #
         # Then,
-        # $T_{m, n, l} = \sum_{i\le p-m} Y2_{i+m, n, l} d_x^i \binom{i+m}{m}$.
+        # $T_{m, n, l} = \sum_{i\le p-m} Y2_{i+m, n, l} d_x^i \frac{1}{m!}$.
         #
         # Cost of the above algorithm is $O(p^4)$ for full since each value needs
         # $O(p)$ work and there are $O(p^3)$ values for $T, Y1, Y2$.
@@ -350,42 +363,43 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         # are parallel to each other.
         # The number of iterations is one for compressed expansions with
         # elliptic PDEs because the $O(1)$ hyperplanes are parallel to each other.
-        for axis in set(d for d, _ in tgt_split):
+        for axis in {d for d, _ in tgt_split}:
             # Use the axis as the first dimension to vary so that the below
             # algorithm is O(p^{d+1}) for full and O(p^{d}) for compressed
             dims = [axis] + list(range(axis)) + \
                     list(range(axis+1, self.dim))
             # Start with source coefficients. Gets updated after each axis.
-            cur_dim_input_coeffs = src_coeffs   # noqa: N806
+            cur_dim_input_coeffs = src_coeffs
             # O(1) iterations
             for d in dims:
                 cur_dim_output_coeffs = [0] * len(src_mis)
                 # Only O(p^{d-1}) operations are used in compressed
-                # All of them are used in full.
-                for i, s in enumerate(src_mis):
+                # O(p^d) operations are used in full
+                for out_i, out_mi in enumerate(src_mis):
                     # O(p) iterations
-                    for q in range(p+1-sum(s)):
-                        src_mi = list(s)
-                        src_mi[d] += q
-                        src_mi = tuple(src_mi)
+                    for q in range(p+1-sum(out_mi)):
+                        src_mi = mi_increment_axis(out_mi, d, q)
                         if src_mi in src_mi_to_index:
-                            cur_dim_output_coeffs[i] += (dvec[d]/src_rscale)**q * \
-                                     cur_dim_input_coeffs[src_mi_to_index[src_mi]] \
-                                     / factorial(q)
+                            cur_dim_output_coeffs[out_i] += (dvec[d]/src_rscale)**q \
+                                * cur_dim_input_coeffs[src_mi_to_index[src_mi]] \
+                                / factorial(q)
                 # Y at the end of the iteration becomes the source coefficients
                 # for the next iteration
                 cur_dim_input_coeffs = cur_dim_output_coeffs
 
             for mi in tgt_mis:
-                # In L2L, source level has same or higher order than target level
-                assert mi in src_mi_to_index
-                # Add to result after scaling
-                result[tgt_mi_to_index[mi]] += \
-                    cur_dim_output_coeffs[src_mi_to_index[mi]] \
+                # In L2L, source level usually has same or higher order than target
+                # level. If not, extra coeffs in target level are zero filled.
+                if mi not in src_mi_to_index:
+                    result[tgt_mi_to_index[mi]] = 0
+                else:
+                    # Add to result after scaling
+                    result[tgt_mi_to_index[mi]] += \
+                        cur_dim_output_coeffs[src_mi_to_index[mi]] \
                         * rscale_ratio ** sum(mi)
 
         # {{{ simpler, functionally equivalent code
-        if 0:
+        if not _fast_version:
             # Rscale/operand magnitude is fairly sensitive to the order of
             # operations--which is something we don't have fantastic control
             # over at the symbolic level. Scaling dvec, then differentiating,

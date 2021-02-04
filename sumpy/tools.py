@@ -62,6 +62,18 @@ def mi_factorial(mi):
     return result
 
 
+def mi_increment_axis(mi, axis, increment):
+    new_mi = list(mi)
+    new_mi[axis] += increment
+    return tuple(new_mi)
+
+
+def mi_set_axis(mi, axis, value):
+    new_mi = list(mi)
+    new_mi[axis] = value
+    return tuple(new_mi)
+
+
 def mi_power(vector, mi, evaluate=True):
     result = 1
     for mi_i, vec_i in zip(mi, vector):

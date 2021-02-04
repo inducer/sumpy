@@ -17,7 +17,7 @@
 #    reports:
 #      junit: test/pytest.xml
 
-Python 3 POCL:
+Pytest POCL:
   script:
   - export PY_EXE=python3
   - export PYOPENCL_TEST=portable:pthread
@@ -33,7 +33,7 @@ Python 3 POCL:
     reports:
       junit: test/pytest.xml
 
-Python 3 Titan X:
+Pytest Titan X:
   script:
   - py_version=3
   - export PYOPENCL_TEST=nvi:titan
@@ -50,7 +50,7 @@ Python 3 Titan X:
     reports:
       junit: test/pytest.xml
 
-Python 3 Conda:
+Pytest Conda:
   script:
   # Disable caching to ensure SymEngine code generation is exercised.
   - export SUMPY_NO_CACHE=1
@@ -67,7 +67,7 @@ Python 3 Conda:
     reports:
       junit: test/pytest.xml
 
-Python 3.6 POCL Titan X:
+Pytest POCL Titan X:
   script:
   # Disable caching to ensure SymEngine code generation is exercised.
   - export SUMPY_NO_CACHE=1
@@ -83,6 +83,20 @@ Python 3.6 POCL Titan X:
   artifacts:
     reports:
       junit: test/pytest.xml
+
+Examples Conda:
+  script: |
+    grep -v symengine .test-conda-env-py3.yml > .test-conda-env.yml
+    CONDA_ENVIRONMENT=.test-conda-env.yml
+    curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/ci-support.sh
+    . ci-support.sh
+    EXTRA_INSTALL="pyvisfile scipy"
+    build_py_project_in_conda_env
+    run_examples
+  tags:
+  - large-node
+  except:
+  - tags
 
 Documentation:
   script:

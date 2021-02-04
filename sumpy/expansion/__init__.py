@@ -250,15 +250,15 @@ class ExpansionTermsWrangler:
         return type(self)(**new_kwargs)
 
     @memoize_method
-    def _get_coeff_identifier_split(self) -> List[Tuple[int, List[Tuple[int]]]]:
-        """
-        This splits the coefficients into :math:`O(p)` number of disjoint sets
+    def _split_coeffs_into_hyperplanes(self) -> List[Tuple[int, List[Tuple[int]]]]:
+        r"""
+        This splits the coefficients into :math:`O(p)` disjoint sets
         so that for each set, all the identifiers have the form,
-        :math:`(m_1, m_2, ..., m_{j-1}, c, m_{j+1}, ... , m_{dim})`
+        :math:`(m_1, m_2, ..., m_{j-1}, c, m_{j+1}, ... , m_{\text{dim}})`
         where :math:`c` is a constant. Geometrically, each set is an axis-aligned
         hyperplane.
 
-        If this is an instance of LinearPDEBasedExpansionTermsWrangler,
+        If this is an instance of :class:`LinearPDEBasedExpansionTermsWrangler`,
         then the number of sets will be :math:`O(1)`.
 
         In the returned object ``[(axis, [mi_1, mi2, ...]), ...]``,
@@ -312,6 +312,8 @@ class ExpansionTermsWrangler:
             for mi in self.get_coefficient_identifiers():
                 # Check if the multi-index is in this hyperplane and
                 # if it is not in any of the hyperplanes we saw before
+                # (This rejects coefficients that might be in multiple
+                # hyperplanes, such as near the origin.)
                 if mi[d] == const and mi not in seen_mis:
                     coeffs_in_hyperplane.append(mi)
                     seen_mis.add(mi)

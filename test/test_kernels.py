@@ -736,6 +736,70 @@ def test_translations(ctx_factory, knl, local_expn_class, mpole_expn_class):
         verifier()
 
 
+@pytest.mark.parametrize("order", [4])
+@pytest.mark.parametrize(("base_knl", "local_expn_class", "mpole_expn_class"), [
+    (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    ])
+@pytest.mark.parametrize("with_source_derivative", [
+    False,
+    True
+    ])
+def test_m2m_and_l2l_exprs_simpler(base_knl, local_expn_class, mpole_expn_class,
+        order, with_source_derivative):
+
+    from sympy.core.cache import clear_cache
+    clear_cache()
+
+    np.random.seed(17)
+
+    extra_kwargs = {}
+    if isinstance(base_knl, HelmholtzKernel):
+        if base_knl.allow_evanescent:
+            extra_kwargs["k"] = 0.2 * (0.707 + 0.707j)
+        else:
+            extra_kwargs["k"] = 0.2
+    if isinstance(base_knl, StokesletKernel):
+        extra_kwargs["mu"] = 0.2
+
+    if with_source_derivative:
+        knl = DirectionalSourceDerivative(base_knl, "dir_vec")
+    else:
+        knl = base_knl
+
+    mpole_expn = mpole_expn_class(knl, order=order)
+    local_expn = local_expn_class(knl, order=order)
+
+    from sumpy.symbolic import make_sym_vector, Symbol, USE_SYMENGINE
+    dvec = make_sym_vector("d", knl.dim)
+    src_coeff_exprs = [Symbol("src_coeff%d" % i) for i in range(len(mpole_expn))]
+
+    src_rscale = 3
+    tgt_rscale = 2
+
+    faster_m2m = mpole_expn.translate_from(mpole_expn, src_coeff_exprs, src_rscale,
+            dvec, tgt_rscale)
+    slower_m2m = mpole_expn.translate_from(mpole_expn, src_coeff_exprs, src_rscale,
+            dvec, tgt_rscale, _fast_version=False)
+
+    def _check_equal(expr1, expr2):
+        if USE_SYMENGINE:
+            return float((expr1 - expr2).expand()) == 0.0
+        else:
+            # with sympy we are using UnevaluatedExpr and expand doesn't expand it
+            # Running doit replaces UnevaluatedExpr with evaluated exprs
+            return float((expr1 - expr2).doit().expand()) == 0.0
+
+    for expr1, expr2 in zip(faster_m2m, slower_m2m):
+        assert _check_equal(expr1, expr2)
+
+    faster_l2l = local_expn.translate_from(local_expn, src_coeff_exprs, src_rscale,
+            dvec, tgt_rscale)
+    slower_l2l = local_expn.translate_from(local_expn, src_coeff_exprs, src_rscale,
+            dvec, tgt_rscale, _fast_version=False)
+    for expr1, expr2 in zip(faster_l2l, slower_l2l):
+        assert _check_equal(expr1, expr2)
+
+
 # You can test individual routines by typing
 # $ python test_kernels.py 'test_p2p(cl.create_some_context)'
 
