@@ -28,7 +28,7 @@ from sumpy.expansion import (
     HelmholtzConformingVolumeTaylorExpansion,
     BiharmonicConformingVolumeTaylorExpansion)
 from sumpy.tools import mi_set_axis
-from pytools import cartesian_product, factorial
+from pytools import factorial
 
 import logging
 logger = logging.getLogger(__name__)
