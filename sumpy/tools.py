@@ -266,6 +266,7 @@ class RadialDerivativeTaker(MiDerivativeTaker):
         rsym = sym.Symbol("_r")
         r_expr = expr.xreplace({self.r**2: rsym**2})
         self.is_radial = not any(r_expr.has(v) for v in var_list)
+        self.var_list_multiplied = [add_to_sac(sac, v * rscale) for v in var_list]
 
     def diff(self, mi, q=0):
         """
@@ -288,8 +289,7 @@ class RadialDerivativeTaker(MiDerivativeTaker):
                 mi_minus_one = list(mi)
                 mi_minus_one[i] = 0
                 mi_minus_one = tuple(mi_minus_one)
-                expr = self.var_list[i] * self.diff(mi_minus_one, q=q+1)
-                expr *= self.rscale
+                expr = self.var_list_multiplied[i] * self.diff(mi_minus_one, q=q+1)
                 self.cache_by_mi_q[(mi, q)] = expr
                 return expr
 
@@ -301,9 +301,8 @@ class RadialDerivativeTaker(MiDerivativeTaker):
                 mi_minus_two = list(mi)
                 mi_minus_two[i] -= 2
                 mi_minus_two = tuple(mi_minus_two)
-                expr = (mi[i]-1)*self.diff(mi_minus_two, q=q+1) * self.rscale
-                expr += self.var_list[i] * self.diff(mi_minus_one, q=q+1)
-                expr *= self.rscale
+                expr = (mi[i]-1)*self.diff(mi_minus_two, q=q+1) * self.rscale ** 2
+                expr += self.var_list_multiplied[i] * self.diff(mi_minus_one, q=q+1)
                 expr = add_to_sac(self.sac, expr)
                 self.cache_by_mi_q[(mi, q)] = expr
                 return expr
@@ -336,7 +335,6 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
             # See https://dlmf.nist.gov/10.6.E6
             # and https://dlmf.nist.gov/10.6#E1
             k = self.orig_expr.args[1] / self.r
-            print("k", k)
             expr = -  2 * (q - 1) * self.diff(mi, q - 1)
             expr += - k**2 * self.diff(mi, q - 2)
             expr /= self.r**2

@@ -116,8 +116,9 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             src_rscale = 1
             tgt_rscale = 1
 
-        logger.info("building translation operator: %s(%d) -> %s(%d): start"
-                % (type(src_expansion).__name__,
+        logger.info("building translation operator for %s: %s(%d) -> %s(%d): start"
+                % (src_expansion.kernel,
+                    type(src_expansion).__name__,
                     src_expansion.order,
                     type(self).__name__,
                     self.order))
