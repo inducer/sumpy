@@ -23,7 +23,6 @@ THE SOFTWARE.
 import numpy as np
 import loopy as lp
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
-import pymbolic
 
 from sumpy.tools import KernelCacheWrapper, KernelComputation
 
@@ -91,8 +90,8 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
         sac = SymbolicAssignmentCollection()
 
         strengths = [sp.Symbol(f"strength_{i}") for i in self.strength_usage]
-        coeffs = self.expansion.coefficients_from_source_vec(self.source_kernels, avec,
-                    None, rscale, strengths, sac=sac)
+        coeffs = self.expansion.coefficients_from_source_vec(self.source_kernels,
+                    avec, None, rscale, strengths, sac=sac)
 
         coeff_names = []
         for i, coeff in enumerate(coeffs):

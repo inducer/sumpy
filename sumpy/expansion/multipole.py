@@ -22,7 +22,6 @@ THE SOFTWARE.
 
 import sumpy.symbolic as sym  # noqa
 
-from sumpy.symbolic import vector_xreplace
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
     HelmholtzConformingVolumeTaylorExpansion,
@@ -54,10 +53,10 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
     Coefficients represent the terms in front of the kernel derivatives.
     """
 
-    def coefficients_from_source_vec(self, kernels, avec, bvec, rscale, weights, sac=None):
+    def coefficients_from_source_vec(self, kernels, avec, bvec, rscale, weights,
+            sac=None):
         from sumpy.kernel import KernelWrapper
         from sumpy.tools import mi_power, mi_factorial
-
 
         if not self.use_rscale:
             rscale = 1

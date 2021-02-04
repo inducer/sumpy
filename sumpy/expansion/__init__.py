@@ -122,7 +122,8 @@ class ExpansionBase:
         """
         raise NotImplementedError
 
-    def coefficients_from_source_vec(self, kernels, avec, bvec, rscale, weights, sac=None):
+    def coefficients_from_source_vec(self, kernels, avec, bvec, rscale, weights,
+            sac=None):
         """Form an expansion with a linear combination of kernels and weights.
 
         :arg avec: vector from source to center.
@@ -433,19 +434,17 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             rscale, sac=None):
 
         from sumpy.tools import add_to_sac
-        save_intermediate = lambda x: add_to_sac(sac, x)
         projection_matrix = self.get_projection_matrix(rscale)
         return projection_matrix.matvec(stored_kernel_derivatives,
-                                        save_intermediate)
+                lambda x: add_to_sac(sac, x))
 
     def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients,
             rscale, sac=None):
 
         from sumpy.tools import add_to_sac
-        save_intermediate = lambda x: add_to_sac(sac, x)
         projection_matrix = self.get_projection_matrix(rscale)
         return projection_matrix.transpose_matvec(full_mpole_coefficients,
-                                                  save_intermediate)
+                lambda x: add_to_sac(sac, x))
 
     @property
     def stored_identifiers(self):

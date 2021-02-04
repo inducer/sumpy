@@ -114,7 +114,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
     Coefficients represent derivative values of the kernel.
     """
 
-    def coefficients_from_source_vec(self, kernels, avec, bvec, rscale, weights, sac=None):
+    def coefficients_from_source_vec(self, kernels, avec, bvec, rscale, weights,
+            sac=None):
         """Form an expansion with a linear combination of kernels and weights.
 
         :arg avec: vector from source to center.
@@ -135,7 +136,6 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             rscale = 1
 
         for knl, weight in zip(kernels, weights):
-            coeffs = []
             expr_dict = {(0,)*self.dim: 1}
             expr_dict = knl.get_derivative_transformation_at_source(expr_dict)
             pp_nderivatives = single_valued(sum(mi) for mi in expr_dict.keys())
@@ -155,37 +155,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         return result
 
-    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None,
-            taker=None):
-        from sumpy.tools import MiDerivativeTakerWrapper
-
-        if not self.use_rscale:
-            rscale = 1
-
-        result = []
-        if taker is None:
-            taker = self.get_kernel_derivative_taker(avec, rscale, sac)
-        expr_dict = {(0,)*self.dim: 1}
-        expr_dict = kernel.get_derivative_transformation_at_source(expr_dict)
-        pp_nderivatives = single_valued(sum(mi) for mi in expr_dict.keys())
-
-        for mi in self.get_coefficient_identifiers():
-            wrapper = MiDerivativeTakerWrapper(taker, mi)
-            mi_expr = kernel.postprocess_at_source(wrapper, avec)
-            # By passing `rscale` to the derivative taker we are taking a scaled
-            # version of the derivative which is `expr.diff(mi)*rscale**sum(mi)`
-            # which might be implemented efficiently for kernels like Laplace.
-            # One caveat is that `postprocess_at_source` might take more
-            # derivatives which would multiply the expression by more `rscale`s
-            # than necessary as the derivative taker does not know about
-            # `postprocess_at_source`. This is corrected by dividing by `rscale`.
-            expr = mi_expr / rscale ** pp_nderivatives
-            result.append(expr)
-
-        return result
+    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
+        return self.coefficients_from_source_vec(self, (kernel,), avec, bvec,
+                rscale=rscale, weights=(1,), sac=sac)
 
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
-        from pytools import factorial
         if not self.use_rscale:
             rscale = 1
 
