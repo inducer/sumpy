@@ -42,6 +42,7 @@ from sumpy.expansion.local import (
         BiharmonicConformingVolumeTaylorLocalExpansion)
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, AxisTargetDerivative,
         DirectionalSourceDerivative, BiharmonicKernel, StokesletKernel)
+import sumpy.symbolic as sym
 from pytools.convergence import PConvergenceVerifier
 
 import logging
@@ -798,6 +799,72 @@ def test_m2m_and_l2l_exprs_simpler(base_knl, local_expn_class, mpole_expn_class,
             dvec, tgt_rscale, _fast_version=False)
     for expr1, expr2 in zip(faster_l2l, slower_l2l):
         assert _check_equal(expr1, expr2)
+
+
+# {{{ test toeplitz
+
+def _m2l_translate_simple(tgt_expansion, src_expansion, src_coeff_exprs, src_rscale,
+                           dvec, tgt_rscale):
+
+    if not tgt_expansion.use_rscale:
+        src_rscale = 1
+        tgt_rscale = 1
+
+    from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansionBase
+    if not isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
+        return 1
+
+    # We know the general form of the multipole expansion is:
+    #
+    #    coeff0 * diff(kernel, mi0) + coeff1 * diff(kernel, mi1) + ...
+    #
+    # To get the local expansion coefficients, we take derivatives of
+    # the multipole expansion.
+    taker = src_expansion.get_kernel_derivative_taker(dvec, src_rscale, sac=None)
+
+    from sumpy.tools import add_mi
+
+    result = []
+    for deriv in tgt_expansion.get_coefficient_identifiers():
+        local_result = []
+        for coeff, term in zip(
+                src_coeff_exprs,
+                src_expansion.get_coefficient_identifiers()):
+
+            kernel_deriv = taker.diff(add_mi(deriv, term)) / src_rscale**sum(deriv)
+
+            local_result.append(
+                    coeff * kernel_deriv * tgt_rscale**sum(deriv))
+        result.append(sym.Add(*local_result))
+    return result
+
+
+def test_m2l_toeplitz():
+    dim = 3
+    knl = LaplaceKernel(dim)
+    local_expn_class = LaplaceConformingVolumeTaylorLocalExpansion
+    mpole_expn_class = LaplaceConformingVolumeTaylorMultipoleExpansion
+
+    local_expn = local_expn_class(knl, order=5)
+    mpole_expn = mpole_expn_class(knl, order=5)
+
+    dvec = sym.make_sym_vector("d", dim)
+    src_coeff_exprs = list(1 + np.random.randn(len(mpole_expn)))
+    src_rscale = 2.0
+    tgt_rscale = 1.0
+
+    expected_output = _m2l_translate_simple(local_expn, mpole_expn, src_coeff_exprs,
+                                           src_rscale, dvec, tgt_rscale)
+    actual_output = local_expn.translate_from(mpole_expn, src_coeff_exprs,
+                                              src_rscale, dvec, tgt_rscale, sac=None)
+
+    replace_dict = dict((d, np.random.rand(1)[0]) for d in dvec)
+    for sym_a, sym_b in zip(expected_output, actual_output):
+        num_a = sym_a.xreplace(replace_dict)
+        num_b = sym_b.xreplace(replace_dict)
+        assert abs(num_a - num_b)/abs(num_a) < 1e-10
+
+# }}}
 
 
 # You can test individual routines by typing
