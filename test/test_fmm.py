@@ -73,7 +73,7 @@ else:
     (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
                          False),
     (HelmholtzKernel(2), HelmholtzConformingVolumeTaylorLocalExpansion,
-                         HelmholtzConformingVolumeTaylorMultipoleExpansion , False),
+                         HelmholtzConformingVolumeTaylorMultipoleExpansion, False),
     (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion, False),
     (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
                          False),

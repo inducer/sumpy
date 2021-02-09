@@ -226,8 +226,6 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         if not self.use_rscale:
             src_rscale = 1
 
-        from sumpy.tools import add_mi
-
         toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
             self.m2l_global_precompute_mis(src_expansion)
 

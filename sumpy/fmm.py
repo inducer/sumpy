@@ -344,7 +344,6 @@ class SumpyExpansionWrangler:
 
         self.translation_classes_data = translation_classes_data
 
-
     # {{{ data vector utilities
 
     def _expansions_level_starts(self, order_to_size, level_starts):

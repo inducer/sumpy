@@ -1039,6 +1039,7 @@ def find_linear_relationship(matrix):
             mat[j, :] = mat[j, :]*mat[i, col] - mat[i, :]*mat[j, col]
     return {}
 
+
 def matvec_toeplitz_upper_triangular(first_row, vector):
     n = len(first_row)
     assert len(vector) == n
