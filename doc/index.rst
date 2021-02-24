@@ -21,8 +21,8 @@ Contents
     codegen
     eval
     misc
-
-
+    🚀 Github <https://github.com/inducer/sumpy>
+    💾 Download Releases <https://pypi.org/project/sumpy>
 
 Indices and tables
 ==================

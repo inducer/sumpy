@@ -109,24 +109,28 @@ def test_qbx_direct(ctx_factory, factor, lpot_id):
 
     from sumpy.kernel import LaplaceKernel, DirectionalSourceDerivative
     if lpot_id == 1:
-        knl = LaplaceKernel(ndim)
+        base_knl = LaplaceKernel(ndim)
+        knl = base_knl
     elif lpot_id == 2:
-        knl = LaplaceKernel(ndim)
-        knl = DirectionalSourceDerivative(knl, dir_vec_name="dsource_vec")
+        base_knl = LaplaceKernel(ndim)
+        knl = DirectionalSourceDerivative(base_knl, dir_vec_name="dsource_vec")
     else:
         raise ValueError("unknow lpot_id")
 
     from sumpy.expansion.local import LineTaylorLocalExpansion
-    lknl = LineTaylorLocalExpansion(knl, order)
+    expn = LineTaylorLocalExpansion(knl, order)
 
     from sumpy.qbx import LayerPotential
-    lpot = LayerPotential(ctx, [lknl])
+    lpot = LayerPotential(ctx, expansion=expn, source_kernels=(knl,),
+            target_kernels=(base_knl,))
 
     from sumpy.qbx import LayerPotentialMatrixGenerator
-    mat_gen = LayerPotentialMatrixGenerator(ctx, [lknl])
+    mat_gen = LayerPotentialMatrixGenerator(ctx, expansion=expn,
+            source_kernels=(knl,), target_kernels=(base_knl,))
 
     from sumpy.qbx import LayerPotentialMatrixBlockGenerator
-    blk_gen = LayerPotentialMatrixBlockGenerator(ctx, [lknl])
+    blk_gen = LayerPotentialMatrixBlockGenerator(ctx, expansion=expn,
+            source_kernels=(knl,), target_kernels=(base_knl,))
 
     for n in [200, 300, 400]:
         targets, sources, centers, expansion_radii, sigma = \

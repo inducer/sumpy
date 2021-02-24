@@ -60,6 +60,18 @@ def mi_factorial(mi):
     return result
 
 
+def mi_increment_axis(mi, axis, increment):
+    new_mi = list(mi)
+    new_mi[axis] += increment
+    return tuple(new_mi)
+
+
+def mi_set_axis(mi, axis, value):
+    new_mi = list(mi)
+    new_mi[axis] = value
+    return tuple(new_mi)
+
+
 def mi_power(vector, mi, evaluate=True):
     result = 1
     for mi_i, vec_i in zip(mi, vector):
@@ -201,8 +213,8 @@ def gather_loopy_source_arguments(kernel_likes):
 class KernelComputation:
     """Common input processing for kernel computations."""
 
-    def __init__(self, ctx, kernels, strength_usage,
-            value_dtypes, name, options=[], device=None):
+    def __init__(self, ctx, target_kernels, source_kernels, strength_usage,
+            value_dtypes, name, device=None):
         """
         :arg kernels: list of :class:`sumpy.kernel.Kernel` instances
             :class:`sumpy.kernel.TargetDerivative` wrappers should be
@@ -217,14 +229,14 @@ class KernelComputation:
 
         if value_dtypes is None:
             value_dtypes = []
-            for knl in kernels:
+            for knl in target_kernels:
                 if knl.is_complex_valued:
                     value_dtypes.append(np.complex128)
                 else:
                     value_dtypes.append(np.float64)
 
         if not isinstance(value_dtypes, (list, tuple)):
-            value_dtypes = [np.dtype(value_dtypes)] * len(kernels)
+            value_dtypes = [np.dtype(value_dtypes)] * len(target_kernels)
         value_dtypes = [np.dtype(vd) for vd in value_dtypes]
 
         # }}}
@@ -232,9 +244,9 @@ class KernelComputation:
         # {{{ process strength_usage
 
         if strength_usage is None:
-            strength_usage = [0] * len(kernels)
+            strength_usage = list(range(len(source_kernels)))
 
-        if len(kernels) != len(strength_usage):
+        if len(source_kernels) != len(strength_usage):
             raise ValueError("exprs and strength_usage must have the same length")
         strength_count = max(strength_usage)+1
 
@@ -246,7 +258,8 @@ class KernelComputation:
         self.context = ctx
         self.device = device
 
-        self.kernels = kernels
+        self.source_kernels = tuple(source_kernels)
+        self.target_kernels = tuple(target_kernels)
         self.value_dtypes = value_dtypes
         self.strength_usage = strength_usage
         self.strength_count = strength_count
@@ -264,7 +277,7 @@ class KernelComputation:
                     expression=sympy_conv(kernel.get_global_scaling_const()),
                     temp_var_type=lp.Optional(dtype))
                 for i, (kernel, dtype) in enumerate(
-                    zip(self.kernels, self.value_dtypes))]
+                    zip(self.target_kernels, self.value_dtypes))]
 
 # }}}
 

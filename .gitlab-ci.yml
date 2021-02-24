@@ -17,7 +17,7 @@
 #    reports:
 #      junit: test/pytest.xml
 
-Python 3 POCL:
+Pytest POCL:
   script:
   - export PY_EXE=python3
   - export PYOPENCL_TEST=portable:pthread
@@ -33,7 +33,7 @@ Python 3 POCL:
     reports:
       junit: test/pytest.xml
 
-Python 3 Titan X:
+Pytest Titan V:
   script:
   - py_version=3
   - export PYOPENCL_TEST=nvi:titan
@@ -42,7 +42,7 @@ Python 3 Titan X:
   - ". ./build-and-test-py-project.sh"
   tags:
   - python3
-  - nvidia-titan-x
+  - nvidia-titan-v
   except:
   - tags
   allow_failure: True
@@ -50,7 +50,7 @@ Python 3 Titan X:
     reports:
       junit: test/pytest.xml
 
-Python 3 Conda:
+Pytest Conda:
   script:
   # Disable caching to ensure SymEngine code generation is exercised.
   - export SUMPY_NO_CACHE=1
@@ -67,7 +67,7 @@ Python 3 Conda:
     reports:
       junit: test/pytest.xml
 
-Python 3.6 POCL Titan X:
+Pytest POCL Titan V:
   script:
   # Disable caching to ensure SymEngine code generation is exercised.
   - export SUMPY_NO_CACHE=1
@@ -77,12 +77,26 @@ Python 3.6 POCL Titan X:
   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project-within-miniconda.sh
   - ". ./build-and-test-py-project-within-miniconda.sh"
   tags:
-  - nvidia-titan-x
+  - nvidia-titan-v
   except:
   - tags
   artifacts:
     reports:
       junit: test/pytest.xml
+
+Examples Conda:
+  script: |
+    grep -v symengine .test-conda-env-py3.yml > .test-conda-env.yml
+    CONDA_ENVIRONMENT=.test-conda-env.yml
+    curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/ci-support.sh
+    . ci-support.sh
+    EXTRA_INSTALL="pyvisfile scipy"
+    build_py_project_in_conda_env
+    run_examples
+  tags:
+  - large-node
+  except:
+  - tags
 
 Documentation:
   script:
@@ -101,16 +115,15 @@ Flake8:
   except:
   - tags
 
-# https://github.com/illinois-scicomp/machine-shop-maintenance/issues/4
-# Benchmarks:
-#   script:
-#   - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
-#   - PROJECT=sumpy
-#   - PYOPENCL_TEST=portable:pthread
-#   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-benchmark-py-project.sh
-#   - ". ./build-and-benchmark-py-project.sh"
-#   tags:
-#   - linux
-#   - benchmark
-#   except:
-#   - tags
+Benchmarks:
+  script:
+  - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
+  - PROJECT=sumpy
+  - PYOPENCL_TEST=portable:pthread
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-benchmark-py-project.sh
+  - ". ./build-and-benchmark-py-project.sh"
+  tags:
+  - linux
+  - benchmark
+  except:
+  - tags

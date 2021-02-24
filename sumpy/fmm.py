@@ -60,27 +60,32 @@ class SumpyExpansionWranglerCodeContainer:
     def __init__(self, cl_context,
             multipole_expansion_factory,
             local_expansion_factory,
-            out_kernels, exclude_self=False, use_rscale=None):
+            target_kernels, exclude_self=False, use_rscale=None,
+            strength_usage=None, source_kernels=None):
         """
         :arg multipole_expansion_factory: a callable of a single argument (order)
             that returns a multipole expansion.
         :arg local_expansion_factory: a callable of a single argument (order)
             that returns a local expansion.
-        :arg out_kernels: a list of output kernels
+        :arg target_kernels: a list of output kernels
         :arg exclude_self: whether the self contribution should be excluded
+        :arg strength_usage: passed unchanged to p2l, p2m and p2p.
+        :arg source_kernels: passed unchanged to p2l, p2m and p2p.
         """
         self.multipole_expansion_factory = multipole_expansion_factory
         self.local_expansion_factory = local_expansion_factory
-        self.out_kernels = out_kernels
+        self.source_kernels = source_kernels
+        self.target_kernels = target_kernels
         self.exclude_self = exclude_self
         self.use_rscale = use_rscale
+        self.strength_usage = strength_usage
 
         self.cl_context = cl_context
 
     @memoize_method
     def get_base_kernel(self):
         from pytools import single_valued
-        return single_valued(k.get_base_kernel() for k in self.out_kernels)
+        return single_valued(k.get_base_kernel() for k in self.target_kernels)
 
     @memoize_method
     def multipole_expansion(self, order):
@@ -93,12 +98,16 @@ class SumpyExpansionWranglerCodeContainer:
     @memoize_method
     def p2m(self, tgt_order):
         return P2EFromSingleBox(self.cl_context,
-                self.multipole_expansion(tgt_order))
+                kernels=self.source_kernels,
+                expansion=self.multipole_expansion(tgt_order),
+                strength_usage=self.strength_usage)
 
     @memoize_method
     def p2l(self, tgt_order):
         return P2EFromCSR(self.cl_context,
-                self.local_expansion(tgt_order))
+                kernels=self.source_kernels,
+                expansion=self.local_expansion(tgt_order),
+                strength_usage=self.strength_usage)
 
     @memoize_method
     def m2m(self, src_order, tgt_order):
@@ -122,18 +131,20 @@ class SumpyExpansionWranglerCodeContainer:
     def m2p(self, src_order):
         return E2PFromCSR(self.cl_context,
                 self.multipole_expansion(src_order),
-                self.out_kernels)
+                self.target_kernels)
 
     @memoize_method
     def l2p(self, src_order):
         return E2PFromSingleBox(self.cl_context,
                 self.local_expansion(src_order),
-                self.out_kernels)
+                self.target_kernels)
 
     @memoize_method
     def p2p(self):
-        return P2PFromCSR(self.cl_context, self.out_kernels,
-                          exclude_self=self.exclude_self)
+        return P2PFromCSR(self.cl_context, target_kernels=self.target_kernels,
+                          source_kernels=self.source_kernels,
+                          exclude_self=self.exclude_self,
+                          strength_usage=self.strength_usage)
 
     def get_wrangler(self, queue, tree, dtype, fmm_level_to_order,
             source_extra_kwargs={},
@@ -310,7 +321,7 @@ class SumpyExpansionWrangler:
                     self.queue,
                     self.tree.ntargets,
                     dtype=self.dtype)
-                for k in self.code.out_kernels])
+                for k in self.code.target_kernels])
 
     def reorder_sources(self, source_array):
         return source_array.with_queue(self.queue)[self.tree.user_source_ids]
@@ -351,7 +362,7 @@ class SumpyExpansionWrangler:
 
     def form_multipoles(self,
             level_start_source_box_nrs, source_boxes,
-            src_weights):
+            src_weight_vecs):
         mpoles = self.multipole_expansion_zeros()
 
         kwargs = self.extra_kwargs.copy()
@@ -372,7 +383,7 @@ class SumpyExpansionWrangler:
                     self.queue,
                     source_boxes=source_boxes[start:stop],
                     centers=self.tree.box_centers,
-                    strengths=src_weights,
+                    strengths=src_weight_vecs,
                     tgt_expansions=mpoles_view,
                     tgt_base_ibox=level_start_ibox,
 
@@ -443,7 +454,7 @@ class SumpyExpansionWrangler:
         return (mpoles, SumpyTimingFuture(self.queue, events))
 
     def eval_direct(self, target_boxes, source_box_starts,
-            source_box_lists, src_weights):
+            source_box_lists, src_weight_vecs):
         pot = self.output_zeros()
 
         kwargs = self.extra_kwargs.copy()
@@ -457,7 +468,7 @@ class SumpyExpansionWrangler:
                 target_boxes=target_boxes,
                 source_box_starts=source_box_starts,
                 source_box_lists=source_box_lists,
-                strength=(src_weights,),
+                strength=src_weight_vecs,
                 result=pot,
 
                 **kwargs)
@@ -563,7 +574,7 @@ class SumpyExpansionWrangler:
 
     def form_locals(self,
             level_start_target_or_target_parent_box_nrs,
-            target_or_target_parent_boxes, starts, lists, src_weights):
+            target_or_target_parent_boxes, starts, lists, src_weight_vecs):
         local_exps = self.local_expansion_zeros()
 
         kwargs = self.extra_kwargs.copy()
@@ -588,7 +599,7 @@ class SumpyExpansionWrangler:
                     source_box_starts=starts[start:stop+1],
                     source_box_lists=lists,
                     centers=self.tree.box_centers,
-                    strengths=src_weights,
+                    strengths=src_weight_vecs,
 
                     tgt_expansions=target_local_exps_view,
                     tgt_base_ibox=target_level_start_ibox,

@@ -48,7 +48,7 @@ Expansion-to-expansion
 
 class E2EBase(KernelCacheWrapper):
     def __init__(self, ctx, src_expansion, tgt_expansion,
-            options=[], name=None, device=None):
+            name=None, device=None):
         """
         :arg expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
         :arg strength_usage: A list of integers indicating which expression
@@ -79,7 +79,6 @@ class E2EBase(KernelCacheWrapper):
         self.ctx = ctx
         self.src_expansion = src_expansion
         self.tgt_expansion = tgt_expansion
-        self.options = options
         self.name = name or self.default_name
         self.device = device
 
@@ -218,8 +217,8 @@ class E2EFromCSR(E2EBase):
                 lang_version=MOST_RECENT_LANGUAGE_VERSION
                 )
 
-        for expn in [self.src_expansion, self.tgt_expansion]:
-            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+        for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
+            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
@@ -338,8 +337,8 @@ class E2EFromChildren(E2EBase):
                 fixed_parameters=dict(dim=self.dim, nchildren=2**self.dim),
                 lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
-        for expn in [self.src_expansion, self.tgt_expansion]:
-            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+        for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
+            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
@@ -442,8 +441,8 @@ class E2EFromParent(E2EBase):
                 fixed_parameters=dict(dim=self.dim, nchildren=2**self.dim),
                 lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
-        for expn in [self.src_expansion, self.tgt_expansion]:
-            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+        for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
+            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
