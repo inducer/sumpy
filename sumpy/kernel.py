@@ -116,6 +116,7 @@ class Kernel:
     .. attribute:: dim
 
     .. automethod:: get_base_kernel
+    .. automethod:: replace_base_kernel
     .. automethod:: prepare_loopy_kernel
     .. automethod:: get_code_transformer
     .. automethod:: get_expression
@@ -171,6 +172,12 @@ class Kernel:
         *self*.
         """
         return self
+
+    def replace_base_kernel(self, new_base_kernel):
+        """Return the base kernel being wrapped by this one, or else
+        *new_base_kernel*.
+        """
+        return new_base_kernel
 
     def prepare_loopy_kernel(self, loopy_knl):
         """Apply some changes (such as registering function
@@ -804,6 +811,10 @@ class KernelWrapper(Kernel):
     def get_source_args(self):
         return self.inner_kernel.get_source_args()
 
+    def replace_base_kernel(self, new_base_kernel):
+        raise NotImplementedError("replace_base_kernel is not implemented "
+            "for this wrapper.")
+
 # }}}
 
 
@@ -832,6 +843,10 @@ class AxisTargetDerivative(DerivativeBase):
     def postprocess_at_target(self, expr, bvec):
         expr = self.inner_kernel.postprocess_at_target(expr, bvec)
         return expr.diff(bvec[self.axis])
+
+    def replace_base_kernel(self, new_base_kernel):
+        return type(self)(self.axis,
+            self.inner_kernel.replace_base_kernel(new_base_kernel))
 
     def replace_inner_kernel(self, new_inner_kernel):
         return type(self)(self.axis, new_inner_kernel)
@@ -877,6 +892,10 @@ class DirectionalDerivative(DerivativeBase):
         key_hash.update(type(self).__name__.encode("utf8"))
         key_builder.rec(key_hash, self.inner_kernel)
         key_builder.rec(key_hash, self.dir_vec_name)
+
+    def replace_base_kernel(self, new_base_kernel):
+        return type(self)(self.inner_kernel.replace_base_kernel(new_base_kernel),
+            dir_vec_name=self.dir_vec_name)
 
     def __str__(self):
         return r"{} . \/_{} {}".format(

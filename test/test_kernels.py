@@ -131,7 +131,7 @@ def test_p2e_multiple(ctx_factory, base_knl, expn_class):
     if isinstance(base_knl, StokesletKernel):
         extra_kwargs["mu"] = 0.2
 
-    in_kernels = [
+    source_kernels = [
         DirectionalSourceDerivative(base_knl, "dir_vec"),
         base_knl,
     ]
@@ -169,7 +169,7 @@ def test_p2e_multiple(ctx_factory, base_knl, expn_class):
     rscale = 0.5  # pick something non-1
 
     # apply p2e at the same time
-    p2e = P2EFromSingleBox(ctx, expn, kernels=in_kernels, strength_usage=[0, 1])
+    p2e = P2EFromSingleBox(ctx, expn, kernels=source_kernels, strength_usage=[0, 1])
     evt, (mpoles,) = p2e(queue,
             source_boxes=source_boxes,
             box_source_starts=box_source_starts,
@@ -190,11 +190,12 @@ def test_p2e_multiple(ctx_factory, base_knl, expn_class):
 
     # apply p2e separately
     expected_result = np.zeros_like(actual_result)
-    for i, in_kernel in enumerate(in_kernels):
+    for i, source_kernel in enumerate(source_kernels):
         extra_source_kwargs = extra_kwargs.copy()
-        if isinstance(in_kernel, DirectionalSourceDerivative):
+        if isinstance(source_kernel, DirectionalSourceDerivative):
             extra_source_kwargs["dir_vec"] = dir_vec
-        p2e = P2EFromSingleBox(ctx, expn, kernels=[in_kernel], strength_usage=[i])
+        p2e = P2EFromSingleBox(ctx, expn,
+            kernels=[source_kernel], strength_usage=[i])
         evt, (mpoles,) = p2e(queue,
             source_boxes=source_boxes,
             box_source_starts=box_source_starts,
@@ -275,7 +276,7 @@ def test_p2e2p(ctx_factory, base_knl, expn_class, order, with_source_derivative)
     else:
         knl = base_knl
 
-    out_kernels = [
+    target_kernels = [
             knl,
             AxisTargetDerivative(0, knl),
             ]
@@ -283,8 +284,8 @@ def test_p2e2p(ctx_factory, base_knl, expn_class, order, with_source_derivative)
 
     from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P
     p2e = P2EFromSingleBox(ctx, expn, kernels=[knl])
-    e2p = E2PFromSingleBox(ctx, expn, kernels=out_kernels)
-    p2p = P2P(ctx, out_kernels, exclude_self=False)
+    e2p = E2PFromSingleBox(ctx, expn, kernels=target_kernels)
+    p2p = P2P(ctx, target_kernels, exclude_self=False)
 
     from pytools.convergence import EOCRecorder
     eoc_rec_pot = EOCRecorder()
@@ -480,7 +481,7 @@ def test_translations(ctx_factory, knl, local_expn_class, mpole_expn_class):
     res = 20
     nsources = 15
 
-    out_kernels = [knl]
+    target_kernels = [knl]
 
     extra_kwargs = {}
     if isinstance(knl, HelmholtzKernel):
@@ -566,11 +567,11 @@ def test_translations(ctx_factory, knl, local_expn_class, mpole_expn_class):
         from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P, E2EFromCSR
         p2m = P2EFromSingleBox(ctx, m_expn)
         m2m = E2EFromCSR(ctx, m_expn, m_expn)
-        m2p = E2PFromSingleBox(ctx, m_expn, out_kernels)
+        m2p = E2PFromSingleBox(ctx, m_expn, target_kernels)
         m2l = E2EFromCSR(ctx, m_expn, l_expn)
         l2l = E2EFromCSR(ctx, l_expn, l_expn)
-        l2p = E2PFromSingleBox(ctx, l_expn, out_kernels)
-        p2p = P2P(ctx, out_kernels, exclude_self=False)
+        l2p = E2PFromSingleBox(ctx, l_expn, target_kernels)
+        p2p = P2P(ctx, target_kernels, exclude_self=False)
 
         fp = FieldPlotter(centers[:, -1], extent=0.3, npoints=res)
         targets = fp.points

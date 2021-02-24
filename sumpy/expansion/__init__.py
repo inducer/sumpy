@@ -54,6 +54,7 @@ class ExpansionBase:
     .. automethod:: __eq__
     .. automethod:: __ne__
     """
+    init_arg_names = ("kernel", "order", "use_rscale")
 
     def __init__(self, kernel, order, use_rscale=None):
         # Don't be tempted to remove target derivatives here.
@@ -81,9 +82,6 @@ class ExpansionBase:
     def is_complex_valued(self):
         return self.kernel.is_complex_valued
 
-    def prepare_loopy_kernel(self, loopy_knl):
-        return self.kernel.prepare_loopy_kernel(loopy_knl)
-
     def get_code_transformer(self):
         return self.kernel.get_code_transformer()
 
@@ -110,7 +108,7 @@ class ExpansionBase:
         """
         raise NotImplementedError
 
-    def coefficients_from_source(self, avec, bvec, rscale, sac=None):
+    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
         """Form an expansion from a source point.
 
         :arg avec: vector from source to center.
@@ -124,7 +122,7 @@ class ExpansionBase:
         """
         raise NotImplementedError
 
-    def evaluate(self, coeffs, bvec, rscale, sac=None):
+    def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         """
         :return: a :mod:`sympy` expression corresponding
             to the evaluated expansion with the coefficients
@@ -152,6 +150,21 @@ class ExpansionBase:
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+    def copy(self, **kwargs):
+        new_kwargs = {
+                name: getattr(self, name)
+                for name in self.init_arg_names}
+
+        for name in self.init_arg_names:
+            new_kwargs[name] = kwargs.pop(name, getattr(self, name))
+
+        if kwargs:
+            raise TypeError("unexpected keyword arguments '%s'"
+                % ", ".join(kwargs))
+
+        return type(self)(**new_kwargs)
+
 
 # }}}
 

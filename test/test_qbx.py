@@ -54,7 +54,8 @@ def test_direct(ctx_factory):
     from sumpy.qbx import LayerPotential
     from sumpy.expansion.local import LineTaylorLocalExpansion
 
-    lpot = LayerPotential(ctx, [LineTaylorLocalExpansion(lknl, order)])
+    lpot = LayerPotential(ctx, expansion=LineTaylorLocalExpansion(lknl, order),
+            target_kernels=(lknl,), source_kernels=(lknl,))
 
     mode_nr = 25
 
