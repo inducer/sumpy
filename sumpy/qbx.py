@@ -464,6 +464,7 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
 
 def find_jump_term(kernel, arg_provider):
     from sumpy.kernel import (
+            AxisSourceDerivative,
             AxisTargetDerivative,
             DirectionalSourceDerivative,
             DirectionalTargetDerivative,
@@ -478,6 +479,9 @@ def find_jump_term(kernel, arg_provider):
             kernel = kernel.kernel
         elif isinstance(kernel, DirectionalTargetDerivative):
             tgt_derivatives.append(kernel.dir_vec_name)
+            kernel = kernel.kernel
+        elif isinstance(kernel, AxisSourceDerivative):
+            src_derivatives.append(kernel.axis)
             kernel = kernel.kernel
         elif isinstance(kernel, DirectionalSourceDerivative):
             src_derivatives.append(kernel.dir_vec_name)
