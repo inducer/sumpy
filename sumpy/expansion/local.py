@@ -156,7 +156,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         return result
 
     def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
-        return self.coefficients_from_source_vec(self, (kernel,), avec, bvec,
+        return self.coefficients_from_source_vec((kernel,), avec, bvec,
                 rscale=rscale, weights=(1,), sac=sac)
 
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
