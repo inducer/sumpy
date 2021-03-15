@@ -169,8 +169,8 @@ class MiDerivativeTaker(object):
 
         assert isinstance(expr, sym.Basic)
         self.var_list = var_list
-        empty_mi = (0,) * len(var_list)
-        self.cache_by_mi = {empty_mi: expr}
+        zero_mi = (0,) * len(var_list)
+        self.cache_by_mi = {zero_mi: expr}
         self.rscale = rscale
         self.sac = sac
         self.dim = len(self.var_list)
