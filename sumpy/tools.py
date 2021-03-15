@@ -219,6 +219,15 @@ class LaplaceDerivativeTaker(MiDerivativeTaker):
                 sym.sqrt(sum(v**2 for v in self.scaled_var_list)))
 
     def diff(self, mi):
+        """
+        Implements the algorithm described in [Fernando2021] to take cartesian
+        derivatives of Laplace potential using recurrences. Cost of each derivative
+        is amortized constant.
+
+        .. [Fernando2021]: Fernando, I., Klöckner, A., 2021. Automatic Synthesis of
+                           Low Complexity Translation Operators for the Fast
+                           Multipole Method. SIAM CSE 21.
+        """
         # Return zero for negative values. Makes the algorithm readable.
         if min(mi) < 0:
             return 0
@@ -282,10 +291,13 @@ class RadialDerivativeTaker(MiDerivativeTaker):
 
     def diff(self, mi, q=0):
         """
-        See [1] for the algorithm
+        Implements the algorithm described in [Tausch2003] to take cartesian
+        derivatives of radial functions using recurrences. Cost of each derivative
+        is amortized linear in the degree.
 
-        [1]: Tausch, J., 2003. The fast multipole method for arbitrary Green's
-             functions. Contemporary Mathematics, 329, pp.307-314.
+        .. [Tausch2003]: Tausch, J., 2003. The fast multipole method for arbitrary
+                         Green's functions.
+                         Contemporary Mathematics, 329, pp.307-314.
         """
         if not self.is_radial:
             assert q == 0
@@ -351,7 +363,7 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
             expr += - k**2 * self.diff(mi, q - 2)
             expr /= self.r**2
         else:
-            # See reference [1] in RadialDerivativeTaker.diff
+            # See reference [Tausch2003] in RadialDerivativeTaker.diff
             k = (self.orig_expr * self.r).args[-1] / sym.I / self.r
             expr = -(2*q - 1)/self.r**2 * self.diff(mi, q - 1)
             expr += -k**2 / self.r * self.diff(mi, q - 2)
