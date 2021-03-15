@@ -164,7 +164,7 @@ class MiDerivativeTaker(object):
         making them what you might call *scale-invariant*.
 
         This derivative taker returns :math:`g^{(i)}(\xi) = \alpha^i f^{(i)}`
-        given :math:`f^{(0)}` as *expr* and :math:`\alpha` as *rscale*.
+        given :math:`f^{(0)}` as *expr* and :math:`\alpha` as :attr:`rscale`.
         """
 
         assert isinstance(expr, sym.Basic)
