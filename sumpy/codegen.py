@@ -159,7 +159,8 @@ def is_assignment_nontrivial(name, value):
 
 
 def kill_trivial_assignments(assignments, retain_names=set()):
-    logger.info("kill trivial assignments (plain): start")
+    from pytools import ProcessLogger
+    plog = ProcessLogger(logger, "kill trivial assignments (plain)")
     from time import time
     start = time()
     approved_assignments = []
@@ -182,8 +183,8 @@ def kill_trivial_assignments(assignments, retain_names=set()):
 
     nrej = len(rejected_assignments)
     total_time = time() - start
-    logger.info(f"kill trivial assignments (plain): done, "
-                f"{nrej} assignments killed in {total_time:.3g} seconds")
+    plog.done()
+    logger.info(f"{nrej} assignments killed.")
 
     return result
 
