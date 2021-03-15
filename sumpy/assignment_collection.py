@@ -192,6 +192,11 @@ class SymbolicAssignmentCollection:
             self.add_assignment(name.name, value)
 
         for name, new_expr in zip(assign_names, new_assign_exprs):
+            # We want the assignment collection to be ordered correctly
+            # to make it easier for loopy to schedule.
+            # Deleting the original assignments and adding them again
+            # makes them occur after the CSE'd expression preserving
+            # the order of operations.
             del self.assignments[name]
             self.assignments[name] = new_expr
 
