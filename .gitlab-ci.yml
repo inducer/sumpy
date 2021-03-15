@@ -6,7 +6,7 @@
 #   - export PY_EXE=python3.5
 #   - export PYOPENCL_TEST=nvi:k40
 #   - export EXTRA_INSTALL="numpy mako"
-#   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project.sh
+#   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project.sh
 #   - ". ./build-and-test-py-project.sh"
 #   tags:
 #   - python3.5
@@ -22,7 +22,7 @@ Pytest POCL:
   - export PY_EXE=python3
   - export PYOPENCL_TEST=portable:pthread
   - export EXTRA_INSTALL="pybind11 numpy mako"
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project.sh
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project.sh
   - ". ./build-and-test-py-project.sh"
   tags:
   - python3
@@ -38,7 +38,7 @@ Pytest Titan V:
   - py_version=3
   - export PYOPENCL_TEST=nvi:titan
   - EXTRA_INSTALL="pybind11 numpy mako"
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project.sh
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project.sh
   - ". ./build-and-test-py-project.sh"
   tags:
   - python3
@@ -57,7 +57,7 @@ Pytest Conda:
   - export SUMPY_FORCE_SYMBOLIC_BACKEND=symengine
   - export PYOPENCL_TEST=portable:pthread
   - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project-within-miniconda.sh
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project-within-miniconda.sh
   - ". ./build-and-test-py-project-within-miniconda.sh"
   tags:
   - large-node
@@ -74,7 +74,7 @@ Pytest POCL Titan V:
   - export SUMPY_FORCE_SYMBOLIC_BACKEND=symengine
   - export PYOPENCL_TEST=portable:titan
   - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project-within-miniconda.sh
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project-within-miniconda.sh
   - ". ./build-and-test-py-project-within-miniconda.sh"
   tags:
   - nvidia-titan-v
@@ -88,7 +88,7 @@ Examples Conda:
   script: |
     grep -v symengine .test-conda-env-py3.yml > .test-conda-env.yml
     CONDA_ENVIRONMENT=.test-conda-env.yml
-    curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/ci-support.sh
+    curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/ci-support.sh
     . ci-support.sh
     EXTRA_INSTALL="pyvisfile scipy"
     build_py_project_in_conda_env
@@ -101,14 +101,14 @@ Examples Conda:
 Documentation:
   script:
   - EXTRA_INSTALL="pybind11 numpy mako"
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-docs.sh
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-docs.sh
   - ". ./build-docs.sh"
   tags:
   - python3
 
 Flake8:
   script:
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/prepare-and-run-flake8.sh
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-flake8.sh
   - . ./prepare-and-run-flake8.sh "$CI_PROJECT_NAME" test examples benchmarks
   tags:
   - python3
@@ -120,7 +120,7 @@ Benchmarks:
   - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
   - PROJECT=sumpy
   - PYOPENCL_TEST=portable:pthread
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-benchmark-py-project.sh
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-benchmark-py-project.sh
   - ". ./build-and-benchmark-py-project.sh"
   tags:
   - linux

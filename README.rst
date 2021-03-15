@@ -1,12 +1,12 @@
 sumpy: n-body kernels and translation operators
 ===============================================
 
-.. image:: https://gitlab.tiker.net/inducer/sumpy/badges/master/pipeline.svg
+.. image:: https://gitlab.tiker.net/inducer/sumpy/badges/main/pipeline.svg
     :alt: Gitlab Build Status
-    :target: https://gitlab.tiker.net/inducer/sumpy/commits/master
-.. image:: https://github.com/inducer/sumpy/workflows/CI/badge.svg?branch=master&event=push
+    :target: https://gitlab.tiker.net/inducer/sumpy/commits/main
+.. image:: https://github.com/inducer/sumpy/workflows/CI/badge.svg?branch=main&event=push
     :alt: Github Build Status
-    :target: https://github.com/inducer/sumpy/actions?query=branch%3Amaster+workflow%3ACI+event%3Apush
+    :target: https://github.com/inducer/sumpy/actions?query=branch%3Amain+workflow%3ACI+event%3Apush
 .. image:: https://badge.fury.io/py/sumpy.png
     :alt: Python Package Index Release Page
     :target: https://pypi.org/project/sumpy/
