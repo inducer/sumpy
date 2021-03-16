@@ -157,9 +157,6 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
 
         return assignments + loopy_insns, result_names
 
-    def get_kernel_scaling_or_not(self, kernel_idx):
-        return f"knl_{kernel_idx}_scaling"
-
     def get_strength_or_not(self, isrc, kernel_idx):
         from sumpy.symbolic import Symbol
         return Symbol(f"strength_{self.strength_usage[kernel_idx]}")
@@ -190,6 +187,8 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
             knl = lp.tag_array_axes(knl, "targets", "sep,C")
 
         knl = lp.split_iname(knl, "itgt", 1024, outer_tag="g.0")
+        knl = self._allow_redundant_execution_of_knl_scaling(knl)
+
         return knl
 
 
@@ -392,6 +391,7 @@ class P2PMatrixBlockGenerator(P2PBase):
             knl = lp.tag_array_axes(knl, "targets", "sep,C")
 
         knl = lp.split_iname(knl, "imat", 1024, outer_tag="g.0")
+        knl = self._allow_redundant_execution_of_knl_scaling(knl)
         return knl
 
     def __call__(self, queue, targets, sources, index_set, **kwargs):
@@ -535,6 +535,8 @@ class P2PFromCSR(P2PBase):
             knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
         else:
             knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
+
+        knl = self._allow_redundant_execution_of_knl_scaling(knl)
 
         return knl
 
