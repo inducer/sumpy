@@ -89,7 +89,6 @@ def mi_power(vector, mi, evaluate=True):
 def add_to_sac(sac, expr):
     import sumpy.symbolic as sym
     if sac is None:
-        raise RuntimeError("")
         return expr
 
     if isinstance(expr, (sym.Number, sym.Symbol)):
