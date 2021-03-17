@@ -26,7 +26,7 @@ from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
     HelmholtzConformingVolumeTaylorExpansion,
     BiharmonicConformingVolumeTaylorExpansion)
-from pytools import factorial, single_valued
+from pytools import factorial
 from sumpy.tools import mi_set_axis, add_to_sac
 
 import logging

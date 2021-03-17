@@ -29,7 +29,6 @@ from sumpy.expansion import (
     BiharmonicConformingVolumeTaylorExpansion)
 
 from sumpy.tools import mi_increment_axis
-from pytools import single_valued
 
 
 class LocalExpansionBase(ExpansionBase):
@@ -143,11 +142,15 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             wrapper = MiDerivativeTakerWrapper(taker, expr_dict)
             # Following is a hack to make sure cse works.
             if 1:
-                save_temp = lambda x: add_to_sac(sac, weight * x)
+                def save_temp(x):
+                    return add_to_sac(sac, weight * x)
+
                 for i, mi in enumerate(self.get_coefficient_identifiers()):
                     result[i] += wrapper.diff(mi, save_temp)
             else:
-                save_temp = lambda x: add_to_sac(sac, x)
+                def save_temp(x):
+                    return add_to_sac(sac, x)
+
                 for i, mi in enumerate(self.get_coefficient_identifiers()):
                     result[i] += weight * wrapper.diff(mi, save_temp)
 

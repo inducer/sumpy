@@ -46,7 +46,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 from dataclasses import dataclass
-from typing import Tuple
 
 
 # {{{ multi_index helpers
@@ -391,7 +390,6 @@ class MiDerivativeTakerWrapper:
         # :attr:`derivative_transformation` which would multiply the
         # expression by more `rscale`s than necessary. This is corrected by
         # dividing by `rscale`.
-        base_deriv = self.taker.diff(mi)
         result = 0
         for extra_mi, coeff in self.derivative_transformation.items():
             result += coeff * self.taker.diff(add_mi(mi, extra_mi))
