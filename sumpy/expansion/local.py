@@ -117,6 +117,9 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
     def coefficients_from_source_vec(self, kernels, avec, bvec, rscale, weights,
             sac=None):
         """Form an expansion with a linear combination of kernels and weights.
+        Since all of the kernels share a base kernel, this method uses one
+        derivative taker with one SymbolicAssignmentCollection object
+        to remove redundant calculations.
 
         :arg avec: vector from source to center.
         :arg bvec: vector from center to target. Not usually necessary,

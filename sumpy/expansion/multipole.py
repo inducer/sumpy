@@ -55,6 +55,10 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
     def coefficients_from_source_vec(self, kernels, avec, bvec, rscale, weights,
             sac=None):
+        """This method calculates the full coefficients, sums them up and
+        compresses them. This is more efficient that calculating full
+        coefficients, compressing and then summing.
+        """
         from sumpy.kernel import KernelWrapper
         from sumpy.tools import mi_power, mi_factorial
 
