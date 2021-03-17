@@ -370,15 +370,15 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
         return expr
 
 
-# A :class:`MiDerivativeTaker` represents an expression and
-# lets you get derivatives of those. This wrapper represents
-# a derivative of an expression and is useful when then there's
-# no specialized derivative taker for the derivative expression,
-# but there's one for the expression. This avoids writing
-# specialized derivative takers for example the double layer
-# expression when there's already one for the single layer.
 @dataclass
 class MiDerivativeTakerWrapper:
+    """A :class:`MiDerivativeTaker` represents an expression and
+    lets you get derivatives of those. This wrapper represents
+    a derivative of an expression and is useful when then there's
+    no specialized derivative taker for the derivative expression,
+    but there's one for the expression. This avoids writing
+    specialized derivative takers for example the double layer
+    expression when there's already one for the single layer."""
     taker: MiDerivativeTaker
     derivative_transformation: dict
 
