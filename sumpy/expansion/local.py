@@ -181,12 +181,12 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, _fast_version=True):
-        logger.info("building translation operator for %s: %s(%d) -> %s(%d): start"
-                % (src_expansion.kernel,
+        logger.info("building translation operator for %s: %s(%d) -> %s(%d): start",
+                    src_expansion.kernel,
                     type(src_expansion).__name__,
                     src_expansion.order,
                     type(self).__name__,
-                    self.order))
+                    self.order)
 
         if not self.use_rscale:
             src_rscale = 1
