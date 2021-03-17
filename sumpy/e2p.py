@@ -108,12 +108,15 @@ class E2PBase(KernelCacheWrapper):
 
     def get_kernel_scaling_assignment(self):
         from sumpy.symbolic import SympyToPymbolicMapper
+        from sumpy.tools import ScalingAssignmentTag
         sympy_conv = SympyToPymbolicMapper()
         return [lp.Assignment(id=None,
                     assignee="kernel_scaling",
                     expression=sympy_conv(
                         self.expansion.kernel.get_global_scaling_const()),
-                    temp_var_type=lp.Optional(None))]
+                    temp_var_type=lp.Optional(None),
+                    tags=frozenset([ScalingAssignmentTag()]),
+                    )]
 
     def get_cache_key(self):
         return (type(self).__name__, self.expansion, tuple(self.kernels))
@@ -196,6 +199,8 @@ class E2PFromSingleBox(E2PBase):
         # FIXME
         knl = self.get_kernel()
         knl = lp.tag_inames(knl, dict(itgt_box="g.0"))
+        knl = self._allow_redundant_execution_of_knl_scaling(knl)
+
         return knl
 
     def __call__(self, queue, **kwargs):
@@ -306,6 +311,7 @@ class E2PFromCSR(E2PBase):
         # FIXME
         knl = self.get_kernel()
         knl = lp.tag_inames(knl, dict(itgt_box="g.0"))
+        knl = self._allow_redundant_execution_of_knl_scaling(knl)
         return knl
 
     def __call__(self, queue, **kwargs):

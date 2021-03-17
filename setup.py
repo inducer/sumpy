@@ -93,8 +93,8 @@ setup(name="sumpy",
 
       python_requires="~=3.6",
       install_requires=[
-          "pytools>=2018.2",
-          "loopy>=2017.2",
+          "pytools>=2021.1.1",
+          "loopy>=2021.1",
           "boxtree>=2018.1",
           "pytest>=2.3",
           "pyrsistent>=0.16.0",

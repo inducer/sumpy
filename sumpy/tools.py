@@ -33,6 +33,8 @@ __doc__ = """
 """
 
 from pytools import memoize_method, memoize_in, single_valued
+from pytools.tag import Tag, tag_dataclass
+
 import numpy as np
 import sumpy.symbolic as sym
 
@@ -44,8 +46,6 @@ from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 
 import logging
 logger = logging.getLogger(__name__)
-
-from dataclasses import dataclass
 
 
 # {{{ multi_index helpers
@@ -370,7 +370,7 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
         return expr
 
 
-@dataclass
+@tag_dataclass
 class MiDerivativeTakerWrapper:
     """A :class:`MiDerivativeTaker` represents an expression and
     lets you get derivatives of those. This wrapper represents
@@ -484,6 +484,11 @@ def gather_loopy_source_arguments(kernel_likes):
 
 # {{{  KernelComputation
 
+@tag_dataclass
+class ScalingAssignmentTag(Tag):
+    pass
+
+
 class KernelComputation:
     """Common input processing for kernel computations."""
 
@@ -549,7 +554,8 @@ class KernelComputation:
                 lp.Assignment(id=None,
                     assignee="knl_%d_scaling" % i,
                     expression=sympy_conv(kernel.get_global_scaling_const()),
-                    temp_var_type=lp.Optional(dtype))
+                    temp_var_type=lp.Optional(dtype),
+                    tags=frozenset([ScalingAssignmentTag()]))
                 for i, (kernel, dtype) in enumerate(
                     zip(self.target_kernels, self.value_dtypes))]
 
@@ -916,6 +922,13 @@ class KernelCacheWrapper:
             code_cache.store_if_not_present(cache_key, knl)
 
         return knl
+
+    @staticmethod
+    def _allow_redundant_execution_of_knl_scaling(knl):
+        from loopy.match import ObjTagged
+        from sumpy.tools import ScalingAssignmentTag
+        return lp.add_inames_for_unused_hw_axes(
+                knl, within=ObjTagged(ScalingAssignmentTag()))
 
 
 def my_syntactic_subs(expr, subst_dict):

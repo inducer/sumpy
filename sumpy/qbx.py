@@ -198,6 +198,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
             from warnings import warn
             warn("don't know how to tune layer potential computation for '%s'" % dev)
             loopy_knl = lp.split_iname(loopy_knl, "itgt", 128, outer_tag="g.0")
+        loopy_knl = self._allow_redundant_execution_of_knl_scaling(loopy_knl)
 
         return loopy_knl
 
@@ -426,6 +427,7 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
             loopy_knl = lp.tag_array_axes(loopy_knl, "center", "sep,C")
 
         loopy_knl = lp.split_iname(loopy_knl, "imat", 1024, outer_tag="g.0")
+        loopy_knl = self._allow_redundant_execution_of_knl_scaling(loopy_knl)
         return loopy_knl
 
     def __call__(self, queue, targets, sources, centers, expansion_radii,
