@@ -202,8 +202,7 @@ class Kernel:
         """
         from sumpy.tools import MiDerivativeTakerWrapper, add_mi
         if isinstance(expr, MiDerivativeTakerWrapper):
-            taker, init_mi = expr
-            return taker.diff(add_mi(mi, init_mi))
+            return expr.diff(mi)
         else:
             for i in range(self.dim):
                 if mi[i] == 0:

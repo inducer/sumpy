@@ -45,7 +45,8 @@ from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 import logging
 logger = logging.getLogger(__name__)
 
-from collections import namedtuple
+from dataclasses import dataclass
+from typing import Tuple
 
 
 # {{{ multi_index helpers
@@ -377,8 +378,13 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
 # but there's one for the expression. This avoids writing
 # specialized derivative takers for example the double layer
 # expression when there's already one for the single layer.
-MiDerivativeTakerWrapper = namedtuple("MiDerivativeTakerWrapper",
-                                      ["taker", "initial_mi"])
+@dataclass
+class MiDerivativeTakerWrapper:
+    taker: MiDerivativeTaker
+    initial_mi: Tuple[int]
+
+    def diff(self, mi):
+        return self.taker.diff(add_mi(self.initial_mi, mi))
 
 # }}}
 
