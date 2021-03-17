@@ -27,7 +27,7 @@ from sumpy.expansion import (
     HelmholtzConformingVolumeTaylorExpansion,
     BiharmonicConformingVolumeTaylorExpansion)
 from pytools import factorial, single_valued
-from sumpy.tools import mi_set_axis
+from sumpy.tools import mi_set_axis, add_to_sac
 
 import logging
 logger = logging.getLogger(__name__)
@@ -95,16 +95,11 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         taker = self.get_kernel_derivative_taker(bvec, rscale, sac)
         expr_dict = {(0,)*self.dim: 1}
         expr_dict = kernel.get_derivative_transformation_at_target(expr_dict)
-        pp_nderivatives = single_valued(sum(mi) for mi in expr_dict.keys())
+        wrapper = MiDerivativeTakerWrapper(taker, expr_dict)
 
         result = []
         for coeff, mi in zip(coeffs, self.get_coefficient_identifiers()):
-            wrapper = MiDerivativeTakerWrapper(taker, mi)
-            mi_expr = kernel.postprocess_at_target(wrapper, bvec)
-            # For details about this correction, see the explanation at
-            # VolumeTaylorLocalExpansionBase.coefficients_from_source
-            expr = coeff * mi_expr / rscale**pp_nderivatives
-            result.append(expr)
+            result.append(coeff * wrapper.diff(mi, lambda x: add_to_sac(sac, x)))
 
         result = sym.Add(*tuple(result))
         return result

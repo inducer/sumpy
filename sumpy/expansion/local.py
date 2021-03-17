@@ -131,30 +131,25 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             the coefficients of the expansion.
         """
         from sumpy.tools import MiDerivativeTakerWrapper
-        if sac is None:
-            raise RuntimeError("")
-        taker = self.get_kernel_derivative_taker(avec, rscale, sac)
-        result = [0]*len(self)
         if not self.use_rscale:
             rscale = 1
+
+        taker = self.get_kernel_derivative_taker(avec, rscale, sac)
+        result = [0]*len(self)
 
         for knl, weight in zip(kernels, weights):
             expr_dict = {(0,)*self.dim: 1}
             expr_dict = knl.get_derivative_transformation_at_source(expr_dict)
-            pp_nderivatives = single_valued(sum(mi) for mi in expr_dict.keys())
-
-            for i, mi in enumerate(self.get_coefficient_identifiers()):
-                wrapper = MiDerivativeTakerWrapper(taker, mi)
-                mi_expr = knl.postprocess_at_source(wrapper, avec)
-                # By passing `rscale` to the derivative taker we are taking a scaled
-                # version of the derivative which is `expr.diff(mi)*rscale**sum(mi)`
-                # which might be implemented efficiently for kernels like Laplace.
-                # One caveat is that `postprocess_at_source` might take more
-                # derivatives which would multiply the expression by more `rscale`s
-                # than necessary as the derivative taker does not know about
-                # `postprocess_at_source`. This is corrected by dividing by `rscale`.
-                expr = mi_expr * add_to_sac(sac, weight / rscale ** pp_nderivatives)
-                result[i] += expr
+            wrapper = MiDerivativeTakerWrapper(taker, expr_dict)
+            # Following is a hack to make sure cse works.
+            if 1:
+                save_temp = lambda x: add_to_sac(sac, weight * x)
+                for i, mi in enumerate(self.get_coefficient_identifiers()):
+                    result[i] += wrapper.diff(mi, save_temp)
+            else:
+                save_temp = lambda x: add_to_sac(sac, x)
+                for i, mi in enumerate(self.get_coefficient_identifiers()):
+                    result[i] += weight * wrapper.diff(mi, save_temp)
 
         return result
 

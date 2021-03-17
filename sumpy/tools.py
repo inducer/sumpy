@@ -32,7 +32,7 @@ __doc__ = """
  .. autoclass:: MatrixBlockIndexRanges
 """
 
-from pytools import memoize_method, memoize_in
+from pytools import memoize_method, memoize_in, single_valued
 import numpy as np
 import sumpy.symbolic as sym
 
@@ -381,10 +381,23 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
 @dataclass
 class MiDerivativeTakerWrapper:
     taker: MiDerivativeTaker
-    initial_mi: Tuple[int]
+    derivative_transformation: dict
 
-    def diff(self, mi):
-        return self.taker.diff(add_mi(self.initial_mi, mi))
+    def diff(self, mi, save_intermediate=lambda x: x):
+        # By passing `rscale` to the derivative taker we are taking a scaled
+        # version of the derivative which is `expr.diff(mi)*rscale**sum(mi)`
+        # which might be implemented efficiently for kernels like Laplace.
+        # One caveat is that we are taking more derivatives because of
+        # :attr:`derivative_transformation` which would multiply the
+        # expression by more `rscale`s than necessary. This is corrected by
+        # dividing by `rscale`.
+        base_deriv = self.taker.diff(mi)
+        result = 0
+        for extra_mi, coeff in self.derivative_transformation.items():
+            result += coeff * self.taker.diff(add_mi(mi, extra_mi))
+        order = single_valued(sum(extra_mi) for extra_mi in
+                self.derivative_transformation.keys())
+        return result * save_intermediate(1 / self.taker.rscale ** order)
 
 # }}}
 
