@@ -198,17 +198,13 @@ class Kernel:
         raise NotImplementedError
 
     def _diff(self, expr, vec, mi):
-        """Take the derivative of an expression or a MiDerivativeTakerWrapper
+        """Take the derivative of an expression
         """
-        from sumpy.tools import MiDerivativeTakerWrapper
-        if isinstance(expr, MiDerivativeTakerWrapper):
-            return expr.diff(mi)
-        else:
-            for i in range(self.dim):
-                if mi[i] == 0:
-                    continue
-                expr = expr.diff(vec[i], mi[i])
-            return expr
+        for i in range(self.dim):
+            if mi[i] == 0:
+                continue
+            expr = expr.diff(vec[i], mi[i])
+        return expr
 
     def postprocess_at_source(self, expr, avec):
         """Transform a kernel evaluation or expansion expression in a place
