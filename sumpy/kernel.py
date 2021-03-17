@@ -200,7 +200,7 @@ class Kernel:
     def _diff(self, expr, vec, mi):
         """Take the derivative of an expression or a MiDerivativeTakerWrapper
         """
-        from sumpy.tools import MiDerivativeTakerWrapper, add_mi
+        from sumpy.tools import MiDerivativeTakerWrapper
         if isinstance(expr, MiDerivativeTakerWrapper):
             return expr.diff(mi)
         else:
