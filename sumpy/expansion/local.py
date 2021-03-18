@@ -133,26 +133,24 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         if not self.use_rscale:
             rscale = 1
 
-        taker = self.get_kernel_derivative_taker(avec, rscale, sac)
+        base_taker = self.get_kernel_derivative_taker(avec, rscale, sac)
         result = [0]*len(self)
 
         for knl, weight in zip(kernels, weights):
-            expr_dict = {(0,)*self.dim: 1}
-            expr_dict = knl.get_derivative_transformation_at_source(expr_dict)
-            wrapper = MiDerivativeTakerWrapper(taker, expr_dict)
+            taker = knl.postproccess_at_source(base_taker)
             # Following is a hack to make sure cse works.
             if 1:
                 def save_temp(x):
                     return add_to_sac(sac, weight * x)
 
                 for i, mi in enumerate(self.get_coefficient_identifiers()):
-                    result[i] += wrapper.diff(mi, save_temp)
+                    result[i] += taker.diff(mi, save_temp)
             else:
                 def save_temp(x):
                     return add_to_sac(sac, x)
 
                 for i, mi in enumerate(self.get_coefficient_identifiers()):
-                    result[i] += weight * wrapper.diff(mi, save_temp)
+                    result[i] += weight * taker.diff(mi, save_temp)
 
         return result
 

@@ -214,8 +214,12 @@ class Kernel:
         The typical use of this function is to apply source-variable
         derivatives to the kernel.
         """
+        from sumpy.tools import MiDerivativeTaker, MiDerivativeTakerWrapper
         expr_dict = {(0,)*self.dim: 1}
         expr_dict = self.get_derivative_transformation_at_source(expr_dict)
+        if isinstance(expr, MiDerivativeTaker):
+            return MiDerivativeTakerWrapper(expr, expr_dict)
+
         result = 0
         for mi, coeff in expr_dict.items():
             result += coeff * self._diff(expr, avec, mi)
@@ -229,8 +233,12 @@ class Kernel:
         The typical use of this function is to apply target-variable
         derivatives to the kernel.
         """
+        from sumpy.tools import MiDerivativeTaker, MiDerivativeTakerWrapper
         expr_dict = {(0,)*self.dim: 1}
         expr_dict = self.get_derivative_transformation_at_target(expr_dict)
+        if isinstance(expr, MiDerivativeTaker):
+            return MiDerivativeTakerWrapper(expr, expr_dict)
+
         result = 0
         for mi, coeff in expr_dict.items():
             result += coeff * self._diff(expr, bvec, mi)
