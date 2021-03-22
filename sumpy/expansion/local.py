@@ -136,7 +136,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         result = [0]*len(self)
 
         for knl, weight in zip(kernels, weights):
-            taker = knl.postproccess_at_source(base_taker, avec)
+            taker = knl.postprocess_at_source(base_taker, avec)
             # Following is a hack to make sure cse works.
             if 1:
                 def save_temp(x):
