@@ -129,7 +129,6 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         :returns: a list of :mod:`sympy` expressions representing
             the coefficients of the expansion.
         """
-        from sumpy.tools import MiDerivativeTakerWrapper
         if not self.use_rscale:
             rscale = 1
 
@@ -137,7 +136,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         result = [0]*len(self)
 
         for knl, weight in zip(kernels, weights):
-            taker = knl.postproccess_at_source(base_taker)
+            taker = knl.postproccess_at_source(base_taker, avec)
             # Following is a hack to make sure cse works.
             if 1:
                 def save_temp(x):

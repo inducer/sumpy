@@ -88,12 +88,11 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                 rscale, (1,), sac=sac)
 
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
-        from sumpy.tools import MiDerivativeTakerWrapper
         if not self.use_rscale:
             rscale = 1
 
         base_taker = self.get_kernel_derivative_taker(bvec, rscale, sac)
-        taker = kernel.postprocess_at_target(base_taker)
+        taker = kernel.postprocess_at_target(base_taker, bvec)
 
         result = []
         for coeff, mi in zip(coeffs, self.get_coefficient_identifiers()):
