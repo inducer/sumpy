@@ -30,6 +30,8 @@ __doc__ = """
 
  .. autoclass:: BlockIndexRanges
  .. autoclass:: MatrixBlockIndexRanges
+ .. autoclass:: ExprDerivativeTaker
+ .. autoclass:: DifferentiatedExprDerivativeTaker
 """
 
 from pytools import memoize_method, memoize_in
@@ -374,11 +376,20 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
 class DifferentiatedExprDerivativeTaker:
     """A :class:`ExprDerivativeTaker` represents an expression and
     lets you get derivatives of those. This wrapper represents
-    a derivative of an expression and is useful when then there's
+    a sum of derivatives of an expression and is useful when there's
     no specialized derivative taker for the derivative expression,
     but there's one for the expression. This avoids writing
     specialized derivative takers for example the double layer
     expression when there's already one for the single layer.
+
+    Attributes:
+        taker (ExprDerivativeTaker): A derivative taker for the base kernel
+
+        derivative_transformation (dict):
+            A dictionary mapping a derivative
+            multi-index to a coeffcient. The expression represented by this
+            derivative taker is the linear combination of the derivatives
+            of the expression for the base kernel.
     """
     taker: ExprDerivativeTaker
     derivative_transformation: dict
