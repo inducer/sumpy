@@ -98,7 +98,7 @@ def add_to_sac(sac, expr):
     return sym.Symbol(name)
 
 
-class MiDerivativeTaker(object):
+class ExprDerivativeTaker(object):
 
     def __init__(self, expr, var_list, rscale=1, sac=None):
         r"""
@@ -209,7 +209,7 @@ class MiDerivativeTaker(object):
             key=lambda other_mi: sum(self.mi_dist(mi, other_mi)))
 
 
-class LaplaceDerivativeTaker(MiDerivativeTaker):
+class LaplaceDerivativeTaker(ExprDerivativeTaker):
 
     def __init__(self, expr, var_list, rscale=1, sac=None):
         super(LaplaceDerivativeTaker, self).__init__(expr, var_list, rscale, sac)
@@ -237,7 +237,7 @@ class LaplaceDerivativeTaker(MiDerivativeTaker):
 
         dim = self.dim
         if max(mi) == 1:
-            return MiDerivativeTaker.diff(self, mi)
+            return ExprDerivativeTaker.diff(self, mi)
         d = -1
         for i in range(dim):
             if mi[i] >= 2:
@@ -272,7 +272,7 @@ class LaplaceDerivativeTaker(MiDerivativeTaker):
         return expr
 
 
-class RadialDerivativeTaker(MiDerivativeTaker):
+class RadialDerivativeTaker(ExprDerivativeTaker):
 
     def __init__(self, expr, var_list, rscale=1, sac=None):
         """
@@ -300,7 +300,7 @@ class RadialDerivativeTaker(MiDerivativeTaker):
         """
         if not self.is_radial:
             assert q == 0
-            return MiDerivativeTaker.diff(self, mi)
+            return ExprDerivativeTaker.diff(self, mi)
 
         try:
             return self.cache_by_mi_q[(mi, q)]
@@ -371,8 +371,8 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
 
 
 @tag_dataclass
-class MiDerivativeTakerWrapper:
-    """A :class:`MiDerivativeTaker` represents an expression and
+class DifferentiatedExprDerivativeTaker:
+    """A :class:`ExprDerivativeTaker` represents an expression and
     lets you get derivatives of those. This wrapper represents
     a derivative of an expression and is useful when then there's
     no specialized derivative taker for the derivative expression,
@@ -380,7 +380,7 @@ class MiDerivativeTakerWrapper:
     specialized derivative takers for example the double layer
     expression when there's already one for the single layer.
     """
-    taker: MiDerivativeTaker
+    taker: ExprDerivativeTaker
     derivative_transformation: dict
 
     def diff(self, mi, save_intermediate=lambda x: x):
