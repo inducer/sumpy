@@ -32,7 +32,7 @@ __doc__ = """
  .. autoclass:: MatrixBlockIndexRanges
 """
 
-from pytools import memoize_method, memoize_in, single_valued
+from pytools import memoize_method, memoize_in
 from pytools.tag import Tag, tag_dataclass
 
 import numpy as np
@@ -391,12 +391,15 @@ class DifferentiatedExprDerivativeTaker:
         # :attr:`derivative_transformation` which would multiply the
         # expression by more `rscale`s than necessary. This is corrected by
         # dividing by `rscale`.
-        result = 0
-        for extra_mi, coeff in self.derivative_transformation.items():
-            result += coeff * self.taker.diff(add_mi(mi, extra_mi))
-        order = single_valued(sum(extra_mi) for extra_mi in
+        max_order = max(sum(extra_mi) for extra_mi in
                 self.derivative_transformation.keys())
-        return result * save_intermediate(1 / self.taker.rscale ** order)
+
+        result = sum(
+            coeff * self.taker.diff(add_mi(mi, extra_mi))
+            / self.taker.rscale ** (sum(extra_mi) - max_order)
+            for extra_mi, coeff in self.derivative_transformation.items())
+
+        return result * save_intermediate(1 / self.taker.rscale ** max_order)
 
 # }}}
 
