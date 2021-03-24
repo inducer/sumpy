@@ -405,7 +405,7 @@ class DifferentiatedExprDerivativeTaker:
 
     .. attribute:: taker
         A :class:`ExprDerivativeTaker` for the base expression.
-        
+
     .. attribute:: derivative_transformation
         A dictionary mapping a derivative multi-index to a coefficient.
         The expression represented by this derivative taker is the linear
