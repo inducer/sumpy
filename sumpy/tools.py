@@ -31,6 +31,9 @@ __doc__ = """
  .. autoclass:: BlockIndexRanges
  .. autoclass:: MatrixBlockIndexRanges
  .. autoclass:: ExprDerivativeTaker
+ .. autoclass:: LaplaceDerivativeTaker
+ .. autoclass:: RadialDerivativeTaker
+ .. autoclass:: HelmholtzDerivativeTaker
  .. autoclass:: DifferentiatedExprDerivativeTaker
 """
 
@@ -104,10 +107,12 @@ class ExprDerivativeTaker(object):
     """Facilitates the efficient computation of (potentially) high-order
     derivatives of a given :mod:`sympy` expression *expr* while attempting
     to maximize the number of common subexpressions generated.
-    
+
     This class defines the interface and realizes a baseline implementation.
     More specialized implementations may offer better efficiency for special
     cases.
+
+    .. automethod:: diff
     """
 
     def __init__(self, expr, var_list, rscale=1, sac=None):
@@ -189,6 +194,11 @@ class ExprDerivativeTaker(object):
         return np.array(a, dtype=int) - np.array(b, dtype=int)
 
     def diff(self, mi):
+        """Take the derivative of the expression represented by
+        :class:`ExprDerivativeTaker`.
+
+        :param mi: multi-index representing the derivative
+        """
         try:
             return self.cache_by_mi[mi]
         except KeyError:
@@ -220,6 +230,8 @@ class ExprDerivativeTaker(object):
 
 
 class LaplaceDerivativeTaker(ExprDerivativeTaker):
+    """Specialized derivative taker for Laplace potential.
+    """
 
     def __init__(self, expr, var_list, rscale=1, sac=None):
         super(LaplaceDerivativeTaker, self).__init__(expr, var_list, rscale, sac)
@@ -283,6 +295,8 @@ class LaplaceDerivativeTaker(ExprDerivativeTaker):
 
 
 class RadialDerivativeTaker(ExprDerivativeTaker):
+    """Specialized derivative taker for radial expressions.
+    """
 
     def __init__(self, expr, var_list, rscale=1, sac=None):
         """
@@ -354,6 +368,8 @@ class RadialDerivativeTaker(ExprDerivativeTaker):
 
 
 class HelmholtzDerivativeTaker(RadialDerivativeTaker):
+    """Specialized derivative taker for Helmholtz potential.
+    """
 
     def diff(self, mi, q=0):
         import sumpy.symbolic as sym
@@ -387,13 +403,11 @@ class DifferentiatedExprDerivativeTaker:
     derivatives of a base expression. To take the actual derivatives,
     it makes use of an underlying derivative taker *taker*.
 
-    Attributes:
-        taker (ExprDerivativeTaker): A derivative taker for the base kernel
-
-        derivative_transformation (dict):
-            A dictionary mapping a derivative
-            multi-index to a coeffcient. The expression represented by this
-            derivative taker is the linear combination of the derivatives
+    .. attribute:: taker (ExprDerivativeTaker): A derivative taker for the
+            base kernel.
+    .. attribute:: derivative_transformation (dict): A dictionary mapping a
+            derivative multi-index to a coeffcient. The expression represented
+            by this derivative taker is the linear combination of the derivatives
             of the expression for the base kernel.
     """
     taker: ExprDerivativeTaker
