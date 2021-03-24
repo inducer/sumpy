@@ -101,6 +101,14 @@ def add_to_sac(sac, expr):
 
 
 class ExprDerivativeTaker(object):
+    """Facilitates the efficient computation of (potentially) high-order
+    derivatives of a given :mod:`sympy` expression *expr* while attempting
+    to maximize the number of common subexpressions generated.
+    
+    This class defines the interface and realizes a baseline implementation.
+    More specialized implementations may offer better efficiency for special
+    cases.
+    """
 
     def __init__(self, expr, var_list, rscale=1, sac=None):
         r"""
@@ -374,13 +382,10 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
 
 @tag_dataclass
 class DifferentiatedExprDerivativeTaker:
-    """A :class:`ExprDerivativeTaker` represents an expression and
-    lets you get derivatives of those. This wrapper represents
-    a sum of derivatives of an expression and is useful when there's
-    no specialized derivative taker for the derivative expression,
-    but there's one for the expression. This avoids writing
-    specialized derivative takers for example the double layer
-    expression when there's already one for the single layer.
+    """Implements the :class:`ExprDerivativeTaker` interface
+    for an expression that is itself a linear combination of
+    derivatives of a base expression. To take the actual derivatives,
+    it makes use of an underlying derivative taker *taker*.
 
     Attributes:
         taker (ExprDerivativeTaker): A derivative taker for the base kernel
