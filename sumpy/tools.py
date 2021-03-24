@@ -247,7 +247,7 @@ class LaplaceDerivativeTaker(ExprDerivativeTaker):
 
         .. [Fernando2021]: Fernando, I., Klöckner, A., 2021. Automatic Synthesis of
                            Low Complexity Translation Operators for the Fast
-                           Multipole Method. SIAM CSE 21.
+                           Multipole Method. In preparation.
         """
         # Return zero for negative values. Makes the algorithm readable.
         if min(mi) < 0:
