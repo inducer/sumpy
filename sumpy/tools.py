@@ -403,12 +403,14 @@ class DifferentiatedExprDerivativeTaker:
     derivatives of a base expression. To take the actual derivatives,
     it makes use of an underlying derivative taker *taker*.
 
-    .. attribute:: taker (ExprDerivativeTaker): A derivative taker for the
-            base kernel.
-    .. attribute:: derivative_transformation (dict): A dictionary mapping a
-            derivative multi-index to a coeffcient. The expression represented
-            by this derivative taker is the linear combination of the derivatives
-            of the expression for the base kernel.
+    .. attribute:: taker
+        A :class:`ExprDerivativeTaker` for the base expression.
+        
+    .. attribute:: derivative_transformation
+        A dictionary mapping a derivative multi-index to a coefficient.
+        The expression represented by this derivative taker is the linear
+        combination of the derivatives of the expression for the
+        base expression.
     """
     taker: ExprDerivativeTaker
     derivative_transformation: dict
