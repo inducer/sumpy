@@ -87,17 +87,15 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                 self.device.hashable_model_and_version_identifier)
 
     def _expand(self, sac, avec, bvec, rscale, isrc):
-        coefficients = np.zeros(len(self.expansion), dtype=object)
         from sumpy.symbolic import PymbolicToSympyMapper
         conv = PymbolicToSympyMapper()
-        for idx, knl in enumerate(self.source_kernels):
-            strength = conv(self.get_strength_or_not(isrc, idx))
-            coefficients += np.array([coeff * strength for
-                                i, coeff in enumerate(
-                                    self.expansion.coefficients_from_source(knl,
-                                          avec, bvec, rscale))])
+        strengths = [conv(self.get_strength_or_not(isrc, idx))
+                     for idx in range(len(self.source_kernels))]
+        coefficients = self.expansion.coefficients_from_source_vec(
+            self.source_kernels, avec, bvec, rscale=rscale, weights=strengths,
+            sac=sac)
 
-        return list(coefficients)
+        return coefficients
 
     def _evaluate(self, sac, avec, bvec, rscale, expansion_nr, coefficients):
         expn = self.target_kernels[expansion_nr]

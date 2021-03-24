@@ -167,7 +167,7 @@ class SymbolicAssignmentCollection:
 
         logger.info("common subexpression elimination: start")
 
-        assign_names = sorted(self.assignments)
+        assign_names = list(self.assignments.keys())
         assign_exprs = [self.assignments[name] for name in assign_names]
 
         # Options here:
@@ -190,6 +190,15 @@ class SymbolicAssignmentCollection:
         for name, value in new_assignments:
             assert isinstance(name, sym.Symbol)
             self.add_assignment(name.name, value)
+
+        for name, new_expr in zip(assign_names, new_assign_exprs):
+            # We want the assignment collection to be ordered correctly
+            # to make it easier for loopy to schedule.
+            # Deleting the original assignments and adding them again
+            # makes them occur after the CSE'd expression preserving
+            # the order of operations.
+            del self.assignments[name]
+            self.assignments[name] = new_expr
 
         logger.info("common subexpression elimination: done after {dur:.2f} s"
                     .format(dur=time.time() - start_time))

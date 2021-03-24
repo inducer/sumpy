@@ -122,6 +122,26 @@ class ExpansionBase:
         """
         raise NotImplementedError
 
+    def coefficients_from_source_vec(self, kernels, avec, bvec, rscale, weights,
+            sac=None):
+        """Form an expansion with a linear combination of kernels and weights.
+
+        :arg avec: vector from source to center.
+        :arg bvec: vector from center to target. Not usually necessary,
+            except for line-Taylor expansion.
+        :arg sac: a symbolic assignment collection where temporary
+            expressions are stored.
+
+        :returns: a list of :mod:`sympy` expressions representing
+            the coefficients of the expansion.
+        """
+        result = [0]*len(self)
+        for knl, weight in zip(kernels, weights):
+            coeffs = self.coefficients_from_source(knl, avec, bvec, rscale, sac=sac)
+            for i in range(len(result)):
+                result[i] += weight * coeffs[i]
+        return result
+
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         """
         :return: a :mod:`sympy` expression corresponding
@@ -164,6 +184,14 @@ class ExpansionBase:
                 % ", ".join(kwargs))
 
         return type(self)(**new_kwargs)
+
+    def get_kernel_derivative_taker(self, dvec, rscale, sac):
+        """Return a ExprDerivativeTaker instance that supports taking
+        derivatives of the kernel with respect to dvec
+        """
+        from sumpy.tools import ExprDerivativeTaker
+        return ExprDerivativeTaker(self.kernel.get_expression(dvec), dvec, rscale,
+                sac)
 
 
 # }}}
@@ -405,26 +433,18 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
             rscale, sac=None):
 
-        def save_intermediate(expr):
-            if sac is None:
-                return expr
-            return sym.Symbol(sac.assign_unique("projection_temp", expr))
-
+        from sumpy.tools import add_to_sac
         projection_matrix = self.get_projection_matrix(rscale)
         return projection_matrix.matvec(stored_kernel_derivatives,
-                                        save_intermediate)
+                lambda x: add_to_sac(sac, x))
 
     def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients,
             rscale, sac=None):
 
-        def save_intermediate(expr):
-            if sac is None:
-                return expr
-            return sym.Symbol(sac.assign_unique("compress_temp", expr))
-
+        from sumpy.tools import add_to_sac
         projection_matrix = self.get_projection_matrix(rscale)
         return projection_matrix.transpose_matvec(full_mpole_coefficients,
-                                                  save_intermediate)
+                lambda x: add_to_sac(sac, x))
 
     @property
     def stored_identifiers(self):
@@ -609,6 +629,7 @@ class BiharmonicExpansionTermsWrangler(LinearPDEBasedExpansionTermsWrangler):
     def get_pde_as_diff_op(self, **kwargs):
         w = make_identity_diff_op(self.dim)
         return laplacian(laplacian(w))
+
 # }}}
 
 
@@ -674,6 +695,11 @@ class LaplaceConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
     def __init__(self, kernel, order, use_rscale):
         self.expansion_terms_wrangler_key = (order, kernel.dim)
 
+    def get_kernel_derivative_taker(self, dvec, rscale, sac):
+        from sumpy.tools import LaplaceDerivativeTaker
+        return LaplaceDerivativeTaker(self.kernel.get_expression(dvec), dvec,
+                rscale, sac)
+
 
 class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
 
@@ -685,6 +711,11 @@ class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
         helmholtz_k_name = kernel.get_base_kernel().helmholtz_k_name
         self.expansion_terms_wrangler_key = (order, kernel.dim, helmholtz_k_name)
 
+    def get_kernel_derivative_taker(self, dvec, rscale, sac):
+        from sumpy.tools import HelmholtzDerivativeTaker
+        return HelmholtzDerivativeTaker(self.kernel.get_expression(dvec), dvec,
+                rscale, sac)
+
 
 class BiharmonicConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
 
@@ -694,6 +725,11 @@ class BiharmonicConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
     # not user-facing, be strict about having to pass use_rscale
     def __init__(self, kernel, order, use_rscale):
         self.expansion_terms_wrangler_key = (order, kernel.dim)
+
+    def get_kernel_derivative_taker(self, dvec, rscale, sac):
+        from sumpy.tools import RadialDerivativeTaker
+        return RadialDerivativeTaker(self.kernel.get_expression(dvec), dvec,
+                rscale, sac)
 
 # }}}
 

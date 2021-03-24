@@ -22,13 +22,12 @@ THE SOFTWARE.
 
 import sumpy.symbolic as sym  # noqa
 
-from sumpy.symbolic import vector_xreplace
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
     HelmholtzConformingVolumeTaylorExpansion,
     BiharmonicConformingVolumeTaylorExpansion)
-from sumpy.tools import mi_set_axis
 from pytools import factorial
+from sumpy.tools import mi_set_axis, add_to_sac
 
 import logging
 logger = logging.getLogger(__name__)
@@ -54,62 +53,53 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
     Coefficients represent the terms in front of the kernel derivatives.
     """
 
-    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
+    def coefficients_from_source_vec(self, kernels, avec, bvec, rscale, weights,
+            sac=None):
+        """This method calculates the full coefficients, sums them up and
+        compresses them. This is more efficient that calculating full
+        coefficients, compressing and then summing.
+        """
         from sumpy.kernel import KernelWrapper
-        if kernel is None:
-            kernel = self.kernel
-
         from sumpy.tools import mi_power, mi_factorial
 
         if not self.use_rscale:
             rscale = 1
 
-        if isinstance(kernel, KernelWrapper):
-            result = [
-                    kernel.postprocess_at_source(mi_power(avec, mi), avec)
-                    / mi_factorial(mi) / rscale ** sum(mi)
-                    for mi in self.get_full_coefficient_identifiers()]
-        else:
-            avec = [sym.UnevaluatedExpr(a * rscale**-1) for a in avec]
+        result = [0]*len(self.get_full_coefficient_identifiers())
+        for kernel, weight in zip(kernels, weights):
+            if isinstance(kernel, KernelWrapper):
+                coeffs = [
+                        kernel.postprocess_at_source(mi_power(avec, mi), avec)
+                        / rscale ** sum(mi)
+                        for mi in self.get_full_coefficient_identifiers()]
+            else:
+                avec_scaled = [sym.UnevaluatedExpr(a * rscale**-1) for a in avec]
+                coeffs = [mi_power(avec_scaled, mi)
+                          for mi in self.get_full_coefficient_identifiers()]
 
-            result = [
-                    mi_power(avec, mi) / mi_factorial(mi)
-                    for mi in self.get_full_coefficient_identifiers()]
+            for i, mi in enumerate(self.get_full_coefficient_identifiers()):
+                result[i] += coeffs[i] * weight / mi_factorial(mi)
         return (
             self.expansion_terms_wrangler.get_stored_mpole_coefficients_from_full(
                 result, rscale, sac=sac))
 
-    def get_scaled_multipole(self, kernel, expr, bvec, rscale, nderivatives,
-            nderivatives_for_scaling=None):
-        if nderivatives_for_scaling is None:
-            nderivatives_for_scaling = nderivatives
-
-        if self.kernel.has_efficient_scale_adjustment:
-            return (
-                    kernel.adjust_for_kernel_scaling(
-                        vector_xreplace(
-                            expr,
-                            bvec, bvec * rscale**-1),
-                        rscale, nderivatives)
-                    / rscale ** (nderivatives - nderivatives_for_scaling))
-        else:
-            return (rscale**nderivatives_for_scaling * expr)
+    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
+        return self.coefficients_from_source_vec((kernel,), avec, bvec,
+                rscale, (1,), sac=sac)
 
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         if not self.use_rscale:
             rscale = 1
 
-        taker = self.get_kernel_derivative_taker(kernel, bvec)
+        base_taker = self.get_kernel_derivative_taker(bvec, rscale, sac)
+        taker = kernel.postprocess_at_target(base_taker, bvec)
 
-        result = sym.Add(*tuple(coeff * self.get_scaled_multipole(kernel,
-                    taker.diff(mi), bvec, rscale, sum(mi))
-                for coeff, mi in zip(coeffs, self.get_coefficient_identifiers())))
+        result = []
+        for coeff, mi in zip(coeffs, self.get_coefficient_identifiers()):
+            result.append(coeff * taker.diff(mi, lambda x: add_to_sac(sac, x)))
 
-        return kernel.postprocess_at_target(result, bvec)
-
-    def get_kernel_derivative_taker(self, kernel, bvec):
-        from sumpy.tools import MiDerivativeTaker
-        return MiDerivativeTaker(kernel.get_expression(bvec), bvec)
+        result = sym.Add(*tuple(result))
+        return result
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, _fast_version=True):
@@ -122,8 +112,9 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             src_rscale = 1
             tgt_rscale = 1
 
-        logger.info("building translation operator: %s(%d) -> %s(%d): start"
-                % (type(src_expansion).__name__,
+        logger.info("building translation operator for %s: %s(%d) -> %s(%d): start"
+                % (src_expansion.kernel,
+                    type(src_expansion).__name__,
                     src_expansion.order,
                     type(self).__name__,
                     self.order))

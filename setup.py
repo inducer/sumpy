@@ -98,8 +98,6 @@ setup(name="sumpy",
           "boxtree>=2018.1",
           "pytest>=2.3",
           "pyrsistent>=0.16.0",
-
-          # If this causes issues, see:
-          # https://code.google.com/p/sympy/issues/detail?id=3874
+          "dataclasses>=0.7;python_version<='3.6'",
           "sympy>=0.7.2",
           ])

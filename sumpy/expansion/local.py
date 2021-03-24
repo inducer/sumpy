@@ -21,6 +21,7 @@ THE SOFTWARE.
 """
 
 import sumpy.symbolic as sym
+from sumpy.tools import add_to_sac
 
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
@@ -73,8 +74,8 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
         from sumpy.symbolic import USE_SYMENGINE
 
         if USE_SYMENGINE:
-            from sumpy.tools import MiDerivativeTaker, my_syntactic_subs
-            deriv_taker = MiDerivativeTaker(line_kernel, (tau,))
+            from sumpy.tools import ExprDerivativeTaker, my_syntactic_subs
+            deriv_taker = ExprDerivativeTaker(line_kernel, (tau,), sac=sac, rscale=1)
 
             return [my_syntactic_subs(
                         kernel.postprocess_at_source(
@@ -112,16 +113,54 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
     Coefficients represent derivative values of the kernel.
     """
 
-    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
-        from sumpy.tools import MiDerivativeTaker
-        ppkernel = kernel.postprocess_at_source(kernel.get_expression(avec), avec)
+    def coefficients_from_source_vec(self, kernels, avec, bvec, rscale, weights,
+            sac=None):
+        """Form an expansion with a linear combination of kernels and weights.
+        Since all of the kernels share a base kernel, this method uses one
+        derivative taker with one SymbolicAssignmentCollection object
+        to remove redundant calculations.
 
-        taker = MiDerivativeTaker(ppkernel, avec)
-        return [
-                taker.diff(mi) * rscale ** sum(mi)
-                for mi in self.get_coefficient_identifiers()]
+        :arg avec: vector from source to center.
+        :arg bvec: vector from center to target. Not usually necessary,
+            except for line-Taylor expansion.
+        :arg sac: a symbolic assignment collection where temporary
+            expressions are stored.
+
+        :returns: a list of :mod:`sympy` expressions representing
+            the coefficients of the expansion.
+        """
+        if not self.use_rscale:
+            rscale = 1
+
+        base_taker = self.get_kernel_derivative_taker(avec, rscale, sac)
+        result = [0]*len(self)
+
+        for knl, weight in zip(kernels, weights):
+            taker = knl.postprocess_at_source(base_taker, avec)
+            # Following is a hack to make sure cse works.
+            if 1:
+                def save_temp(x):
+                    return add_to_sac(sac, weight * x)
+
+                for i, mi in enumerate(self.get_coefficient_identifiers()):
+                    result[i] += taker.diff(mi, save_temp)
+            else:
+                def save_temp(x):
+                    return add_to_sac(sac, x)
+
+                for i, mi in enumerate(self.get_coefficient_identifiers()):
+                    result[i] += weight * taker.diff(mi, save_temp)
+
+        return result
+
+    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
+        return self.coefficients_from_source_vec((kernel,), avec, bvec,
+                rscale=rscale, weights=(1,), sac=sac)
 
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
+        if not self.use_rscale:
+            rscale = 1
+
         evaluated_coeffs = (
             self.expansion_terms_wrangler.get_full_kernel_derivatives_from_stored(
                 coeffs, rscale, sac=sac))
@@ -140,11 +179,12 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, _fast_version=True):
-        logger.info("building translation operator: %s(%d) -> %s(%d): start"
-                % (type(src_expansion).__name__,
+        logger.info("building translation operator for %s: %s(%d) -> %s(%d): start",
+                    src_expansion.kernel,
+                    type(src_expansion).__name__,
                     src_expansion.order,
                     type(self).__name__,
-                    self.order))
+                    self.order)
 
         if not self.use_rscale:
             src_rscale = 1
@@ -162,8 +202,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # This code speeds up derivative taking by caching all kernel
             # derivatives.
 
-            taker = src_expansion.get_kernel_derivative_taker(src_expansion.kernel,
-                dvec)
+            taker = src_expansion.get_kernel_derivative_taker(dvec=dvec, sac=sac,
+                rscale=src_rscale)
 
             from sumpy.tools import add_mi
 
@@ -216,30 +256,21 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                                                         stored_coeffs):
                     if coeff == 0:
                         continue
-                    nderivatives_for_scaling = \
-                            sum(tgtplusderiv_coeff_id)-sum(lexp_mi)
-                    kernel_deriv = (
-                            src_expansion.get_scaled_multipole(
-                                src_expansion.kernel,
-                                taker.diff(tgtplusderiv_coeff_id),
-                                dvec, src_rscale,
-                                nderivatives=sum(tgtplusderiv_coeff_id),
-                                nderivatives_for_scaling=nderivatives_for_scaling))
-
+                    kernel_deriv = taker.diff(tgtplusderiv_coeff_id)
+                    rscale_ratio = tgt_rscale / src_rscale
                     lexp_mi_terms.append(
-                            coeff * kernel_deriv * tgt_rscale**sum(lexp_mi))
+                            coeff * kernel_deriv * rscale_ratio**sum(lexp_mi))
                 result.append(sym.Add(*lexp_mi_terms))
             logger.info("building translation operator: done")
             return result
 
         rscale_ratio = sym.UnevaluatedExpr(tgt_rscale/src_rscale)
 
-        from sumpy.tools import MiDerivativeTaker
         from math import factorial
         src_wrangler = src_expansion.expansion_terms_wrangler
         src_coeffs = (
             src_wrangler.get_full_kernel_derivatives_from_stored(
-                src_coeff_exprs, src_rscale))
+                src_coeff_exprs, src_rscale, sac=sac))
         src_mis = \
             src_expansion.expansion_terms_wrangler.get_full_coefficient_identifiers()
 
@@ -348,11 +379,12 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # to compensate for differentiating which is done at the end.
             # This moves the two cancelling "rscales" closer to each other at
             # the end in the hope of helping rscale magnitude.
+            from sumpy.tools import ExprDerivativeTaker
             dvec_scaled = [d*src_rscale for d in dvec]
             expr = src_expansion.evaluate(src_expansion.kernel, src_coeff_exprs,
                         dvec_scaled, rscale=src_rscale, sac=sac)
             replace_dict = {d: d/src_rscale for d in dvec}
-            taker = MiDerivativeTaker(expr, dvec)
+            taker = ExprDerivativeTaker(expr, dvec)
             rscale_ratio = sym.UnevaluatedExpr(tgt_rscale/src_rscale)
             result = [
                     (taker.diff(mi).xreplace(replace_dict) * rscale_ratio**sum(mi))
