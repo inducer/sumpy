@@ -33,7 +33,7 @@ def test_kill_trivial_assignments():
 
     assignments = (
         ("t0", 6),
-        ("t1", -t0),
+        ("t1", x),
         ("t2", 6*x),
         ("nt", x**y),
         # users of trivial assignments
@@ -53,10 +53,11 @@ def test_kill_trivial_assignments():
         return Sum(vals)
 
     assert result == [
+        ("t2", 6*x),
         ("nt", x**y),
         ("u0", _s(6, 1)),
-        ("u1", _s(-6, 1)),
-        ("u2", _s(6*x, 1))]
+        ("u1", _s(x, 1)),
+        ("u2", _s(t2, 1))]
 
 
 def test_symbolic_assignment_name_uniqueness():

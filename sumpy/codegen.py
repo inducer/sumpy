@@ -147,15 +147,8 @@ def is_assignment_nontrivial(name, value):
         return False
     elif isinstance(value, prim.Variable):
         return False
-    elif (isinstance(value, prim.Product)
-            and len(value.children) == 2
-            and sum(1 for arg in value.children if prim.is_constant(arg)) == 1
-            and sum(1 for arg in value.children
-                    if isinstance(arg, prim.Variable)) == 1):
-        # const*var: not good enough
-        return False
-
-    return True
+    else:
+        return True
 
 
 def kill_trivial_assignments(assignments, retain_names=set()):
