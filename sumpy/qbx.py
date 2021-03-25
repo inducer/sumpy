@@ -87,17 +87,15 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                 self.device.hashable_model_and_version_identifier)
 
     def _expand(self, sac, avec, bvec, rscale, isrc):
-        coefficients = np.zeros(len(self.expansion), dtype=object)
         from sumpy.symbolic import PymbolicToSympyMapper
         conv = PymbolicToSympyMapper()
-        for idx, knl in enumerate(self.source_kernels):
-            strength = conv(self.get_strength_or_not(isrc, idx))
-            coefficients += np.array([coeff * strength for
-                                i, coeff in enumerate(
-                                    self.expansion.coefficients_from_source(knl,
-                                          avec, bvec, rscale))])
+        strengths = [conv(self.get_strength_or_not(isrc, idx))
+                     for idx in range(len(self.source_kernels))]
+        coefficients = self.expansion.coefficients_from_source_vec(
+            self.source_kernels, avec, bvec, rscale=rscale, weights=strengths,
+            sac=sac)
 
-        return list(coefficients)
+        return coefficients
 
     def _evaluate(self, sac, avec, bvec, rscale, expansion_nr, coefficients):
         expn = self.target_kernels[expansion_nr]
@@ -200,6 +198,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
             from warnings import warn
             warn("don't know how to tune layer potential computation for '%s'" % dev)
             loopy_knl = lp.split_iname(loopy_knl, "itgt", 128, outer_tag="g.0")
+        loopy_knl = self._allow_redundant_execution_of_knl_scaling(loopy_knl)
 
         return loopy_knl
 
@@ -428,6 +427,7 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
             loopy_knl = lp.tag_array_axes(loopy_knl, "center", "sep,C")
 
         loopy_knl = lp.split_iname(loopy_knl, "imat", 1024, outer_tag="g.0")
+        loopy_knl = self._allow_redundant_execution_of_knl_scaling(loopy_knl)
         return loopy_knl
 
     def __call__(self, queue, targets, sources, centers, expansion_radii,

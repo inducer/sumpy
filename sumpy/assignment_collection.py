@@ -104,11 +104,10 @@ class SymbolicAssignmentCollection:
             assignments = {}
 
         self.assignments = assignments
+        self.reversed_assignments = {v: k for (k, v) in assignments.items()}
 
         self.symbol_generator = _SymbolGenerator(self.assignments)
         self.all_dependencies_cache = {}
-
-        self.user_symbols = set()
 
     def __str__(self):
         return "\n".join(
@@ -139,7 +138,8 @@ class SymbolicAssignmentCollection:
         self.all_dependencies_cache[var_name] = result
         return result
 
-    def add_assignment(self, name, expr, root_name=None, wrt_set=None):
+    def add_assignment(self, name, expr, root_name=None, wrt_set=None,
+            retain_name=True):
         assert isinstance(name, str)
         assert name not in self.assignments
 
@@ -148,7 +148,14 @@ class SymbolicAssignmentCollection:
         if root_name is None:
             root_name = name
 
-        self.assignments[name] = sym.sympify(expr)
+        new_expr = sym.sympify(expr)
+
+        if not retain_name and new_expr in self.reversed_assignments:
+            return self.reversed_assignments[new_expr]
+
+        self.assignments[name] = new_expr
+        self.reversed_assignments[new_expr] = name
+
         return name
 
     def assign_unique(self, name_base, expr):
@@ -157,9 +164,15 @@ class SymbolicAssignmentCollection:
         """
         new_name = self.symbol_generator(name_base).name
 
-        self.add_assignment(new_name, expr)
-        self.user_symbols.add(new_name)
-        return new_name
+        return self.add_assignment(new_name, expr)
+
+    def assign_temp(self, name_base, expr):
+        """If *expr* is mapped to a existing variable, then return the existing
+        variable or assign *expr* to a new variable whose name is based on
+        *name_base*. Return the variable name *expr* is mapped to in either case.
+        """
+        new_name = self.symbol_generator(name_base).name
+        return self.add_assignment(new_name, expr, retain_name=False)
 
     def run_global_cse(self, extra_exprs=[]):
         import time
@@ -192,6 +205,11 @@ class SymbolicAssignmentCollection:
             self.add_assignment(name.name, value)
 
         for name, new_expr in zip(assign_names, new_assign_exprs):
+            # We want the assignment collection to be ordered correctly
+            # to make it easier for loopy to schedule.
+            # Deleting the original assignments and adding them again
+            # makes them occur after the CSE'd expression preserving
+            # the order of operations.
             del self.assignments[name]
             self.assignments[name] = new_expr
 

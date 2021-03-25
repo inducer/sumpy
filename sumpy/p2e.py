@@ -187,6 +187,7 @@ class P2EFromSingleBox(P2EBase):
         # FIXME
         knl = self.get_kernel()
         knl = lp.split_iname(knl, "isrc_box", 16, outer_tag="g.0")
+        knl = self._allow_redundant_execution_of_knl_scaling(knl)
 
         return knl
 
@@ -296,6 +297,7 @@ class P2EFromCSR(P2EBase):
         # FIXME
         knl = self.get_kernel()
         knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
+        knl = self._allow_redundant_execution_of_knl_scaling(knl)
 
         return knl
 

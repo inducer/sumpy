@@ -186,11 +186,11 @@ class ExpansionBase:
         return type(self)(**new_kwargs)
 
     def get_kernel_derivative_taker(self, dvec, rscale, sac):
-        """Return a MiDerivativeTaker instance that supports taking
+        """Return a ExprDerivativeTaker instance that supports taking
         derivatives of the kernel with respect to dvec
         """
-        from sumpy.tools import MiDerivativeTaker
-        return MiDerivativeTaker(self.kernel.get_expression(dvec), dvec, rscale,
+        from sumpy.tools import ExprDerivativeTaker
+        return ExprDerivativeTaker(self.kernel.get_expression(dvec), dvec, rscale,
                 sac)
 
 

@@ -30,9 +30,16 @@ __doc__ = """
 
  .. autoclass:: BlockIndexRanges
  .. autoclass:: MatrixBlockIndexRanges
+ .. autoclass:: ExprDerivativeTaker
+ .. autoclass:: LaplaceDerivativeTaker
+ .. autoclass:: RadialDerivativeTaker
+ .. autoclass:: HelmholtzDerivativeTaker
+ .. autoclass:: DifferentiatedExprDerivativeTaker
 """
 
 from pytools import memoize_method, memoize_in
+from pytools.tag import Tag, tag_dataclass
+
 import numpy as np
 import sumpy.symbolic as sym
 
@@ -44,8 +51,6 @@ from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 
 import logging
 logger = logging.getLogger(__name__)
-
-from collections import namedtuple
 
 
 # {{{ multi_index helpers
@@ -87,18 +92,27 @@ def mi_power(vector, mi, evaluate=True):
 
 
 def add_to_sac(sac, expr):
-    import sumpy.symbolic as sym
     if sac is None:
         return expr
 
-    if isinstance(expr, (sym.Number, sym.Symbol)):
+    if expr.is_Number or expr.is_Symbol:
         return expr
 
-    name = sac.assign_unique("temp", expr)
+    name = sac.assign_temp("temp", expr)
     return sym.Symbol(name)
 
 
-class MiDerivativeTaker(object):
+class ExprDerivativeTaker(object):
+    """Facilitates the efficient computation of (potentially) high-order
+    derivatives of a given :mod:`sympy` expression *expr* while attempting
+    to maximize the number of common subexpressions generated.
+
+    This class defines the interface and realizes a baseline implementation.
+    More specialized implementations may offer better efficiency for special
+    cases.
+
+    .. automethod:: diff
+    """
 
     def __init__(self, expr, var_list, rscale=1, sac=None):
         r"""
@@ -163,13 +177,13 @@ class MiDerivativeTaker(object):
         making them what you might call *scale-invariant*.
 
         This derivative taker returns :math:`g^{(i)}(\xi) = \alpha^i f^{(i)}`
-        given :math:`f^{(0)}` as *expr* and :math:`\alpha` as *rscale*.
+        given :math:`f^{(0)}` as *expr* and :math:`\alpha` as :attr:`rscale`.
         """
 
         assert isinstance(expr, sym.Basic)
         self.var_list = var_list
-        empty_mi = (0,) * len(var_list)
-        self.cache_by_mi = {empty_mi: expr}
+        zero_mi = (0,) * len(var_list)
+        self.cache_by_mi = {zero_mi: expr}
         self.rscale = rscale
         self.sac = sac
         self.dim = len(self.var_list)
@@ -179,6 +193,11 @@ class MiDerivativeTaker(object):
         return np.array(a, dtype=int) - np.array(b, dtype=int)
 
     def diff(self, mi):
+        """Take the derivative of the expression represented by
+        :class:`ExprDerivativeTaker`.
+
+        :param mi: multi-index representing the derivative
+        """
         try:
             return self.cache_by_mi[mi]
         except KeyError:
@@ -209,7 +228,9 @@ class MiDerivativeTaker(object):
             key=lambda other_mi: sum(self.mi_dist(mi, other_mi)))
 
 
-class LaplaceDerivativeTaker(MiDerivativeTaker):
+class LaplaceDerivativeTaker(ExprDerivativeTaker):
+    """Specialized derivative taker for Laplace potential.
+    """
 
     def __init__(self, expr, var_list, rscale=1, sac=None):
         super(LaplaceDerivativeTaker, self).__init__(expr, var_list, rscale, sac)
@@ -218,6 +239,15 @@ class LaplaceDerivativeTaker(MiDerivativeTaker):
                 sym.sqrt(sum(v**2 for v in self.scaled_var_list)))
 
     def diff(self, mi):
+        """
+        Implements the algorithm described in [Fernando2021] to take cartesian
+        derivatives of Laplace potential using recurrences. Cost of each derivative
+        is amortized constant.
+
+        .. [Fernando2021]: Fernando, I., Klöckner, A., 2021. Automatic Synthesis of
+                           Low Complexity Translation Operators for the Fast
+                           Multipole Method. In preparation.
+        """
         # Return zero for negative values. Makes the algorithm readable.
         if min(mi) < 0:
             return 0
@@ -228,7 +258,7 @@ class LaplaceDerivativeTaker(MiDerivativeTaker):
 
         dim = self.dim
         if max(mi) == 1:
-            return MiDerivativeTaker.diff(self, mi)
+            return ExprDerivativeTaker.diff(self, mi)
         d = -1
         for i in range(dim):
             if mi[i] >= 2:
@@ -263,7 +293,9 @@ class LaplaceDerivativeTaker(MiDerivativeTaker):
         return expr
 
 
-class RadialDerivativeTaker(MiDerivativeTaker):
+class RadialDerivativeTaker(ExprDerivativeTaker):
+    """Specialized derivative taker for radial expressions.
+    """
 
     def __init__(self, expr, var_list, rscale=1, sac=None):
         """
@@ -281,14 +313,17 @@ class RadialDerivativeTaker(MiDerivativeTaker):
 
     def diff(self, mi, q=0):
         """
-        See [1] for the algorithm
+        Implements the algorithm described in [Tausch2003] to take cartesian
+        derivatives of radial functions using recurrences. Cost of each derivative
+        is amortized linear in the degree.
 
-        [1]: Tausch, J., 2003. The fast multipole method for arbitrary Green's
-             functions. Contemporary Mathematics, 329, pp.307-314.
+        .. [Tausch2003]: Tausch, J., 2003. The fast multipole method for arbitrary
+                         Green's functions.
+                         Contemporary Mathematics, 329, pp.307-314.
         """
         if not self.is_radial:
             assert q == 0
-            return MiDerivativeTaker.diff(self, mi)
+            return ExprDerivativeTaker.diff(self, mi)
 
         try:
             return self.cache_by_mi_q[(mi, q)]
@@ -332,6 +367,8 @@ class RadialDerivativeTaker(MiDerivativeTaker):
 
 
 class HelmholtzDerivativeTaker(RadialDerivativeTaker):
+    """Specialized derivative taker for Helmholtz potential.
+    """
 
     def diff(self, mi, q=0):
         import sumpy.symbolic as sym
@@ -350,7 +387,7 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
             expr += - k**2 * self.diff(mi, q - 2)
             expr /= self.r**2
         else:
-            # See reference [1] in RadialDerivativeTaker.diff
+            # See reference [Tausch2003] in RadialDerivativeTaker.diff
             k = (self.orig_expr * self.r).args[-1] / sym.I / self.r
             expr = -(2*q - 1)/self.r**2 * self.diff(mi, q - 1)
             expr += -k**2 / self.r * self.diff(mi, q - 2)
@@ -358,8 +395,42 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
         return expr
 
 
-MiDerivativeTakerWrapper = namedtuple("MiDerivativeTakerWrapper",
-                                      ["taker", "initial_mi"])
+@tag_dataclass
+class DifferentiatedExprDerivativeTaker:
+    """Implements the :class:`ExprDerivativeTaker` interface
+    for an expression that is itself a linear combination of
+    derivatives of a base expression. To take the actual derivatives,
+    it makes use of an underlying derivative taker *taker*.
+
+    .. attribute:: taker
+        A :class:`ExprDerivativeTaker` for the base expression.
+
+    .. attribute:: derivative_transformation
+        A dictionary mapping a derivative multi-index to a coefficient.
+        The expression represented by this derivative taker is the linear
+        combination of the derivatives of the expression for the
+        base expression.
+    """
+    taker: ExprDerivativeTaker
+    derivative_transformation: dict
+
+    def diff(self, mi, save_intermediate=lambda x: x):
+        # By passing `rscale` to the derivative taker we are taking a scaled
+        # version of the derivative which is `expr.diff(mi)*rscale**sum(mi)`
+        # which might be implemented efficiently for kernels like Laplace.
+        # One caveat is that we are taking more derivatives because of
+        # :attr:`derivative_transformation` which would multiply the
+        # expression by more `rscale`s than necessary. This is corrected by
+        # dividing by `rscale`.
+        max_order = max(sum(extra_mi) for extra_mi in
+                self.derivative_transformation.keys())
+
+        result = sum(
+            coeff * self.taker.diff(add_mi(mi, extra_mi))
+            / self.taker.rscale ** (sum(extra_mi) - max_order)
+            for extra_mi, coeff in self.derivative_transformation.items())
+
+        return result * save_intermediate(1 / self.taker.rscale ** max_order)
 
 # }}}
 
@@ -448,6 +519,11 @@ def gather_loopy_source_arguments(kernel_likes):
 
 # {{{  KernelComputation
 
+@tag_dataclass
+class ScalingAssignmentTag(Tag):
+    pass
+
+
 class KernelComputation:
     """Common input processing for kernel computations."""
 
@@ -513,7 +589,8 @@ class KernelComputation:
                 lp.Assignment(id=None,
                     assignee="knl_%d_scaling" % i,
                     expression=sympy_conv(kernel.get_global_scaling_const()),
-                    temp_var_type=lp.Optional(dtype))
+                    temp_var_type=lp.Optional(dtype),
+                    tags=frozenset([ScalingAssignmentTag()]))
                 for i, (kernel, dtype) in enumerate(
                     zip(self.target_kernels, self.value_dtypes))]
 
@@ -880,6 +957,13 @@ class KernelCacheWrapper:
             code_cache.store_if_not_present(cache_key, knl)
 
         return knl
+
+    @staticmethod
+    def _allow_redundant_execution_of_knl_scaling(knl):
+        from loopy.match import ObjTagged
+        from sumpy.tools import ScalingAssignmentTag
+        return lp.add_inames_for_unused_hw_axes(
+                knl, within=ObjTagged(ScalingAssignmentTag()))
 
 
 def my_syntactic_subs(expr, subst_dict):

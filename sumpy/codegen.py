@@ -147,21 +147,13 @@ def is_assignment_nontrivial(name, value):
         return False
     elif isinstance(value, prim.Variable):
         return False
-    elif (isinstance(value, prim.Product)
-            and len(value.children) == 2
-            and sum(1 for arg in value.children if prim.is_constant(arg)) == 1
-            and sum(1 for arg in value.children
-                    if isinstance(arg, prim.Variable)) == 1):
-        # const*var: not good enough
-        return False
-
-    return True
+    else:
+        return True
 
 
 def kill_trivial_assignments(assignments, retain_names=set()):
-    logger.info("kill trivial assignments (plain): start")
-    from time import time
-    start = time()
+    from pytools import ProcessLogger
+    plog = ProcessLogger(logger, "kill trivial assignments (plain)")
     approved_assignments = []
     rejected_assignments = []
 
@@ -181,9 +173,8 @@ def kill_trivial_assignments(assignments, retain_names=set()):
         result.append((name, r))
 
     nrej = len(rejected_assignments)
-    total_time = time() - start
-    logger.info(f"kill trivial assignments (plain): done, "
-                f"{nrej} assignments killed in {total_time:.3g} seconds")
+    plog.done()
+    logger.info(f"{nrej} assignments killed.")
 
     return result
 

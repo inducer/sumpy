@@ -26,8 +26,8 @@ from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
     HelmholtzConformingVolumeTaylorExpansion,
     BiharmonicConformingVolumeTaylorExpansion)
-from pytools import factorial, single_valued
-from sumpy.tools import mi_set_axis
+from pytools import factorial
+from sumpy.tools import mi_set_axis, add_to_sac
 
 import logging
 logger = logging.getLogger(__name__)
@@ -55,6 +55,10 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
     def coefficients_from_source_vec(self, kernels, avec, bvec, rscale, weights,
             sac=None):
+        """This method calculates the full coefficients, sums them up and
+        compresses them. This is more efficient that calculating full
+        coefficients, compressing and then summing.
+        """
         from sumpy.kernel import KernelWrapper
         from sumpy.tools import mi_power, mi_factorial
 
@@ -84,23 +88,15 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                 rscale, (1,), sac=sac)
 
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
-        from sumpy.tools import MiDerivativeTakerWrapper
         if not self.use_rscale:
             rscale = 1
 
-        taker = self.get_kernel_derivative_taker(bvec, rscale, sac)
-        expr_dict = {(0,)*self.dim: 1}
-        expr_dict = kernel.get_derivative_transformation_at_target(expr_dict)
-        pp_nderivatives = single_valued(sum(mi) for mi in expr_dict.keys())
+        base_taker = self.get_kernel_derivative_taker(bvec, rscale, sac)
+        taker = kernel.postprocess_at_target(base_taker, bvec)
 
         result = []
         for coeff, mi in zip(coeffs, self.get_coefficient_identifiers()):
-            wrapper = MiDerivativeTakerWrapper(taker, mi)
-            mi_expr = kernel.postprocess_at_target(wrapper, bvec)
-            # For details about this correction, see the explanation at
-            # VolumeTaylorLocalExpansionBase.coefficients_from_source
-            expr = coeff * mi_expr / rscale**pp_nderivatives
-            result.append(expr)
+            result.append(coeff * taker.diff(mi, lambda x: add_to_sac(sac, x)))
 
         result = sym.Add(*tuple(result))
         return result

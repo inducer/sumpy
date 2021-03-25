@@ -199,18 +199,13 @@ class Kernel:
         raise NotImplementedError
 
     def _diff(self, expr, vec, mi):
-        """Take the derivative of an expression or a MiDerivativeTakerWrapper
+        """Take the derivative of an expression
         """
-        from sumpy.tools import MiDerivativeTakerWrapper, add_mi
-        if isinstance(expr, MiDerivativeTakerWrapper):
-            taker, init_mi = expr
-            return taker.diff(add_mi(mi, init_mi))
-        else:
-            for i in range(self.dim):
-                if mi[i] == 0:
-                    continue
-                expr = expr.diff(vec[i], mi[i])
-            return expr
+        for i in range(self.dim):
+            if mi[i] == 0:
+                continue
+            expr = expr.diff(vec[i], mi[i])
+        return expr
 
     def postprocess_at_source(self, expr, avec):
         """Transform a kernel evaluation or expansion expression in a place
@@ -220,8 +215,13 @@ class Kernel:
         The typical use of this function is to apply source-variable
         derivatives to the kernel.
         """
+        from sumpy.tools import (ExprDerivativeTaker,
+            DifferentiatedExprDerivativeTaker)
         expr_dict = {(0,)*self.dim: 1}
         expr_dict = self.get_derivative_transformation_at_source(expr_dict)
+        if isinstance(expr, ExprDerivativeTaker):
+            return DifferentiatedExprDerivativeTaker(expr, expr_dict)
+
         result = 0
         for mi, coeff in expr_dict.items():
             result += coeff * self._diff(expr, avec, mi)
@@ -235,8 +235,13 @@ class Kernel:
         The typical use of this function is to apply target-variable
         derivatives to the kernel.
         """
+        from sumpy.tools import (ExprDerivativeTaker,
+            DifferentiatedExprDerivativeTaker)
         expr_dict = {(0,)*self.dim: 1}
         expr_dict = self.get_derivative_transformation_at_target(expr_dict)
+        if isinstance(expr, ExprDerivativeTaker):
+            return DifferentiatedExprDerivativeTaker(expr, expr_dict)
+
         result = 0
         for mi, coeff in expr_dict.items():
             result += coeff * self._diff(expr, bvec, mi)
