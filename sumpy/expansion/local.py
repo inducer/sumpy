@@ -515,7 +515,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             for j in self.get_coefficient_identifiers():
                 translated_coeffs.append(
                     sum(
-                        (-1) ** j
+                        sym.Integer(-1) ** j
                         * hankel_1(m + j, arg_scale * dvec_len)
                         * src_rscale ** abs(m)
                         * tgt_rscale ** abs(j)
