@@ -91,7 +91,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         if not self.use_rscale:
             rscale = 1
 
-        base_taker = self.get_kernel_derivative_taker(bvec, rscale, sac)
+        base_taker = kernel.get_derivative_taker(bvec, rscale, sac)
         taker = kernel.postprocess_at_target(base_taker, bvec)
 
         result = []
