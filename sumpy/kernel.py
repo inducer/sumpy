@@ -368,6 +368,13 @@ class ExpressionKernel(Kernel):
 
     mapper_method = "map_expression_kernel"
 
+    def get_derivative_taker(self, dvec, rscale, sac):
+        """Return a :class:`sumpy.tools.ExprDerivativeTaker` instance that supports
+        taking derivatives of the base kernel with respect to dvec.
+        """
+        from sumpy.tools import ExprDerivativeTaker
+        return ExprDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
+
 
 one_kernel_2d = ExpressionKernel(
         dim=2,
@@ -413,6 +420,13 @@ class LaplaceKernel(ExpressionKernel):
 
     mapper_method = "map_laplace_kernel"
 
+    def get_derivative_taker(self, dvec, rscale, sac):
+        """Return a :class:`sumpy.tools.ExprDerivativeTaker` instance that supports
+        taking derivatives of the base kernel with respect to dvec.
+        """
+        from sumpy.tools import LaplaceDerivativeTaker
+        return LaplaceDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
+
 
 class BiharmonicKernel(ExpressionKernel):
     init_arg_names = ("dim",)
@@ -448,6 +462,14 @@ class BiharmonicKernel(ExpressionKernel):
         return "BiharmKnl%dD" % self.dim
 
     mapper_method = "map_biharmonic_kernel"
+
+    def get_derivative_taker(self, dvec, rscale, sac):
+        """Return a :class:`sumpy.tools.ExprDerivativeTaker` instance that supports
+        taking derivatives of the base kernel with respect to dvec.
+        """
+        from sumpy.tools import RadialDerivativeTaker
+        return RadialDerivativeTaker(self.get_expression(dvec), dvec, rscale,
+                sac)
 
 
 class HelmholtzKernel(ExpressionKernel):
@@ -518,6 +540,13 @@ class HelmholtzKernel(ExpressionKernel):
                     )]
 
     mapper_method = "map_helmholtz_kernel"
+
+    def get_derivative_taker(self, dvec, rscale, sac):
+        """Return a :class:`sumpy.tools.ExprDerivativeTaker` instance that supports
+        taking derivatives of the base kernel with respect to dvec.
+        """
+        from sumpy.tools import HelmholtzDerivativeTaker
+        return HelmholtzDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
 
 class YukawaKernel(ExpressionKernel):
@@ -592,6 +621,13 @@ class YukawaKernel(ExpressionKernel):
                     )]
 
     mapper_method = "map_yukawa_kernel"
+
+    def get_derivative_taker(self, dvec, rscale, sac):
+        """Return a :class:`sumpy.tools.ExprDerivativeTaker` instance that supports
+        taking derivatives of the base kernel with respect to dvec.
+        """
+        from sumpy.tools import HelmholtzDerivativeTaker
+        return HelmholtzDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
 
 class StokesletKernel(ExpressionKernel):
@@ -773,6 +809,9 @@ class KernelWrapper(Kernel):
     def replace_base_kernel(self, new_base_kernel):
         raise NotImplementedError("replace_base_kernel is not implemented "
             "for this wrapper.")
+
+    def get_derivative_taker(self, dvec, rscale, sac):
+        return self.inner_kernel.get_derivative_taker(dvec, rscale, sac)
 
 # }}}
 

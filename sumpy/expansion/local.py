@@ -29,6 +29,7 @@ from sumpy.expansion import (
     BiharmonicConformingVolumeTaylorExpansion)
 
 from sumpy.tools import mi_increment_axis
+from pytools import single_valued
 
 
 class LocalExpansionBase(ExpansionBase):
@@ -132,7 +133,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         if not self.use_rscale:
             rscale = 1
 
-        base_taker = self.get_kernel_derivative_taker(avec, rscale, sac)
+        base_kernel = single_valued(knl.get_base_kernel() for knl in kernels)
+        base_taker = base_kernel.get_derivative_taker(avec, rscale, sac)
         result = [0]*len(self)
 
         for knl, weight in zip(kernels, weights):
@@ -202,7 +204,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # This code speeds up derivative taking by caching all kernel
             # derivatives.
 
-            taker = src_expansion.get_kernel_derivative_taker(dvec=dvec, sac=sac,
+            taker = src_expansion.kernel.get_derivative_taker(dvec=dvec, sac=sac,
                 rscale=src_rscale)
 
             from sumpy.tools import add_mi
@@ -513,7 +515,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             for j in self.get_coefficient_identifiers():
                 translated_coeffs.append(
                     sum(
-                        (-1) ** j
+                        sym.Integer(-1) ** j
                         * hankel_1(m + j, arg_scale * dvec_len)
                         * src_rscale ** abs(m)
                         * tgt_rscale ** abs(j)
