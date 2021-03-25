@@ -118,7 +118,7 @@ Documentation:
     build_docs
     popd
     if [[ -d ~/.scicomp-benchmarks/asv/$PROJECT ]]; then
-      cp -rf ~/.scicomp-benchmarks/asv/$PROJECT docs/_build/html/benchmarks/
+      cp -rf ~/.scicomp-benchmarks/asv/$PROJECT docs/_build/html/benchmarks
     fi
     maybe_upload_docs
 
