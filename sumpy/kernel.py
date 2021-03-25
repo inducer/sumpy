@@ -373,8 +373,7 @@ class ExpressionKernel(Kernel):
         taking derivatives of the base kernel with respect to dvec.
         """
         from sumpy.tools import ExprDerivativeTaker
-        return ExprDerivativeTaker(self.kernel.get_expression(dvec), dvec, rscale,
-                sac)
+        return ExprDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
 
 one_kernel_2d = ExpressionKernel(
@@ -426,8 +425,7 @@ class LaplaceKernel(ExpressionKernel):
         taking derivatives of the base kernel with respect to dvec.
         """
         from sumpy.tools import LaplaceDerivativeTaker
-        return LaplaceDerivativeTaker(self.kernel.get_expression(dvec), dvec, rscale,
-                sac)
+        return LaplaceDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
 
 class BiharmonicKernel(ExpressionKernel):
@@ -470,7 +468,7 @@ class BiharmonicKernel(ExpressionKernel):
         taking derivatives of the base kernel with respect to dvec.
         """
         from sumpy.tools import RadialDerivativeTaker
-        return RadialDerivativeTaker(self.kernel.get_expression(dvec), dvec, rscale,
+        return RadialDerivativeTaker(self.get_expression(dvec), dvec, rscale,
                 sac)
 
 
@@ -548,8 +546,7 @@ class HelmholtzKernel(ExpressionKernel):
         taking derivatives of the base kernel with respect to dvec.
         """
         from sumpy.tools import HelmholtzDerivativeTaker
-        return HelmholtzDerivativeTaker(self.kernel.get_expression(dvec), dvec,
-                rscale, sac)
+        return HelmholtzDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
 
 class YukawaKernel(ExpressionKernel):
@@ -630,8 +627,7 @@ class YukawaKernel(ExpressionKernel):
         taking derivatives of the base kernel with respect to dvec.
         """
         from sumpy.tools import HelmholtzDerivativeTaker
-        return HelmholtzDerivativeTaker(self.kernel.get_expression(dvec), dvec,
-                rscale, sac)
+        return HelmholtzDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
 
 class StokesletKernel(ExpressionKernel):
@@ -813,6 +809,9 @@ class KernelWrapper(Kernel):
     def replace_base_kernel(self, new_base_kernel):
         raise NotImplementedError("replace_base_kernel is not implemented "
             "for this wrapper.")
+
+    def get_derivative_taker(self, dvec, rscale, sac):
+        return self.inner_kernel.get_derivative_taker(dvec, rscale, sac)
 
 # }}}
 
