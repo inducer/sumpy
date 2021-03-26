@@ -35,6 +35,4 @@ Resources:
 
 * `documentation <https://documen.tician.de/sumpy>`_
 * `source code via git <https://github.com/inducer/sumpy>`_
-
-If you can see inside the UIUC firewall, you may browse
-`benchmark results <https://koelsch.d.tiker.net/benchmarks/asv/sumpy/>`_.
+* `benchmarks <https://documen.tician.de/sumpy/benchmarks>`_
