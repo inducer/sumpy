@@ -110,6 +110,7 @@ Examples Conda:
 Documentation:
   stage: deploy
   script: |
+    PROJECT=sumpy
     EXTRA_INSTALL="pybind11 numpy mako"
     curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/ci-support.sh
     . ci-support.sh
