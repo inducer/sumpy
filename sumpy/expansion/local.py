@@ -31,6 +31,7 @@ from sumpy.expansion import (
 from sumpy.tools import mi_increment_axis, matvec_toeplitz_upper_triangular
 from pytools import single_valued
 
+
 class LocalExpansionBase(ExpansionBase):
     pass
 
