@@ -73,6 +73,7 @@ __doc__ = """
 from pytools import memoize_method, memoize_in
 from pytools.tag import Tag, tag_dataclass
 import math
+import numbers
 
 import numpy as np
 import sumpy.symbolic as sym
@@ -996,7 +997,6 @@ class KernelCacheWrapper:
     @staticmethod
     def _allow_redundant_execution_of_knl_scaling(knl):
         from loopy.match import ObjTagged
-        from sumpy.tools import ScalingAssignmentTag
         return lp.add_inames_for_unused_hw_axes(
                 knl, within=ObjTagged(ScalingAssignmentTag()))
 

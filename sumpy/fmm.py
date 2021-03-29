@@ -62,7 +62,7 @@ class SumpyExpansionWranglerCodeContainer:
             multipole_expansion_factory,
             local_expansion_factory,
             target_kernels, exclude_self=False, use_rscale=None,
-            strength_usage=None, source_kernels=None):
+            strength_usage=None, source_kernels=None, use_fft=False):
         """
         :arg multipole_expansion_factory: a callable of a single argument (order)
             that returns a multipole expansion.
@@ -80,6 +80,7 @@ class SumpyExpansionWranglerCodeContainer:
         self.exclude_self = exclude_self
         self.use_rscale = use_rscale
         self.strength_usage = strength_usage
+        self.use_fft = use_fft
 
         self.cl_context = cl_context
 
@@ -94,7 +95,8 @@ class SumpyExpansionWranglerCodeContainer:
 
     @memoize_method
     def local_expansion(self, order):
-        return self.local_expansion_factory(order, self.use_rscale)
+        return self.local_expansion_factory(order, self.use_rscale,
+                use_fft=self.use_fft)
 
     @memoize_method
     def p2m(self, tgt_order):
@@ -329,12 +331,18 @@ class SumpyExpansionWrangler:
         if base_kernel.is_translation_invariant:
             if translation_classes_data is None:
                 from warnings import warn
-                warn(
-                     "List 2 (multipole-to-local) translations will be "
-                     "unoptimized. Supply a translation_classes_data argument to "
-                     "the wrangler for optimized List 2.",
-                     SumpyTranslationClassesDataNotSuppliedWarning,
-
+                if self.code.use_fft:
+                    raise NotImplementedError(
+                         "FFT based List 2 (multipole-to-local) translations "
+                         "without translation_classes_data argument is not "
+                         "implemented. Supply a translation_classes_data argument "
+                         "to the wrangler for optimized List 2.")
+                else:
+                    warn(
+                         "List 2 (multipole-to-local) translations will be "
+                         "unoptimized. Supply a translation_classes_data argument "
+                         "to the wrangler for optimized List 2.",
+                         SumpyTranslationClassesDataNotSuppliedWarning,
                      stacklevel=2)
                 self.supports_optimized_m2l = False
             else:
@@ -367,7 +375,7 @@ class SumpyExpansionWrangler:
     @memoize_method
     def local_expansions_level_starts(self):
         return self._expansions_level_starts(
-                lambda order: len(self.code.local_expansion_factory(order)),
+                lambda order: len(self.code.local_expansion(order)),
                 level_starts=self.tree.level_start_box_nrs)
 
     @memoize_method
@@ -378,8 +386,8 @@ class SumpyExpansionWrangler:
     @memoize_method
     def m2l_precomputed_exprs_level_starts(self):
         def order_to_size(order):
-            mpole_expn = self.code.multipole_expansion_factory(order)
-            local_expn = self.code.local_expansion_factory(order)
+            mpole_expn = self.code.multipole_expansion(order)
+            local_expn = self.code.local_expansion(order)
             return local_expn.m2l_global_precompute_nexpr(mpole_expn)
 
         return self._expansions_level_starts(order_to_size,

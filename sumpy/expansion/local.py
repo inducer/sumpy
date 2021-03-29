@@ -28,12 +28,19 @@ from sumpy.expansion import (
     HelmholtzConformingVolumeTaylorExpansion,
     BiharmonicConformingVolumeTaylorExpansion)
 
-from sumpy.tools import mi_increment_axis, matvec_toeplitz_upper_triangular
+from sumpy.tools import (mi_increment_axis, matvec_toeplitz_upper_triangular,
+    fft_toeplitz_upper_triangular)
 from pytools import single_valued
 
 
 class LocalExpansionBase(ExpansionBase):
-    pass
+    def __init__(self, kernel, order, use_rscale=None, use_fft=False):
+        super().__init__(kernel, order, use_rscale)
+        self.use_fft = use_fft
+
+    def with_kernel(self, kernel):
+        return type(self)(kernel, self.order, self.use_rscale,
+                use_fft=self.use_fft)
 
 
 import logging
@@ -304,7 +311,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                         add_to_sac(sac, coeff)
 
             # Do the matvec
-            output = matvec_toeplitz_upper_triangular(toeplitz_first_row,
+            if self.use_fft:
+                output = fft_toeplitz_upper_triangular(toeplitz_first_row,
+                                derivatives_full)
+            else:
+                output = matvec_toeplitz_upper_triangular(toeplitz_first_row,
                                 derivatives_full)
 
             # Filter out the dummy rows and scale them for target
@@ -451,8 +462,9 @@ class VolumeTaylorLocalExpansion(
         VolumeTaylorExpansion,
         VolumeTaylorLocalExpansionBase):
 
-    def __init__(self, kernel, order, use_rscale=None):
-        VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale)
+    def __init__(self, kernel, order, use_rscale=None, use_fft=False):
+        VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale,
+                use_fft)
         VolumeTaylorExpansion.__init__(self, kernel, order, use_rscale)
 
 
@@ -460,8 +472,9 @@ class LaplaceConformingVolumeTaylorLocalExpansion(
         LaplaceConformingVolumeTaylorExpansion,
         VolumeTaylorLocalExpansionBase):
 
-    def __init__(self, kernel, order, use_rscale=None):
-        VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale)
+    def __init__(self, kernel, order, use_rscale=None, use_fft=False):
+        VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale,
+                use_fft)
         LaplaceConformingVolumeTaylorExpansion.__init__(
                 self, kernel, order, use_rscale)
 
@@ -470,8 +483,9 @@ class HelmholtzConformingVolumeTaylorLocalExpansion(
         HelmholtzConformingVolumeTaylorExpansion,
         VolumeTaylorLocalExpansionBase):
 
-    def __init__(self, kernel, order, use_rscale=None):
-        VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale)
+    def __init__(self, kernel, order, use_rscale=None, use_fft=False):
+        VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale,
+                use_fft)
         HelmholtzConformingVolumeTaylorExpansion.__init__(
                 self, kernel, order, use_rscale)
 
@@ -480,8 +494,9 @@ class BiharmonicConformingVolumeTaylorLocalExpansion(
         BiharmonicConformingVolumeTaylorExpansion,
         VolumeTaylorLocalExpansionBase):
 
-    def __init__(self, kernel, order, use_rscale=None):
-        VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale)
+    def __init__(self, kernel, order, use_rscale=None, use_fft=False):
+        VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale,
+                use_fft)
         BiharmonicConformingVolumeTaylorExpansion.__init__(
                 self, kernel, order, use_rscale)
 
@@ -581,7 +596,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
 
 class H2DLocalExpansion(_FourierBesselLocalExpansion):
-    def __init__(self, kernel, order, use_rscale=None):
+    def __init__(self, kernel, order, use_rscale=None, use_fft=False):
         from sumpy.kernel import HelmholtzKernel
         assert (isinstance(kernel.get_base_kernel(), HelmholtzKernel)
                 and kernel.dim == 2)
@@ -596,7 +611,7 @@ class H2DLocalExpansion(_FourierBesselLocalExpansion):
 
 
 class Y2DLocalExpansion(_FourierBesselLocalExpansion):
-    def __init__(self, kernel, order, use_rscale=None):
+    def __init__(self, kernel, order, use_rscale=None, use_fft=False):
         from sumpy.kernel import YukawaKernel
         assert (isinstance(kernel.get_base_kernel(), YukawaKernel)
                 and kernel.dim == 2)
