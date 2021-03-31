@@ -29,6 +29,7 @@ from sumpy.expansion import (
     BiharmonicConformingVolumeTaylorExpansion)
 
 from sumpy.tools import mi_increment_axis, matvec_toeplitz_upper_triangular
+from pytools import single_valued
 
 
 class LocalExpansionBase(ExpansionBase):
@@ -132,7 +133,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         if not self.use_rscale:
             rscale = 1
 
-        base_taker = self.get_kernel_derivative_taker(avec, rscale, sac)
+        base_kernel = single_valued(knl.get_base_kernel() for knl in kernels)
+        base_taker = base_kernel.get_derivative_taker(avec, rscale, sac)
         result = [0]*len(self)
 
         for knl, weight in zip(kernels, weights):
@@ -257,7 +259,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         # The vector has the kernel derivatives and depends only on the distance
         # between the two centers
-        taker = src_expansion.get_kernel_derivative_taker(dvec, src_rscale, sac)
+        taker = src_expansion.kernel.get_derivative_taker(dvec, src_rscale, sac)
         vector_stored = []
         # Calculate the kernel derivatives for the compressed set
         for term in \
@@ -580,7 +582,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             for j in self.get_coefficient_identifiers():
                 translated_coeffs.append(
                     sum(
-                        (-1) ** j
+                        sym.Integer(-1) ** j
                         * hankel_1(m + j, arg_scale * dvec_len)
                         * src_rscale ** abs(m)
                         * tgt_rscale ** abs(j)

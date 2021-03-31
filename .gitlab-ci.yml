@@ -17,7 +17,12 @@
 #    reports:
 #      junit: test/pytest.xml
 
+stages:
+  - test
+  - deploy
+
 Pytest POCL:
+  stage: test
   script:
   - export PY_EXE=python3
   - export PYOPENCL_TEST=portable:pthread
@@ -34,6 +39,7 @@ Pytest POCL:
       junit: test/pytest.xml
 
 Pytest Titan V:
+  stage: test
   script:
   - py_version=3
   - export PYOPENCL_TEST=nvi:titan
@@ -51,6 +57,7 @@ Pytest Titan V:
       junit: test/pytest.xml
 
 Pytest Conda:
+  stage: test
   script:
   # Disable caching to ensure SymEngine code generation is exercised.
   - export SUMPY_NO_CACHE=1
@@ -68,6 +75,7 @@ Pytest Conda:
       junit: test/pytest.xml
 
 Pytest POCL Titan V:
+  stage: test
   script:
   # Disable caching to ensure SymEngine code generation is exercised.
   - export SUMPY_NO_CACHE=1
@@ -85,6 +93,7 @@ Pytest POCL Titan V:
       junit: test/pytest.xml
 
 Examples Conda:
+  stage: test
   script: |
     grep -v symengine .test-conda-env-py3.yml > .test-conda-env.yml
     CONDA_ENVIRONMENT=.test-conda-env.yml
@@ -99,14 +108,25 @@ Examples Conda:
   - tags
 
 Documentation:
-  script:
-  - EXTRA_INSTALL="pybind11 numpy mako"
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-docs.sh
-  - ". ./build-docs.sh"
+  stage: deploy
+  script: |
+    PROJECT=sumpy
+    EXTRA_INSTALL="pybind11 numpy mako"
+    curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/ci-support.sh
+    . ci-support.sh
+    build_py_project_in_venv
+    build_docs
+    if [[ -d ~/.scicomp-benchmarks/asv/$PROJECT ]]; then
+      cp -rf ~/.scicomp-benchmarks/asv/$PROJECT _build/html/benchmarks
+    fi
+    maybe_upload_docs
+
   tags:
-  - python3
+  - linux
+  - benchmark
 
 Flake8:
+  stage: test
   script:
   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-flake8.sh
   - . ./prepare-and-run-flake8.sh "$CI_PROJECT_NAME" test examples benchmarks
@@ -116,6 +136,7 @@ Flake8:
   - tags
 
 Benchmarks:
+  stage: test
   script:
   - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
   - PROJECT=sumpy
