@@ -178,12 +178,20 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         return kernel.postprocess_at_target(result, bvec)
 
     def m2l_global_precompute_nexpr(self, src_expansion):
-        return len(self.m2l_global_precompute_mis(src_expansion)[1])
+        """Returns number of expressions in M2L global precomputation step.
+        """
+        return len(self._m2l_global_precompute_mis(src_expansion)[1])
 
-    def m2l_global_precompute_mis(self, src_expansion):
+    def _m2l_global_precompute_mis(self, src_expansion):
+        """A helper method to calculate multi-indices used in M2L global
+        precomputation step.
+        """
         from pytools import generate_nonnegative_integer_tuples_below as gnitb
         from sumpy.tools import add_mi
 
+        # max_mi is the multi-index which is the sum of the
+        # element-wise maximum of source multi-indices and the
+        # element-wise maximum of target multi-indices.
         max_mi = [0]*self.dim
         for i in range(self.dim):
             max_mi[i] = max(mi[i] for mi in
@@ -191,8 +199,16 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             max_mi[i] += max(mi[i] for mi in
                               self.get_coefficient_identifiers())
 
+        # These are the multi-indices in the Toeplitz matrix.
+        # Note that to get the Toeplitz matrix structure some
+        # multi-indices that is not in the M2L computation were
+        # added. This corresponds to adding $\mathcal{O}(p^{d-1})$
+        # additional rows and columns in the case of some PDEs
+        # like Laplace and $\mathcal{O}(p^d)$ in other cases.
         toeplitz_matrix_coeffs = list(gnitb([m + 1 for m in max_mi]))
 
+        # These are the multi-indices in the computation of M2L
+        # without the additional mis in the Toeplitz matrix
         needed_vector_terms = []
         # For eg: 2D full Taylor Laplace, we only need kernel derivatives
         # (n1+n2, m1+m2), n1+m1<=p, n2+m2<=p
@@ -225,7 +241,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             src_rscale = 1
 
         toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
-            self.m2l_global_precompute_mis(src_expansion)
+            self._m2l_global_precompute_mis(src_expansion)
 
         # Create a expansion terms wrangler for derivatives up to order
         # (tgt order)+(src order) including a corresponding reduction matrix
@@ -279,7 +295,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansionBase
         if isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
             toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
-                self.m2l_global_precompute_mis(src_expansion)
+                self._m2l_global_precompute_mis(src_expansion)
             toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
                                 enumerate(toeplitz_matrix_coeffs))
 
