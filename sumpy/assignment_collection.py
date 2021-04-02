@@ -22,6 +22,7 @@ THE SOFTWARE.
 
 
 import sumpy.symbolic as sym
+from collections import OrderedDict
 
 import logging
 logger = logging.getLogger(__name__)
@@ -95,14 +96,9 @@ class SymbolicAssignmentCollection:
     by this class, but not expressions using names defined in this collection.
     """
 
-    def __init__(self, assignments=None):
-        """
-        :arg assignments: mapping from *var_name* to expression
-        """
+    def __init__(self):
 
-        if assignments is None:
-            assignments = {}
-
+        assignments = OrderedDict()
         self.assignments = assignments
         self.reversed_assignments = {v: k for (k, v) in assignments.items()}
 
@@ -191,18 +187,21 @@ class SymbolicAssignmentCollection:
         #from sumpy.symbolic import checked_cse
 
         from sumpy.cse import cse
-        new_assignments, new_exprs = cse(assign_exprs + extra_exprs,
+        new_assignments_list, new_exprs = cse(assign_exprs + extra_exprs,
                 symbols=self.symbol_generator)
 
         new_assign_exprs = new_exprs[:len(assign_exprs)]
         new_extra_exprs = new_exprs[len(assign_exprs):]
 
-        for name, new_expr in zip(assign_names, new_assign_exprs):
-            self.assignments[name] = new_expr
-
-        for name, value in new_assignments:
+        new_assignments = OrderedDict()
+        for name, value in new_assignments_list:
             assert isinstance(name, sym.Symbol)
-            self.add_assignment(name.name, value)
+            new_assignments[name.name] = value
+
+        for name, new_expr in zip(assign_names, new_assign_exprs):
+            new_assignments[name] =  new_expr
+
+        self.assignments = new_assignments
 
         for name, new_expr in zip(assign_names, new_assign_exprs):
             # We want the assignment collection to be ordered correctly

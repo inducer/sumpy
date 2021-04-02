@@ -21,7 +21,7 @@ THE SOFTWARE.
 """
 
 import sumpy.symbolic as sym
-from sumpy.tools import add_to_sac
+from sumpy.tools import add_to_sac, fft
 
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
@@ -187,9 +187,13 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         return kernel.postprocess_at_target(result, bvec)
 
     def m2l_global_precompute_nexpr(self, src_expansion):
-        return len(self.m2l_global_precompute_mis(src_expansion)[1])
+        if self.use_fft:
+            nexpr = len(self._m2l_global_precompute_mis(src_expansion)[0])
+        else:
+            nexpr = len(self._m2l_global_precompute_mis(src_expansion)[1])
+        return nexpr
 
-    def m2l_global_precompute_mis(self, src_expansion):
+    def _m2l_global_precompute_mis(self, src_expansion):
         from pytools import generate_nonnegative_integer_tuples_below as gnitb
         from sumpy.tools import add_mi
 
@@ -215,6 +219,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
     def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
             dvec, tgt_rscale, sac):
+
         # We know the general form of the multipole expansion is:
         #
         #  coeff0 * diff(kernel(src - c1), mi0) +
@@ -234,7 +239,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             src_rscale = 1
 
         toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
-            self.m2l_global_precompute_mis(src_expansion)
+            self._m2l_global_precompute_mis(src_expansion)
+
+        toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
+                                enumerate(toeplitz_matrix_coeffs))
+>>>>>>> 4b95905766d950f99b371222b93ff36b1b12358b
 
         # Create a expansion terms wrangler for derivatives up to order
         # (tgt order)+(src order) including a corresponding reduction matrix
@@ -269,7 +278,56 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         for i, term in enumerate(needed_vector_terms):
             vector[i] = add_to_sac(sac,
                         vector_full[srcplusderiv_ident_to_index[term]])
+
+        if self.use_fft:
+            # Add zero values needed to make the translation matrix toeplitz
+            derivatives_full = [0]*len(toeplitz_matrix_coeffs)
+            for expr, mi in zip(vector, needed_vector_terms):
+                derivatives_full[toeplitz_matrix_ident_to_index[mi]] = expr
+            return self._fft(list(reversed(derivatives_full)), sac=sac)
+
         return vector
+
+    def m2l_preprocess_exprs(self, src_expansion, src_coeff_exprs, sac,
+            src_rscale):
+        toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
+                self._m2l_global_precompute_mis(src_expansion)
+        toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
+                            enumerate(toeplitz_matrix_coeffs))
+
+        # Calculate the first row of the upper triangular Toeplitz matrix
+        toeplitz_first_row = [0] * len(toeplitz_matrix_coeffs)
+        for coeff, term in zip(
+                src_coeff_exprs,
+                src_expansion.get_coefficient_identifiers()):
+            toeplitz_first_row[toeplitz_matrix_ident_to_index[term]] = \
+                    add_to_sac(sac, coeff)
+
+        if self.use_fft:
+            return self._fft(toeplitz_first_row, sac=sac)
+        else:
+            return toeplitz_first_row
+
+    def m2l_postprocess_exprs(self, src_expansion, m2l_result, src_rscale,
+            tgt_rscale, sac):
+        toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
+                self._m2l_global_precompute_mis(src_expansion)
+        toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
+                            enumerate(toeplitz_matrix_coeffs))
+
+        if self.use_fft:
+            n = len(toeplitz_matrix_coeffs)
+            m2l_result = fft(m2l_result, inverse=True, sac=sac)
+            m2l_result = list(reversed(m2l_result[:n]))
+
+        # Filter out the dummy rows and scale them for target
+        result = []
+        rscale_ratio = add_to_sac(sac, tgt_rscale/src_rscale)
+        for term in self.get_coefficient_identifiers():
+            index = toeplitz_matrix_ident_to_index[term]
+            result.append(m2l_result[index]*rscale_ratio**sum(term))
+
+        return result
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, _fast_version=True,
@@ -286,9 +344,10 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             tgt_rscale = 1
 
         from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansionBase
+
         if isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
             toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
-                self.m2l_global_precompute_mis(src_expansion)
+                self._m2l_global_precompute_mis(src_expansion)
             toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
                                 enumerate(toeplitz_matrix_coeffs))
 
@@ -298,32 +357,33 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             else:
                 derivatives = precomputed_exprs
 
+            if self.use_fft:
+                assert precomputed_exprs is not None
+                assert len(src_coeff_exprs) == len(precomputed_exprs)
+                result = []
+                for i in range(len(precomputed_exprs)):
+                    a = precomputed_exprs[i]
+                    b = src_coeff_exprs[i]
+                    result.append(a*b)
+                return result
+
             derivatives_full = [0]*len(toeplitz_matrix_coeffs)
             for expr, mi in zip(derivatives, needed_vector_terms):
                 derivatives_full[toeplitz_matrix_ident_to_index[mi]] = expr
 
-            # Calculate the first row of the upper triangular Toeplitz matrix
-            toeplitz_first_row = [0] * len(toeplitz_matrix_coeffs)
-            for coeff, term in zip(
-                    src_coeff_exprs,
-                    src_expansion.get_coefficient_identifiers()):
-                toeplitz_first_row[toeplitz_matrix_ident_to_index[term]] = \
-                        add_to_sac(sac, coeff)
+            toeplitz_first_row = self.m2l_preprocess_exprs(src_expansion,
+                src_coeff_exprs, sac)
 
             # Do the matvec
-            if self.use_fft:
+            if 0:
                 output = fft_toeplitz_upper_triangular(toeplitz_first_row,
-                                derivatives_full)
+                                derivatives_full, sac=sac)
             else:
                 output = matvec_toeplitz_upper_triangular(toeplitz_first_row,
                                 derivatives_full)
 
-            # Filter out the dummy rows and scale them for target
-            result = []
-            rscale_ratio = add_to_sac(sac, tgt_rscale/src_rscale)
-            for term in self.get_coefficient_identifiers():
-                index = toeplitz_matrix_ident_to_index[term]
-                result.append(output[index]*rscale_ratio**sum(term))
+            result = self.m2l_postprocess_exprs(src_expansion, output, src_rscale,
+                tgt_rscale, sac)
 
             logger.info("building translation operator: done")
             return result
@@ -533,6 +593,8 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         if not self.use_rscale:
             rscale = 1
+        if knl is None:
+            knl = self.kernel
 
         from sumpy.symbolic import sym_real_norm_2
         bessel_j = sym.Function("bessel_j")
@@ -548,8 +610,69 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                        * sym.exp(sym.I * c * -target_angle_rel_center), bvec)
                 for c in self.get_coefficient_identifiers())
 
+    def m2l_global_precompute_nexpr(self, src_expansion):
+        nexpr = 4 * self.order + 1
+        return nexpr
+
+    def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
+            dvec, tgt_rscale, sac):
+
+        from sumpy.symbolic import sym_real_norm_2
+        from sumpy.tools import fft
+
+        dvec_len = sym_real_norm_2(dvec)
+        hankel_1 = sym.Function("hankel_1")
+        new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
+        arg_scale = self.get_bessel_arg_scaling()
+        assert self.order == src_expansion.order
+        precomputed_exprs = [0] * (4*self.order + 1)
+        for j in self.get_coefficient_identifiers():
+            for m in self.get_coefficient_identifiers():
+                precomputed_exprs[m + j + 2 * self.order] = (
+                    hankel_1(m + j, arg_scale * dvec_len)
+                    * sym.exp(sym.I * (m + j) * new_center_angle_rel_old_center))
+
+        if self.use_fft:
+            order = self.order
+            first, last = precomputed_exprs[:2*order], precomputed_exprs[2*order:]
+            return fft(list(last)+list(first), sac)
+
+        return precomputed_exprs
+
+    def m2l_preprocess_exprs(self, src_expansion, src_coeff_exprs, sac,
+            src_rscale):
+
+        from sumpy.tools import fft
+        src_coeff_exprs = list(src_coeff_exprs)
+        for m in src_expansion.get_coefficient_identifiers():
+            src_coeff_exprs[src_expansion.get_storage_index(m)] *= src_rscale**abs(m)
+
+        if self.use_fft:
+            src_coeff_exprs = list(reversed(src_coeff_exprs))
+            src_coeff_exprs += [0] * (len(src_coeff_exprs) - 1)
+            res = fft(src_coeff_exprs, sac=sac)
+            return res
+        else:
+            return src_coeff_exprs
+
+    def m2l_postprocess_exprs(self, src_expansion, m2l_result, src_rscale,
+            tgt_rscale, sac):
+
+        if self.use_fft:
+            n = 2 * self.order + 1
+            m2l_result = fft(m2l_result, inverse=True, sac=sac)
+            m2l_result = m2l_result[:2*self.order+1]
+
+        # Filter out the dummy rows and scale them for target
+        result = []
+        for j in self.get_coefficient_identifiers():
+            result.append(m2l_result[j + self.order] \
+                    * tgt_rscale**(abs(j)) * sym.Integer(-1)**j)
+
+        return result
+
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale, sac=None):
+            dvec, tgt_rscale, sac=None, precomputed_exprs=None):
         from sumpy.symbolic import sym_real_norm_2
 
         if not self.use_rscale:
@@ -563,6 +686,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             bessel_j = sym.Function("bessel_j")
             new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
             translated_coeffs = []
+
             for j in self.get_coefficient_identifiers():
                 translated_coeffs.append(
                     sum(src_coeff_exprs[src_expansion.get_storage_index(m)]
@@ -574,20 +698,31 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             return translated_coeffs
 
         if isinstance(src_expansion, self.mpole_expn_class):
-            dvec_len = sym_real_norm_2(dvec)
-            hankel_1 = sym.Function("hankel_1")
-            new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
+            if precomputed_exprs is None:
+                derivatives = self.m2l_global_precompute_exprs(src_expansion,
+                    src_rscale, dvec, tgt_rscale)
+            else:
+                derivatives = precomputed_exprs
+
             translated_coeffs = []
+            if self.use_fft:
+                assert precomputed_exprs is not None
+                assert len(derivatives) == len(src_coeff_exprs)
+                for a, b in zip(derivatives, src_coeff_exprs):
+                    translated_coeffs.append(a * b)
+                return translated_coeffs
+
+            src_coeff_exprs = self.m2l_preprocess_exprs(src_expansion, src_coeff_exprs, sac,
+                src_rscale)
+
             for j in self.get_coefficient_identifiers():
-                translated_coeffs.append(
-                    sum(
-                        sym.Integer(-1) ** j
-                        * hankel_1(m + j, arg_scale * dvec_len)
-                        * src_rscale ** abs(m)
-                        * tgt_rscale ** abs(j)
-                        * sym.exp(sym.I * (m + j) * new_center_angle_rel_old_center)
+                translated_coeff.append(
+                      sum(derivatives[m + j + 2*self.order]
                         * src_coeff_exprs[src_expansion.get_storage_index(m)]
                         for m in src_expansion.get_coefficient_identifiers()))
+
+            translated_coeffs = self.m2l_postprocess_exprs(src_expansion, translated_coeffs, src_rscale,
+                tgt_rscale, sac)
             return translated_coeffs
 
         raise RuntimeError("do not know how to translate %s to %s"
@@ -601,7 +736,7 @@ class H2DLocalExpansion(_FourierBesselLocalExpansion):
         assert (isinstance(kernel.get_base_kernel(), HelmholtzKernel)
                 and kernel.dim == 2)
 
-        super().__init__(kernel, order, use_rscale)
+        super().__init__(kernel, order, use_rscale, use_fft=use_fft)
 
         from sumpy.expansion.multipole import H2DMultipoleExpansion
         self.mpole_expn_class = H2DMultipoleExpansion
@@ -616,7 +751,7 @@ class Y2DLocalExpansion(_FourierBesselLocalExpansion):
         assert (isinstance(kernel.get_base_kernel(), YukawaKernel)
                 and kernel.dim == 2)
 
-        super().__init__(kernel, order, use_rscale)
+        super().__init__(kernel, order, use_rscale, use_fft=use_fft)
 
         from sumpy.expansion.multipole import Y2DMultipoleExpansion
         self.mpole_expn_class = Y2DMultipoleExpansion

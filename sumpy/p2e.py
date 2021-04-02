@@ -109,7 +109,6 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
                 vector_names={"a"},
                 pymbolic_expr_maps=code_transformers,
                 retain_names=coeff_names,
-                complex_dtype=np.complex128  # FIXME
                 )
 
     def get_cache_key(self):

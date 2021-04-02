@@ -24,7 +24,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-
 =============================================================================
 Copyright (c) 2006-2019 SymPy Development Team
 
@@ -77,6 +76,9 @@ import numbers
 
 import numpy as np
 import sumpy.symbolic as sym
+import numbers
+import math
+from collections import namedtuple
 
 import pyopencl as cl
 import pyopencl.array  # noqa
@@ -1051,7 +1053,7 @@ def is_obj_array_like(ary):
             or (isinstance(ary, np.ndarray) and ary.dtype.char == "O"))
 
 
-# {{{ matrix
+# {{{ matrices
 
 def reduced_row_echelon_form(m):
     """Calculates a reduced row echelon form of a
@@ -1260,6 +1262,79 @@ def fft_toeplitz_upper_triangular(first_row, x, sac=None):
     res_fft = [_complex_tuple_mul(a, b, sac=sac) for a, b in zip(v_fft, x_fft)]
     res = fft(res_fft, inverse=True, sac=sac)
     return [a for a, _ in reversed(res[:n])]
+
+# }}}
+
+# }}}
+
+
+# {{{ FFT
+
+def fft(seq, inverse=False, sac=None):
+    """
+    Return the discrete fourier transform of the sequence seq.
+    seq should be a python iterable with tuples of length 2
+    corresponding to the real part and imaginary part.
+    """
+
+    from pymbolic.algorithm import fft as _fft, ifft as _ifft 
+
+    def wrap(expr):
+        if isinstance(expr, np.ndarray):
+            res = [wrap(a) for a in expr]
+            return np.array(res, dtype=object).reshape(expr.shape)
+        return add_to_sac(sac, expr, "temp_fft")
+
+    if inverse:
+        return _ifft(list(seq), wrap_intermediate=wrap).tolist()
+    else:
+        return _fft(list(seq), wrap_intermediate=wrap).tolist()
+
+
+def fft_toeplitz_upper_triangular(first_row, x, sac=None):
+    """
+    Returns the matvec of the Toeplitz matrix given by
+    the first row and the vector x using a Fourier transform
+    """
+    assert len(first_row) == len(x)
+    n = len(first_row)
+    v = list(first_row)
+    v += [0]*(n-1)
+
+    x = list(reversed(x))
+    x += [0]*(n-1)
+
+    v_fft = fft(v, sac)
+    x_fft = fft(x, sac)
+    res_fft = [add_to_sac(sac, a * b) for a, b in zip(v_fft, x_fft)]
+    res = fft(res_fft, inverse=True, sac=sac)
+    return list(reversed(res[:n]))
+
+
+def fft_toeplitz_upper_triangular_lwork(n):
+    return n
+
+
+def matvec_toeplitz_upper_triangular(first_row, vector):
+    n = len(first_row)
+    assert len(vector) == n
+    output = [0]*n
+    for row in range(n):
+        terms = tuple(first_row[col-row]*vector[col] for col in range(row, n))
+        output[row] = sym.Add(*terms)
+    return output
+
+
+def to_complex_dtype(dtype):
+    if dtype == np.complex64:
+        return np.complex64
+    if dtype == np.complex128:
+        return np.complex128
+    if dtype == np.float32:
+        return np.complex64
+    if dtype == np.float64:
+        return np.complex128
+    raise RuntimeError(f"Unknown dtype: {dtype}")
 
 # }}}
 

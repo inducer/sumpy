@@ -53,6 +53,7 @@ class ExpansionBase:
     .. automethod:: translate_from
     .. automethod:: __eq__
     .. automethod:: __ne__
+    .. automethod:: get_kernel_derivative_taker
     """
     init_arg_names = ("kernel", "order", "use_rscale")
 
@@ -114,8 +115,8 @@ class ExpansionBase:
         :arg avec: vector from source to center.
         :arg bvec: vector from center to target. Not usually necessary,
             except for line-Taylor expansion.
-        :arg sac: a symbolic assignment collection where temporary
-            expressions are stored.
+        :arg sac: A SymbolicAssignmentCollction used for storing
+            temporary expressions.
 
         :returns: a list of :mod:`sympy` expressions representing
             the coefficients of the expansion.
@@ -144,6 +145,9 @@ class ExpansionBase:
 
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         """
+        :arg sac: A SymbolicAssignmentCollction used for storing
+            temporary expressions.
+
         :return: a :mod:`sympy` expression corresponding
             to the evaluated expansion with the coefficients
             in *coeffs*.
@@ -185,7 +189,6 @@ class ExpansionBase:
 
         return type(self)(**new_kwargs)
 
-
 # }}}
 
 
@@ -204,11 +207,11 @@ class ExpansionTermsWrangler:
         raise NotImplementedError
 
     def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
-            rscale, sac=None):
+            rscale):
         raise NotImplementedError
 
     def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients,
-            rscale, sac=None):
+            rscale):
         raise NotImplementedError
 
     @memoize_method
@@ -321,7 +324,7 @@ class FullExpansionTermsWrangler(ExpansionTermsWrangler):
             ExpansionTermsWrangler.get_full_coefficient_identifiers)
 
     def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
-            rscale, sac=None):
+            rscale):
         return stored_kernel_derivatives
 
     get_stored_mpole_coefficients_from_full = (
@@ -687,6 +690,11 @@ class LaplaceConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
     def __init__(self, kernel, order, use_rscale):
         self.expansion_terms_wrangler_key = (order, kernel.dim)
 
+    def get_kernel_derivative_taker(self, dvec, rscale, sac):
+        from sumpy.tools import LaplaceDerivativeTaker
+        return LaplaceDerivativeTaker(self.kernel.get_expression(dvec), dvec,
+                rscale, sac)
+
 
 class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
 
@@ -698,6 +706,11 @@ class HelmholtzConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
         helmholtz_k_name = kernel.get_base_kernel().helmholtz_k_name
         self.expansion_terms_wrangler_key = (order, kernel.dim, helmholtz_k_name)
 
+    def get_kernel_derivative_taker(self, dvec, rscale, sac):
+        from sumpy.tools import HelmholtzYukawaDerivativeTaker
+        return HelmholtzYukawaDerivativeTaker(self.kernel.get_expression(dvec), dvec,
+                rscale, sac)
+
 
 class BiharmonicConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
 
@@ -707,7 +720,6 @@ class BiharmonicConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
     # not user-facing, be strict about having to pass use_rscale
     def __init__(self, kernel, order, use_rscale):
         self.expansion_terms_wrangler_key = (order, kernel.dim)
-
 
 # }}}
 

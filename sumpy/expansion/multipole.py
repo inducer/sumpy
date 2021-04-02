@@ -413,6 +413,8 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         if not self.use_rscale:
             rscale = 1
+        if knl is None:
+            knl = self.kernel
 
         from sumpy.symbolic import sym_real_norm_2
         hankel_1 = sym.Function("hankel_1")
