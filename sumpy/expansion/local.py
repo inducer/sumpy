@@ -623,7 +623,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                 for c in self.get_coefficient_identifiers())
 
     def m2l_global_precompute_nexpr(self, src_expansion):
-        nexpr = 4 * self.order + 1
+        nexpr = 2 * self.order + 2 * src_expansion.order + 1
         return nexpr
 
     def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
@@ -636,16 +636,17 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         hankel_1 = sym.Function("hankel_1")
         new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
         arg_scale = self.get_bessel_arg_scaling()
-        assert self.order == src_expansion.order
-        precomputed_exprs = [0] * (4*self.order + 1)
+        precomputed_exprs = [0] * (2*self.order + 2 * src_expansion.order + 1)
         for j in self.get_coefficient_identifiers():
-            for m in self.get_coefficient_identifiers():
-                precomputed_exprs[m + j + 2 * self.order] = (
+            idx_j = self.get_storage_index(j)
+            for m in src_expansion.get_coefficient_identifiers():
+                idx_m = src_expansion.get_storage_index(m)
+                precomputed_exprs[idx_j + idx_m] = (
                     hankel_1(m + j, arg_scale * dvec_len)
                     * sym.exp(sym.I * (m + j) * new_center_angle_rel_old_center))
 
         if self.use_fft:
-            order = self.order
+            order = src_expansion.order
             first, last = precomputed_exprs[:2*order], precomputed_exprs[2*order:]
             return fft(list(last)+list(first), sac)
 
@@ -677,7 +678,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         # Filter out the dummy rows and scale them for target
         result = []
         for j in self.get_coefficient_identifiers():
-            result.append(m2l_result[j + self.order]
+            result.append(m2l_result[self.get_storage_index(j)]
                     * tgt_rscale**(abs(j)) * sym.Integer(-1)**j)
 
         return result
@@ -728,7 +729,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
             for j in self.get_coefficient_identifiers():
                 translated_coeffs.append(
-                      sum(derivatives[m + j + 2*self.order]
+                      sum(derivatives[m + j + self.order + src_expansion.order]
                         * src_coeff_exprs[src_expansion.get_storage_index(m)]
                         for m in src_expansion.get_coefficient_identifiers()))
 
