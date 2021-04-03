@@ -255,12 +255,9 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
             self._m2l_global_precompute_mis(src_expansion)
-<<<<<<< HEAD
 
         toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
                                 enumerate(toeplitz_matrix_coeffs))
-=======
->>>>>>> e940d59431135695182dbe228a1d47cf14117393
 
         # Create a expansion terms wrangler for derivatives up to order
         # (tgt order)+(src order) including a corresponding reduction matrix
