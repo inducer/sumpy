@@ -260,7 +260,7 @@ class E2EFromCSRTranslationClassesPrecompute(E2EFromCSR):
     """
     default_name = "e2e_from_csr_translation_classes_precompute"
 
-    def get_translation_loopy_insns(self):
+    def get_translation_loopy_insns(self, result_dtype):
         from sumpy.symbolic import make_sym_vector
         dvec = make_sym_vector("d", self.dim)
 
@@ -284,10 +284,10 @@ class E2EFromCSRTranslationClassesPrecompute(E2EFromCSR):
                 vector_names=set(["d"]),
                 pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
                 retain_names=tgt_coeff_names,
-                complex_dtype=np.complex128  # FIXME
+                complex_dtype=to_complex_dtype(result_dtype),
                 )
 
-    def get_kernel(self):
+    def get_kernel(self, result_dtype):
         nprecomputed_exprs = \
             self.tgt_expansion.m2l_global_precompute_nexpr(self.src_expansion)
         from sumpy.tools import gather_loopy_arguments
@@ -301,7 +301,7 @@ class E2EFromCSRTranslationClassesPrecompute(E2EFromCSR):
                     <> d[idim] = m2l_translation_vectors[idim, \
                             itr_class + translation_classes_level_start] {dup=idim}
 
-                    """] + self.get_translation_loopy_insns() + ["""
+                    """] + self.get_translation_loopy_insns(result_dtype) + ["""
                     m2l_precomputed_exprs[itr_class, {idx}] = precomputed_expr{idx}
                     """.format(idx=i) for i in range(nprecomputed_exprs)] + ["""
                 end
@@ -333,9 +333,9 @@ class E2EFromCSRTranslationClassesPrecompute(E2EFromCSR):
 
         return loopy_knl
 
-    def get_optimized_kernel(self):
+    def get_optimized_kernel(self, result_dtype):
         # FIXME
-        knl = self.get_kernel()
+        knl = self.get_kernel(result_dtype)
         knl = lp.split_iname(knl, "itr_class", 16, outer_tag="g.0")
 
         return knl
@@ -348,16 +348,20 @@ class E2EFromCSRTranslationClassesPrecompute(E2EFromCSR):
         :arg m2l_precomputed_exprs:
         :arg m2l_translation_vectors:
         """
-        knl = self.get_cached_optimized_kernel()
-
         m2l_translation_vectors = kwargs.pop("m2l_translation_vectors")
         # "1" may be passed for rscale, which won't have its type
         # meaningfully inferred. Make the type of rscale explicit.
         src_rscale = m2l_translation_vectors.dtype.type(kwargs.pop("src_rscale"))
 
+        m2l_precomputed_exprs = kwargs.pop("m2l_precomputed_exprs")
+        result_dtype = m2l_precomputed_exprs.dtype
+
+        knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
+
         return knl(queue,
                 src_rscale=src_rscale,
                 m2l_translation_vectors=m2l_translation_vectors,
+                m2l_precomputed_exprs=m2l_precomputed_exprs,
                 **kwargs)
 
 # }}}
@@ -576,10 +580,6 @@ class E2EFromCSRTranslationInvariant(E2EFromCSR):
         knl = self.get_kernel(result_dtype)
         knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
 
-        #print(knl)
-        import pickle
-        with open("complex_type_inference.lp.knl", "wb") as f:
-            pickle.dump(knl, f)
         return knl
 
     def __call__(self, queue, **kwargs):

@@ -99,7 +99,6 @@ class SumpyExpansionWranglerCodeContainer:
 
     @memoize_method
     def local_expansion(self, order):
-        print(self.use_fft)
         return self.local_expansion_factory(order, self.use_rscale,
                 use_fft=self.use_fft)
 
