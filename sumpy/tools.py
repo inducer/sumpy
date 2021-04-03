@@ -71,14 +71,10 @@ __doc__ = """
 
 from pytools import memoize_method, memoize_in
 from pytools.tag import Tag, tag_dataclass
-import math
 import numbers
 
 import numpy as np
 import sumpy.symbolic as sym
-import numbers
-import math
-from collections import namedtuple
 
 import pyopencl as cl
 import pyopencl.array  # noqa
@@ -1165,109 +1161,6 @@ def find_linear_relationship(matrix):
 
 # }}}
 
-def matvec_toeplitz_upper_triangular(first_row, vector):
-    n = len(first_row)
-    assert len(vector) == n
-    output = [0]*n
-    for row in range(n):
-        terms = tuple(first_row[col-row]*vector[col] for col in range(row, n))
-        output[row] = sym.Add(*terms)
-    return output
-
-
-# {{{ FFT
-
-def _complex_tuple_mul(a, b, sac=None):
-    """
-    Multiply the two complex numbers represented as a tuple
-    for real and imaginary parts
-    """
-    return (add_to_sac(sac, (a[0]*b[0])-(a[1]*b[1])),
-            add_to_sac(sac, (a[0]*b[1])+(a[1]*b[0])))
-
-
-def _binary_reverse(n, bits):
-    # Returns the reverse of the number n in binary form with bits
-    # number of bits
-    b = bin(n)[2:].rjust(bits, "0")
-    return int(b[::-1], 2)
-
-
-def fft(seq, inverse=False, sac=None):
-    """
-    Return the discrete fourier transform of the sequence seq.
-    seq should be a python iterable with tuples of length 2
-    corresponding to the real part and imaginary part.
-    """
-
-    a = seq
-    n = len(a)
-    if n < 2:
-        return a
-
-    b = n.bit_length() - 1
-    if n & (n - 1):  # not a power of 2
-        b += 1
-        n = 2**b
-
-    a += [(0, 0)]*(n - len(a))
-    for i in range(1, n):
-        j = _binary_reverse(i, b)
-        if i < j:
-            a[i], a[j] = a[j], a[i]
-    ang = 2*math.pi/n
-    # Rewrite cosines and sines using cosines of angle in the first quadrant
-    # This is to reduce duplicate of floating point numbers with 1 ULP difference
-    # and also make sure quantities like cos(pi/2) - sin(pi/2) produces 0 exactly.
-    w = [(math.cos(ang*i), math.cos(ang*(n/4.0 - i))) for i in range((n + 3)//4)]
-    w[0] = (1, 0)
-    w += [(-math.cos(ang*(n/2 - i)), math.cos(ang*(i - n/4.0))) for
-            i in range((n + 3)//4, n//2)]
-    if n % 4 == 0:
-        w[n//4] = (0, 1)
-    if inverse:
-        w = [(x[0], -x[1]) for x in w]
-    h = 2
-    while h <= n:
-        hf, ut = h // 2, n // h
-        for i in range(0, n, h):
-            for j in range(hf):
-                u, v = a[i + j], _complex_tuple_mul(a[i + j + hf], w[ut * j],
-                        sac=None)
-                a[i + j] = (u[0] + v[0], u[1] + v[1])
-                a[i + j + hf] = (u[0] - v[0], u[1] - v[1])
-        h *= 2
-
-    if inverse:
-        a = [(x[0]/n, x[1]/n) for x in a]
-
-    return a
-
-
-def fft_toeplitz_upper_triangular(first_row, x, sac=None):
-    """
-    Returns the matvec of the Toeplitz matrix given by
-    the first row and the vector x using a Fourier transform
-    """
-    assert len(first_row) == len(x)
-    n = len(first_row)
-    v = list(first_row)
-    v += [0]*(n-1)
-
-    x = list(reversed(x))
-    x += [0]*(n-1)
-
-    v_fft = fft([(a, 0) for a in v], sac=sac)
-    x_fft = fft([(a, 0) for a in x], sac=sac)
-    res_fft = [_complex_tuple_mul(a, b, sac=sac) for a, b in zip(v_fft, x_fft)]
-    res = fft(res_fft, inverse=True, sac=sac)
-    return [a for a, _ in reversed(res[:n])]
-
-# }}}
-
-# }}}
-
-
 # {{{ FFT
 
 def fft(seq, inverse=False, sac=None):
@@ -1277,13 +1170,13 @@ def fft(seq, inverse=False, sac=None):
     corresponding to the real part and imaginary part.
     """
 
-    from pymbolic.algorithm import fft as _fft, ifft as _ifft 
+    from pymbolic.algorithm import fft as _fft, ifft as _ifft
 
     def wrap(expr):
         if isinstance(expr, np.ndarray):
             res = [wrap(a) for a in expr]
             return np.array(res, dtype=object).reshape(expr.shape)
-        return add_to_sac(sac, expr, "temp_fft")
+        return add_to_sac(sac, expr)
 
     if inverse:
         return _ifft(list(seq), wrap_intermediate=wrap).tolist()
@@ -1309,10 +1202,6 @@ def fft_toeplitz_upper_triangular(first_row, x, sac=None):
     res_fft = [add_to_sac(sac, a * b) for a, b in zip(v_fft, x_fft)]
     res = fft(res_fft, inverse=True, sac=sac)
     return list(reversed(res[:n]))
-
-
-def fft_toeplitz_upper_triangular_lwork(n):
-    return n
 
 
 def matvec_toeplitz_upper_triangular(first_row, vector):

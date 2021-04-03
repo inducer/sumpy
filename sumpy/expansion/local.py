@@ -243,7 +243,6 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
                                 enumerate(toeplitz_matrix_coeffs))
->>>>>>> 4b95905766d950f99b371222b93ff36b1b12358b
 
         # Create a expansion terms wrangler for derivatives up to order
         # (tgt order)+(src order) including a corresponding reduction matrix
@@ -284,7 +283,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             derivatives_full = [0]*len(toeplitz_matrix_coeffs)
             for expr, mi in zip(vector, needed_vector_terms):
                 derivatives_full[toeplitz_matrix_ident_to_index[mi]] = expr
-            return self._fft(list(reversed(derivatives_full)), sac=sac)
+            return fft(list(reversed(derivatives_full)), sac=sac)
 
         return vector
 
@@ -304,7 +303,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                     add_to_sac(sac, coeff)
 
         if self.use_fft:
-            return self._fft(toeplitz_first_row, sac=sac)
+            return fft(toeplitz_first_row, sac=sac)
         else:
             return toeplitz_first_row
 
@@ -372,7 +371,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 derivatives_full[toeplitz_matrix_ident_to_index[mi]] = expr
 
             toeplitz_first_row = self.m2l_preprocess_exprs(src_expansion,
-                src_coeff_exprs, sac)
+                src_coeff_exprs, sac, src_rscale)
 
             # Do the matvec
             if 0:
@@ -593,8 +592,6 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         if not self.use_rscale:
             rscale = 1
-        if knl is None:
-            knl = self.kernel
 
         from sumpy.symbolic import sym_real_norm_2
         bessel_j = sym.Function("bessel_j")
@@ -635,6 +632,8 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         if self.use_fft:
             order = self.order
             first, last = precomputed_exprs[:2*order], precomputed_exprs[2*order:]
+            #first, last = precomputed_exprs[:2*order+1], precomputed_exprs[2*order+1:]
+            #return fft(list(reversed(first))+list(reversed(last)), sac)
             return fft(list(last)+list(first), sac)
 
         return precomputed_exprs
@@ -659,14 +658,13 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             tgt_rscale, sac):
 
         if self.use_fft:
-            n = 2 * self.order + 1
             m2l_result = fft(m2l_result, inverse=True, sac=sac)
             m2l_result = m2l_result[:2*self.order+1]
 
         # Filter out the dummy rows and scale them for target
         result = []
         for j in self.get_coefficient_identifiers():
-            result.append(m2l_result[j + self.order] \
+            result.append(m2l_result[j + self.order]
                     * tgt_rscale**(abs(j)) * sym.Integer(-1)**j)
 
         return result
@@ -700,7 +698,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         if isinstance(src_expansion, self.mpole_expn_class):
             if precomputed_exprs is None:
                 derivatives = self.m2l_global_precompute_exprs(src_expansion,
-                    src_rscale, dvec, tgt_rscale)
+                    src_rscale, dvec, tgt_rscale, sac=sac)
             else:
                 derivatives = precomputed_exprs
 
@@ -712,17 +710,17 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                     translated_coeffs.append(a * b)
                 return translated_coeffs
 
-            src_coeff_exprs = self.m2l_preprocess_exprs(src_expansion, src_coeff_exprs, sac,
-                src_rscale)
+            src_coeff_exprs = self.m2l_preprocess_exprs(src_expansion,
+                    src_coeff_exprs, sac, src_rscale)
 
             for j in self.get_coefficient_identifiers():
-                translated_coeff.append(
+                translated_coeffs.append(
                       sum(derivatives[m + j + 2*self.order]
                         * src_coeff_exprs[src_expansion.get_storage_index(m)]
                         for m in src_expansion.get_coefficient_identifiers()))
 
-            translated_coeffs = self.m2l_postprocess_exprs(src_expansion, translated_coeffs, src_rscale,
-                tgt_rscale, sac)
+            translated_coeffs = self.m2l_postprocess_exprs(src_expansion,
+                translated_coeffs, src_rscale, tgt_rscale, sac)
             return translated_coeffs
 
         raise RuntimeError("do not know how to translate %s to %s"
@@ -737,6 +735,7 @@ class H2DLocalExpansion(_FourierBesselLocalExpansion):
                 and kernel.dim == 2)
 
         super().__init__(kernel, order, use_rscale, use_fft=use_fft)
+        print(use_fft)
 
         from sumpy.expansion.multipole import H2DMultipoleExpansion
         self.mpole_expn_class = H2DMultipoleExpansion

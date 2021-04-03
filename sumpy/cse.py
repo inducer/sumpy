@@ -143,6 +143,7 @@ class FuncArgTracker:
 
         for func_i, func in enumerate(funcs):
             func_argset = set()
+
             for func_arg in func.args:
                 arg_number = self.get_or_add_value_number(func_arg)
                 func_argset.add(arg_number)

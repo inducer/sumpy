@@ -54,7 +54,7 @@ else:
 
 
 @pytest.mark.parametrize(
-        "knl, local_expn_class, mpole_expn_class, optimized_m2l, use_fft", [
+    "knl, local_expn_class, mpole_expn_class, optimized_m2l, use_fft", [
     (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
         False, False),
     (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
@@ -78,11 +78,13 @@ else:
     (HelmholtzKernel(2), HelmholtzConformingVolumeTaylorLocalExpansion,
         HelmholtzConformingVolumeTaylorMultipoleExpansion, False, False),
     (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion, False, False),
+    (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion, True, False),
+    (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion, True, True),
     (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
         False, False),
     (HelmholtzKernel(3), HelmholtzConformingVolumeTaylorLocalExpansion,
         HelmholtzConformingVolumeTaylorMultipoleExpansion, False, False),
-    (YukawaKernel(2), Y2DLocalExpansion, Y2DMultipoleExpansion, False, True),
+    (YukawaKernel(2), Y2DLocalExpansion, Y2DMultipoleExpansion, False, False),
     ])
 def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
         optimized_m2l, use_fft):
@@ -360,7 +362,7 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory):
     wcc = SumpyExpansionWranglerCodeContainer(
             ctx,
             partial(mpole_expn_class, knl),
-            partial(local_expn_class, knl, use_fft=use_fft),
+            partial(local_expn_class, knl),
             target_kernels)
 
     wrangler = wcc.get_wrangler(queue, tree, dtype,
@@ -512,7 +514,8 @@ def test_sumpy_axis_source_derivative(ctx_factory):
 
 
 # You can test individual routines by typing
-# $ python test_fmm.py 'test_sumpy_fmm(cl.create_some_context)'
+# $ python test_fmm.py 'test_sumpy_fmm(cl.create_some_context, LaplaceKernel(2),
+#       VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion, False, False)'
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

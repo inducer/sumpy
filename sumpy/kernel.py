@@ -20,6 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+
 import loopy as lp
 import numpy as np
 from pymbolic.mapper import IdentityMapper, CSECachingMapperMixin
@@ -370,8 +371,6 @@ class ExpressionKernel(Kernel):
                 key_builder.rec(key_hash, value)
 
     mapper_method = "map_expression_kernel"
-    # TODO: Allow kernels that are not translation invariant
-    is_translation_invariant = True
 
     def get_derivative_taker(self, dvec, rscale, sac):
         """Return a :class:`sumpy.tools.ExprDerivativeTaker` instance that supports
@@ -424,7 +423,6 @@ class LaplaceKernel(ExpressionKernel):
         return "LapKnl%dD" % self.dim
 
     mapper_method = "map_laplace_kernel"
-    is_translation_invariant = True
 
     def get_derivative_taker(self, dvec, rscale, sac):
         """Return a :class:`sumpy.tools.ExprDerivativeTaker` instance that supports
@@ -468,7 +466,6 @@ class BiharmonicKernel(ExpressionKernel):
         return "BiharmKnl%dD" % self.dim
 
     mapper_method = "map_biharmonic_kernel"
-    is_translation_invariant = True
 
     def get_derivative_taker(self, dvec, rscale, sac):
         """Return a :class:`sumpy.tools.ExprDerivativeTaker` instance that supports
@@ -547,7 +544,6 @@ class HelmholtzKernel(ExpressionKernel):
                     )]
 
     mapper_method = "map_helmholtz_kernel"
-    is_translation_invariant = True
 
     def get_derivative_taker(self, dvec, rscale, sac):
         """Return a :class:`sumpy.tools.ExprDerivativeTaker` instance that supports
@@ -629,7 +625,6 @@ class YukawaKernel(ExpressionKernel):
                     )]
 
     mapper_method = "map_yukawa_kernel"
-    is_translation_invariant = True
 
     def get_derivative_taker(self, dvec, rscale, sac):
         """Return a :class:`sumpy.tools.ExprDerivativeTaker` instance that supports
@@ -704,7 +699,6 @@ class StokesletKernel(ExpressionKernel):
                     )]
 
     mapper_method = "map_stokeslet_kernel"
-    is_translation_invariant = True
 
 
 class StressletKernel(ExpressionKernel):

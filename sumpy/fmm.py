@@ -99,6 +99,7 @@ class SumpyExpansionWranglerCodeContainer:
 
     @memoize_method
     def local_expansion(self, order):
+        print(self.use_fft)
         return self.local_expansion_factory(order, self.use_rscale,
                 use_fft=self.use_fft)
 
@@ -132,19 +133,19 @@ class SumpyExpansionWranglerCodeContainer:
     def m2l_optimized(self, src_order, tgt_order):
         return E2EFromCSRTranslationInvariant(self.cl_context,
                 self.multipole_expansion(src_order),
-                self.local_expansion(tgt_order), use_fft=self.use_fft)
+                self.local_expansion(tgt_order))
 
     @memoize_method
     def m2l_optimized_precompute_kernel(self, src_order, tgt_order):
         return E2EFromCSRTranslationClassesPrecompute(self.cl_context,
                 self.multipole_expansion(src_order),
-                self.local_expansion(tgt_order), use_fft=self.use_fft)
+                self.local_expansion(tgt_order))
 
     @memoize_method
     def m2l_preprocess_kernel(self, src_order, tgt_order):
         return E2EFromCSRWithFFTPreprocess(self.cl_context,
                 self.multipole_expansion(src_order),
-                self.local_expansion(tgt_order), use_fft=self.use_fft)
+                self.local_expansion(tgt_order))
 
     @memoize_method
     def l2l(self, src_order, tgt_order):
@@ -178,8 +179,7 @@ class SumpyExpansionWranglerCodeContainer:
             translation_classes_data=None):
         return SumpyExpansionWrangler(self, queue, tree, dtype, fmm_level_to_order,
                 source_extra_kwargs, kernel_extra_kwargs, self_extra_kwargs,
-                translation_classes_data=translation_classes_data,
-                use_fft=self.use_fft)
+                translation_classes_data=translation_classes_data)
 # }}}
 
 
@@ -366,7 +366,7 @@ class SumpyExpansionWrangler:
                          "unoptimized. Supply a translation_classes_data argument "
                          "to the wrangler for optimized List 2.",
                          SumpyTranslationClassesDataNotSuppliedWarning,
-                     stacklevel=2)
+                         stacklevel=2)
                 self.supports_optimized_m2l = False
             else:
                 self.supports_optimized_m2l = True
@@ -374,6 +374,7 @@ class SumpyExpansionWrangler:
             self.supports_optimized_m2l = False
 
         self.translation_classes_data = translation_classes_data
+        self.use_fft = self.code.use_fft
 
     # {{{ data vector utilities
 
@@ -463,9 +464,10 @@ class SumpyExpansionWrangler:
     @memoize_method
     def pp_multipole_expansions_level_starts(self):
         def order_to_size(order):
-            mpole_expn = self.code.multipole_expansion_factory(order)
-            local_expn = self.code.local_expansion_factory(order)
-            return local_expn.m2l_global_precompute_nexpr(mpole_expn)
+            mpole_expn = self.code.multipole_expansion(order)
+            local_expn = self.code.local_expansion(order)
+            res = local_expn.m2l_global_precompute_nexpr(mpole_expn)
+            return res
 
         return self._expansions_level_starts(order_to_size,
                 level_starts=self.tree.level_start_box_nrs)
@@ -746,6 +748,9 @@ class SumpyExpansionWrangler:
                 )
                 events.append(evt)
             mpole_exps = pp_mpole_exps
+            mpole_exps_view_func = self.pp_multipole_expansions_view
+        else:
+            mpole_exps_view_func = self.multipole_expansions_view
 
         local_exps = self.local_expansion_zeros()
 
@@ -759,7 +764,7 @@ class SumpyExpansionWrangler:
             m2l = self.m2l_class(order, order)
 
             source_level_start_ibox, source_mpoles_view = \
-                    self.m2l_mpole_expansions_view(mpole_exps, lev)
+                    mpole_exps_view_func(mpole_exps, lev)
             target_level_start_ibox, target_local_exps_view = \
                     self.local_expansions_view(local_exps, lev)
 
