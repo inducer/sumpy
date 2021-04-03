@@ -632,8 +632,6 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         if self.use_fft:
             order = self.order
             first, last = precomputed_exprs[:2*order], precomputed_exprs[2*order:]
-            #first, last = precomputed_exprs[:2*order+1], precomputed_exprs[2*order+1:]
-            #return fft(list(reversed(first))+list(reversed(last)), sac)
             return fft(list(last)+list(first), sac)
 
         return precomputed_exprs
