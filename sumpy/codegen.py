@@ -73,114 +73,6 @@ class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
 # }}}
 
 
-# {{{ trivial assignment elimination
-
-def make_one_step_subst(assignments):
-    assignments = dict(assignments)
-    unwanted_vars = set(assignments.keys())
-
-    # Ensure no re-assignments.
-    assert len(unwanted_vars) == len(assignments)
-
-    from loopy.symbolic import get_dependencies
-    unwanted_deps = {
-        name: get_dependencies(value) & unwanted_vars
-        for name, value in assignments.items()}
-
-    # {{{ compute substitution order
-
-    toposort = []
-    visited = set()
-    visiting = set()
-
-    while unwanted_vars:
-        stack = [unwanted_vars.pop()]
-
-        while stack:
-            top = stack[-1]
-
-            if top in visiting:
-                visiting.remove(top)
-                toposort.append(top)
-
-            if top in visited:
-                stack.pop()
-                continue
-
-            visited.add(top)
-            visiting.add(top)
-
-            for dep in unwanted_deps[top]:
-                # Check for no cycles.
-                assert dep not in visiting
-                stack.append(dep)
-
-    # }}}
-
-    # {{{ make substitution
-
-    from pymbolic import substitute
-
-    result = {}
-    used_name_to_var = {}
-    from pymbolic import evaluate
-    from functools import partial
-    simplify = partial(evaluate, context=used_name_to_var)
-
-    for name in toposort:
-        value = assignments[name]
-        value = substitute(value, result)
-        used_name_to_var.update(
-            (used_name, prim.Variable(used_name))
-            for used_name in get_dependencies(value)
-            if used_name not in used_name_to_var)
-
-        result[name] = simplify(value)
-
-    # }}}
-
-    return result
-
-
-def is_assignment_nontrivial(name, value):
-    if prim.is_constant(value):
-        return False
-    elif isinstance(value, prim.Variable):
-        return False
-    else:
-        return True
-
-
-def kill_trivial_assignments(assignments, retain_names=set()):
-    from pytools import ProcessLogger
-    plog = ProcessLogger(logger, "kill trivial assignments (plain)")
-    approved_assignments = []
-    rejected_assignments = []
-
-    for name, value in assignments:
-        if name in retain_names or is_assignment_nontrivial(name, value):
-            approved_assignments.append((name, value))
-        else:
-            rejected_assignments.append((name, value))
-
-    # un-substitute rejected assignments
-    unsubst_rej = make_one_step_subst(rejected_assignments)
-
-    result = []
-    from pymbolic import substitute
-    for name, expr in approved_assignments:
-        r = substitute(expr, unsubst_rej)
-        result.append((name, r))
-
-    nrej = len(rejected_assignments)
-    plog.done()
-    logger.info(f"{nrej} assignments killed.")
-
-    return result
-
-# }}}
-
-
 # {{{ bessel handling
 
 BESSEL_PREAMBLE = """//CL//
@@ -675,8 +567,6 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
     # convert from sympy
     sympy_conv = SympyToPymbolicMapper()
     assignments = [(name, sympy_conv(expr)) for name, expr in assignments]
-
-    assignments = kill_trivial_assignments(assignments, retain_names)
 
     bdr = BesselDerivativeReplacer()
     assignments = [(name, bdr(expr)) for name, expr in assignments]
