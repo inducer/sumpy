@@ -412,6 +412,7 @@ class FractionKiller(CSECachingMapperMixin, IdentityMapper):
 
         if isinstance(num, int) and isinstance(denom, int):
             if num % denom == 0:
+                1/0
                 return num // denom
             return int(expr.numerator) / int(expr.denominator)
 
