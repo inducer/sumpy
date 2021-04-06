@@ -330,18 +330,27 @@ class BesselDerivativeReplacer(CSECachingMapperMixin, IdentityMapper):
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
 
-class BesselSubstitutor(CSECachingMapperMixin, IdentityMapper):
+class CallExternalRecMapper(IdentityMapper):
+    def rec(self, expr, rec_object=None, *args, **kwargs):
+        if rec_object:
+            return rec_object.rec(expr, *args, **kwargs)
+        else:
+            return super().rec(expr, *args, **kwargs)
+
+
+class BesselSubstitutor(CSECachingMapperMixin, CallExternalRecMapper):
     def __init__(self, bessel_getter):
         self.bessel_getter = bessel_getter
 
-    def map_call(self, expr):
+    def map_call(self, expr, rec_object=None, *args):
         if isinstance(expr.function, prim.Variable):
             name = expr.function.name
             if name in ["hankel_1", "bessel_j"]:
                 order, arg = expr.parameters
-                return getattr(self.bessel_getter, name)(order, self.rec(arg))
+                return getattr(self.bessel_getter, name)(order, self.rec(arg,
+                    rec_object, *args))
 
-        return IdentityMapper.map_call(self, expr)
+        return IdentityMapper.map_call(rec_object if rec_object else self, expr)
 
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
@@ -350,22 +359,22 @@ class BesselSubstitutor(CSECachingMapperMixin, IdentityMapper):
 
 # {{{ power rewriter
 
-class PowerRewriter(CSECachingMapperMixin, IdentityMapper):
-    def map_power(self, expr):
+class PowerRewriter(CSECachingMapperMixin, CallExternalRecMapper):
+    def map_power(self, expr, *args):
         exp = expr.exponent
         if isinstance(exp, int):
             new_base = prim.wrap_in_cse(expr.base)
 
             if exp > 1 and exp % 2 == 0:
                 square = prim.wrap_in_cse(new_base*new_base)
-                return self.rec(prim.wrap_in_cse(square**(exp//2)))
+                return self.rec(prim.wrap_in_cse(square**(exp//2)), *args)
             elif exp > 1 and exp % 2 == 1:
                 square = prim.wrap_in_cse(new_base*new_base)
-                return self.rec(prim.wrap_in_cse(square**((exp-1)//2))*new_base)
+                return self.rec(prim.wrap_in_cse(square**((exp-1)//2))*new_base, *args)
             elif exp == 1:
                 return new_base
             elif exp < 0:
-                return self.rec((1/new_base)**(-exp))
+                return self.rec((1/new_base)**(-exp), *args)
 
         if (isinstance(expr.exponent, prim.Quotient)
                 and isinstance(expr.exponent.numerator, int)
@@ -377,7 +386,7 @@ class PowerRewriter(CSECachingMapperMixin, IdentityMapper):
                 p *= -1
 
             if q == 1:
-                return self.rec(new_base**p)
+                return self.rec(new_base**p, *args)
 
             if q == 2:
                 assert p != 0
@@ -389,9 +398,9 @@ class PowerRewriter(CSECachingMapperMixin, IdentityMapper):
                     new_base = prim.wrap_in_cse(prim.Variable("rsqrt")(expr.base))
                     p *= -1
 
-                return self.rec(new_base**p)
+                return self.rec(new_base**p, *args)
 
-        return IdentityMapper.map_power(self, expr)
+        return IdentityMapper.map_power(rec_object if rec_object else self, expr)
 
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
@@ -403,7 +412,7 @@ class PowerRewriter(CSECachingMapperMixin, IdentityMapper):
 from loopy.tools import is_integer
 
 
-class BigIntegerKiller(CSECachingMapperMixin, IdentityMapper):
+class BigIntegerKiller(CSECachingMapperMixin, CallExternalRecMapper):
 
     def __init__(self, warn_on_digit_loss=True, int_type=np.int64,
             float_type=np.float64):
@@ -412,11 +421,11 @@ class BigIntegerKiller(CSECachingMapperMixin, IdentityMapper):
         self.float_type = float_type
         self.iinfo = np.iinfo(int_type)
 
-    def map_constant(self, expr):
+    def map_constant(self, expr, *args):
         """Convert integer values not within the range of `self.int_type` to float.
         """
         if not is_integer(expr):
-            return IdentityMapper.map_constant(self, expr)
+            return expr
 
         if self.iinfo.min <= expr <= self.iinfo.max:
             return expr
@@ -441,7 +450,7 @@ class BigIntegerKiller(CSECachingMapperMixin, IdentityMapper):
 
 # {{{ convert 123000000j to 123000000 * 1j
 
-class ComplexRewriter(CSECachingMapperMixin, IdentityMapper):
+class ComplexRewriter(CSECachingMapperMixin, CallExternalRecMapper):
 
     def __init__(self, float_type=np.float32):
         IdentityMapper.__init__(self)
@@ -468,13 +477,13 @@ class ComplexRewriter(CSECachingMapperMixin, IdentityMapper):
 INDEXED_VAR_RE = re.compile("^([a-zA-Z_]+)([0-9]+)$")
 
 
-class VectorComponentRewriter(CSECachingMapperMixin, IdentityMapper):
+class VectorComponentRewriter(CSECachingMapperMixin, CallExternalRecMapper):
     """For names in name_whitelist, turn ``a3`` into ``a[3]``."""
 
     def __init__(self, name_whitelist=set()):
         self.name_whitelist = name_whitelist
 
-    def map_variable(self, expr):
+    def map_variable(self, expr, *args):
         match_obj = INDEXED_VAR_RE.match(expr.name)
         if match_obj is not None:
             name = match_obj.group(1)
@@ -482,9 +491,9 @@ class VectorComponentRewriter(CSECachingMapperMixin, IdentityMapper):
             if name in self.name_whitelist:
                 return prim.Variable(name).index(subscript)
             else:
-                return IdentityMapper.map_variable(self, expr)
+                return expr
         else:
-            return IdentityMapper.map_variable(self, expr)
+            return expr
 
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
@@ -493,14 +502,15 @@ class VectorComponentRewriter(CSECachingMapperMixin, IdentityMapper):
 
 # {{{ sum sign grouper
 
-class SumSignGrouper(CSECachingMapperMixin, IdentityMapper):
+class SumSignGrouper(CSECachingMapperMixin, CallExternalRecMapper):
     """Anti-cancellation cargo-cultism."""
 
-    def map_sum(self, expr):
+    def map_sum(self, expr, *args):
         first_group = []
         second_group = []
 
-        for child in expr.children:
+        for orig_child in expr.children:
+            child = self.rec(orig_child, *args)
             tchild = child
             if isinstance(tchild, prim.CommonSubexpression):
                 tchild = tchild.child
@@ -518,6 +528,10 @@ class SumSignGrouper(CSECachingMapperMixin, IdentityMapper):
             else:
                 first_group.append(child)
 
+        new_children = tuple(first_group + second_group)
+        if len(new_children) == len(expr.children) and \
+            all(child is orig_child for child, orig_child in zip(new_children, expr.children)):
+                return expr
         return prim.Sum(tuple(first_group+second_group))
 
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
@@ -525,14 +539,67 @@ class SumSignGrouper(CSECachingMapperMixin, IdentityMapper):
 # }}}
 
 
-class MathConstantRewriter(CSECachingMapperMixin, IdentityMapper):
-    def map_variable(self, expr):
+class MathConstantRewriter(CSECachingMapperMixin, CallExternalRecMapper):
+    def map_variable(self, expr, *args):
         if expr.name == "pi":
             return prim.Variable("M_PI")
         else:
-            return IdentityMapper.map_variable(self, expr)
+            return expr
 
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+
+def combine_mappers(self, *mappers):
+    from collections import defaultdict
+    all_methods = defaultdict(list)
+    base_classes = [CSECachingMapperMixin, IdentityMapper]
+    for mapper in mappers:
+        assert isinstance(mapper, CallExternalRecMapper)
+        for method_name in dir(type(mapper)):
+            if not method_name.startswith("map"):
+                continue
+            if method_name == "map_common_subexpression_uncached":
+                continue
+            method = getattr(type(mapper), method_name)
+            method_equals_base_class_method = False
+            for base_class in base_classes:
+                base_class_method = getattr(base_class, method_name, None)
+                if base_class_method is not None:
+                    method_equals_base_class_method = (base_class_method == method)
+                    break
+            else:
+                raise RuntimeError(f"Unknown mapping method {method_name}")
+
+            if method_equals_base_class_method:
+                continue
+            all_methods[method_name].append((mapper, method))
+
+
+    class CombineMapper(CSECachingMapperMixin, IdentityMapper):
+        def __init__(self, all_methods):
+            self.all_methods = all_methods
+        map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+
+
+    def _map(method_name, self, expr):
+        if not method_name in self.all_methods:
+            return getattr(IdentityMapper, method_name)(self, expr)
+        orig_expr = expr
+        for mapper, method in self.all_methods[method_name]:
+            new_expr = method(mapper, expr, self)
+            if not hasattr(new_expr, "mapper_method"):
+                return new_expr
+            if getattr(new_expr, "mapper_method", None) != method_name:
+                ret = self.rec(new_expr)
+                return ret
+            expr = new_expr
+        return expr
+
+    from functools import partial
+    import types
+    combine_mapper = CombineMapper(all_methods)
+    for method_name in all_methods.keys():
+        setattr(combine_mapper, method_name, types.MethodType(partial(_map, method_name), combine_mapper))
+    return combine_mapper
 
 
 def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
@@ -565,8 +632,11 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
     bik = BigIntegerKiller()
     cmr = ComplexRewriter()
 
+    cmb_mapper = combine_mappers(bessel_sub, vcr, pwr, ssg, bik, cmr)
+
     def convert_expr(name, expr):
         logger.debug("generate expression for: %s" % name)
+        """
         expr = bdr(expr)
         expr = bessel_sub(expr)
         expr = vcr(expr)
@@ -574,6 +644,8 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
         expr = ssg(expr)
         expr = bik(expr)
         expr = cmr(expr)
+        """
+        expr = cmb_mapper(expr)
         #expr = cse_tag(expr)
         for m in pymbolic_expr_maps:
             expr = m(expr)
