@@ -398,30 +398,6 @@ class PowerRewriter(CSECachingMapperMixin, IdentityMapper):
 # }}}
 
 
-# {{{ fraction killer
-
-class FractionKiller(CSECachingMapperMixin, IdentityMapper):
-    """Kills fractions where the numerator is evenly divisible by the
-    denominator.
-
-    (Why does :mod:`sympy` even produce these?)
-    """
-    def map_quotient(self, expr):
-        num = expr.numerator
-        denom = expr.denominator
-
-        if isinstance(num, int) and isinstance(denom, int):
-            if num % denom == 0:
-                return num // denom
-            return int(expr.numerator) / int(expr.denominator)
-
-        return IdentityMapper.map_quotient(self, expr)
-
-    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
-
-# }}}
-
-
 # {{{ convert big integers into floats
 
 from loopy.tools import is_integer
@@ -586,7 +562,6 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
     vcr = VectorComponentRewriter(vector_names)
     pwr = PowerRewriter()
     ssg = SumSignGrouper()
-    fck = FractionKiller()
     bik = BigIntegerKiller()
     cmr = ComplexRewriter()
 
@@ -596,7 +571,6 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
         expr = bessel_sub(expr)
         expr = vcr(expr)
         expr = pwr(expr)
-        expr = fck(expr)
         expr = ssg(expr)
         expr = bik(expr)
         expr = cmr(expr)
