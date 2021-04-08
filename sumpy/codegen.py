@@ -28,7 +28,7 @@ import loopy as lp
 
 import re
 
-from pymbolic.mapper import IdentityMapper, WalkMapper, CSECachingMapperMixin
+from pymbolic.mapper import IdentityMapper, CSECachingMapperMixin
 import pymbolic.primitives as prim
 
 from loopy.types import NumpyType
@@ -300,7 +300,8 @@ class BesselTopOrderGatherer(CSECachingMapperMixin, CallExternalRecMapper):
             self.bessel_j_arg_to_top_order[arg] = max(
                     self.bessel_j_arg_to_top_order.get(arg, 0),
                     abs(order))
-        return IdentityMapper.map_call(rec_object if rec_object else self, expr, rec_object, *args)
+        return IdentityMapper.map_call(rec_object if rec_object else self,
+                expr, rec_object, *args)
 
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
