@@ -143,116 +143,11 @@ class E2EFromCSR(E2EBase):
 
     default_name = "e2e_from_csr"
 
-    def get_kernel(self):
-        ncoeff_src = len(self.src_expansion)
-        ncoeff_tgt = len(self.tgt_expansion)
-
-        # To clarify terminology:
-        #
-        # isrc_box -> The index in a list of (in this case, source) boxes
-        # src_ibox -> The (global) box number for the (in this case, source) box
-        #
-        # (same for itgt_box, tgt_ibox)
-
-        from sumpy.tools import gather_loopy_arguments
-        loopy_knl = lp.make_kernel(
-                [
-                    "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
-                    "{[isrc_box]: isrc_start<=isrc_box<isrc_stop}",
-                    "{[idim]: 0<=idim<dim}",
-                    ],
-                ["""
-                for itgt_box
-                    <> tgt_ibox = target_boxes[itgt_box]
-
-                    <> tgt_center[idim] = centers[idim, tgt_ibox] \
-
-                    <> isrc_start = src_box_starts[itgt_box]
-                    <> isrc_stop = src_box_starts[itgt_box+1]
-
-                    for isrc_box
-                        <> src_ibox = src_box_lists[isrc_box] \
-                                {id=read_src_ibox}
-
-                        <> src_center[idim] = centers[idim, src_ibox] {dup=idim}
-                        <> d[idim] = tgt_center[idim] - src_center[idim] \
-                            {dup=idim}
-
-                        """] + ["""
-                        <> src_coeff{coeffidx} = \
-                            src_expansions[src_ibox - src_base_ibox, {coeffidx}] \
-                            {{dep=read_src_ibox}}
-                        """.format(coeffidx=i) for i in range(ncoeff_src)] + [
-
-                        ] + self.get_translation_loopy_insns() + ["""
-                    end
-
-                    """] + ["""
-                    tgt_expansions[tgt_ibox - tgt_base_ibox, {coeffidx}] = \
-                            simul_reduce(sum, isrc_box, coeff{coeffidx}) \
-                            {{id_prefix=write_expn}}
-                    """.format(coeffidx=i) for i in range(ncoeff_tgt)] + ["""
-                end
-                """],
-                [
-                    lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
-                    lp.ValueArg("src_rscale,tgt_rscale", None),
-                    lp.GlobalArg("src_box_starts, src_box_lists",
-                        None, shape=None, strides=(1,), offset=lp.auto),
-                    lp.ValueArg("aligned_nboxes,tgt_base_ibox,src_base_ibox",
-                        np.int32),
-                    lp.ValueArg("nsrc_level_boxes,ntgt_level_boxes",
-                        np.int32),
-                    lp.GlobalArg("src_expansions", None,
-                        shape=("nsrc_level_boxes", ncoeff_src), offset=lp.auto),
-                    lp.GlobalArg("tgt_expansions", None,
-                        shape=("ntgt_level_boxes", ncoeff_tgt), offset=lp.auto),
-                    "..."
-                ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
-                name=self.name,
-                assumptions="ntgt_boxes>=1",
-                silenced_warnings="write_race(write_expn*)",
-                default_offset=lp.auto,
-                fixed_parameters=dict(dim=self.dim),
-                lang_version=MOST_RECENT_LANGUAGE_VERSION
-                )
-
-        for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
-            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
-
-        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-        loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
-
-        return loopy_knl
-
-    def __call__(self, queue, **kwargs):
-        """
-        :arg src_expansions:
-        :arg src_box_starts:
-        :arg src_box_lists:
-        :arg src_rscale:
-        :arg tgt_rscale:
-        :arg centers:
-        """
-        knl = self.get_cached_optimized_kernel()
-
-        centers = kwargs.pop("centers")
-        # "1" may be passed for rscale, which won't have its type
-        # meaningfully inferred. Make the type of rscale explicit.
-        src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
-        tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
-
-        return knl(queue,
-                centers=centers,
-                src_rscale=src_rscale, tgt_rscale=tgt_rscale,
-                **kwargs)
-
-
-class E2EFromCSRTranslationInvariant(E2EFromCSR):
-    """Implements translation from a "compressed sparse row"-like source box
-    list for translation invariant Kernels.
-    """
-    default_name = "e2e_from_csr_translation_invariant"
+    def __init__(self, ctx, src_expansion, tgt_expansion,
+            name=None, device=None, use_precomputed_exprs=False):
+        super().__init__(ctx, src_expansion, tgt_expansion,
+            name=name, device=device)
+        self.use_precomputed_exprs = use_precomputed_exprs
 
     def get_translation_loopy_insns(self):
         from sumpy.symbolic import make_sym_vector
@@ -266,6 +161,9 @@ class E2EFromCSRTranslationInvariant(E2EFromCSR):
 
         nprecomputed_exprs = \
             self.tgt_expansion.m2l_global_precompute_nexpr(self.src_expansion)
+
+        if not self.use_precomputed_exprs:
+            nprecomputed_exprs = 0
 
         precomputed_exprs = [sym.Symbol("precomputed_expr%d" % i)
                 for i in range(nprecomputed_exprs)]
@@ -297,6 +195,9 @@ class E2EFromCSRTranslationInvariant(E2EFromCSR):
         nprecomputed_exprs = \
             self.tgt_expansion.m2l_global_precompute_nexpr(self.src_expansion)
 
+        if not self.use_precomputed_exprs:
+            nprecomputed_exprs = 0
+
         # To clarify terminology:
         #
         # isrc_box -> The index in a list of (in this case, source) boxes
@@ -327,11 +228,12 @@ class E2EFromCSRTranslationInvariant(E2EFromCSR):
                         <> src_center[idim] = centers[idim, src_ibox] {dup=idim}
                         <> d[idim] = tgt_center[idim] - src_center[idim] \
                             {dup=idim}
+                        """] + (["""
                         <> translation_class = \
                                 m2l_translation_classes_lists[isrc_box]
                         <> translation_class_rel = translation_class - \
                                                     translation_classes_level_start
-                        """] + ["""
+                        """] if nprecomputed_exprs != 0 else []) + ["""
                         <> precomputed_expr{idx} = \
                             m2l_precomputed_exprs[translation_class_rel, {idx}]
                         """.format(idx=idx) for idx in range(
@@ -360,22 +262,24 @@ class E2EFromCSRTranslationInvariant(E2EFromCSR):
                         np.int32),
                     lp.ValueArg("nsrc_level_boxes,ntgt_level_boxes",
                         np.int32),
-                    lp.ValueArg("translation_classes_level_start",
-                        np.int32),
                     lp.GlobalArg("src_expansions", None,
                         shape=("nsrc_level_boxes", ncoeff_src), offset=lp.auto),
                     lp.GlobalArg("tgt_expansions", None,
                         shape=("ntgt_level_boxes", ncoeff_tgt), offset=lp.auto),
-                    lp.ValueArg("ntranslation_classes, ntranslation_classes_lists",
+                    "..."
+                ] + ([
+                    lp.ValueArg("translation_classes_level_start",
                         np.int32),
-                    lp.GlobalArg("m2l_translation_classes_lists", np.int32,
-                        shape=("ntranslation_classes_lists"), strides=(1,),
-                        offset=lp.auto),
                     lp.GlobalArg("m2l_precomputed_exprs", None,
                         shape=("ntranslation_classes", nprecomputed_exprs),
                         offset=lp.auto),
-                    "..."
-                ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
+                    lp.GlobalArg("m2l_translation_classes_lists", np.int32,
+                        shape=("ntranslation_classes_lists"), strides=(1,),
+                        offset=lp.auto),
+                    lp.ValueArg("ntranslation_classes, ntranslation_classes_lists",
+                        np.int32),
+                ] if nprecomputed_exprs != 0 else []) + \
+                        gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
@@ -392,6 +296,34 @@ class E2EFromCSRTranslationInvariant(E2EFromCSR):
         loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
 
         return loopy_knl
+
+    def get_cache_key(self):
+        return (
+                type(self).__name__,
+                self.src_expansion,
+                self.tgt_expansion, self.use_precomputed_exprs)
+
+    def __call__(self, queue, **kwargs):
+        """
+        :arg src_expansions:
+        :arg src_box_starts:
+        :arg src_box_lists:
+        :arg src_rscale:
+        :arg tgt_rscale:
+        :arg centers:
+        """
+        knl = self.get_cached_optimized_kernel()
+
+        centers = kwargs.pop("centers")
+        # "1" may be passed for rscale, which won't have its type
+        # meaningfully inferred. Make the type of rscale explicit.
+        src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
+        tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
+
+        return knl(queue,
+                centers=centers,
+                src_rscale=src_rscale, tgt_rscale=tgt_rscale,
+                **kwargs)
 
 
 class E2EFromCSRTranslationClassesPrecompute(E2EFromCSR):

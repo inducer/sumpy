@@ -31,11 +31,6 @@ from sumpy.expansion import (
 from sumpy.tools import mi_increment_axis, matvec_toeplitz_upper_triangular
 from pytools import single_valued
 
-
-class LocalExpansionBase(ExpansionBase):
-    pass
-
-
 import logging
 logger = logging.getLogger(__name__)
 
@@ -47,6 +42,19 @@ __doc__ = """
 .. autoclass:: LineTaylorLocalExpansion
 
 """
+
+
+class LocalExpansionBase(ExpansionBase):
+    def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
+            dvec, tgt_rscale, sac):
+        return tuple()
+
+    def m2l_global_precompute_nexpr(self, src_expansion):
+        return 0
+
+    def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
+            dvec, tgt_rscale, sac=None, precomputed_exprs=None):
+        raise NotImplementedError
 
 
 # {{{ line taylor
@@ -301,7 +309,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
                                 enumerate(toeplitz_matrix_coeffs))
 
-            if precomputed_exprs is None:
+            if not precomputed_exprs:
                 derivatives = self.m2l_global_precompute_exprs(src_expansion,
                         src_rscale, dvec, tgt_rscale, sac)
             else:
@@ -550,7 +558,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                 for c in self.get_coefficient_identifiers())
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale, sac=None):
+            dvec, tgt_rscale, sac=None, precomputed_exprs=None):
         from sumpy.symbolic import sym_real_norm_2
 
         if not self.use_rscale:
