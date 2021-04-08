@@ -54,9 +54,8 @@ class LocalExpansionBase(ExpansionBase):
         for multipole-to-local translations that depend only on the
         distance between the multipole center and the local center.
 
-        Since there are only a few different values for the distance between
-        multipole center and local center (27 per level for 2D and
-        80 per level for 3D), these can be precomputed for the tree.
+        Since there are only a finite amount of different values for the
+        distance between per level, these can be precomputed for the tree.
         """
         return tuple()
 
