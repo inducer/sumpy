@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 __doc__ = """
 
+.. autoclass:: LocalExpansionBase
 .. autoclass:: VolumeTaylorLocalExpansion
 .. autoclass:: H2DLocalExpansion
 .. autoclass:: Y2DLocalExpansion
@@ -45,11 +46,24 @@ __doc__ = """
 
 
 class LocalExpansionBase(ExpansionBase):
+    """Base class for local expansions.
+    """
     def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
             dvec, tgt_rscale, sac):
+        """Return an iterable of expressions that needs to be precomputed
+        for multipole-to-local translations that depend only on the
+        distance between the multipole center and the local center.
+
+        Since there are only a few different values for the distance between
+        multipole center and local center (27 per level for 2D and
+        80 per level for 3D), these can be precomputed for the tree.
+        """
         return tuple()
 
     def m2l_global_precompute_nexpr(self, src_expansion):
+        """Return the number of expressions returned by
+        :func:`~sumpy.expansion.local.LocalExpansionBase.m2l_global_precompute_exprs`.
+        """
         return 0
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
