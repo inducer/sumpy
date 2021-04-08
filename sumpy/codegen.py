@@ -556,7 +556,16 @@ class MathConstantRewriter(CSECachingMapperMixin, CallExternalRecMapper):
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
 
-def combine_mappers(self, *mappers):
+def combine_mappers(*mappers):
+    """Returns a mapper that combines the work of several mappers.
+    For this to work, the mappers need to be instances of
+    :class:`sumpy.codegen.CallExternalRecMapper` and when calling
+    parent class methods, the mappers need to use the argument
+    *rec_object* passed to the *map_* method. All the mappers
+    need to be commutative and for any mapper applying the
+    mapper on an expression that has already been mapped should
+    result in an identical object.
+    """
     from collections import defaultdict
     all_methods = defaultdict(list)
     base_classes = [CSECachingMapperMixin, IdentityMapper]
