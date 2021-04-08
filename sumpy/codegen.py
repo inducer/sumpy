@@ -275,7 +275,15 @@ class BesselGetter:
                     "bessel_j_%d" % order)
 
 
-class BesselTopOrderGatherer(CSECachingMapperMixin, WalkMapper):
+class CallExternalRecMapper(IdentityMapper):
+    def rec(self, expr, rec_object=None, *args, **kwargs):
+        if rec_object:
+            return rec_object.rec(expr, *args, **kwargs)
+        else:
+            return super().rec(expr, *args, **kwargs)
+
+
+class BesselTopOrderGatherer(CSECachingMapperMixin, CallExternalRecMapper):
     """This mapper walks the expression tree to find the highest-order
     Bessel J being used, so that all other Js can be computed by the
     (stable) downward recurrence.
@@ -283,7 +291,7 @@ class BesselTopOrderGatherer(CSECachingMapperMixin, WalkMapper):
     def __init__(self):
         self.bessel_j_arg_to_top_order = {}
 
-    def map_call(self, expr):
+    def map_call(self, expr, rec_object=None, *args):
         if isinstance(expr.function, prim.Variable) \
                 and expr.function.name == "bessel_j":
             order, arg = expr.parameters
@@ -292,14 +300,13 @@ class BesselTopOrderGatherer(CSECachingMapperMixin, WalkMapper):
             self.bessel_j_arg_to_top_order[arg] = max(
                     self.bessel_j_arg_to_top_order.get(arg, 0),
                     abs(order))
-        else:
-            return WalkMapper.map_call(self, expr)
+        return IdentityMapper.map_call(rec_object if rec_object else self, expr, rec_object, *args)
 
-    map_common_subexpression_uncached = WalkMapper.map_common_subexpression
+    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
 
-class BesselDerivativeReplacer(CSECachingMapperMixin, IdentityMapper):
-    def map_substitution(self, expr):
+class BesselDerivativeReplacer(CSECachingMapperMixin, CallExternalRecMapper):
+    def map_substitution(self, expr, rec_object=None, *args):
         assert isinstance(expr.child, prim.Derivative)
         call = expr.child.child
 
@@ -325,17 +332,10 @@ class BesselDerivativeReplacer(CSECachingMapperMixin, IdentityMapper):
                         for idx, i in enumerate(range(order-k, order+k+1, 2))),
                     "d%d_%s_%s" % (n_derivs, function.name, order_str))
         else:
-            return IdentityMapper.map_substitution(self, expr)
+            return IdentityMapper.map_substitution(
+                    rec_object if rec_object else self, expr, rec_object, *args)
 
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
-
-
-class CallExternalRecMapper(IdentityMapper):
-    def rec(self, expr, rec_object=None, *args, **kwargs):
-        if rec_object:
-            return rec_object.rec(expr, *args, **kwargs)
-        else:
-            return super().rec(expr, *args, **kwargs)
 
 
 class BesselSubstitutor(CSECachingMapperMixin, CallExternalRecMapper):
@@ -360,21 +360,23 @@ class BesselSubstitutor(CSECachingMapperMixin, CallExternalRecMapper):
 # {{{ power rewriter
 
 class PowerRewriter(CSECachingMapperMixin, CallExternalRecMapper):
-    def map_power(self, expr, *args):
+    def map_power(self, expr, rec_object=None, *args):
         exp = expr.exponent
         if isinstance(exp, int):
             new_base = prim.wrap_in_cse(expr.base)
 
             if exp > 1 and exp % 2 == 0:
                 square = prim.wrap_in_cse(new_base*new_base)
-                return self.rec(prim.wrap_in_cse(square**(exp//2)), *args)
+                return self.rec(prim.wrap_in_cse(square**(exp//2)),
+                        rec_object, *args)
             elif exp > 1 and exp % 2 == 1:
                 square = prim.wrap_in_cse(new_base*new_base)
-                return self.rec(prim.wrap_in_cse(square**((exp-1)//2))*new_base, *args)
+                return self.rec(prim.wrap_in_cse(square**((exp-1)//2))*new_base,
+                        rec_object, *args)
             elif exp == 1:
                 return new_base
             elif exp < 0:
-                return self.rec((1/new_base)**(-exp), *args)
+                return self.rec((1/new_base)**(-exp), rec_object, *args)
 
         if (isinstance(expr.exponent, prim.Quotient)
                 and isinstance(expr.exponent.numerator, int)
@@ -386,7 +388,7 @@ class PowerRewriter(CSECachingMapperMixin, CallExternalRecMapper):
                 p *= -1
 
             if q == 1:
-                return self.rec(new_base**p, *args)
+                return self.rec(new_base**p, rec_object, *args)
 
             if q == 2:
                 assert p != 0
@@ -398,7 +400,7 @@ class PowerRewriter(CSECachingMapperMixin, CallExternalRecMapper):
                     new_base = prim.wrap_in_cse(prim.Variable("rsqrt")(expr.base))
                     p *= -1
 
-                return self.rec(new_base**p, *args)
+                return self.rec(new_base**p, rec_object, *args)
 
         return IdentityMapper.map_power(rec_object if rec_object else self, expr)
 
@@ -530,8 +532,9 @@ class SumSignGrouper(CSECachingMapperMixin, CallExternalRecMapper):
 
         new_children = tuple(first_group + second_group)
         if len(new_children) == len(expr.children) and \
-            all(child is orig_child for child, orig_child in zip(new_children, expr.children)):
-                return expr
+                all(child is orig_child for child, orig_child in
+                    zip(new_children, expr.children)):
+            return expr
         return prim.Sum(tuple(first_group+second_group))
 
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
@@ -547,6 +550,7 @@ class MathConstantRewriter(CSECachingMapperMixin, CallExternalRecMapper):
             return expr
 
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+
 
 def combine_mappers(self, *mappers):
     from collections import defaultdict
@@ -573,32 +577,26 @@ def combine_mappers(self, *mappers):
                 continue
             all_methods[method_name].append((mapper, method))
 
-
     class CombineMapper(CSECachingMapperMixin, IdentityMapper):
         def __init__(self, all_methods):
             self.all_methods = all_methods
         map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
-
-    def _map(method_name, self, expr):
-        if not method_name in self.all_methods:
+    def _map(method_name, self, expr, rec_object=None, *args):
+        if method_name not in self.all_methods:
             return getattr(IdentityMapper, method_name)(self, expr)
-        orig_expr = expr
         for mapper, method in self.all_methods[method_name]:
             new_expr = method(mapper, expr, self)
-            if not hasattr(new_expr, "mapper_method"):
-                return new_expr
-            if getattr(new_expr, "mapper_method", None) != method_name:
-                ret = self.rec(new_expr)
-                return ret
-            expr = new_expr
+            if new_expr is not expr:
+                return self.rec(new_expr)
         return expr
 
     from functools import partial
     import types
     combine_mapper = CombineMapper(all_methods)
     for method_name in all_methods.keys():
-        setattr(combine_mapper, method_name, types.MethodType(partial(_map, method_name), combine_mapper))
+        setattr(combine_mapper, method_name,
+                types.MethodType(partial(_map, method_name), combine_mapper))
     return combine_mapper
 
 
@@ -612,51 +610,35 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
     assignments = [(name, sympy_conv(expr)) for name, expr in assignments]
 
     bdr = BesselDerivativeReplacer()
-    assignments = [(name, bdr(expr)) for name, expr in assignments]
-
     btog = BesselTopOrderGatherer()
-    for name, expr in assignments:
-        btog(expr)
-
-    #from pymbolic.mapper.cse_tagger import CSEWalkMapper, CSETagMapper
-    #cse_walk = CSEWalkMapper()
-    #for name, expr in assignments:
-    #    cse_walk(expr)
-    #cse_tag = CSETagMapper(cse_walk)
-
-    # do the rest of the conversion
-    bessel_sub = BesselSubstitutor(BesselGetter(btog.bessel_j_arg_to_top_order))
     vcr = VectorComponentRewriter(vector_names)
     pwr = PowerRewriter()
     ssg = SumSignGrouper()
     bik = BigIntegerKiller()
     cmr = ComplexRewriter()
 
-    cmb_mapper = combine_mappers(bessel_sub, vcr, pwr, ssg, bik, cmr)
+    cmb_mapper = combine_mappers(bdr, btog, vcr, pwr, fck, ssg, bik, cmr)
 
     def convert_expr(name, expr):
         logger.debug("generate expression for: %s" % name)
-        """
-        expr = bdr(expr)
-        expr = bessel_sub(expr)
-        expr = vcr(expr)
-        expr = pwr(expr)
-        expr = ssg(expr)
-        expr = bik(expr)
-        expr = cmr(expr)
-        """
         expr = cmb_mapper(expr)
-        #expr = cse_tag(expr)
         for m in pymbolic_expr_maps:
             expr = m(expr)
         return expr
+
+    assignments = [(name, convert_expr(name, expr)) for name, expr in assignments]
+    if btog.bessel_j_arg_to_top_order:
+        bessel_sub = BesselSubstitutor(BesselGetter(btog.bessel_j_arg_to_top_order))
+    else:
+        def bessel_sub(expr, *args, **kwargs):
+            return expr
 
     import loopy as lp
     from pytools import MinRecursionLimit
     with MinRecursionLimit(3000):
         result = [
                 lp.Assignment(id=None,
-                    assignee=name, expression=convert_expr(name, expr),
+                    assignee=name, expression=bessel_sub(expr),
                     temp_var_type=lp.Optional(None))
                 for name, expr in assignments]
 
