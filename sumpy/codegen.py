@@ -467,6 +467,10 @@ class ComplexRewriter(CSECachingMapperMixin, CallExternalRecMapper):
         if complex(self.float_type(expr.imag)) == expr.imag:
             return IdentityMapper.map_constant(self, expr)
 
+        # avoid cycles
+        if expr == 1j:
+            return expr
+
         return expr.real + prim.Product((expr.imag, 1j))
 
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
