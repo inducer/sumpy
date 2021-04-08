@@ -159,14 +159,15 @@ class E2EFromCSR(E2EBase):
 
         tgt_rscale = sym.Symbol("tgt_rscale")
 
-        nprecomputed_exprs = \
-            self.tgt_expansion.m2l_global_precompute_nexpr(self.src_expansion)
-
-        if not self.use_precomputed_exprs:
-            nprecomputed_exprs = 0
-
-        precomputed_exprs = [sym.Symbol("precomputed_expr%d" % i)
+        extra_kwargs = dict()
+        if self.use_precomputed_exprs:
+            nprecomputed_exprs = \
+                self.tgt_expansion.m2l_global_precompute_nexpr(self.src_expansion)
+            precomputed_exprs = [sym.Symbol("precomputed_expr%d" % i)
                 for i in range(nprecomputed_exprs)]
+            extra_kwargs["precomputed_exprs"] = precomputed_exprs
+        else:
+            nprecomputed_exprs = 0
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
@@ -175,8 +176,7 @@ class E2EFromCSR(E2EBase):
                 for i, coeff_i in enumerate(
                     self.tgt_expansion.translate_from(
                         self.src_expansion, src_coeff_exprs, src_rscale,
-                        dvec, tgt_rscale, sac,
-                        precomputed_exprs=precomputed_exprs))]
+                        dvec, tgt_rscale, sac, *extra_kwargs))]
 
         sac.run_global_cse()
 
@@ -192,10 +192,11 @@ class E2EFromCSR(E2EBase):
     def get_kernel(self):
         ncoeff_src = len(self.src_expansion)
         ncoeff_tgt = len(self.tgt_expansion)
-        nprecomputed_exprs = \
-            self.tgt_expansion.m2l_global_precompute_nexpr(self.src_expansion)
 
-        if not self.use_precomputed_exprs:
+        if self.use_precomputed_exprs:
+            nprecomputed_exprs = \
+                self.tgt_expansion.m2l_global_precompute_nexpr(self.src_expansion)
+        else:
             nprecomputed_exprs = 0
 
         # To clarify terminology:
@@ -278,8 +279,8 @@ class E2EFromCSR(E2EBase):
                         offset=lp.auto),
                     lp.ValueArg("ntranslation_classes, ntranslation_classes_lists",
                         np.int32),
-                ] if nprecomputed_exprs != 0 else []) + \
-                        gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
+                ] if nprecomputed_exprs != 0 else [])
+                + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
