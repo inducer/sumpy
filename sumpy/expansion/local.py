@@ -232,16 +232,16 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         # These are the multi-indices in the computation of M2L
         # without the additional mis in the Toeplitz matrix
-        needed_vector_terms = []
+        needed_vector_terms = set()
         # For eg: 2D full Taylor Laplace, we only need kernel derivatives
         # (n1+n2, m1+m2), n1+m1<=p, n2+m2<=p
         for tgt_deriv in self.get_coefficient_identifiers():
             for src_deriv in src_expansion.get_coefficient_identifiers():
                 needed = add_mi(src_deriv, tgt_deriv)
                 if needed not in needed_vector_terms:
-                    needed_vector_terms.append(needed)
+                    needed_vector_terms.add(needed)
 
-        return toeplitz_matrix_coeffs, needed_vector_terms, max_mi
+        return toeplitz_matrix_coeffs, tuple(needed_vector_terms), max_mi
 
     def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
             dvec, tgt_rscale, sac):
