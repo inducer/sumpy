@@ -370,6 +370,14 @@ class E2EFromCSR(E2EBase):
 
         return knl
 
+    def get_cache_key(self):
+        return (
+                type(self).__name__,
+                self.src_expansion,
+                self.tgt_expansion,
+                self.use_precomputed_exprs,
+        )
+
     def __call__(self, queue, **kwargs):
         """
         :arg src_expansions:
