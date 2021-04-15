@@ -32,17 +32,6 @@ from sumpy.tools import (mi_increment_axis, matvec_toeplitz_upper_triangular,
     fft_toeplitz_upper_triangular)
 from pytools import single_valued
 
-
-class LocalExpansionBase(ExpansionBase):
-    def __init__(self, kernel, order, use_rscale=None, use_fft=False):
-        super().__init__(kernel, order, use_rscale)
-        self.use_fft = use_fft
-
-    def with_kernel(self, kernel):
-        return type(self)(kernel, self.order, self.use_rscale,
-                use_fft=self.use_fft)
-
-
 import logging
 logger = logging.getLogger(__name__)
 
@@ -54,6 +43,30 @@ __doc__ = """
 .. autoclass:: LineTaylorLocalExpansion
 
 """
+
+
+class LocalExpansionBase(ExpansionBase):
+    init_arg_names = ("kernel", "order", "use_rscale", "use_fft")
+
+    def __init__(self, kernel, order, use_rscale=None, use_fft=False):
+        super().__init__(kernel, order, use_rscale)
+        self.use_fft = use_fft
+
+    def with_kernel(self, kernel):
+        return type(self)(kernel, self.order, self.use_rscale,
+                use_fft=self.use_fft)
+
+    def update_persistent_hash(self, key_hash, key_builder):
+        super().update_persistent_hash(key_hash, key_builder)
+        key_builder.rec(key_hash, self.use_fft)
+
+    def __eq__(self, other):
+        return (
+                type(self) == type(other)
+                and self.kernel == other.kernel
+                and self.order == other.order
+                and self.use_rscale == other.use_rscale
+                and self.use_fft == other.use_fft)
 
 
 # {{{ line taylor
