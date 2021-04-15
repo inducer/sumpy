@@ -30,8 +30,6 @@ __doc__ = """Integrates :mod:`boxtree` with :mod:`sumpy`.
 import pyopencl as cl
 import pyopencl.array  # noqa
 
-import numpy as np
-
 from pytools import memoize_method
 
 from sumpy import (
@@ -41,6 +39,7 @@ from sumpy import (
         E2EFromCSR, E2EFromChildren, E2EFromParent,
         E2EFromCSRTranslationClassesPrecompute,
         E2EFromCSRWithFFTPreprocess)
+from sumpy.tools import to_complex_dtype
 
 
 def level_to_rscale(tree, level):
@@ -315,12 +314,8 @@ class SumpyExpansionWrangler:
             self.complex_dtype = dtype
         elif complex_dtype is not None:
             self.complex_dtype = complex_dtype
-        elif self.dtype in (np.float32, np.complex64):
-            self.complex_dtype = np.complex64
-        elif self.dtype in (np.float64, np.complex128):
-            self.complex_dtype = np.complex128
         else:
-            raise RuntimeError(f"Cannot compute complex type for {self.dtype}")
+            self.complex_dtype = to_complex_dtype(dtype)
 
         if kernel_extra_kwargs is None:
             kernel_extra_kwargs = {}
