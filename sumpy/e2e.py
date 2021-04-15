@@ -250,7 +250,6 @@ class E2EFromCSR(E2EBase):
         return insns
 
     def get_kernel(self, result_dtype):
-        ncoeff_tgt = len(self.tgt_expansion)
         if self.use_precomputed_exprs:
             nprecomputed_exprs = \
                 self.tgt_expansion.m2l_global_precompute_nexpr(self.src_expansion)
@@ -259,8 +258,12 @@ class E2EFromCSR(E2EBase):
 
         if self.use_fft:
             ncoeff_src = nprecomputed_exprs
+            ncoeff_post = nprecomputed_exprs
         else:
             ncoeff_src = len(self.src_expansion)
+            ncoeff_post = len(self.tgt_expansion)
+
+        ncoeff_tgt = len(self.tgt_expansion)
 
         # To clarify terminology:
         #
@@ -310,11 +313,11 @@ class E2EFromCSR(E2EBase):
                     """] + ["""
                     <> coeff_sum{coeffidx} = \
                         simul_reduce(sum, isrc_box, coeff{coeffidx})
-                    """.format(coeffidx=i) for i in range(ncoeff_src)] + [
-                    ] + self.get_postprocess_loopy_insns(result_dtype) + ["""
+                    """.format(coeffidx=i) for i in range(ncoeff_post)] + [
+                    ] + self.get_postprocess_loopy_insns(result_dtype) + [f"""
                     tgt_expansions[tgt_ibox - tgt_base_ibox, {coeffidx}] = \
                             coeff_post{coeffidx} {{id_prefix=write_expn}}
-                    """.format(coeffidx=i) for i in range(ncoeff_tgt)] + ["""
+                    """ for coeffidx in range(ncoeff_tgt)] + ["""
                 end
                 """],
                 [
