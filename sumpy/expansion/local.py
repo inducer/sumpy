@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 __doc__ = """
 
+.. autoclass:: LocalExpansionBase
 .. autoclass:: VolumeTaylorLocalExpansion
 .. autoclass:: H2DLocalExpansion
 .. autoclass:: Y2DLocalExpansion
@@ -46,6 +47,8 @@ __doc__ = """
 
 
 class LocalExpansionBase(ExpansionBase):
+    """Base class for local expansions.
+    """
     init_arg_names = ("kernel", "order", "use_rscale", "use_fft")
 
     def __init__(self, kernel, order, use_rscale=None, use_fft=False):
@@ -67,6 +70,27 @@ class LocalExpansionBase(ExpansionBase):
                 and self.order == other.order
                 and self.use_rscale == other.use_rscale
                 and self.use_fft == other.use_fft)
+
+    def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
+            dvec, tgt_rscale, sac):
+        """Return an iterable of expressions that needs to be precomputed
+        for multipole-to-local translations that depend only on the
+        distance between the multipole center and the local center.
+
+        Since there are only a finite amount of different values for the
+        distance between per level, these can be precomputed for the tree.
+        """
+        return tuple()
+
+    def m2l_global_precompute_nexpr(self, src_expansion):
+        """Return the number of expressions returned by
+        :func:`~sumpy.expansion.local.LocalExpansionBase.m2l_global_precompute_exprs`.
+        """
+        return 0
+
+    def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
+            dvec, tgt_rscale, sac=None, precomputed_exprs=None):
+        raise NotImplementedError
 
 
 # {{{ line taylor
@@ -234,16 +258,16 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         # These are the multi-indices in the computation of M2L
         # without the additional mis in the Toeplitz matrix
-        needed_vector_terms = []
+        needed_vector_terms = set()
         # For eg: 2D full Taylor Laplace, we only need kernel derivatives
         # (n1+n2, m1+m2), n1+m1<=p, n2+m2<=p
         for tgt_deriv in self.get_coefficient_identifiers():
             for src_deriv in src_expansion.get_coefficient_identifiers():
                 needed = add_mi(src_deriv, tgt_deriv)
                 if needed not in needed_vector_terms:
-                    needed_vector_terms.append(needed)
+                    needed_vector_terms.add(needed)
 
-        return toeplitz_matrix_coeffs, needed_vector_terms, max_mi
+        return toeplitz_matrix_coeffs, tuple(needed_vector_terms), max_mi
 
     def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
             dvec, tgt_rscale, sac):
@@ -378,7 +402,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
                                 enumerate(toeplitz_matrix_coeffs))
 
-            if precomputed_exprs is None:
+            if not precomputed_exprs:
                 derivatives = self.m2l_global_precompute_exprs(src_expansion,
                         src_rscale, dvec, tgt_rscale, sac)
             else:

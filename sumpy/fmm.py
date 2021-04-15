@@ -38,10 +38,8 @@ from sumpy import (
         P2EFromSingleBox, P2EFromCSR,
         E2PFromSingleBox, E2PFromCSR,
         P2PFromCSR,
-        E2EFromCSR,
-        E2EFromCSRTranslationInvariant, E2EFromCSRTranslationClassesPrecompute,
-        E2EFromCSRWithFFTPreprocess,
-        E2EFromChildren, E2EFromParent)
+        E2EFromCSR, E2EFromChildren, E2EFromParent,
+        E2EFromCSRTranslationClassesPrecompute)
 
 
 def level_to_rscale(tree, level):
@@ -123,16 +121,11 @@ class SumpyExpansionWranglerCodeContainer:
                 self.multipole_expansion(tgt_order))
 
     @memoize_method
-    def m2l(self, src_order, tgt_order):
+    def m2l(self, src_order, tgt_order, use_precomputed_exprs=False):
         return E2EFromCSR(self.cl_context,
                 self.multipole_expansion(src_order),
-                self.local_expansion(tgt_order))
-
-    @memoize_method
-    def m2l_optimized(self, src_order, tgt_order):
-        return E2EFromCSRTranslationInvariant(self.cl_context,
-                self.multipole_expansion(src_order),
-                self.local_expansion(tgt_order))
+                self.local_expansion(tgt_order),
+                use_precomputed_exprs=use_precomputed_exprs)
 
     @memoize_method
     def m2l_optimized_precompute_kernel(self, src_order, tgt_order):
@@ -707,13 +700,6 @@ class SumpyExpansionWrangler:
         info["wait_for"] = events[lev]
         return precomputed_exprs_view.shape[0] != 0
 
-    @property
-    def m2l_class(self):
-        if self.supports_optimized_m2l:
-            return self.code.m2l_optimized
-        else:
-            return self.code.m2l
-
     def multipole_to_local(self,
             level_start_target_box_nrs,
             target_boxes, src_box_starts, src_box_lists,
@@ -760,7 +746,7 @@ class SumpyExpansionWrangler:
                 continue
 
             order = self.level_orders[lev]
-            m2l = self.m2l_class(order, order)
+            m2l = self.code.m2l(order, order, self.supports_optimized_m2l)
 
             source_level_start_ibox, source_mpoles_view = \
                     mpole_exps_view_func(mpole_exps, lev)
