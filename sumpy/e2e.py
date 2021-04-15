@@ -393,15 +393,15 @@ class E2EFromCSR(E2EBase):
         src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
 
-        tgt_expansions = kwargs.pop("tgt_expansions")
-        result_dtype = tgt_expansions.dtype
+        src_expansions = kwargs.pop("src_expansions")
+        result_dtype = src_expansions.dtype
 
         knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
 
         return knl(queue,
                 centers=centers,
                 src_rscale=src_rscale, tgt_rscale=tgt_rscale,
-                tgt_expansions=tgt_expansions,
+                src_expansions=src_expansions,
                 **kwargs)
 
 
