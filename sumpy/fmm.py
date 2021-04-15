@@ -39,7 +39,8 @@ from sumpy import (
         E2PFromSingleBox, E2PFromCSR,
         P2PFromCSR,
         E2EFromCSR, E2EFromChildren, E2EFromParent,
-        E2EFromCSRTranslationClassesPrecompute)
+        E2EFromCSRTranslationClassesPrecompute,
+        E2EFromCSRWithFFTPreprocess)
 
 
 def level_to_rscale(tree, level):

@@ -166,6 +166,7 @@ class E2EFromCSR(E2EBase):
             nprecomputed_exprs = \
                 self.tgt_expansion.m2l_global_precompute_nexpr(self.src_expansion)
             precomputed_exprs = [sym.Symbol("precomputed_expr%d" % i)
+                for i in range(nprecomputed_exprs)]
             extra_kwargs["precomputed_exprs"] = precomputed_exprs
         else:
             nprecomputed_exprs = 0
@@ -178,9 +179,6 @@ class E2EFromCSR(E2EBase):
         src_coeff_exprs = [sym.Symbol("src_coeff%d" % i)
                 for i in range(ncoeff_src)]
 
-        precomputed_exprs = [sym.Symbol("precomputed_expr%d" % i)
-                for i in range(nprecomputed_exprs)]
-
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
         tgt_coeff_names = [
@@ -188,7 +186,7 @@ class E2EFromCSR(E2EBase):
                 for i, coeff_i in enumerate(
                     self.tgt_expansion.translate_from(
                         self.src_expansion, src_coeff_exprs, src_rscale,
-                        dvec, tgt_rscale, sac, *extra_kwargs))]
+                        dvec, tgt_rscale, sac, **extra_kwargs))]
 
         sac.run_global_cse()
 
@@ -251,9 +249,18 @@ class E2EFromCSR(E2EBase):
                 )
         return insns
 
-    def get_kernel(self):
-        ncoeff_src = len(self.src_expansion)
+    def get_kernel(self, result_dtype):
         ncoeff_tgt = len(self.tgt_expansion)
+        if self.use_precomputed_exprs:
+            nprecomputed_exprs = \
+                self.tgt_expansion.m2l_global_precompute_nexpr(self.src_expansion)
+        else:
+            nprecomputed_exprs = 0
+
+        if self.use_fft:
+            ncoeff_src = nprecomputed_exprs
+        else:
+            ncoeff_src = len(self.src_expansion)
 
         # To clarify terminology:
         #
@@ -272,33 +279,41 @@ class E2EFromCSR(E2EBase):
                 ["""
                 for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
-
-                    <> tgt_center[idim] = centers[idim, tgt_ibox] \
-
+                    <> tgt_center[idim] = centers[idim, tgt_ibox]
                     <> isrc_start = src_box_starts[itgt_box]
                     <> isrc_stop = src_box_starts[itgt_box+1]
 
                     for isrc_box
                         <> src_ibox = src_box_lists[isrc_box] \
                                 {id=read_src_ibox}
-
                         <> src_center[idim] = centers[idim, src_ibox] {dup=idim}
                         <> d[idim] = tgt_center[idim] - src_center[idim] \
                             {dup=idim}
-
-                        """] + ["""
+                        """] + (["""
+                        <> translation_class = \
+                                m2l_translation_classes_lists[isrc_box]
+                        <> translation_class_rel = translation_class - \
+                                                    translation_classes_level_start
+                        """] if nprecomputed_exprs != 0 else []) + ["""
+                        <> precomputed_expr{idx} = \
+                            m2l_precomputed_exprs[translation_class_rel, {idx}]
+                        """.format(idx=idx) for idx in range(
+                            nprecomputed_exprs)] + ["""
                         <> src_coeff{coeffidx} = \
                             src_expansions[src_ibox - src_base_ibox, {coeffidx}] \
                             {{dep=read_src_ibox}}
                         """.format(coeffidx=i) for i in range(ncoeff_src)] + [
 
-                        ] + self.get_translation_loopy_insns() + ["""
+                        ] + self.get_translation_loopy_insns(result_dtype) + ["""
                     end
 
                     """] + ["""
+                    <> coeff_sum{coeffidx} = \
+                        simul_reduce(sum, isrc_box, coeff{coeffidx})
+                    """.format(coeffidx=i) for i in range(ncoeff_src)] + [
+                    ] + self.get_postprocess_loopy_insns(result_dtype) + ["""
                     tgt_expansions[tgt_ibox - tgt_base_ibox, {coeffidx}] = \
-                            simul_reduce(sum, isrc_box, coeff{coeffidx}) \
-                            {{id_prefix=write_expn}}
+                            coeff_post{coeffidx} {{id_prefix=write_expn}}
                     """.format(coeffidx=i) for i in range(ncoeff_tgt)] + ["""
                 end
                 """],
@@ -316,12 +331,25 @@ class E2EFromCSR(E2EBase):
                     lp.GlobalArg("tgt_expansions", None,
                         shape=("ntgt_level_boxes", ncoeff_tgt), offset=lp.auto),
                     "..."
-                ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
+                ] + ([
+                    lp.ValueArg("translation_classes_level_start",
+                        np.int32),
+                    lp.GlobalArg("m2l_precomputed_exprs", None,
+                        shape=("ntranslation_classes", nprecomputed_exprs),
+                        offset=lp.auto),
+                    lp.GlobalArg("m2l_translation_classes_lists", np.int32,
+                        shape=("ntranslation_classes_lists"), strides=(1,),
+                        offset=lp.auto),
+                    lp.ValueArg("ntranslation_classes, ntranslation_classes_lists",
+                        np.int32),
+                ] if nprecomputed_exprs != 0 else [])
+                + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
                 default_offset=lp.auto,
-                fixed_parameters=dict(dim=self.dim),
+                fixed_parameters=dict(dim=self.dim,
+                                      nprecomputed_exprs=nprecomputed_exprs),
                 lang_version=MOST_RECENT_LANGUAGE_VERSION
                 )
 
@@ -335,6 +363,13 @@ class E2EFromCSR(E2EBase):
 
         return loopy_knl
 
+    def get_optimized_kernel(self, result_dtype):
+        # FIXME
+        knl = self.get_kernel(result_dtype)
+        knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
+
+        return knl
+
     def __call__(self, queue, **kwargs):
         """
         :arg src_expansions:
@@ -344,17 +379,21 @@ class E2EFromCSR(E2EBase):
         :arg tgt_rscale:
         :arg centers:
         """
-        knl = self.get_cached_optimized_kernel()
-
         centers = kwargs.pop("centers")
         # "1" may be passed for rscale, which won't have its type
         # meaningfully inferred. Make the type of rscale explicit.
         src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
 
+        tgt_expansions = kwargs.pop("tgt_expansions")
+        result_dtype = tgt_expansions.dtype
+
+        knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
+
         return knl(queue,
                 centers=centers,
                 src_rscale=src_rscale, tgt_rscale=tgt_rscale,
+                tgt_expansions=tgt_expansions,
                 **kwargs)
 
 
