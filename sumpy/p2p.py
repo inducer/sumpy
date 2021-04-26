@@ -235,6 +235,7 @@ class P2P(P2PBase):
             arguments,
             assumptions="nsources>=1 and ntargets>=1",
             name=self.name,
+            default_offset=lp.auto,
             fixed_parameters=dict(
                 dim=self.dim,
                 nstrengths=self.strength_count,

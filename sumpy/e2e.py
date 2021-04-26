@@ -26,6 +26,7 @@ import sumpy.symbolic as sym
 
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 from sumpy.tools import KernelCacheWrapper
+from pytools import memoize_method
 
 import logging
 logger = logging.getLogger(__name__)
@@ -88,6 +89,7 @@ class E2EBase(KernelCacheWrapper):
 
         self.dim = src_expansion.dim
 
+    @memoize_method
     def get_translation_loopy_insns(self):
         from sumpy.symbolic import make_sym_vector
         dvec = make_sym_vector("d", self.dim)
