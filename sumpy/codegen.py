@@ -652,10 +652,11 @@ def combine_mappers(*mappers):
     For this to work, the mappers need to be instances of
     :class:`sumpy.codegen.CallExternalRecMapper` and when calling
     parent class methods, the mappers need to use the argument
-    *rec_object* passed to the *map_* method. All the mappers
-    need to commute and for any mapper applying the
-    mapper on an expression that has already been mapped should
-    result in an identical object.
+    *rec_object* passed to the *map_* method. *rec_object* is a
+    *CombinedMapper* instance which would dispatch the object to
+    all the mappers given. The mappers given need to commute and
+    for any mapper applying the mapper on an expression that has
+    already been mapped should result in an identical object.
     """
     from collections import defaultdict
     all_methods = defaultdict(list)
