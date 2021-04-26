@@ -100,7 +100,8 @@ class E2PBase(KernelCacheWrapper):
         loopy_insns = to_loopy_insns(
                 sac.assignments.items(),
                 vector_names={"b"},
-                pymbolic_expr_maps=[self.expansion.get_code_transformer()],
+                pymbolic_expr_maps=[
+                    knl.get_code_transformer() for knl in self.kernels],
                 retain_names=result_names,
                 complex_dtype=np.complex128  # FIXME
                 )
