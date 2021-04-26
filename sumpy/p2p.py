@@ -64,10 +64,10 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
           Default: all kernels use the same strength.
         """
         from pytools import single_valued
-        from sumpy.kernel import (TargetDerivativeRemover,
-                SourceDerivativeRemover)
-        tdr = TargetDerivativeRemover()
-        sdr = SourceDerivativeRemover()
+        from sumpy.kernel import (TargetTransformationRemover,
+                SourceTransformationRemover)
+        tdr = TargetTransformationRemover()
+        sdr = SourceTransformationRemover()
 
         if source_kernels is None:
             source_kernels = [single_valued(tdr(knl) for knl in target_kernels)]

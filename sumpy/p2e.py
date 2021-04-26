@@ -56,9 +56,10 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
           number of strength arrays that need to be passed.
           Default: all kernels use the same strength.
         """
-        from sumpy.kernel import TargetDerivativeRemover, SourceDerivativeRemover
-        tdr = TargetDerivativeRemover()
-        sdr = SourceDerivativeRemover()
+        from sumpy.kernel import (TargetTransformationRemover,
+                SourceTransformationRemover)
+        tdr = TargetTransformationRemover()
+        sdr = SourceTransformationRemover()
 
         if kernels is None:
             kernels = [tdr(expansion.kernel)]
