@@ -645,13 +645,15 @@ class MathConstantRewriter(CSECachingMapperMixin, CallExternalRecMapper):
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
 
+# {{{ combine mappers
+
 def combine_mappers(*mappers):
     """Returns a mapper that combines the work of several mappers.
     For this to work, the mappers need to be instances of
     :class:`sumpy.codegen.CallExternalRecMapper` and when calling
     parent class methods, the mappers need to use the argument
     *rec_object* passed to the *map_* method. All the mappers
-    need to be commutative and for any mapper applying the
+    need to commute and for any mapper applying the
     mapper on an expression that has already been mapped should
     result in an identical object.
     """
@@ -661,7 +663,7 @@ def combine_mappers(*mappers):
     for mapper in mappers:
         assert isinstance(mapper, CallExternalRecMapper)
         for method_name in dir(type(mapper)):
-            if not method_name.startswith("map"):
+            if not method_name.startswith("map_"):
                 continue
             if method_name == "map_common_subexpression_uncached":
                 continue
@@ -679,7 +681,7 @@ def combine_mappers(*mappers):
                 continue
             all_methods[method_name].append((mapper, method))
 
-    class CombineMapper(CSECachingMapperMixin, IdentityMapper):
+    class CombinedMapper(CSECachingMapperMixin, IdentityMapper):
         def __init__(self, all_methods):
             self.all_methods = all_methods
         map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
@@ -690,12 +692,13 @@ def combine_mappers(*mappers):
         for mapper, method in self.all_methods[method_name]:
             new_expr = method(mapper, expr, self)
             if new_expr is not expr:
+                # Re-traverse the whole thing from the get-go.
                 return self.rec(new_expr)
         return expr
 
     from functools import partial
     import types
-    combine_mapper = CombineMapper(all_methods)
+    combine_mapper = CombinedMapper(all_methods)
     for method_name in all_methods.keys():
         setattr(combine_mapper, method_name,
                 types.MethodType(partial(_map, method_name), combine_mapper))
@@ -743,5 +746,7 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
 
     logger.info("loopy instruction generation: done")
     return result
+
+# }}}
 
 # vim: fdm=marker
