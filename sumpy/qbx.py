@@ -103,8 +103,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
             sym.Symbol(
                 sac.assign_unique("expn%dcoeff%s" % (
                     expansion_nr, stringify_expn_index(i)),
-                    expn.postprocess_at_target(
-                        coefficients[self.expansion.get_storage_index(i)], bvec)))
+                        coefficients[self.expansion.get_storage_index(i)]))
             for i in self.expansion.get_coefficient_identifiers()]
 
         return sac.assign_unique("expn%d_result" % expansion_nr,
