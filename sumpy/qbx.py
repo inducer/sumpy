@@ -348,7 +348,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
 # }}}
 
 
-# {{{
+# {{{ matrix block generator
 
 class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
     """Generator for a subset of the layer potential matrix entries.
