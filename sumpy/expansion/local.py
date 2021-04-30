@@ -98,6 +98,9 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
                     for i in self.get_coefficient_identifiers()]
 
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
+        # cannot support target derivatives
+        assert kernel == self.kernel
+
         # no point in heeding rscale here--just ignore it
         from pytools import factorial
         return sym.Add(*(
