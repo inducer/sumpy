@@ -29,12 +29,20 @@ from pyopencl.tools import (  # noqa
 
 import logging
 logger = logging.getLogger(__name__)
+from sumpy.expansion.local import (
+        LineTaylorLocalExpansion, VolumeTaylorLocalExpansion)
+import pytest
 
 
+@pytest.mark.parametrize("expn_class", [
+            LineTaylorLocalExpansion,
+            VolumeTaylorLocalExpansion,
+            ])
+def test_direct_qbx_vs_eigval(ctx_factory, expn_class):
+    """This evaluates a single layer potential on a circle using a known
+    eigenvalue/eigenvector combination.
+    """
 
-
-def test_direct(ctx_factory):
-    # This evaluates a single layer potential on a circle.
     logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_factory()
@@ -46,9 +54,8 @@ def test_direct(ctx_factory):
     order = 12
 
     from sumpy.qbx import LayerPotential
-    from sumpy.expansion.local import LineTaylorLocalExpansion
 
-    lpot = LayerPotential(ctx, expansion=LineTaylorLocalExpansion(lknl, order),
+    lpot = LayerPotential(ctx, expansion=expn_class(lknl, order),
             target_kernels=(lknl,), source_kernels=(lknl,))
 
     mode_nr = 25
