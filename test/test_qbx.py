@@ -166,7 +166,6 @@ def test_direct_qbx_vs_eigval_with_tgt_deriv(ctx_factory, expn_class):
         normals = unit_circle
         result_qbx = normals[0] * result_qbx_dx + normals[1] * result_qbx_dy
 
-        np.set_printoptions(linewidth=200)
         eocrec.add_data_point(h, np.max(np.abs(result_ref - result_qbx)))
 
     if expn_class is not LineTaylorLocalExpansion:
