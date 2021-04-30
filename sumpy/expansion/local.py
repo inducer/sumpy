@@ -97,9 +97,16 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
                     .subs("tau", 0)
                     for i in self.get_coefficient_identifiers()]
 
-    def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
+    def evaluate(self, tgt_kernel, coeffs, bvec, rscale, sac=None):
+        from sumpy.kernel import (SourceDerivativeRemover,
+                TargetDerivativeRemover)
+
         # cannot support target derivatives
-        assert kernel == self.kernel
+        sdr = SourceDerivativeRemover()
+        tdr = TargetDerivativeRemover()
+        if sdr(tgt_kernel) != tdr(sdr(self.kernel)):
+            raise ValueError("Line Taylor expansion cannot support "
+                    "target derivatives")
 
         # no point in heeding rscale here--just ignore it
         from pytools import factorial
