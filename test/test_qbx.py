@@ -152,7 +152,7 @@ def test_direct_qbx_vs_eigval_with_tgt_deriv(ctx_factory, expn_class):
         strengths = (sigma * h,)
 
         if expn_class is LineTaylorLocalExpansion:
-            with pytest.raises(AssertionError):
+            with pytest.raises(ValueError):
                 evt, (result_qbx_dx,) = lpot_dx(queue, targets, sources, centers,
                         strengths, expansion_radii=expansion_radii)
 
