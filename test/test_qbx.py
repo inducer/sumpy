@@ -31,12 +31,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-try:
-    import faulthandler
-except ImportError:
-    pass
-else:
-    faulthandler.enable()
 
 
 def test_direct(ctx_factory):
