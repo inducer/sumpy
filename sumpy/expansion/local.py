@@ -98,13 +98,9 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
                     for i in self.get_coefficient_identifiers()]
 
     def evaluate(self, tgt_kernel, coeffs, bvec, rscale, sac=None):
-        from sumpy.kernel import (SourceDerivativeRemover,
-                TargetDerivativeRemover)
-
-        # cannot support target derivatives
-        sdr = SourceDerivativeRemover()
+        from sumpy.kernel import TargetDerivativeRemover
         tdr = TargetDerivativeRemover()
-        if sdr(tgt_kernel) != tdr(sdr(self.kernel)):
+        if tgt_kernel != tdr(tgt_kernel):
             raise ValueError("Line Taylor expansion cannot support "
                     "target derivatives")
 
