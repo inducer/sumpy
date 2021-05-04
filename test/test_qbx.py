@@ -29,18 +29,20 @@ from pyopencl.tools import (  # noqa
 
 import logging
 logger = logging.getLogger(__name__)
+from sumpy.expansion.local import (
+        LineTaylorLocalExpansion, VolumeTaylorLocalExpansion)
+import pytest
 
 
-try:
-    import faulthandler
-except ImportError:
-    pass
-else:
-    faulthandler.enable()
+@pytest.mark.parametrize("expn_class", [
+            LineTaylorLocalExpansion,
+            VolumeTaylorLocalExpansion,
+            ])
+def test_direct_qbx_vs_eigval(ctx_factory, expn_class):
+    """This evaluates a single layer potential on a circle using a known
+    eigenvalue/eigenvector combination.
+    """
 
-
-def test_direct(ctx_factory):
-    # This evaluates a single layer potential on a circle.
     logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_factory()
@@ -52,9 +54,8 @@ def test_direct(ctx_factory):
     order = 12
 
     from sumpy.qbx import LayerPotential
-    from sumpy.expansion.local import LineTaylorLocalExpansion
 
-    lpot = LayerPotential(ctx, expansion=LineTaylorLocalExpansion(lknl, order),
+    lpot = LayerPotential(ctx, expansion=expn_class(lknl, order),
             target_kernels=(lknl,), source_kernels=(lknl,))
 
     mode_nr = 25
@@ -95,8 +96,84 @@ def test_direct(ctx_factory):
     assert eocrec.order_estimate() > order - slack
 
 
-# You can test individual routines by typing
-# $ python test_kernels.py 'test_p2p(cl.create_some_context)'
+@pytest.mark.parametrize("expn_class", [
+            LineTaylorLocalExpansion,
+            VolumeTaylorLocalExpansion,
+            ])
+def test_direct_qbx_vs_eigval_with_tgt_deriv(ctx_factory, expn_class):
+    """This evaluates a single layer potential on a circle using a known
+    eigenvalue/eigenvector combination.
+    """
+
+    logging.basicConfig(level=logging.INFO)
+
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    from sumpy.kernel import LaplaceKernel, AxisTargetDerivative
+    lknl = LaplaceKernel(2)
+
+    order = 8
+
+    from sumpy.qbx import LayerPotential
+
+    lpot_dx = LayerPotential(ctx, expansion=expn_class(lknl, order),
+            target_kernels=(AxisTargetDerivative(0, lknl),), source_kernels=(lknl,))
+    lpot_dy = LayerPotential(ctx, expansion=expn_class(lknl, order),
+            target_kernels=(AxisTargetDerivative(1, lknl),), source_kernels=(lknl,))
+
+    mode_nr = 15
+
+    from pytools.convergence import EOCRecorder
+
+    eocrec = EOCRecorder()
+
+    for n in [200, 300, 400]:
+        t = np.linspace(0, 2 * np.pi, n, endpoint=False)
+        unit_circle = np.exp(1j * t)
+        unit_circle = np.array([unit_circle.real, unit_circle.imag])
+
+        sigma = np.cos(mode_nr * t)
+        #eigval = 1/(2*mode_nr)
+        eigval = 0.5
+
+        result_ref = eigval * sigma
+
+        h = 2 * np.pi / n
+
+        targets = unit_circle
+        sources = unit_circle
+
+        radius = 7 * h
+        centers = unit_circle * (1 - radius)
+
+        expansion_radii = np.ones(n) * radius
+
+        strengths = (sigma * h,)
+
+        if expn_class is LineTaylorLocalExpansion:
+            with pytest.raises(ValueError):
+                evt, (result_qbx_dx,) = lpot_dx(queue, targets, sources, centers,
+                        strengths, expansion_radii=expansion_radii)
+
+            continue
+
+        evt, (result_qbx_dx,) = lpot_dx(queue, targets, sources, centers, strengths,
+                expansion_radii=expansion_radii)
+        evt, (result_qbx_dy,) = lpot_dy(queue, targets, sources, centers, strengths,
+                expansion_radii=expansion_radii)
+
+        normals = unit_circle
+        result_qbx = normals[0] * result_qbx_dx + normals[1] * result_qbx_dy
+
+        eocrec.add_data_point(h, np.max(np.abs(result_ref - result_qbx)))
+
+    if expn_class is not LineTaylorLocalExpansion:
+        print(eocrec)
+
+        slack = 1.5
+        assert eocrec.order_estimate() > order - slack
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
