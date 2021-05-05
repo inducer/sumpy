@@ -105,8 +105,8 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
             # postprocess_at_target because the coefficients are assigned
             # symbols and postprocess with a derivative will make them zero.
             # Instead run postprocess here before the coeffients are assigned.
-            coefficients = [tgt_knl.postprocess_at_target(coeff, bvec) for \
-                    coeff in coeffcients]
+            coefficients = [tgt_knl.postprocess_at_target(coeff, bvec) for
+                    coeff in coefficients]
 
         assigned_coeffs = [
             sym.Symbol(
