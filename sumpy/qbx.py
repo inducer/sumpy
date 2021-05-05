@@ -158,9 +158,9 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
     def get_default_src_tgt_arguments(self):
         from sumpy.tools import gather_loopy_source_arguments
         return ([
-                lp.GlobalArg("src", None,
+                lp.GlobalArg("sources", None,
                     shape=(self.dim, "nsources"), order="C"),
-                lp.GlobalArg("tgt", None,
+                lp.GlobalArg("targets", None,
                     shape=(self.dim, "ntargets"), order="C"),
                 lp.GlobalArg("center", None,
                     shape=(self.dim, "ntargets"), order="C"),
@@ -179,9 +179,9 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
         loopy_knl = self.get_kernel()
 
         if targets_is_obj_array:
-            loopy_knl = lp.tag_array_axes(loopy_knl, "tgt", "sep,C")
+            loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
         if sources_is_obj_array:
-            loopy_knl = lp.tag_array_axes(loopy_knl, "src", "sep,C")
+            loopy_knl = lp.tag_array_axes(loopy_knl, "sources", "sep,C")
         if centers_is_obj_array:
             loopy_knl = lp.tag_array_axes(loopy_knl, "center", "sep,C")
 
@@ -235,8 +235,8 @@ class LayerPotential(LayerPotentialBase):
             """],
             self.get_kernel_scaling_assignments()
             + ["for itgt, isrc"]
-            + ["<> a[idim] = center[idim, itgt] - src[idim, isrc] {dup=idim}"]
-            + ["<> b[idim] = tgt[idim, itgt] - center[idim, itgt] {dup=idim}"]
+            + ["<> a[idim] = center[idim, itgt] - sources[idim, isrc] {dup=idim}"]
+            + ["<> b[idim] = targets[idim, itgt] - center[idim, itgt] {dup=idim}"]
             + ["<> rscale = expansion_radii[itgt]"]
             + [f"<> strength_{i}_isrc = strength_{i}[isrc]" for i in
                     range(self.strength_count)]
@@ -277,7 +277,7 @@ class LayerPotential(LayerPotentialBase):
         for i, dens in enumerate(strengths):
             kwargs["strength_%d" % i] = dens
 
-        return knl(queue, src=sources, tgt=targets, center=centers,
+        return knl(queue, sources=sources, targets=targets, center=centers,
                 expansion_radii=expansion_radii, **kwargs)
 
 # }}}
@@ -311,8 +311,8 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
             """],
             self.get_kernel_scaling_assignments()
             + ["for itgt, isrc"]
-            + ["<> a[idim] = center[idim, itgt] - src[idim, isrc] {dup=idim}"]
-            + ["<> b[idim] = tgt[idim, itgt] - center[idim, itgt] {dup=idim}"]
+            + ["<> a[idim] = center[idim, itgt] - sources[idim, isrc] {dup=idim}"]
+            + ["<> b[idim] = targets[idim, itgt] - center[idim, itgt] {dup=idim}"]
             + ["<> rscale = expansion_radii[itgt]"]
             + loopy_insns + kernel_exprs
             + ["""
@@ -341,7 +341,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
                 sources_is_obj_array=is_obj_array_like(sources),
                 centers_is_obj_array=is_obj_array_like(centers))
 
-        return knl(queue, src=sources, tgt=targets, center=centers,
+        return knl(queue, sources=sources, targets=targets, center=centers,
                 expansion_radii=expansion_radii, **kwargs)
 
 # }}}
@@ -386,8 +386,8 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
                     <> itgt = tgtindices[imat]
                     <> isrc = srcindices[imat]
 
-                    <> a[idim] = center[idim, itgt] - src[idim, isrc] {dup=idim}
-                    <> b[idim] = tgt[idim, itgt] - center[idim, itgt] {dup=idim}
+                    <> a[idim] = center[idim, itgt] - sources[idim, isrc] {dup=idim}
+                    <> b[idim] = targets[idim, itgt] - center[idim, itgt] {dup=idim}
                     <> rscale = expansion_radii[itgt]
             """]
             + loopy_insns + kernel_exprs
@@ -419,9 +419,9 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
         loopy_knl = self.get_kernel()
 
         if targets_is_obj_array:
-            loopy_knl = lp.tag_array_axes(loopy_knl, "tgt", "sep,C")
+            loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
         if sources_is_obj_array:
-            loopy_knl = lp.tag_array_axes(loopy_knl, "src", "sep,C")
+            loopy_knl = lp.tag_array_axes(loopy_knl, "sources", "sep,C")
         if centers_is_obj_array:
             loopy_knl = lp.tag_array_axes(loopy_knl, "center", "sep,C")
 
