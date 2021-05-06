@@ -193,7 +193,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                     inner_tag="l.0")
             loopy_knl = lp.split_iname(loopy_knl, "isrc", 256)
             loopy_knl = lp.prioritize_loops(loopy_knl,
-                    ["isrc_outer", "itgt_inner"])
+                    ["isrc_outer", f"{itgt_name}_inner"])
         else:
             from warnings import warn
             warn("don't know how to tune layer potential computation for '%s'" % dev)
