@@ -174,7 +174,8 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
         raise NotImplementedError
 
     def get_optimized_kernel(self,
-            targets_is_obj_array, sources_is_obj_array, centers_is_obj_array):
+            targets_is_obj_array, sources_is_obj_array, centers_is_obj_array,
+            itgt_name="itgt"):
         # FIXME specialize/tune for GPU/CPU
         loopy_knl = self.get_kernel()
 
@@ -188,7 +189,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
         import pyopencl as cl
         dev = self.context.devices[0]
         if dev.type & cl.device_type.CPU:
-            loopy_knl = lp.split_iname(loopy_knl, "itgt", 16, outer_tag="g.0",
+            loopy_knl = lp.split_iname(loopy_knl, itgt_name, 16, outer_tag="g.0",
                     inner_tag="l.0")
             loopy_knl = lp.split_iname(loopy_knl, "isrc", 256)
             loopy_knl = lp.prioritize_loops(loopy_knl,
@@ -196,7 +197,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
         else:
             from warnings import warn
             warn("don't know how to tune layer potential computation for '%s'" % dev)
-            loopy_knl = lp.split_iname(loopy_knl, "itgt", 128, outer_tag="g.0")
+            loopy_knl = lp.split_iname(loopy_knl, itgt_name, 128, outer_tag="g.0")
         loopy_knl = self._allow_redundant_execution_of_knl_scaling(loopy_knl)
 
         return loopy_knl
