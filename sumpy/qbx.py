@@ -447,8 +447,8 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
                 centers_is_obj_array=is_obj_array_like(centers))
 
         return knl(queue,
-                   src=sources,
-                   tgt=targets,
+                   sources=sources,
+                   targets=targets,
                    center=centers,
                    expansion_radii=expansion_radii,
                    tgtindices=index_set.linear_row_indices,
