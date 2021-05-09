@@ -23,9 +23,7 @@ THE SOFTWARE.
 import sumpy.symbolic as sym  # noqa
 
 from sumpy.expansion import (
-    ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
-    HelmholtzConformingVolumeTaylorExpansion,
-    BiharmonicConformingVolumeTaylorExpansion)
+    ExpansionBase, VolumeTaylorExpansion, LinearPDEConformingVolumeTaylorExpansion)
 from pytools import factorial
 from sumpy.tools import mi_set_axis, add_to_sac
 
@@ -346,34 +344,22 @@ class VolumeTaylorMultipoleExpansion(
         VolumeTaylorExpansion.__init__(self, kernel, order, use_rscale)
 
 
-class LaplaceConformingVolumeTaylorMultipoleExpansion(
-        LaplaceConformingVolumeTaylorExpansion,
+class LinearPDEConformingVolumeTaylorMultipoleExpansion(
+        LinearPDEConformingVolumeTaylorExpansion,
         VolumeTaylorMultipoleExpansionBase):
 
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
-        LaplaceConformingVolumeTaylorExpansion.__init__(
+        LinearPDEConformingVolumeTaylorExpansion.__init__(
                 self, kernel, order, use_rscale)
 
 
-class HelmholtzConformingVolumeTaylorMultipoleExpansion(
-        HelmholtzConformingVolumeTaylorExpansion,
-        VolumeTaylorMultipoleExpansionBase):
-
-    def __init__(self, kernel, order, use_rscale=None):
-        VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
-        HelmholtzConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
-
-
-class BiharmonicConformingVolumeTaylorMultipoleExpansion(
-        BiharmonicConformingVolumeTaylorExpansion,
-        VolumeTaylorMultipoleExpansionBase):
-
-    def __init__(self, kernel, order, use_rscale=None):
-        VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
-        BiharmonicConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
+LaplaceConformingVolumeTaylorMultipoleExpansion = \
+        LinearPDEConformingVolumeTaylorMultipoleExpansion
+HelmholtzConformingVolumeTaylorMultipoleExpansion = \
+        LinearPDEConformingVolumeTaylorMultipoleExpansion
+BiharmonicConformingVolumeTaylorMultipoleExpansion = \
+        LinearPDEConformingVolumeTaylorMultipoleExpansion
 
 # }}}
 

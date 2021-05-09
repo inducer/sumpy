@@ -24,9 +24,7 @@ import sumpy.symbolic as sym
 from sumpy.tools import add_to_sac
 
 from sumpy.expansion import (
-    ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
-    HelmholtzConformingVolumeTaylorExpansion,
-    BiharmonicConformingVolumeTaylorExpansion)
+    ExpansionBase, VolumeTaylorExpansion, LinearPDEConformingVolumeTaylorExpansion)
 
 from sumpy.tools import mi_increment_axis
 from pytools import single_valued
@@ -411,34 +409,22 @@ class VolumeTaylorLocalExpansion(
         VolumeTaylorExpansion.__init__(self, kernel, order, use_rscale)
 
 
-class LaplaceConformingVolumeTaylorLocalExpansion(
-        LaplaceConformingVolumeTaylorExpansion,
+class LinearPDEConformingVolumeTaylorLocalExpansion(
+        LinearPDEConformingVolumeTaylorExpansion,
         VolumeTaylorLocalExpansionBase):
 
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale)
-        LaplaceConformingVolumeTaylorExpansion.__init__(
+        LinearPDEConformingVolumeTaylorExpansion.__init__(
                 self, kernel, order, use_rscale)
 
 
-class HelmholtzConformingVolumeTaylorLocalExpansion(
-        HelmholtzConformingVolumeTaylorExpansion,
-        VolumeTaylorLocalExpansionBase):
-
-    def __init__(self, kernel, order, use_rscale=None):
-        VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale)
-        HelmholtzConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
-
-
-class BiharmonicConformingVolumeTaylorLocalExpansion(
-        BiharmonicConformingVolumeTaylorExpansion,
-        VolumeTaylorLocalExpansionBase):
-
-    def __init__(self, kernel, order, use_rscale=None):
-        VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale)
-        BiharmonicConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
+LaplaceConformingVolumeTaylorLocalExpansion = \
+        LinearPDEConformingVolumeTaylorLocalExpansion
+HelmholtzConformingVolumeTaylorLocalExpansion = \
+        LinearPDEConformingVolumeTaylorLocalExpansion
+BiharmonicConformingVolumeTaylorLocalExpansion = \
+        LinearPDEConformingVolumeTaylorLocalExpansion
 
 # }}}
 
