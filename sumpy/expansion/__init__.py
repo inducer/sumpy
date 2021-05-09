@@ -407,7 +407,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     .. automethod:: __init__
     """
 
-    init_arg_names = ("order", "dim", "max_mi")
+    init_arg_names = ("order", "dim", "knl", "max_mi")
 
     def __init__(self, order, dim, knl, max_mi=None):
         r"""
