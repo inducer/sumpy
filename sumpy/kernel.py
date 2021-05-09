@@ -751,6 +751,11 @@ class ElasticityKernel(ExpressionKernel):
 
     mapper_method = "map_elasticity_kernel"
 
+    def get_pde_as_diff_op(self):
+        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+        w = make_identity_diff_op(self.dim)
+        return laplacian(laplacian(w))
+
 
 class StokesletKernel(ElasticityKernel):
     def __init__(self, dim, icomp, jcomp, viscosity_mu="mu",
@@ -759,11 +764,6 @@ class StokesletKernel(ElasticityKernel):
 
     def __repr__(self):
         return "StokesletKnl%dD_%d%d" % (self.dim, self.icomp, self.jcomp)
-
-    def get_pde_as_diff_op(self):
-        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
-        w = make_identity_diff_op(self.dim)
-        return laplacian(laplacian(w))
 
 
 class StressletKernel(ExpressionKernel):
