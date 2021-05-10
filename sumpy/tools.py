@@ -445,10 +445,9 @@ class GatherAllVariables(WalkMapper):
         self.vars.add(expr)
 
 
-def get_all_variables(exprs):
+def get_all_variables(expr):
     mapper = GatherAllVariables()
-    for expr in exprs:
-        mapper(expr)
+    mapper(expr)
     return mapper.vars
 
 # }}}
