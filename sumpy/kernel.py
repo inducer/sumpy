@@ -680,14 +680,8 @@ class ElasticityKernel(ExpressionKernel):
                 evaluate this kernel. Can also be a numeric value given
                 as a string.
         """
-        if isinstance(viscosity_mu, str):
-            mu = parse(viscosity_mu)
-        else:
-            mu = viscosity_mu
-        if isinstance(poisson_ratio, str):
-            nu = parse(poisson_ratio)
-        else:
-            nu = poisson_ratio
+        mu = parse(viscosity_mu)
+        nu = parse(poisson_ratio)
 
         if dim == 2:
             d = make_sym_vector("d", dim)
@@ -717,8 +711,8 @@ class ElasticityKernel(ExpressionKernel):
         else:
             raise RuntimeError("unsupported dimensionality")
 
-        self.viscosity_mu = mu
-        self.poisson_ratio = nu
+        self.viscosity_mu = viscosity_mu
+        self.poisson_ratio = poisson_ratio
         self.icomp = icomp
         self.jcomp = jcomp
 
