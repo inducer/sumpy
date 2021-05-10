@@ -738,16 +738,16 @@ class ElasticityKernel(ExpressionKernel):
     @memoize_method
     def get_args(self):
         from sumpy.tools import get_all_variables
-        variables = get_all_variables([self.viscosity_mu, self.poisson_ratio])
+        variables = get_all_variables(parse(self.viscosity_mu))
         res = []
         for v in variables:
             res.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
-        return res
+        return res + self.get_source_args()
 
     @memoize_method
     def get_source_args(self):
         from sumpy.tools import get_all_variables
-        variables = get_all_variables([self.poisson_ratio])
+        variables = get_all_variables(parse(self.poisson_ratio))
         res = []
         for v in variables:
             res.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
