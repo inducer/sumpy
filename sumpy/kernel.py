@@ -52,6 +52,7 @@ PDE kernels
 .. autoclass:: YukawaKernel
 .. autoclass:: StokesletKernel
 .. autoclass:: StressletKernel
+.. autoclass:: ElasticityKernel
 
 Derivatives
 -----------
@@ -749,6 +750,15 @@ class ElasticityKernel(ExpressionKernel):
             res.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
         return res
 
+    @memoize_method
+    def get_source_args(self):
+        from sumpy.tools import get_all_variables
+        variables = get_all_variables([self.poisson_ratio])
+        res = []
+        for v in variables:
+            res.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
+        return res
+
     mapper_method = "map_elasticity_kernel"
 
     def get_pde_as_diff_op(self):
@@ -769,8 +779,7 @@ class StokesletKernel(ElasticityKernel):
 class StressletKernel(ExpressionKernel):
     init_arg_names = ("dim", "icomp", "jcomp", "kcomp")
 
-    def __init__(self, dim=None, icomp=None, jcomp=None, kcomp=None):
-
+    def __init__(self, dim, icomp, jcomp, kcomp):
         if dim == 2:
             d = make_sym_vector("d", dim)
             r = pymbolic_real_norm_2(d)
@@ -808,8 +817,8 @@ class StressletKernel(ExpressionKernel):
 
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode())
-        key_builder.rec(key_hash, (
-            self.dim, self.icomp, self.jcomp, self.kcomp))
+        key_builder.rec(key_hash,
+                (self.dim, self.icomp, self.jcomp, self.kcomp))
 
     def __repr__(self):
         return "StressletKnl%dD_%d%d%d" % (self.dim, self.icomp, self.jcomp,
