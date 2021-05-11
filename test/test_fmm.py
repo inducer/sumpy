@@ -31,12 +31,10 @@ from sumpy.kernel import LaplaceKernel, HelmholtzKernel, YukawaKernel
 from sumpy.expansion.multipole import (
     VolumeTaylorMultipoleExpansion,
     H2DMultipoleExpansion, Y2DMultipoleExpansion,
-    LinearPDEConformingVolumeTaylorMultipoleExpansion,
     LinearPDEConformingVolumeTaylorMultipoleExpansion)
 from sumpy.expansion.local import (
     VolumeTaylorLocalExpansion,
     H2DLocalExpansion, Y2DLocalExpansion,
-    LinearPDEConformingVolumeTaylorLocalExpansion,
     LinearPDEConformingVolumeTaylorLocalExpansion)
 
 import pytest
