@@ -25,6 +25,7 @@ import loopy as lp
 import numpy as np
 from pymbolic.mapper import IdentityMapper, CSECachingMapperMixin
 from sumpy.symbolic import pymbolic_real_norm_2
+import sumpy.symbolic as sym
 from pymbolic.primitives import make_sym_vector
 from pymbolic import var
 from collections import defaultdict
@@ -379,6 +380,14 @@ class ExpressionKernel(Kernel):
         from sumpy.tools import ExprDerivativeTaker
         return ExprDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
+    def get_pde_as_diff_op(self):
+        r"""
+        Returns the PDE for the kernel as a
+        :class:`sumpy.expansion.diff_op.LinearPDESystemOperator` object `L`
+        where `L(u) = 0` is the PDE.
+        """
+        raise NotImplementedError
+
 
 one_kernel_2d = ExpressionKernel(
         dim=2,
@@ -431,6 +440,11 @@ class LaplaceKernel(ExpressionKernel):
         from sumpy.tools import LaplaceDerivativeTaker
         return LaplaceDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
+    def get_pde_as_diff_op(self):
+        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+        w = make_identity_diff_op(self.dim)
+        return laplacian(w)
+
 
 class BiharmonicKernel(ExpressionKernel):
     init_arg_names = ("dim",)
@@ -474,6 +488,11 @@ class BiharmonicKernel(ExpressionKernel):
         from sumpy.tools import RadialDerivativeTaker
         return RadialDerivativeTaker(self.get_expression(dvec), dvec, rscale,
                 sac)
+
+    def get_pde_as_diff_op(self):
+        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+        w = make_identity_diff_op(self.dim)
+        return laplacian(laplacian(w))
 
 
 class HelmholtzKernel(ExpressionKernel):
@@ -551,6 +570,13 @@ class HelmholtzKernel(ExpressionKernel):
         """
         from sumpy.tools import HelmholtzDerivativeTaker
         return HelmholtzDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
+
+    def get_pde_as_diff_op(self):
+        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+
+        w = make_identity_diff_op(self.dim)
+        k = sym.Symbol(self.helmholtz_k_name)
+        return (laplacian(w) + k**2 * w)
 
 
 class YukawaKernel(ExpressionKernel):
@@ -633,6 +659,12 @@ class YukawaKernel(ExpressionKernel):
         from sumpy.tools import HelmholtzDerivativeTaker
         return HelmholtzDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
+    def get_pde_as_diff_op(self):
+        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+        w = make_identity_diff_op(self.dim)
+        lam = sym.Symbol(self.yukawa_lambda_name)
+        return (laplacian(w) - lam**2 * w)
+
 
 class StokesletKernel(ExpressionKernel):
     init_arg_names = ("dim", "icomp", "jcomp", "viscosity_mu_name")
@@ -699,6 +731,11 @@ class StokesletKernel(ExpressionKernel):
                     )]
 
     mapper_method = "map_stokeslet_kernel"
+
+    def get_pde_as_diff_op(self):
+        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+        w = make_identity_diff_op(self.dim)
+        return laplacian(laplacian(w))
 
 
 class StressletKernel(ExpressionKernel):
@@ -768,6 +805,11 @@ class StressletKernel(ExpressionKernel):
                 ]
 
     mapper_method = "map_stresslet_kernel"
+
+    def get_pde_as_diff_op(self):
+        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+        w = make_identity_diff_op(self.dim)
+        return laplacian(laplacian(w))
 
 # }}}
 
