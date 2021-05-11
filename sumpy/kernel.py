@@ -668,6 +668,13 @@ class ElasticityKernel(ExpressionKernel):
     init_arg_names = ("dim", "icomp", "jcomp", "viscosity_mu_name",
             "poisson_ratio")
 
+    def __new__(cls, dim, icomp, jcomp, viscosity_mu="mu", poisson_ratio="nu"):
+        if poisson_ratio == "0.5":
+            instance = super(ElasticityKernel, cls).__new__(StokesletKernel)
+        else:
+            instance = super(ElasticityKernel, cls).__new__(cls)
+        return instance
+
     def __init__(self, dim, icomp, jcomp, viscosity_mu="mu",
             poisson_ratio="nu"):
         r"""
@@ -763,7 +770,7 @@ class ElasticityKernel(ExpressionKernel):
 
 class StokesletKernel(ElasticityKernel):
     def __init__(self, dim, icomp, jcomp, viscosity_mu="mu",
-            poisson_ratio="1/2"):
+            poisson_ratio="0.5"):
         super().__init__(dim, icomp, jcomp, viscosity_mu, poisson_ratio)
 
     def __repr__(self):
