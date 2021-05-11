@@ -32,14 +32,10 @@ from pyopencl.tools import (  # noqa
 from sumpy.expansion.multipole import (
         VolumeTaylorMultipoleExpansion, H2DMultipoleExpansion,
         VolumeTaylorMultipoleExpansionBase,
-        LaplaceConformingVolumeTaylorMultipoleExpansion,
-        HelmholtzConformingVolumeTaylorMultipoleExpansion,
-        BiharmonicConformingVolumeTaylorMultipoleExpansion)
+        LinearPDEConformingVolumeTaylorMultipoleExpansion)
 from sumpy.expansion.local import (
         VolumeTaylorLocalExpansion, H2DLocalExpansion,
-        LaplaceConformingVolumeTaylorLocalExpansion,
-        HelmholtzConformingVolumeTaylorLocalExpansion,
-        BiharmonicConformingVolumeTaylorLocalExpansion)
+        LinearPDEConformingVolumeTaylorLocalExpansion)
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, AxisTargetDerivative,
         DirectionalSourceDerivative, BiharmonicKernel, StokesletKernel)
 from pytools.convergence import PConvergenceVerifier
@@ -106,8 +102,8 @@ def test_p2p(ctx_factory, exclude_self):
 
 
 @pytest.mark.parametrize(("base_knl", "expn_class"), [
-    (LaplaceKernel(2), LaplaceConformingVolumeTaylorLocalExpansion),
-    (LaplaceKernel(2), LaplaceConformingVolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion),
+    (LaplaceKernel(2), LinearPDEConformingVolumeTaylorMultipoleExpansion),
 ])
 def test_p2e_multiple(ctx_factory, base_knl, expn_class):
 
@@ -219,13 +215,13 @@ def test_p2e_multiple(ctx_factory, base_knl, expn_class):
 @pytest.mark.parametrize(("base_knl", "expn_class"), [
     (LaplaceKernel(2), VolumeTaylorLocalExpansion),
     (LaplaceKernel(2), VolumeTaylorMultipoleExpansion),
-    (LaplaceKernel(2), LaplaceConformingVolumeTaylorLocalExpansion),
-    (LaplaceKernel(2), LaplaceConformingVolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion),
+    (LaplaceKernel(2), LinearPDEConformingVolumeTaylorMultipoleExpansion),
 
     (HelmholtzKernel(2), VolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), VolumeTaylorLocalExpansion),
-    (HelmholtzKernel(2), HelmholtzConformingVolumeTaylorLocalExpansion),
-    (HelmholtzKernel(2), HelmholtzConformingVolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion),
+    (HelmholtzKernel(2), LinearPDEConformingVolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), H2DLocalExpansion),
     (HelmholtzKernel(2), H2DMultipoleExpansion),
 
@@ -237,9 +233,9 @@ def test_p2e_multiple(ctx_factory, base_knl, expn_class):
     (HelmholtzKernel(2, allow_evanescent=True), VolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2, allow_evanescent=True), VolumeTaylorLocalExpansion),
     (HelmholtzKernel(2, allow_evanescent=True),
-     HelmholtzConformingVolumeTaylorLocalExpansion),
+     LinearPDEConformingVolumeTaylorLocalExpansion),
     (HelmholtzKernel(2, allow_evanescent=True),
-     HelmholtzConformingVolumeTaylorMultipoleExpansion),
+     LinearPDEConformingVolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2, allow_evanescent=True), H2DLocalExpansion),
     (HelmholtzKernel(2, allow_evanescent=True), H2DMultipoleExpansion),
     ])
@@ -456,16 +452,16 @@ def test_p2e2p(ctx_factory, base_knl, expn_class, order, with_source_derivative)
 
 @pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class", [
     (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
-    (LaplaceKernel(2), LaplaceConformingVolumeTaylorLocalExpansion,
-     LaplaceConformingVolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+     LinearPDEConformingVolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(2), HelmholtzConformingVolumeTaylorLocalExpansion,
-     HelmholtzConformingVolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+     LinearPDEConformingVolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion),
     (StokesletKernel(2, 0, 0), VolumeTaylorLocalExpansion,
      VolumeTaylorMultipoleExpansion),
-    (StokesletKernel(2, 0, 0), BiharmonicConformingVolumeTaylorLocalExpansion,
-     BiharmonicConformingVolumeTaylorMultipoleExpansion),
+    (StokesletKernel(2, 0, 0), LinearPDEConformingVolumeTaylorLocalExpansion,
+     LinearPDEConformingVolumeTaylorMultipoleExpansion),
     ])
 def test_translations(ctx_factory, knl, local_expn_class, mpole_expn_class):
     logging.basicConfig(level=logging.INFO)
