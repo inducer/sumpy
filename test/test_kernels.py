@@ -838,8 +838,8 @@ def _m2l_translate_simple(tgt_expansion, src_expansion, src_coeff_exprs, src_rsc
 def test_m2l_toeplitz():
     dim = 3
     knl = LaplaceKernel(dim)
-    local_expn_class = LaplaceConformingVolumeTaylorLocalExpansion
-    mpole_expn_class = LaplaceConformingVolumeTaylorMultipoleExpansion
+    local_expn_class = LinearPDEConformingVolumeTaylorLocalExpansion
+    mpole_expn_class = LinearPDEConformingVolumeTaylorMultipoleExpansion
 
     local_expn = local_expn_class(knl, order=5)
     mpole_expn = mpole_expn_class(knl, order=5)
