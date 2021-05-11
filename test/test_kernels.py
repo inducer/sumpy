@@ -32,13 +32,9 @@ from pyopencl.tools import (  # noqa
 from sumpy.expansion.multipole import (
         VolumeTaylorMultipoleExpansion, H2DMultipoleExpansion,
         VolumeTaylorMultipoleExpansionBase,
-        LinearPDEConformingVolumeTaylorMultipoleExpansion,
-        LinearPDEConformingVolumeTaylorMultipoleExpansion,
         LinearPDEConformingVolumeTaylorMultipoleExpansion)
 from sumpy.expansion.local import (
         VolumeTaylorLocalExpansion, H2DLocalExpansion,
-        LinearPDEConformingVolumeTaylorLocalExpansion,
-        LinearPDEConformingVolumeTaylorLocalExpansion,
         LinearPDEConformingVolumeTaylorLocalExpansion)
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, AxisTargetDerivative,
         DirectionalSourceDerivative, BiharmonicKernel, StokesletKernel)

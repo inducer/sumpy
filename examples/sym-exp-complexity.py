@@ -4,10 +4,8 @@ import loopy as lp
 from sumpy.kernel import LaplaceKernel, HelmholtzKernel
 from sumpy.expansion.local import (
         LinearPDEConformingVolumeTaylorLocalExpansion,
-        LinearPDEConformingVolumeTaylorLocalExpansion,
         )
 from sumpy.expansion.multipole import (
-        LinearPDEConformingVolumeTaylorMultipoleExpansion,
         LinearPDEConformingVolumeTaylorMultipoleExpansion,
         )
 from sumpy.e2e import E2EFromCSR
