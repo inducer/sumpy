@@ -778,9 +778,15 @@ class StokesletKernel(ElasticityKernel):
 
 
 class StressletKernel(ExpressionKernel):
-    init_arg_names = ("dim", "icomp", "jcomp", "kcomp")
+    init_arg_names = ("dim", "icomp", "jcomp", "kcomp", "viscosity_mu")
 
-    def __init__(self, dim, icomp, jcomp, kcomp):
+    def __init__(self, dim, icomp, jcomp, kcomp, viscosity_mu="mu"):
+        r"""
+        :arg viscosity_mu: The argument name to use for
+                dynamic viscosity :math:`\mu` the then generating functions to
+                evaluate this kernel.
+        """
+        # Mu is unused but kept for consistency with the stokeslet.
         if dim == 2:
             d = make_sym_vector("d", dim)
             r = pymbolic_real_norm_2(d)
@@ -806,6 +812,7 @@ class StressletKernel(ExpressionKernel):
         self.icomp = icomp
         self.jcomp = jcomp
         self.kcomp = kcomp
+        self.viscosity_mu = viscosity_mu
 
         super().__init__(
                 dim,
@@ -814,12 +821,12 @@ class StressletKernel(ExpressionKernel):
                 is_complex_valued=False)
 
     def __getinitargs__(self):
-        return (self.dim, self.icomp, self.jcomp, self.kcomp)
+        return (self.dim, self.icomp, self.jcomp, self.kcomp, self.viscosity_mu)
 
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode())
         key_builder.rec(key_hash,
-                (self.dim, self.icomp, self.jcomp, self.kcomp))
+                (self.dim, self.icomp, self.jcomp, self.kcomp, self.viscosity_mu))
 
     def __repr__(self):
         return "StressletKnl%dD_%d%d%d" % (self.dim, self.icomp, self.jcomp,
@@ -831,6 +838,13 @@ class StressletKernel(ExpressionKernel):
         from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
         w = make_identity_diff_op(self.dim)
         return laplacian(laplacian(w))
+
+    def get_args(self):
+        return [
+                KernelArgument(
+                    loopy_arg=lp.ValueArg(self.viscosity_mu, np.float64),
+                    )
+                ]
 
 # }}}
 
