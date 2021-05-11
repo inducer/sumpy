@@ -3,12 +3,12 @@ import pyopencl as cl
 import loopy as lp
 from sumpy.kernel import LaplaceKernel, HelmholtzKernel
 from sumpy.expansion.local import (
-        LaplaceConformingVolumeTaylorLocalExpansion,
-        HelmholtzConformingVolumeTaylorLocalExpansion,
+        LinearPDEConformingVolumeTaylorLocalExpansion,
+        LinearPDEConformingVolumeTaylorLocalExpansion,
         )
 from sumpy.expansion.multipole import (
-        LaplaceConformingVolumeTaylorMultipoleExpansion,
-        HelmholtzConformingVolumeTaylorMultipoleExpansion,
+        LinearPDEConformingVolumeTaylorMultipoleExpansion,
+        LinearPDEConformingVolumeTaylorMultipoleExpansion,
         )
 from sumpy.e2e import E2EFromCSR
 try:
@@ -22,13 +22,13 @@ def find_flops():
 
     if 0:
         knl = LaplaceKernel(2)
-        m_expn_cls = LaplaceConformingVolumeTaylorMultipoleExpansion
-        l_expn_cls = LaplaceConformingVolumeTaylorLocalExpansion
+        m_expn_cls = LinearPDEConformingVolumeTaylorMultipoleExpansion
+        l_expn_cls = LinearPDEConformingVolumeTaylorLocalExpansion
         flop_type = np.float64
     else:
         knl = HelmholtzKernel(2)
-        m_expn_cls = HelmholtzConformingVolumeTaylorMultipoleExpansion
-        l_expn_cls = HelmholtzConformingVolumeTaylorLocalExpansion
+        m_expn_cls = LinearPDEConformingVolumeTaylorMultipoleExpansion
+        l_expn_cls = LinearPDEConformingVolumeTaylorLocalExpansion
         flop_type = np.complex128
 
     orders = list(range(1, 11, 1))

@@ -31,13 +31,13 @@ from sumpy.kernel import LaplaceKernel, HelmholtzKernel, YukawaKernel
 from sumpy.expansion.multipole import (
     VolumeTaylorMultipoleExpansion,
     H2DMultipoleExpansion, Y2DMultipoleExpansion,
-    LaplaceConformingVolumeTaylorMultipoleExpansion,
-    HelmholtzConformingVolumeTaylorMultipoleExpansion)
+    LinearPDEConformingVolumeTaylorMultipoleExpansion,
+    LinearPDEConformingVolumeTaylorMultipoleExpansion)
 from sumpy.expansion.local import (
     VolumeTaylorLocalExpansion,
     H2DLocalExpansion, Y2DLocalExpansion,
-    LaplaceConformingVolumeTaylorLocalExpansion,
-    HelmholtzConformingVolumeTaylorLocalExpansion)
+    LinearPDEConformingVolumeTaylorLocalExpansion,
+    LinearPDEConformingVolumeTaylorLocalExpansion)
 
 import pytest
 
@@ -55,18 +55,18 @@ else:
 
 @pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class", [
     (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
-    (LaplaceKernel(2), LaplaceConformingVolumeTaylorLocalExpansion,
-                       LaplaceConformingVolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+                       LinearPDEConformingVolumeTaylorMultipoleExpansion),
     (LaplaceKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
-    (LaplaceKernel(3), LaplaceConformingVolumeTaylorLocalExpansion,
-                       LaplaceConformingVolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
+                       LinearPDEConformingVolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(2), HelmholtzConformingVolumeTaylorLocalExpansion,
-                         HelmholtzConformingVolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+                         LinearPDEConformingVolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion),
     (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(3), HelmholtzConformingVolumeTaylorLocalExpansion,
-                         HelmholtzConformingVolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
+                         LinearPDEConformingVolumeTaylorMultipoleExpansion),
     (YukawaKernel(2), Y2DLocalExpansion, Y2DMultipoleExpansion),
     ])
 def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class):
@@ -210,8 +210,8 @@ def test_unified_single_and_double(ctx_factory):
     queue = cl.CommandQueue(ctx)
 
     knl = LaplaceKernel(2)
-    local_expn_class = LaplaceConformingVolumeTaylorLocalExpansion
-    mpole_expn_class = LaplaceConformingVolumeTaylorMultipoleExpansion
+    local_expn_class = LinearPDEConformingVolumeTaylorLocalExpansion
+    mpole_expn_class = LinearPDEConformingVolumeTaylorMultipoleExpansion
 
     nsources = 1000
     ntargets = 300
