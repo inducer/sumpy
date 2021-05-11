@@ -24,7 +24,10 @@ import sumpy.symbolic as sym
 from sumpy.tools import add_to_sac
 
 from sumpy.expansion import (
-    ExpansionBase, VolumeTaylorExpansion, LinearPDEConformingVolumeTaylorExpansion)
+    ExpansionBase, VolumeTaylorExpansion, LinearPDEConformingVolumeTaylorExpansion,
+    LaplaceConformingVolumeTaylorExpansion,
+    HelmholtzConformingVolumeTaylorExpansion,
+    BiharmonicConformingVolumeTaylorExpansion)
 
 from sumpy.tools import mi_increment_axis
 from pytools import single_valued
@@ -413,12 +416,37 @@ class LinearPDEConformingVolumeTaylorLocalExpansion(
                 self, kernel, order, use_rscale)
 
 
-LaplaceConformingVolumeTaylorLocalExpansion = \
-        LinearPDEConformingVolumeTaylorLocalExpansion
-HelmholtzConformingVolumeTaylorLocalExpansion = \
-        LinearPDEConformingVolumeTaylorLocalExpansion
-BiharmonicConformingVolumeTaylorLocalExpansion = \
-        LinearPDEConformingVolumeTaylorLocalExpansion
+class LaplaceConformingVolumeTaylorLocalExpansion(
+        LaplaceConformingVolumeTaylorExpansion):
+
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("LaplaceConformingVolumeTaylorLocalExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorLocalExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
+
+
+class HelmholtzConformingVolumeTaylorLocalExpansion(
+        HelmholtzConformingVolumeTaylorExpansion):
+
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("HelmholtzConformingVolumeTaylorLocalExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorLocalExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
+
+
+class BiharmonicConformingVolumeTaylorLocalExpansion(
+        BiharmonicConformingVolumeTaylorExpansion):
+
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("BiharmonicConformingVolumeTaylorLocalExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorLocalExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
 
 # }}}
 

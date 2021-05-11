@@ -639,9 +639,37 @@ class LinearPDEConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
         self.expansion_terms_wrangler_key = (order, kernel.dim, kernel)
 
 
-LaplaceConformingVolumeTaylorExpansion = LinearPDEConformingVolumeTaylorExpansion
-HelmholtzConformingVolumeTaylorExpansion = LinearPDEConformingVolumeTaylorExpansion
-BiharmonicConformingVolumeTaylorExpansion = LinearPDEConformingVolumeTaylorExpansion
+class LaplaceConformingVolumeTaylorExpansion(
+        LinearPDEConformingVolumeTaylorExpansion):
+
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("LaplaceConformingVolumeTaylorExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
+
+
+class HelmholtzConformingVolumeTaylorExpansion(
+        LinearPDEConformingVolumeTaylorExpansion):
+
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("HelmholtzConformingVolumeTaylorExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
+
+
+class BiharmonicConformingVolumeTaylorExpansion(
+        LinearPDEConformingVolumeTaylorExpansion):
+
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("BiharmonicConformingVolumeTaylorExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
 
 # }}}
 
