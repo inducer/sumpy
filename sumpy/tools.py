@@ -435,6 +435,7 @@ class DifferentiatedExprDerivativeTaker:
 
 # }}}
 
+
 # {{{ get variables
 
 class GatherAllVariables(WalkMapper):
