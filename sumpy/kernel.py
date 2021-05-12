@@ -687,8 +687,14 @@ class ElasticityKernel(ExpressionKernel):
                 evaluate this kernel. Can also be a numeric value given
                 as a string.
         """
-        mu = parse(viscosity_mu)
-        nu = parse(poisson_ratio)
+        if isinstance(viscosity_mu, str):
+            mu = parse(viscosity_mu)
+        else:
+            mu = viscosity_mu
+        if isinstance(poisson_ratio, str):
+            nu = parse(poisson_ratio)
+        else:
+            nu = poisson_ratio
 
         if dim == 2:
             d = make_sym_vector("d", dim)
@@ -718,8 +724,8 @@ class ElasticityKernel(ExpressionKernel):
         else:
             raise RuntimeError("unsupported dimensionality")
 
-        self.viscosity_mu = viscosity_mu
-        self.poisson_ratio = poisson_ratio
+        self.viscosity_mu = mu
+        self.poisson_ratio = nu
         self.icomp = icomp
         self.jcomp = jcomp
 
@@ -734,10 +740,13 @@ class ElasticityKernel(ExpressionKernel):
                 self.poisson_ratio)
 
     def update_persistent_hash(self, key_hash, key_builder):
+        from pymbolic.mapper.persistent_hash import PersistentHashWalkMapper
         key_hash.update(type(self).__name__.encode())
         key_builder.rec(key_hash,
-                (self.dim, self.icomp, self.jcomp, self.viscosity_mu,
-                 self.poisson_ratio))
+                (self.dim, self.icomp, self.jcomp))
+        mapper = PersistentHashWalkMapper(key_hash)
+        mapper(self.viscosity_mu)
+        mapper(self.poisson_ratio)
 
     def __repr__(self):
         return "ElasticityKnl%dD_%d%d" % (self.dim, self.icomp, self.jcomp)
@@ -745,7 +754,7 @@ class ElasticityKernel(ExpressionKernel):
     @memoize_method
     def get_args(self):
         from sumpy.tools import get_all_variables
-        variables = get_all_variables(parse(self.viscosity_mu))
+        variables = get_all_variables(self.viscosity_mu)
         res = []
         for v in variables:
             res.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
@@ -754,7 +763,7 @@ class ElasticityKernel(ExpressionKernel):
     @memoize_method
     def get_source_args(self):
         from sumpy.tools import get_all_variables
-        variables = get_all_variables(parse(self.poisson_ratio))
+        variables = get_all_variables(self.poisson_ratio)
         res = []
         for v in variables:
             res.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
@@ -770,7 +779,7 @@ class ElasticityKernel(ExpressionKernel):
 
 class StokesletKernel(ElasticityKernel):
     def __init__(self, dim, icomp, jcomp, viscosity_mu="mu",
-            poisson_ratio="0.5"):
+            poisson_ratio=0.5):
         super().__init__(dim, icomp, jcomp, viscosity_mu, poisson_ratio)
 
     def __repr__(self):
