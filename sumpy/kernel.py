@@ -680,12 +680,10 @@ class ElasticityKernel(ExpressionKernel):
         r"""
         :arg viscosity_mu: The argument name to use for
                 dynamic viscosity :math:`\mu` when generating functions to
-                evaluate this kernel. Can also be a numeric value given
-                as a string.
+                evaluate this kernel. Can also be a numeric value.
         :arg poisson_ratio: The argument name to use for
                 Poisson's ratio :math:`\nu` when generating functions to
-                evaluate this kernel. Can also be a numeric value given
-                as a string.
+                evaluate this kernel. Can also be a numeric value.
         """
         if isinstance(viscosity_mu, str):
             mu = parse(viscosity_mu)
