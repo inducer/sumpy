@@ -850,6 +850,82 @@ class StressletKernel(ExpressionKernel):
                     )
                 ]
 
+
+class ElasticityHelperKernel(ExpressionKernel):
+    init_arg_names = ("dim", "viscosity_mu", "poisson_ratio")
+
+    def __init__(self, dim, viscosity_mu="mu", poisson_ratio="nu"):
+        r"""
+        :arg viscosity_mu: The argument name to use for
+                dynamic viscosity :math:`\mu` when generating functions to
+                evaluate this kernel. Can also be a numeric value.
+        :arg poisson_ratio: The argument name to use for
+                Poisson's ratio :math:`\nu` when generating functions to
+                evaluate this kernel. Can also be a numeric value.
+        """
+        if isinstance(viscosity_mu, str):
+            mu = parse(viscosity_mu)
+        else:
+            mu = viscosity_mu
+        if isinstance(poisson_ratio, str):
+            nu = parse(poisson_ratio)
+        else:
+            nu = poisson_ratio
+
+        if dim == 3:
+            d = make_sym_vector("d", dim)
+            r = pymbolic_real_norm_2(d)
+            # Kelvin solution
+            expr = d[-1] * var("log")(r + d[-1]) - r
+            scaling = (1 - 2*nu)/(4*var("pi")*mu)
+
+        elif dim is None:
+            expr = None
+            scaling = None
+        else:
+            raise RuntimeError("unsupported dimensionality")
+
+        self.viscosity_mu = mu
+        self.poisson_ratio = nu
+
+        super().__init__(
+                dim,
+                expression=expr,
+                global_scaling_const=scaling,
+                is_complex_valued=False)
+
+    def __getinitargs__(self):
+        return (self.dim, self.viscosity_mu, self.poisson_ratio)
+
+    def update_persistent_hash(self, key_hash, key_builder):
+        from pymbolic.mapper.persistent_hash import PersistentHashWalkMapper
+        key_hash.update(type(self).__name__.encode())
+        key_builder.rec(key_hash, (self.dim,))
+        mapper = PersistentHashWalkMapper(key_hash)
+        mapper(self.viscosity_mu)
+        mapper(self.poisson_ratio)
+
+    def __repr__(self):
+        return "ElasticityHelperKnl%dD" % (self.dim,)
+
+    @memoize_method
+    def get_args(self):
+        from sumpy.tools import get_all_variables
+        variables = get_all_variables(self.viscosity_mu) \
+            + get_all_variables(self.poisson_ratio)
+        res = []
+        for v in variables:
+            res.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
+        return res
+
+    mapper_method = "map_elasticity_helper_kernel"
+
+    def get_pde_as_diff_op(self):
+        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+        w = make_identity_diff_op(self.dim)
+        return laplacian(laplacian(w))
+
+
 # }}}
 
 
@@ -1162,6 +1238,7 @@ class KernelIdentityMapper(KernelMapper):
     map_helmholtz_kernel = map_expression_kernel
     map_yukawa_kernel = map_expression_kernel
     map_elasticity_kernel = map_expression_kernel
+    map_elasticity_helper_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
 
     def map_axis_target_derivative(self, kernel):
@@ -1208,7 +1285,7 @@ class DerivativeCounter(KernelCombineMapper):
     map_biharmonic_kernel = map_expression_kernel
     map_helmholtz_kernel = map_expression_kernel
     map_yukawa_kernel = map_expression_kernel
-    map_elasticity_kernel = map_expression_kernel
+    map_elasticity_helper_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
 
     def map_axis_target_derivative(self, kernel):
