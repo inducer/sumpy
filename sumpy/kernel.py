@@ -665,8 +665,7 @@ class YukawaKernel(ExpressionKernel):
 
 
 class ElasticityKernel(ExpressionKernel):
-    init_arg_names = ("dim", "icomp", "jcomp", "viscosity_mu_name",
-            "poisson_ratio")
+    init_arg_names = ("dim", "icomp", "jcomp", "viscosity_mu", "poisson_ratio")
 
     def __new__(cls, dim, icomp, jcomp, viscosity_mu="mu", poisson_ratio="nu"):
         if poisson_ratio == 0.5:
@@ -675,8 +674,7 @@ class ElasticityKernel(ExpressionKernel):
             instance = super(ElasticityKernel, cls).__new__(cls)
         return instance
 
-    def __init__(self, dim, icomp, jcomp, viscosity_mu="mu",
-            poisson_ratio="nu"):
+    def __init__(self, dim, icomp, jcomp, viscosity_mu="mu", poisson_ratio="nu"):
         r"""
         :arg viscosity_mu: The argument name to use for
                 dynamic viscosity :math:`\mu` when generating functions to
@@ -737,6 +735,9 @@ class ElasticityKernel(ExpressionKernel):
         return (self.dim, self.icomp, self.jcomp, self.viscosity_mu,
                 self.poisson_ratio)
 
+    def __reduce__(self):
+        return (ElasticityKernel, self.__getinitargs__())
+
     def update_persistent_hash(self, key_hash, key_builder):
         from pymbolic.mapper.persistent_hash import PersistentHashWalkMapper
         key_hash.update(type(self).__name__.encode())
@@ -776,8 +777,10 @@ class ElasticityKernel(ExpressionKernel):
 
 
 class StokesletKernel(ElasticityKernel):
-    def __init__(self, dim, icomp, jcomp, viscosity_mu="mu",
-            poisson_ratio=0.5):
+    def __new__(cls, dim, icomp, jcomp, viscosity_mu="mu", poisson_ratio="0.5"):
+        return object.__new__(cls)
+
+    def __init__(self, dim, icomp, jcomp, viscosity_mu="mu", poisson_ratio=0.5):
         super().__init__(dim, icomp, jcomp, viscosity_mu, poisson_ratio)
 
     def __repr__(self):
