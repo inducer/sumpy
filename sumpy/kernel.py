@@ -852,19 +852,19 @@ class StressletKernel(ExpressionKernel):
                 ]
 
 
-class ElasticityHelperKernel(ExpressionKernel):
-    """A helper kernel for the explicit solution to half-space Elasticity problem.
-    This kernel is the line of compression or dilatation of constant strength
-    along the axis "icomp" from zero to negative infinity. See [1] for details.
+class LineOfCompressionKernel(ExpressionKernel):
+    """A kernel for the line of compression or dilatation of constant strength
+    along the axis "axis" from zero to negative infinity. This is used for the
+    explicit solution to half-space Elasticity problem. See [1] for details.
 
     [1]: Mindlin, R. Force at a Point in the Interior of a Semi-Infinite Solid
          https://doi.org/10.1063/1.1745385
     """
-    init_arg_names = ("dim", "icomp", "viscosity_mu", "poisson_ratio")
+    init_arg_names = ("dim", "axis", "viscosity_mu", "poisson_ratio")
 
-    def __init__(self, dim=3, icomp=2, viscosity_mu="mu", poisson_ratio="nu"):
+    def __init__(self, dim=3, axis=2, viscosity_mu="mu", poisson_ratio="nu"):
         r"""
-        :arg icomp: axis number defaulting to 2 for the z axis.
+        :arg axis: axis number defaulting to 2 for the z axis.
         :arg viscosity_mu: The argument name to use for
                 dynamic viscosity :math:`\mu` when generating functions to
                 evaluate this kernel. Can also be a numeric value.
@@ -885,7 +885,7 @@ class ElasticityHelperKernel(ExpressionKernel):
             d = make_sym_vector("d", dim)
             r = pymbolic_real_norm_2(d)
             # Kelvin solution
-            expr = d[icomp] * var("log")(r + d[icomp]) - r
+            expr = d[axis] * var("log")(r + d[axis]) - r
             scaling = (1 - 2*nu)/(4*var("pi")*mu)
 
         elif dim is None:
@@ -896,7 +896,7 @@ class ElasticityHelperKernel(ExpressionKernel):
 
         self.viscosity_mu = mu
         self.poisson_ratio = nu
-        self.icomp = icomp
+        self.axis = axis
 
         super().__init__(
                 dim,
@@ -905,18 +905,18 @@ class ElasticityHelperKernel(ExpressionKernel):
                 is_complex_valued=False)
 
     def __getinitargs__(self):
-        return (self.dim, self.icomp, self.viscosity_mu, self.poisson_ratio)
+        return (self.dim, self.axis, self.viscosity_mu, self.poisson_ratio)
 
     def update_persistent_hash(self, key_hash, key_builder):
         from pymbolic.mapper.persistent_hash import PersistentHashWalkMapper
         key_hash.update(type(self).__name__.encode())
-        key_builder.rec(key_hash, (self.dim, self.icomp))
+        key_builder.rec(key_hash, (self.dim, self.axis))
         mapper = PersistentHashWalkMapper(key_hash)
         mapper(self.viscosity_mu)
         mapper(self.poisson_ratio)
 
     def __repr__(self):
-        return "ElasticityHelperKnl%dD" % (self.dim,)
+        return "LineOfCompressionKnl%dD_%d" % (self.dim, self.axis)
 
     @memoize_method
     def get_args(self):
@@ -928,7 +928,7 @@ class ElasticityHelperKernel(ExpressionKernel):
             res.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
         return res
 
-    mapper_method = "map_elasticity_helper_kernel"
+    mapper_method = "map_line_of_compression_kernel"
 
     def get_pde_as_diff_op(self):
         from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
@@ -1248,7 +1248,7 @@ class KernelIdentityMapper(KernelMapper):
     map_helmholtz_kernel = map_expression_kernel
     map_yukawa_kernel = map_expression_kernel
     map_elasticity_kernel = map_expression_kernel
-    map_elasticity_helper_kernel = map_expression_kernel
+    map_line_of_compression_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
 
     def map_axis_target_derivative(self, kernel):
@@ -1295,7 +1295,7 @@ class DerivativeCounter(KernelCombineMapper):
     map_biharmonic_kernel = map_expression_kernel
     map_helmholtz_kernel = map_expression_kernel
     map_yukawa_kernel = map_expression_kernel
-    map_elasticity_helper_kernel = map_expression_kernel
+    map_line_of_compression_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
 
     def map_axis_target_derivative(self, kernel):
