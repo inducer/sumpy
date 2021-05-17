@@ -852,10 +852,18 @@ class StressletKernel(ExpressionKernel):
 
 
 class ElasticityHelperKernel(ExpressionKernel):
-    init_arg_names = ("dim", "viscosity_mu", "poisson_ratio")
+    """A helper kernel for the explicit solution to half-space Elasticity problem.
+    This kernel is the line of compression or dilatation of constant strength
+    along the axis "icomp" from zero to negative infinity. See [1] for details.
 
-    def __init__(self, dim, viscosity_mu="mu", poisson_ratio="nu"):
+    [1]: Mindlin, R. Force at a Point in the Interior of a Semi-Infinite Solid
+         https://doi.org/10.1063/1.1745385
+    """
+    init_arg_names = ("dim", "icomp", "viscosity_mu", "poisson_ratio")
+
+    def __init__(self, dim=3, icomp=2, viscosity_mu="mu", poisson_ratio="nu"):
         r"""
+        :arg icomp: axis number defaulting to 2 for the z axis.
         :arg viscosity_mu: The argument name to use for
                 dynamic viscosity :math:`\mu` when generating functions to
                 evaluate this kernel. Can also be a numeric value.
@@ -876,7 +884,7 @@ class ElasticityHelperKernel(ExpressionKernel):
             d = make_sym_vector("d", dim)
             r = pymbolic_real_norm_2(d)
             # Kelvin solution
-            expr = d[-1] * var("log")(r + d[-1]) - r
+            expr = d[icomp] * var("log")(r + d[icomp]) - r
             scaling = (1 - 2*nu)/(4*var("pi")*mu)
 
         elif dim is None:
@@ -887,6 +895,7 @@ class ElasticityHelperKernel(ExpressionKernel):
 
         self.viscosity_mu = mu
         self.poisson_ratio = nu
+        self.icomp = icomp
 
         super().__init__(
                 dim,
@@ -895,12 +904,12 @@ class ElasticityHelperKernel(ExpressionKernel):
                 is_complex_valued=False)
 
     def __getinitargs__(self):
-        return (self.dim, self.viscosity_mu, self.poisson_ratio)
+        return (self.dim, self.icomp, self.viscosity_mu, self.poisson_ratio)
 
     def update_persistent_hash(self, key_hash, key_builder):
         from pymbolic.mapper.persistent_hash import PersistentHashWalkMapper
         key_hash.update(type(self).__name__.encode())
-        key_builder.rec(key_hash, (self.dim,))
+        key_builder.rec(key_hash, (self.dim, self.icomp))
         mapper = PersistentHashWalkMapper(key_hash)
         mapper(self.viscosity_mu)
         mapper(self.poisson_ratio)
