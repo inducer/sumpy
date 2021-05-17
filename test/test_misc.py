@@ -33,7 +33,7 @@ from pyopencl.tools import (  # noqa
 from pytools import Record
 
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel,
-        BiharmonicKernel, YukawaKernel)
+        BiharmonicKernel, YukawaKernel, StokesletKernel, ElasticityKernel)
 from sumpy.expansion.diff_op import (make_identity_diff_op, gradient,
         divergence, laplacian, concat, as_scalar_pde, curl, diff)
 
@@ -391,6 +391,20 @@ def test_as_scalar_pde_elasticity():
     pde = concat(*exprs)
     for i in range(5):
         assert as_scalar_pde(pde, i) == laplacian(laplacian(diff_op[0]))
+
+
+def test_elasticity_new():
+    from pickle import dumps, loads
+    stokes_knl = StokesletKernel(3, 0, 1, "mu1", 0.5)
+    stokes_knl2 = ElasticityKernel(3, 0, 1, "mu1", 0.5)
+    elasticity_knl = ElasticityKernel(3, 0, 1, "mu1", "nu")
+
+    assert isinstance(stokes_knl2, StokesletKernel)
+    assert stokes_knl == stokes_knl2
+    assert loads(dumps(stokes_knl)) == stokes_knl
+
+    assert not isinstance(elasticity_knl, StokesletKernel)
+    assert loads(dumps(elasticity_knl)) == elasticity_knl
 
 
 # You can test individual routines by typing
