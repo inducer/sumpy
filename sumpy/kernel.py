@@ -53,6 +53,7 @@ PDE kernels
 .. autoclass:: StokesletKernel
 .. autoclass:: StressletKernel
 .. autoclass:: ElasticityKernel
+.. autoclass:: ElasticityHelperKernel
 
 Derivatives
 -----------
