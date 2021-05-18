@@ -96,6 +96,7 @@ def test_pde_check_kernels(ctx_factory, knl_info, order=5):
     tctx = t.ToyContext(ctx_factory(), knl_info.kernel,
             extra_source_kwargs=knl_info.extra_kwargs)
 
+    np.random.seed(17)
     pt_src = t.PointSources(
             tctx,
             np.random.rand(dim, 50) - 0.5,
