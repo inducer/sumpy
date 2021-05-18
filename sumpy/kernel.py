@@ -857,7 +857,7 @@ class LineOfCompressionKernel(ExpressionKernel):
     along the axis "axis" from zero to negative infinity. This is used for the
     explicit solution to half-space Elasticity problem. See [1] for details.
 
-    [1]: Mindlin, R. Force at a Point in the Interior of a Semi-Infinite Solid
+    [1]: Mindlin, R.: Force at a Point in the Interior of a Semi-Infinite Solid
          https://doi.org/10.1063/1.1745385
     """
     init_arg_names = ("dim", "axis", "viscosity_mu", "poisson_ratio")
