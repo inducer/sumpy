@@ -34,7 +34,7 @@ from pytools import Record
 
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel,
         BiharmonicKernel, YukawaKernel, StokesletKernel, ElasticityKernel,
-        ElasticityHelperKernel)
+        LineOfCompressionKernel)
 from sumpy.expansion.diff_op import (make_identity_diff_op, gradient,
         divergence, laplacian, concat, as_scalar_pde, curl, diff)
 
@@ -399,7 +399,7 @@ def test_elasticity_new():
     stokes_knl = StokesletKernel(3, 0, 1, "mu1", 0.5)
     stokes_knl2 = ElasticityKernel(3, 0, 1, "mu1", 0.5)
     elasticity_knl = ElasticityKernel(3, 0, 1, "mu1", "nu")
-    elasticity_helper_knl = ElasticityHelperKernel(3, 0, "mu1", "nu")
+    elasticity_helper_knl = LineOfCompressionKernel(3, 0, "mu1", "nu")
 
     assert isinstance(stokes_knl2, StokesletKernel)
     assert stokes_knl == stokes_knl2
