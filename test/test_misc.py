@@ -43,13 +43,14 @@ from sumpy.expansion.diff_op import (make_identity_diff_op, gradient,
 # {{{ pde check for kernels
 
 class KernelInfo:
-    def __init__(self, kernel, **kwargs):
+    def __init__(self, kernel, order_tolerance=0.1, **kwargs):
         self.kernel = kernel
         self.extra_kwargs = kwargs
         diff_op = self.kernel.get_pde_as_diff_op()
         assert len(diff_op.eqs) == 1
         eq = diff_op.eqs[0]
         self.eq = eq
+        self.order_tolerance = order_tolerance
 
     def pde_func(self, cp, pot):
         subs_dict = {sym.Symbol(k): v for k, v in self.extra_kwargs.items()}
@@ -80,7 +81,7 @@ class KernelInfo:
     KernelInfo(StokesletKernel(3, 0, 1), mu=5),
     KernelInfo(StokesletKernel(3, 1, 1), mu=5),
     KernelInfo(StressletKernel(2, 0, 0, 0), mu=5),
-    KernelInfo(StressletKernel(2, 0, 0, 1), mu=5),
+    KernelInfo(StressletKernel(2, 0, 0, 1), order_tolerance=0.2, mu=5),
     KernelInfo(StressletKernel(3, 0, 0, 0), mu=5),
     KernelInfo(StressletKernel(3, 0, 0, 1), mu=5),
     KernelInfo(StressletKernel(3, 0, 1, 2), mu=5),
@@ -115,7 +116,8 @@ def test_pde_check_kernels(ctx_factory, knl_info, order=5):
         eoc_rec.add_data_point(h, err)
 
     print(eoc_rec)
-    assert eoc_rec.order_estimate() > order - knl_info.nderivs + 1 - 0.2
+    assert eoc_rec.order_estimate() > order - knl_info.nderivs + 1 \
+        - knl_info.order_tolerance
 
 # }}}
 
