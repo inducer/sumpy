@@ -133,7 +133,7 @@ class Kernel:
     .. automethod:: get_source_args
     """
 
-    def __init__(self, dim=None):
+    def __init__(self, dim):
         self.dim = dim
 
     # {{{ hashing/pickling/equality
@@ -404,7 +404,7 @@ one_kernel_3d = ExpressionKernel(
 class LaplaceKernel(ExpressionKernel):
     init_arg_names = ("dim",)
 
-    def __init__(self, dim=None):
+    def __init__(self, dim):
         # See (Kress LIE, Thm 6.2) for scaling
         if dim == 2:
             r = pymbolic_real_norm_2(make_sym_vector("d", dim))
@@ -447,7 +447,7 @@ class LaplaceKernel(ExpressionKernel):
 class BiharmonicKernel(ExpressionKernel):
     init_arg_names = ("dim",)
 
-    def __init__(self, dim=None):
+    def __init__(self, dim):
         r = pymbolic_real_norm_2(make_sym_vector("d", dim))
         if dim == 2:
             # Ref: Farkas, Peter. Mathematical foundations for fast algorithms
@@ -496,7 +496,7 @@ class BiharmonicKernel(ExpressionKernel):
 class HelmholtzKernel(ExpressionKernel):
     init_arg_names = ("dim", "helmholtz_k_name", "allow_evanescent")
 
-    def __init__(self, dim=None, helmholtz_k_name="k",
+    def __init__(self, dim, helmholtz_k_name="k",
             allow_evanescent=False):
         """
         :arg helmholtz_k_name: The argument name to use for the Helmholtz
@@ -580,7 +580,7 @@ class HelmholtzKernel(ExpressionKernel):
 class YukawaKernel(ExpressionKernel):
     init_arg_names = ("dim", "yukawa_lambda_name")
 
-    def __init__(self, dim=None, yukawa_lambda_name="lam"):
+    def __init__(self, dim, yukawa_lambda_name="lam"):
         """
         :arg yukawa_lambda_name: The argument name to use for the Yukawa
             parameter when generating functions to evaluate this kernel.
@@ -714,9 +714,6 @@ class ElasticityKernel(ExpressionKernel):
                 )
             scaling = -1/(16*var("pi")*(1 - nu)*mu)
 
-        elif dim is None:
-            expr = None
-            scaling = None
         else:
             raise RuntimeError("unsupported dimensionality")
 
@@ -813,9 +810,6 @@ class StressletKernel(ExpressionKernel):
                 )
             scaling = 3/(4*var("pi"))
 
-        elif dim is None:
-            expr = None
-            scaling = None
         else:
             raise RuntimeError("unsupported dimensionality")
 
