@@ -921,8 +921,8 @@ class LineOfCompressionKernel(ExpressionKernel):
     @memoize_method
     def get_args(self):
         from sumpy.tools import get_all_variables
-        variables = get_all_variables(self.viscosity_mu) \
-            + get_all_variables(self.poisson_ratio)
+        variables = list(get_all_variables(self.viscosity_mu)) \
+            + list(get_all_variables(self.poisson_ratio))
         res = []
         for v in variables:
             res.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
