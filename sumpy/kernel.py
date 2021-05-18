@@ -893,10 +893,6 @@ class LineOfCompressionKernel(ExpressionKernel):
             # Kelvin solution
             expr = d[axis] * var("log")(r + d[axis]) - r
             scaling = (1 - 2*nu)/(4*var("pi")*mu)
-
-        elif dim is None:
-            expr = None
-            scaling = None
         else:
             raise RuntimeError("unsupported dimensionality")
 
