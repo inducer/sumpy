@@ -115,7 +115,7 @@ def test_pde_check_kernels(ctx_factory, knl_info, order=5):
         eoc_rec.add_data_point(h, err)
 
     print(eoc_rec)
-    assert eoc_rec.order_estimate() > order - knl_info.nderivs + 1 - 0.1
+    assert eoc_rec.order_estimate() > order - knl_info.nderivs + 1 - 0.2
 
 # }}}
 
