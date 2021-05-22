@@ -66,7 +66,7 @@ class LinearPDESystemOperator:
         return hash((self.dim, self.eqs))
 
     @property
-    def degree(self):
+    def order(self):
         deg = 0
         for eq in self.eqs:
             deg = max(deg, max(sum(ident.mi) for ident in eq.keys()))
