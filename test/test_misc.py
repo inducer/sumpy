@@ -411,11 +411,11 @@ def test_as_scalar_pde_elasticity():
     ]
 
     pde = concat(*exprs)
-    assert pde.degree == 1
+    assert pde.order == 1
     for i in range(5):
         scalar_pde = as_scalar_pde(pde, i)
         assert scalar_pde == laplacian(laplacian(diff_op[0]))
-        assert scalar_pde.degree == 4
+        assert scalar_pde.order == 4
 
 
 def test_elasticity_new():
