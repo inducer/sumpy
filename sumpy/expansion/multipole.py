@@ -23,10 +23,7 @@ THE SOFTWARE.
 import sumpy.symbolic as sym  # noqa
 
 from sumpy.expansion import (
-    ExpansionBase, VolumeTaylorExpansion, LinearPDEConformingVolumeTaylorExpansion,
-    LaplaceConformingVolumeTaylorExpansion,
-    HelmholtzConformingVolumeTaylorExpansion,
-    BiharmonicConformingVolumeTaylorExpansion)
+    ExpansionBase, VolumeTaylorExpansion, LinearPDEConformingVolumeTaylorExpansion)
 from pytools import factorial
 from sumpy.tools import mi_set_axis, add_to_sac
 
@@ -358,7 +355,7 @@ class LinearPDEConformingVolumeTaylorMultipoleExpansion(
 
 
 class LaplaceConformingVolumeTaylorMultipoleExpansion(
-        LaplaceConformingVolumeTaylorExpansion):
+        LinearPDEConformingVolumeTaylorMultipoleExpansion):
 
     def __init__(self, *args, **kwargs):
         from warnings import warn
@@ -369,7 +366,7 @@ class LaplaceConformingVolumeTaylorMultipoleExpansion(
 
 
 class HelmholtzConformingVolumeTaylorMultipoleExpansion(
-        HelmholtzConformingVolumeTaylorExpansion):
+        LinearPDEConformingVolumeTaylorMultipoleExpansion):
 
     def __init__(self, *args, **kwargs):
         from warnings import warn
@@ -380,7 +377,7 @@ class HelmholtzConformingVolumeTaylorMultipoleExpansion(
 
 
 class BiharmonicConformingVolumeTaylorMultipoleExpansion(
-        BiharmonicConformingVolumeTaylorExpansion):
+        LinearPDEConformingVolumeTaylorMultipoleExpansion):
 
     def __init__(self, *args, **kwargs):
         from warnings import warn

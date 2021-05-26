@@ -24,10 +24,7 @@ import sumpy.symbolic as sym
 from sumpy.tools import add_to_sac
 
 from sumpy.expansion import (
-    ExpansionBase, VolumeTaylorExpansion, LinearPDEConformingVolumeTaylorExpansion,
-    LaplaceConformingVolumeTaylorExpansion,
-    HelmholtzConformingVolumeTaylorExpansion,
-    BiharmonicConformingVolumeTaylorExpansion)
+    ExpansionBase, VolumeTaylorExpansion, LinearPDEConformingVolumeTaylorExpansion)
 
 from sumpy.tools import mi_increment_axis
 from pytools import single_valued
@@ -417,7 +414,7 @@ class LinearPDEConformingVolumeTaylorLocalExpansion(
 
 
 class LaplaceConformingVolumeTaylorLocalExpansion(
-        LaplaceConformingVolumeTaylorExpansion):
+        LinearPDEConformingVolumeTaylorLocalExpansion):
 
     def __init__(self, *args, **kwargs):
         from warnings import warn
@@ -428,7 +425,7 @@ class LaplaceConformingVolumeTaylorLocalExpansion(
 
 
 class HelmholtzConformingVolumeTaylorLocalExpansion(
-        HelmholtzConformingVolumeTaylorExpansion):
+        LinearPDEConformingVolumeTaylorLocalExpansion):
 
     def __init__(self, *args, **kwargs):
         from warnings import warn
@@ -439,7 +436,7 @@ class HelmholtzConformingVolumeTaylorLocalExpansion(
 
 
 class BiharmonicConformingVolumeTaylorLocalExpansion(
-        BiharmonicConformingVolumeTaylorExpansion):
+        LinearPDEConformingVolumeTaylorLocalExpansion):
 
     def __init__(self, *args, **kwargs):
         from warnings import warn
