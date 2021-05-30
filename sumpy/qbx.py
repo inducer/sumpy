@@ -98,17 +98,25 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
         return coefficients
 
     def _evaluate(self, sac, avec, bvec, rscale, expansion_nr, coefficients):
-        expn = self.target_kernels[expansion_nr]
+        from sumpy.expansion.local import LineTaylorLocalExpansion
+        tgt_knl = self.target_kernels[expansion_nr]
+        if isinstance(tgt_knl, LineTaylorLocalExpansion):
+            # In LineTaylorLocalExpansion.evaluate, we can't run
+            # postprocess_at_target because the coefficients are assigned
+            # symbols and postprocess with a derivative will make them zero.
+            # Instead run postprocess here before the coeffients are assigned.
+            coefficients = [tgt_knl.postprocess_at_target(coeff, bvec) for
+                    coeff in coefficients]
+
         assigned_coeffs = [
             sym.Symbol(
                 sac.assign_unique("expn%dcoeff%s" % (
                     expansion_nr, stringify_expn_index(i)),
-                    expn.postprocess_at_target(
-                        coefficients[self.expansion.get_storage_index(i)], bvec)))
+                        coefficients[self.expansion.get_storage_index(i)]))
             for i in self.expansion.get_coefficient_identifiers()]
 
         return sac.assign_unique("expn%d_result" % expansion_nr,
-            self.expansion.evaluate(expn, assigned_coeffs, bvec, rscale))
+            self.expansion.evaluate(tgt_knl, assigned_coeffs, bvec, rscale))
 
     def get_loopy_insns_and_result_names(self):
         from sumpy.symbolic import make_sym_vector
@@ -348,7 +356,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
 # }}}
 
 
-# {{{
+# {{{ matrix block generator
 
 class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
     """Generator for a subset of the layer potential matrix entries.

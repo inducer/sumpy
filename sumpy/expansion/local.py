@@ -24,9 +24,7 @@ import sumpy.symbolic as sym
 from sumpy.tools import add_to_sac
 
 from sumpy.expansion import (
-    ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
-    HelmholtzConformingVolumeTaylorExpansion,
-    BiharmonicConformingVolumeTaylorExpansion)
+    ExpansionBase, VolumeTaylorExpansion, LinearPDEConformingVolumeTaylorExpansion)
 
 from sumpy.tools import mi_increment_axis
 from pytools import single_valued
@@ -97,7 +95,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
                     .subs("tau", 0)
                     for i in self.get_coefficient_identifiers()]
 
-    def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
+    def evaluate(self, tgt_kernel, coeffs, bvec, rscale, sac=None):
         # no point in heeding rscale here--just ignore it
         from pytools import factorial
         return sym.Add(*(
@@ -405,34 +403,47 @@ class VolumeTaylorLocalExpansion(
         VolumeTaylorExpansion.__init__(self, kernel, order, use_rscale)
 
 
-class LaplaceConformingVolumeTaylorLocalExpansion(
-        LaplaceConformingVolumeTaylorExpansion,
+class LinearPDEConformingVolumeTaylorLocalExpansion(
+        LinearPDEConformingVolumeTaylorExpansion,
         VolumeTaylorLocalExpansionBase):
 
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale)
-        LaplaceConformingVolumeTaylorExpansion.__init__(
+        LinearPDEConformingVolumeTaylorExpansion.__init__(
                 self, kernel, order, use_rscale)
+
+
+class LaplaceConformingVolumeTaylorLocalExpansion(
+        LinearPDEConformingVolumeTaylorLocalExpansion):
+
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("LaplaceConformingVolumeTaylorLocalExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorLocalExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
 
 
 class HelmholtzConformingVolumeTaylorLocalExpansion(
-        HelmholtzConformingVolumeTaylorExpansion,
-        VolumeTaylorLocalExpansionBase):
+        LinearPDEConformingVolumeTaylorLocalExpansion):
 
-    def __init__(self, kernel, order, use_rscale=None):
-        VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale)
-        HelmholtzConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("HelmholtzConformingVolumeTaylorLocalExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorLocalExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
 
 
 class BiharmonicConformingVolumeTaylorLocalExpansion(
-        BiharmonicConformingVolumeTaylorExpansion,
-        VolumeTaylorLocalExpansionBase):
+        LinearPDEConformingVolumeTaylorLocalExpansion):
 
-    def __init__(self, kernel, order, use_rscale=None):
-        VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale)
-        BiharmonicConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("BiharmonicConformingVolumeTaylorLocalExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorLocalExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
 
 # }}}
 

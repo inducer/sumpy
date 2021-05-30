@@ -39,6 +39,7 @@ __doc__ = """
 
 from pytools import memoize_method, memoize_in
 from pytools.tag import Tag, tag_dataclass
+from pymbolic.mapper import WalkMapper
 
 import numpy as np
 import sumpy.symbolic as sym
@@ -431,6 +432,24 @@ class DifferentiatedExprDerivativeTaker:
             for extra_mi, coeff in self.derivative_transformation.items())
 
         return result * save_intermediate(1 / self.taker.rscale ** max_order)
+
+# }}}
+
+
+# {{{ get variables
+
+class GatherAllVariables(WalkMapper):
+    def __init__(self):
+        self.vars = set()
+
+    def map_variable(self, expr):
+        self.vars.add(expr)
+
+
+def get_all_variables(expr):
+    mapper = GatherAllVariables()
+    mapper(expr)
+    return mapper.vars
 
 # }}}
 

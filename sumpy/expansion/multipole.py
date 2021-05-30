@@ -23,9 +23,7 @@ THE SOFTWARE.
 import sumpy.symbolic as sym  # noqa
 
 from sumpy.expansion import (
-    ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
-    HelmholtzConformingVolumeTaylorExpansion,
-    BiharmonicConformingVolumeTaylorExpansion)
+    ExpansionBase, VolumeTaylorExpansion, LinearPDEConformingVolumeTaylorExpansion)
 from pytools import factorial
 from sumpy.tools import mi_set_axis, add_to_sac
 
@@ -346,34 +344,47 @@ class VolumeTaylorMultipoleExpansion(
         VolumeTaylorExpansion.__init__(self, kernel, order, use_rscale)
 
 
-class LaplaceConformingVolumeTaylorMultipoleExpansion(
-        LaplaceConformingVolumeTaylorExpansion,
+class LinearPDEConformingVolumeTaylorMultipoleExpansion(
+        LinearPDEConformingVolumeTaylorExpansion,
         VolumeTaylorMultipoleExpansionBase):
 
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
-        LaplaceConformingVolumeTaylorExpansion.__init__(
+        LinearPDEConformingVolumeTaylorExpansion.__init__(
                 self, kernel, order, use_rscale)
+
+
+class LaplaceConformingVolumeTaylorMultipoleExpansion(
+        LinearPDEConformingVolumeTaylorMultipoleExpansion):
+
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("LaplaceConformingVolumeTaylorMultipoleExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorMultipoleExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
 
 
 class HelmholtzConformingVolumeTaylorMultipoleExpansion(
-        HelmholtzConformingVolumeTaylorExpansion,
-        VolumeTaylorMultipoleExpansionBase):
+        LinearPDEConformingVolumeTaylorMultipoleExpansion):
 
-    def __init__(self, kernel, order, use_rscale=None):
-        VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
-        HelmholtzConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("HelmholtzConformingVolumeTaylorMultipoleExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorMultipoleExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
 
 
 class BiharmonicConformingVolumeTaylorMultipoleExpansion(
-        BiharmonicConformingVolumeTaylorExpansion,
-        VolumeTaylorMultipoleExpansionBase):
+        LinearPDEConformingVolumeTaylorMultipoleExpansion):
 
-    def __init__(self, kernel, order, use_rscale=None):
-        VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
-        BiharmonicConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("BiharmonicConformingVolumeTaylorMultipoleExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorMultipoleExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
 
 # }}}
 
