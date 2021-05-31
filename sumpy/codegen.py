@@ -648,15 +648,13 @@ class MathConstantRewriter(CSECachingMapperMixin, CallExternalRecMapper):
 # {{{ combine mappers
 
 def combine_mappers(*mappers):
-    """Returns a mapper that combines the work of several mappers.
-    For this to work, the mappers need to be instances of
-    :class:`sumpy.codegen.CallExternalRecMapper` and when calling
-    parent class methods, the mappers need to use the argument
-    *rec_self* passed to the *map_* method. *rec_self* is a
-    *CombinedMapper* instance which would dispatch the object to
-    all the mappers given. The mappers given need to commute and
-    for any mapper applying the mapper on an expression that has
-    already been mapped should result in an identical object.
+    """Returns a mapper that combines the work of several other mappers.  For
+    this to work, the mappers need to be instances of
+    :class:`sumpy.codegen.CallExternalRecMapper`.  When calling parent class
+    methods, the mappers need to use the (first) argument *rec_self* as the
+    instance passed to the *map_* method. *rec_self* is a (custom-generated)
+    *CombinedMapper* instance which dispatches the object to all the mappers
+    given. The mappers need to commute and be idempotent.
     """
     from collections import defaultdict
     all_methods = defaultdict(list)
