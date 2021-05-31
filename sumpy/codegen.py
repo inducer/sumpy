@@ -276,9 +276,9 @@ class BesselGetter:
 
 
 class CallExternalRecMapper(IdentityMapper):
-    def rec(self, expr, rec_object=None, *args, **kwargs):
-        if rec_object:
-            return rec_object.rec(expr, *args, **kwargs)
+    def rec(self, expr, rec_self=None, *args, **kwargs):
+        if rec_self:
+            return rec_self.rec(expr, *args, **kwargs)
         else:
             return super().rec(expr, *args, **kwargs)
 
@@ -291,7 +291,7 @@ class BesselTopOrderGatherer(CSECachingMapperMixin, CallExternalRecMapper):
     def __init__(self):
         self.bessel_j_arg_to_top_order = {}
 
-    def map_call(self, expr, rec_object=None, *args):
+    def map_call(self, expr, rec_self=None, *args):
         if isinstance(expr.function, prim.Variable) \
                 and expr.function.name == "bessel_j":
             order, arg = expr.parameters
@@ -300,14 +300,14 @@ class BesselTopOrderGatherer(CSECachingMapperMixin, CallExternalRecMapper):
             self.bessel_j_arg_to_top_order[arg] = max(
                     self.bessel_j_arg_to_top_order.get(arg, 0),
                     abs(order))
-        return IdentityMapper.map_call(rec_object if rec_object else self,
-                expr, rec_object, *args)
+        return IdentityMapper.map_call(rec_self if rec_self else self,
+                expr, rec_self, *args)
 
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
 
 class BesselDerivativeReplacer(CSECachingMapperMixin, CallExternalRecMapper):
-    def map_substitution(self, expr, rec_object=None, *args):
+    def map_substitution(self, expr, rec_self=None, *args):
         assert isinstance(expr.child, prim.Derivative)
         call = expr.child.child
 
@@ -334,21 +334,21 @@ class BesselDerivativeReplacer(CSECachingMapperMixin, CallExternalRecMapper):
                     "d%d_%s_%s" % (n_derivs, function.name, order_str))
         else:
             return IdentityMapper.map_substitution(
-                    rec_object if rec_object else self, expr, rec_object, *args)
+                    rec_self if rec_self else self, expr, rec_self, *args)
 
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
 
 class HankelSubstitutor(CSECachingMapperMixin, CallExternalRecMapper):
-    def map_call(self, expr, rec_object=None, *args):
+    def map_call(self, expr, rec_self=None, *args):
         if isinstance(expr.function, prim.Variable):
             name = expr.function.name
             if name == "hankel_1":
                 order, arg = expr.parameters
                 return self.hankel_1(order, self.rec(arg,
-                    rec_object, *args))
+                    rec_self, *args))
 
-        return IdentityMapper.map_call(rec_object if rec_object else self, expr)
+        return IdentityMapper.map_call(rec_self if rec_self else self, expr)
 
     def hank1_01(self, arg):
         return prim.Variable("hank1_01")(arg)
@@ -395,15 +395,15 @@ class BesselSubstitutor(CSECachingMapperMixin, IdentityMapper):
             return expr
         return super().__call__(expr, *args, **kwargs)
 
-    def map_call(self, expr, rec_object=None, *args):
+    def map_call(self, expr, rec_self=None, *args):
         if isinstance(expr.function, prim.Variable):
             name = expr.function.name
             if name == "bessel_j":
                 order, arg = expr.parameters
                 return self.bessel_j(order, self.rec(arg,
-                    rec_object, *args))
+                    rec_self, *args))
 
-        return IdentityMapper.map_call(rec_object if rec_object else self, expr)
+        return IdentityMapper.map_call(rec_self if rec_self else self, expr)
 
     @memoize_method
     def bessel_jv_two(self, order, arg):
@@ -447,7 +447,7 @@ class BesselSubstitutor(CSECachingMapperMixin, IdentityMapper):
 # {{{ power rewriter
 
 class PowerRewriter(CSECachingMapperMixin, CallExternalRecMapper):
-    def map_power(self, expr, rec_object=None, *args):
+    def map_power(self, expr, rec_self=None, *args):
         exp = expr.exponent
         if isinstance(exp, int):
             new_base = prim.wrap_in_cse(expr.base)
@@ -455,15 +455,15 @@ class PowerRewriter(CSECachingMapperMixin, CallExternalRecMapper):
             if exp > 1 and exp % 2 == 0:
                 square = prim.wrap_in_cse(new_base*new_base)
                 return self.rec(prim.wrap_in_cse(square**(exp//2)),
-                        rec_object, *args)
+                        rec_self, *args)
             elif exp > 1 and exp % 2 == 1:
                 square = prim.wrap_in_cse(new_base*new_base)
                 return self.rec(prim.wrap_in_cse(square**((exp-1)//2))*new_base,
-                        rec_object, *args)
+                        rec_self, *args)
             elif exp == 1:
                 return new_base
             elif exp < 0:
-                return self.rec((1/new_base)**(-exp), rec_object, *args)
+                return self.rec((1/new_base)**(-exp), rec_self, *args)
 
         if (isinstance(expr.exponent, prim.Quotient)
                 and isinstance(expr.exponent.numerator, int)
@@ -475,7 +475,7 @@ class PowerRewriter(CSECachingMapperMixin, CallExternalRecMapper):
                 p *= -1
 
             if q == 1:
-                return self.rec(new_base**p, rec_object, *args)
+                return self.rec(new_base**p, rec_self, *args)
 
             if q == 2:
                 assert p != 0
@@ -487,9 +487,9 @@ class PowerRewriter(CSECachingMapperMixin, CallExternalRecMapper):
                     new_base = prim.wrap_in_cse(prim.Variable("rsqrt")(expr.base))
                     p *= -1
 
-                return self.rec(new_base**p, rec_object, *args)
+                return self.rec(new_base**p, rec_self, *args)
 
-        return IdentityMapper.map_power(rec_object if rec_object else self, expr)
+        return IdentityMapper.map_power(rec_self if rec_self else self, expr)
 
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
@@ -545,16 +545,16 @@ class ComplexRewriter(CSECachingMapperMixin, CallExternalRecMapper):
         IdentityMapper.__init__(self)
         self.float_type = float_type
 
-    def map_constant(self, expr, rec_object=None, *args, **kwargs):
+    def map_constant(self, expr, rec_self=None, *args, **kwargs):
         """Convert complex values not within complex64 to a product for loopy
         """
         if not isinstance(expr, complex):
             return IdentityMapper.map_constant(
-                    rec_object if rec_object else self, expr)
+                    rec_self if rec_self else self, expr)
 
         if complex(self.float_type(expr.imag)) == expr.imag:
             return IdentityMapper.map_constant(
-                    rec_object if rec_object else self, expr)
+                    rec_self if rec_self else self, expr)
 
         # avoid cycles
         if expr == 1j:
@@ -652,7 +652,7 @@ def combine_mappers(*mappers):
     For this to work, the mappers need to be instances of
     :class:`sumpy.codegen.CallExternalRecMapper` and when calling
     parent class methods, the mappers need to use the argument
-    *rec_object* passed to the *map_* method. *rec_object* is a
+    *rec_self* passed to the *map_* method. *rec_self* is a
     *CombinedMapper* instance which would dispatch the object to
     all the mappers given. The mappers given need to commute and
     for any mapper applying the mapper on an expression that has
@@ -687,7 +687,7 @@ def combine_mappers(*mappers):
             self.all_methods = all_methods
         map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
-    def _map(method_name, self, expr, rec_object=None, *args):
+    def _map(method_name, self, expr, rec_self=None, *args):
         if method_name not in self.all_methods:
             return getattr(IdentityMapper, method_name)(self, expr)
         for mapper, method in self.all_methods[method_name]:
