@@ -542,11 +542,11 @@ class HelmholtzKernel(ExpressionKernel):
                 self.dim, self.helmholtz_k_name)
 
     def prepare_loopy_kernel(self, loopy_knl):
-        from sumpy.codegen import (bessel_preamble_generator, bessel_mangler)
-        loopy_knl = lp.register_function_manglers(loopy_knl,
-                [bessel_mangler])
-        loopy_knl = lp.register_preamble_generators(loopy_knl,
-                [bessel_preamble_generator])
+        from sumpy.codegen import BesselJvvp1, Hankel1_01
+        loopy_knl = lp.register_callable(loopy_knl, "bessel_jvvp1",
+                BesselJvvp1("bessel_jvvp1"))
+        loopy_knl = lp.register_callable(loopy_knl, "hank1_01",
+                Hankel1_01("hank1_01"))
 
         return loopy_knl
 
