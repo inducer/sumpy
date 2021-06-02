@@ -659,15 +659,29 @@ def to_loopy_insns(assignments, vector_names=frozenset(), pymbolic_expr_maps=(),
     sympy_conv = SympyToPymbolicMapper()
     assignments = [(name, sympy_conv(expr)) for name, expr in assignments]
 
+    bdr = BesselDerivativeReplacer()
     btog = BesselTopOrderGatherer()
-    cmb_mapper = combine_mappers(
-        BesselDerivativeReplacer(),
-        btog,
-        VectorComponentRewriter(vector_names),
-        PowerRewriter(),
-        SumSignGrouper(),
-        BigIntegerKiller(),
-        ComplexRewriter())
+    vcr = VectorComponentRewriter(vector_names)
+    pwr = PowerRewriter()
+    ssg = SumSignGrouper()
+    bik = BigIntegerKiller()
+    cmr = ComplexRewriter()
+
+    cmb_mapper = combine_mappers(bdr, btog, vcr, pwr, ssg, bik, cmr)
+
+    if 0:
+        # https://github.com/inducer/sumpy/pull/40#issuecomment-852635444
+        cmb_mapper = combine_mappers(bdr, btog, vcr, pwr, ssg, bik, cmr)
+    else:
+        def cmb_mapper(expr):
+            expr = bdr(expr)
+            expr = vcr(expr)
+            expr = pwr(expr)
+            expr = ssg(expr)
+            expr = bik(expr)
+            expr = cmr(expr)
+            expr = btog(expr)
+            return expr
 
     def convert_expr(name, expr):
         logger.debug("generate expression for: %s" % name)
