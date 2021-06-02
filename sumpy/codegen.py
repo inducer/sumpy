@@ -651,7 +651,20 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
     cmr = ComplexRewriter()
     hks = HankelSubstitutor()
 
-    cmb_mapper = combine_mappers(bdr, btog, vcr, pwr, ssg, bik, cmr, hks)
+    if 0:
+        # https://github.com/inducer/sumpy/pull/40#issuecomment-852635444
+        cmb_mapper = combine_mappers(bdr, btog, vcr, pwr, ssg, bik, cmr, hks)
+    else:
+        def cmb_mapper(expr):
+            expr = bdr(expr)
+            expr = vcr(expr)
+            expr = pwr(expr)
+            expr = ssg(expr)
+            expr = bik(expr)
+            expr = cmr(expr)
+            expr = hks(expr)
+            expr = btog(expr)
+            return expr
 
     def convert_expr(name, expr):
         logger.debug("generate expression for: %s" % name)
