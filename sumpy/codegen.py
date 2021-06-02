@@ -658,13 +658,13 @@ def to_loopy_insns(assignments, vector_names=set(), pymbolic_expr_maps=[],
     else:
         def cmb_mapper(expr):
             expr = bdr(expr)
-            expr = btog(expr)
             expr = vcr(expr)
             expr = pwr(expr)
             expr = ssg(expr)
             expr = bik(expr)
             expr = cmr(expr)
             expr = hks(expr)
+            expr = btog(expr)
             return expr
 
     def convert_expr(name, expr):
