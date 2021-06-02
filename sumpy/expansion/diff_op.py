@@ -65,6 +65,13 @@ class LinearPDESystemOperator:
     def __hash__(self):
         return hash((self.dim, self.eqs))
 
+    @property
+    def order(self):
+        deg = 0
+        for eq in self.eqs:
+            deg = max(deg, max(sum(ident.mi) for ident in eq.keys()))
+        return deg
+
     def __mul__(self, param):
         eqs = []
         for eq in self.eqs:

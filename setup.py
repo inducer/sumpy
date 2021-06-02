@@ -100,4 +100,5 @@ setup(name="sumpy",
           "pyrsistent>=0.16.0",
           "dataclasses>=0.7;python_version<='3.6'",
           "sympy>=0.7.2",
+          "pymbolic>=2021.1",
           ])
