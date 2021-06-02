@@ -267,7 +267,7 @@ class _BesselOrHankel(sympy.Function):
     def fdiff(self, argindex=1):
         if argindex in (1, 3):
             # we are not differentiating w.r.t order or nderivs
-            return 0
+            raise ValueError()
         order, z, nderivs = self.args
         return self.func(order, z, nderivs+1)
 
