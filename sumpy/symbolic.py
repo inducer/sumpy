@@ -267,9 +267,8 @@ class _BesselOrHankel(sympy.Function):
         if argindex in (1, 3):
             # we are not differentiating w.r.t order or nderivs
             return 0
-        args = list(self.args)
-        args[-1] += 1
-        return self.func(*args)
+        order, z, nderivs = self.args
+        return self.func(order, z, nderivs+1)
 
 
 class BesselJ(_BesselOrHankel):
