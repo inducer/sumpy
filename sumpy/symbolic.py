@@ -259,8 +259,9 @@ import sympy
 
 class _BesselOrHankel(sympy.Function):
     """A symbolic function for BesselJ or Hankel1 functions
-    that keeps track of the derivatives taken of the function
-    arguments are (order, z, nderivs)"""
+    that keeps track of the derivatives taken of the function.
+    Arguments are ``(order, z, nderivs)``.
+    """
     nargs = (3,)
 
     def fdiff(self, argindex=1):
