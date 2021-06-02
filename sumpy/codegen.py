@@ -251,17 +251,16 @@ class BesselTopOrderGatherer(CSECachingIdentityMapper, CallExternalRecMapper):
 
 
 class BesselDerivativeReplacer(CSECachingIdentityMapper, CallExternalRecMapper):
-    def map_substitution(self, expr, rec_self=None, *args):
-        assert isinstance(expr.child, prim.Derivative)
-        call = expr.child.child
+    def map_call(self, expr, rec_self=None, *args):
+        call = expr
 
         if (isinstance(call.function, prim.Variable)
-                and call.function.name in ["hankel_1", "bessel_j"]):
-            function = call.function
-            order, _ = call.parameters
-            arg, = expr.values
-
-            n_derivs = len(expr.child.variables)
+                and call.function.name in ["Hankel1", "BesselJ"]):
+            if call.function.name == "Hankel1":
+                function = prim.Variable("hankel_1")
+            else:
+                function = prim.Variable("bessel_j")
+            order, arg, n_derivs = call.parameters
             import sympy as sym
 
             # AS (9.1.31)
@@ -277,7 +276,7 @@ class BesselDerivativeReplacer(CSECachingIdentityMapper, CallExternalRecMapper):
                         for idx, i in enumerate(range(order-k, order+k+1, 2))),
                     "d%d_%s_%s" % (n_derivs, function.name, order_str))
         else:
-            return CSECachingIdentityMapper.map_substitution(
+            return CSECachingIdentityMapper.map_call(
                     rec_self or self, expr, rec_self, *args)
 
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
