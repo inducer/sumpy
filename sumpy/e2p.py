@@ -58,14 +58,14 @@ class E2PBase(KernelCacheWrapper):
 
         from sumpy.kernel import (SourceTransformationRemover,
                 TargetTransformationRemover)
-        sdr = SourceTransformationRemover()
-        tdr = TargetTransformationRemover()
+        sxr = SourceTransformationRemover()
+        txr = TargetTransformationRemover()
         expansion = expansion.with_kernel(
-                sdr(expansion.kernel))
+                sxr(expansion.kernel))
 
-        kernels = [sdr(knl) for knl in kernels]
+        kernels = [sxr(knl) for knl in kernels]
         for knl in kernels:
-            assert tdr(knl) == expansion.kernel
+            assert txr(knl) == expansion.kernel
 
         self.ctx = ctx
         self.expansion = expansion
