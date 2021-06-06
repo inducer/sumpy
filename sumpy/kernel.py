@@ -1203,6 +1203,70 @@ class DirectionalSourceDerivative(DirectionalDerivative):
 
     mapper_method = "map_directional_source_derivative"
 
+
+class TargetPointMultiplier(KernelWrapper):
+    """Wraps a kernel :math:`G(x, y)` and outputs :math:`x_j G(x, y)`
+    where :math:`x, y` are targets and sources respectively.
+    """
+
+    init_arg_names = ("axis", "inner_kernel")
+    target_array_name = "targets"
+
+    def __init__(self, axis, inner_kernel):
+        KernelWrapper.__init__(self, inner_kernel)
+        self.axis = axis
+
+    def __getinitargs__(self):
+        return (self.axis, self.inner_kernel)
+
+    def __str__(self):
+        return "x%d %s" % (self.axis, self.inner_kernel)
+
+    def __repr__(self):
+        return "TargetPointMultiplier(%d, %r)" % (self.axis, self.inner_kernel)
+
+    def replace_base_kernel(self, new_base_kernel):
+        return type(self)(self.axis,
+            self.inner_kernel.replace_base_kernel(new_base_kernel))
+
+    def replace_inner_kernel(self, new_inner_kernel):
+        return type(self)(self.axis, new_inner_kernel)
+
+    def postprocess_at_target(self, expr, avec):
+        from sumpy.symbolic import make_sym_vector as make_sympy_vector
+        from sumpy.tools import (ExprDerivativeTaker,
+            DifferentiatedExprDerivativeTaker)
+
+        expr = self.inner_kernel.postprocess_at_target(expr, avec)
+        target_vec = make_sympy_vector(self.target_array_name, self.dim)
+
+        if isinstance(expr,
+                (ExprDerivativeTaker, DifferentiatedExprDerivativeTaker)):
+            class DerivativeTakerWrapper:
+                def __init__(self, taker, vec, axis):
+                    self.taker = taker
+                    self.vec = vec
+                    self.axis = axis
+
+                def diff(self, *args, **kwargs):
+                    return self.vec[self.axis] * self.taker.diff(*args, **kwargs)
+
+            return DerivativeTakerWrapper(expr, target_vec, self.axis)
+        return target_vec[self.axis] * expr
+
+    def get_code_transformer(self):
+        from sumpy.codegen import VectorComponentRewriter
+        vcr = VectorComponentRewriter([self.target_array_name])
+        from pymbolic.primitives import Variable
+        via = _VectorIndexAdder(self.target_array_name, (Variable("itgt"),))
+
+        def transform(expr):
+            return via(vcr(expr))
+
+        return transform
+
+    mapper_method = "map_target_point_multiplier"
+
 # }}}
 
 
@@ -1233,6 +1297,7 @@ class KernelCombineMapper(KernelMapper):
     map_directional_target_derivative = map_axis_target_derivative
     map_directional_source_derivative = map_axis_target_derivative
     map_axis_source_derivative = map_axis_target_derivative
+    map_target_point_multiplier = map_axis_target_derivative
 
 
 class KernelIdentityMapper(KernelMapper):
@@ -1251,6 +1316,7 @@ class KernelIdentityMapper(KernelMapper):
         return type(kernel)(kernel.axis, self.rec(kernel.inner_kernel))
 
     map_axis_source_derivative = map_axis_target_derivative
+    map_target_point_multiplier = map_axis_target_derivative
 
     def map_directional_target_derivative(self, kernel):
         return type(kernel)(
@@ -1278,6 +1344,14 @@ class TargetDerivativeRemover(AxisTargetDerivativeRemover):
 class SourceDerivativeRemover(AxisSourceDerivativeRemover):
     def map_directional_source_derivative(self, kernel):
         return self.rec(kernel.inner_kernel)
+
+
+class TargetTransformationRemover(TargetDerivativeRemover):
+    def map_target_point_multiplier(self, kernel):
+        return self.rec(kernel.inner_kernel)
+
+
+SourceTransformationRemover = SourceDerivativeRemover
 
 
 class DerivativeCounter(KernelCombineMapper):

@@ -56,15 +56,16 @@ class E2PBase(KernelCacheWrapper):
         if device is None:
             device = ctx.devices[0]
 
-        from sumpy.kernel import SourceDerivativeRemover, TargetDerivativeRemover
-        sdr = SourceDerivativeRemover()
-        tdr = TargetDerivativeRemover()
+        from sumpy.kernel import (SourceTransformationRemover,
+                TargetTransformationRemover)
+        sxr = SourceTransformationRemover()
+        txr = TargetTransformationRemover()
         expansion = expansion.with_kernel(
-                sdr(expansion.kernel))
+                sxr(expansion.kernel))
 
-        kernels = [sdr(knl) for knl in kernels]
+        kernels = [sxr(knl) for knl in kernels]
         for knl in kernels:
-            assert tdr(knl) == expansion.kernel
+            assert txr(knl) == expansion.kernel
 
         self.ctx = ctx
         self.expansion = expansion
@@ -99,7 +100,8 @@ class E2PBase(KernelCacheWrapper):
         loopy_insns = to_loopy_insns(
                 sac.assignments.items(),
                 vector_names={"b"},
-                pymbolic_expr_maps=[self.expansion.get_code_transformer()],
+                pymbolic_expr_maps=[
+                    knl.get_code_transformer() for knl in self.kernels],
                 retain_names=result_names,
                 complex_dtype=np.complex128  # FIXME
                 )
