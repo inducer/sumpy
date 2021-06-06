@@ -184,6 +184,9 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
 
     def get_optimized_kernel(self,
             targets_is_obj_array, sources_is_obj_array, centers_is_obj_array,
+            # Used by pytential to override the name of the loop to be
+            # parallelized. In the case of QBX, that's the loop over QBX
+            # targets (not global targets).
             itgt_name="itgt"):
         # FIXME specialize/tune for GPU/CPU
         loopy_knl = self.get_kernel()
