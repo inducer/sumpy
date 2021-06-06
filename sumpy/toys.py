@@ -25,7 +25,7 @@ THE SOFTWARE.
 
 from pytools import memoize_method
 from numbers import Number
-from sumpy.kernel import TargetDerivativeRemover
+from sumpy.kernel import TargetTransformationRemover
 
 import numpy as np  # noqa: F401
 import loopy as lp  # noqa: F401
@@ -94,7 +94,7 @@ class ToyContext:
         self.queue = cl.CommandQueue(self.cl_context)
         self.kernel = kernel
 
-        self.no_target_deriv_kernel = TargetDerivativeRemover()(kernel)
+        self.no_target_deriv_kernel = TargetTransformationRemover()(kernel)
 
         if expansion_factory is None:
             from sumpy.expansion import DefaultExpansionFactory
