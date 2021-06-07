@@ -542,13 +542,8 @@ class HelmholtzKernel(ExpressionKernel):
                 self.dim, self.helmholtz_k_name)
 
     def prepare_loopy_kernel(self, loopy_knl):
-        from sumpy.codegen import (bessel_preamble_generator, bessel_mangler)
-        loopy_knl = lp.register_function_manglers(loopy_knl,
-                [bessel_mangler])
-        loopy_knl = lp.register_preamble_generators(loopy_knl,
-                [bessel_preamble_generator])
-
-        return loopy_knl
+        from sumpy.codegen import register_bessel_callables
+        return register_bessel_callables(loopy_knl)
 
     def get_args(self):
         if self.allow_evanescent:
@@ -635,13 +630,8 @@ class YukawaKernel(ExpressionKernel):
                 self.dim, self.yukawa_lambda_name)
 
     def prepare_loopy_kernel(self, loopy_knl):
-        from sumpy.codegen import (bessel_preamble_generator, bessel_mangler)
-        loopy_knl = lp.register_function_manglers(loopy_knl,
-                [bessel_mangler])
-        loopy_knl = lp.register_preamble_generators(loopy_knl,
-                [bessel_preamble_generator])
-
-        return loopy_knl
+        from sumpy.codegen import register_bessel_callables
+        return register_bessel_callables(loopy_knl)
 
     def get_args(self):
         return [
