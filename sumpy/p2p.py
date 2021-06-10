@@ -39,7 +39,7 @@ Particle-to-particle
 .. autoclass:: P2PBase
 .. autoclass:: P2P
 .. autoclass:: P2PMatrixGenerator
-.. autoclass:: P2PMatrixBlockGenerator
+.. autoclass:: P2PMatrixSubsetGenerator
 .. autoclass:: P2PFromCSR
 
 """
@@ -318,15 +318,18 @@ class P2PMatrixGenerator(P2PBase):
 # }}}
 
 
-# {{{ P2P matrix block writer
+# {{{ P2P matrix subset generator
 
-class P2PMatrixBlockGenerator(P2PBase):
+class P2PMatrixSubsetGenerator(P2PBase):
     """Generator for a subset of P2P interaction matrix entries.
+
+    This generator evaluates a generic set of entries in the matrix. See
+    :class:`P2PFromCSR` for when a compressed row storage format is available.
 
     .. automethod:: __call__
     """
 
-    default_name = "p2p_block"
+    default_name = "p2p_subset"
 
     def get_strength_or_not(self, isrc, kernel_idx):
         return 1
@@ -395,27 +398,21 @@ class P2PMatrixBlockGenerator(P2PBase):
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
         return knl
 
-    def __call__(self, queue, targets, sources, index_set, **kwargs):
-        """Construct a set of blocks of the full P2P interaction matrix.
+    def __call__(self, queue, targets, sources, tgtindices, srcindices, **kwargs):
+        """Evaluate a subset of the P2P matrix interactions.
 
-        The blocks are returned as one-dimensional arrays, for performance
-        and storage reasons. If the two-dimensional form is desired, it can
-        be obtained using the information in the `index_set` for a block
-        :math:`i` in the following way:
+        :arg targets: target point coordinates, which can be an object
+            :class:`~numpy.ndarray`, :class:`list` or :class:`tuple` of
+            coordinates or a single stacked array.
+        :arg sources: source point coordinates, which can also be in any of the
+            formats of the *targets*,
 
-        .. code-block:: python
+        :arg srcindices: an array of indices into *sources*.
+        :arg tgtindices: an array of indices into *targets*, of the same size
+            as *srcindices*.
 
-            blkranges = index_set.linear_ranges()
-            blkshape = index_set.block_shape(i)
-
-            block2d = result[blkranges[i]:blkranges[i + 1]].reshape(*blkshape)
-
-        :arg targets: target point coordinates.
-        :arg sources: source point coordinates.
-        :arg index_set: a :class:`sumpy.tools.MatrixBlockIndexRanges` used
-            to define the blocks.
-        :return: a tuple of one-dimensional arrays of kernel evaluations at
-            target-source pairs described by `index_set`.
+        :returns: a one-dimensional array of interactions, for each index pair
+            in (*srcindices*, *tgtindices*)
         """
         knl = self.get_cached_optimized_kernel(
                 targets_is_obj_array=is_obj_array_like(targets),
@@ -424,8 +421,8 @@ class P2PMatrixBlockGenerator(P2PBase):
         return knl(queue,
                    targets=targets,
                    sources=sources,
-                   tgtindices=index_set.linear_row_indices,
-                   srcindices=index_set.linear_col_indices, **kwargs)
+                   tgtindices=tgtindices,
+                   srcindices=srcindices, **kwargs)
 
 # }}}
 

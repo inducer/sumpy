@@ -46,7 +46,7 @@ QBX for Layer Potentials
 .. autoclass:: LayerPotentialBase
 .. autoclass:: LayerPotential
 .. autoclass:: LayerPotentialMatrixGenerator
-.. autoclass:: LayerPotentialMatrixBlockGenerator
+.. autoclass:: LayerPotentialMatrixSubsetGenerator
 
 """
 
@@ -360,15 +360,15 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
 # }}}
 
 
-# {{{ matrix block generator
+# {{{ matrix subset generator
 
-class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
+class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
     """Generator for a subset of the layer potential matrix entries.
 
     .. automethod:: __call__
     """
 
-    default_name = "qbx_block"
+    default_name = "qbx_subset"
 
     def get_strength_or_not(self, isrc, kernel_idx):
         return 1
@@ -443,17 +443,28 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
         return loopy_knl
 
     def __call__(self, queue, targets, sources, centers, expansion_radii,
-                 index_set, **kwargs):
-        """
-        :arg targets: target point coordinates.
-        :arg sources: source point coordinates.
-        :arg centers: QBX target expansion centers.
+                 tgtindices, srcindices, **kwargs):
+        """Evaluate a subset of the QBX matrix interactions.
+
+        :arg targets: target point coordinates, which can be an object
+            :class:`~numpy.ndarray`, :class:`list` or :class:`tuple` of
+            coordinates or a single stacked array.
+        :arg sources: source point coordinates, which can also be in any of the
+            formats of the *targets*,
+
+        :arg centers: QBX target expansion center coordinates, which can also
+            be in any of the formats of the *targets*. The number of centers
+            must match the number of targets.
         :arg expansion_radii: radii for each expansion center.
-        :arg index_set: a :class:`sumpy.tools.MatrixBlockIndexRanges` used
-            to define the blocks.
-        :return: a tuple of one-dimensional arrays of kernel evaluations at
-            target-source pairs described by `index_set`.
+
+        :arg srcindices: an array of indices into *sources*.
+        :arg tgtindices: an array of indices into *targets*, of the same size
+            as *srcindices*.
+
+        :returns: a one-dimensional array of interactions, for each index pair
+            in (*srcindices*, *tgtindices*)
         """
+
         knl = self.get_cached_optimized_kernel(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources),
@@ -464,8 +475,8 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
                    targets=targets,
                    center=centers,
                    expansion_radii=expansion_radii,
-                   tgtindices=index_set.linear_row_indices,
-                   srcindices=index_set.linear_col_indices, **kwargs)
+                   tgtindices=tgtindices,
+                   srcindices=srcindices, **kwargs)
 
 # }}}
 
