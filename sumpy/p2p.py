@@ -109,7 +109,7 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
         isrc_sym = var("isrc")
 
         exprs = []
-        for i, out_knl in enumerate(self.target_kernels):
+        for out_knl in self.target_kernels:
             expr_sum = 0
             for j, in_knl in enumerate(self.source_kernels):
                 expr = in_knl.postprocess_at_source(

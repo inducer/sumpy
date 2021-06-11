@@ -159,7 +159,7 @@ class CalculusPatch:
         coeff_diff_mat = np.diag(np.arange(1, npoints), 1)
 
         n_diff_mat = np.eye(npoints)
-        for i in range(nderivs):
+        for _ in range(nderivs):
             n_diff_mat = n_diff_mat.dot(coeff_diff_mat)
 
         deriv_coeffs_mat = la.solve(vandermonde.T, n_diff_mat.T).T
@@ -240,7 +240,7 @@ class CalculusPatch:
         :returns: a scalar.
         """
         f_values = f_values.reshape(*self._pshape)
-        for i in range(self.dim):
+        for _ in range(self.dim):
             f_values = self._zero_eval_vec_1d.dot(f_values)
 
         return f_values
