@@ -638,7 +638,7 @@ def draw_point(loc, **kwargs):
     plt.plot(*loc, marker="o", **kwargs)
 
 
-def draw_annotation(to_pt, from_pt, label, arrowprops={}, **kwargs):
+def draw_annotation(to_pt, from_pt, label, arrowprops=None, **kwargs):
     """
     :arg to_pt: Head of arrow
     :arg from_pt: Tail of arrow
@@ -646,6 +646,8 @@ def draw_annotation(to_pt, from_pt, label, arrowprops={}, **kwargs):
     :arg arrowprops: Passed to arrowprops
     :arg kwargs: Passed to annotate
     """
+    if arrowprops is None:
+        arrowprops = {}
 
     import matplotlib.pyplot as plt
 

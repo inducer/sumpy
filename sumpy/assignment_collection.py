@@ -174,7 +174,10 @@ class SymbolicAssignmentCollection:
         new_name = self.symbol_generator(name_base).name
         return self.add_assignment(new_name, expr, retain_name=False)
 
-    def run_global_cse(self, extra_exprs=[]):
+    def run_global_cse(self, extra_exprs=None):
+        if extra_exprs is None:
+            extra_exprs = []
+
         import time
         start_time = time.time()
 

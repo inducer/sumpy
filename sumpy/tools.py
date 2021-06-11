@@ -218,7 +218,7 @@ class ExprDerivativeTaker(object):
         current_mi = np.array(start_mi, dtype=int)
         for idx, (mi_i, vec_i) in enumerate(
                 zip(self.mi_dist(end_mi, start_mi), self.var_list)):
-            for i in range(1, 1 + mi_i):
+            for _ in range(1, 1 + mi_i):
                 current_mi[idx] += 1
                 yield vec_i, tuple(current_mi)
 
