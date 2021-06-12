@@ -24,10 +24,7 @@ import sumpy.symbolic as sym
 from sumpy.tools import add_to_sac
 
 from sumpy.expansion import (
-    ExpansionBase, VolumeTaylorExpansion, LinearPDEConformingVolumeTaylorExpansion,
-    LaplaceConformingVolumeTaylorExpansion,
-    HelmholtzConformingVolumeTaylorExpansion,
-    BiharmonicConformingVolumeTaylorExpansion)
+    ExpansionBase, VolumeTaylorExpansion, LinearPDEConformingVolumeTaylorExpansion)
 
 from sumpy.tools import mi_increment_axis, matvec_toeplitz_upper_triangular
 from pytools import single_valued
@@ -505,7 +502,7 @@ class LinearPDEConformingVolumeTaylorLocalExpansion(
 
 
 class LaplaceConformingVolumeTaylorLocalExpansion(
-        LaplaceConformingVolumeTaylorExpansion):
+        LinearPDEConformingVolumeTaylorLocalExpansion):
 
     def __init__(self, *args, **kwargs):
         from warnings import warn
@@ -516,7 +513,7 @@ class LaplaceConformingVolumeTaylorLocalExpansion(
 
 
 class HelmholtzConformingVolumeTaylorLocalExpansion(
-        HelmholtzConformingVolumeTaylorExpansion):
+        LinearPDEConformingVolumeTaylorLocalExpansion):
 
     def __init__(self, *args, **kwargs):
         from warnings import warn
@@ -527,7 +524,7 @@ class HelmholtzConformingVolumeTaylorLocalExpansion(
 
 
 class BiharmonicConformingVolumeTaylorLocalExpansion(
-        BiharmonicConformingVolumeTaylorExpansion):
+        LinearPDEConformingVolumeTaylorLocalExpansion):
 
     def __init__(self, *args, **kwargs):
         from warnings import warn
@@ -552,8 +549,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         if not self.use_rscale:
             rscale = 1
 
-        from sumpy.symbolic import sym_real_norm_2
-        hankel_1 = sym.Function("hankel_1")
+        from sumpy.symbolic import sym_real_norm_2, Hankel1
 
         arg_scale = self.get_bessel_arg_scaling()
 
@@ -561,7 +557,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         source_angle_rel_center = sym.atan2(-avec[1], -avec[0])
         avec_len = sym_real_norm_2(avec)
         return [kernel.postprocess_at_source(
-                    hankel_1(c, arg_scale * avec_len)
+                    Hankel1(c, arg_scale * avec_len, 0)
                     * rscale ** abs(c)
                     * sym.exp(sym.I * c * source_angle_rel_center), avec)
                     for c in self.get_coefficient_identifiers()]
@@ -570,8 +566,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         if not self.use_rscale:
             rscale = 1
 
-        from sumpy.symbolic import sym_real_norm_2
-        bessel_j = sym.Function("bessel_j")
+        from sumpy.symbolic import sym_real_norm_2, BesselJ
         bvec_len = sym_real_norm_2(bvec)
         target_angle_rel_center = sym.atan2(bvec[1], bvec[0])
 
@@ -579,14 +574,14 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
         return sum(coeffs[self.get_storage_index(c)]
                    * kernel.postprocess_at_target(
-                       bessel_j(c, arg_scale * bvec_len)
+                       BesselJ(c, arg_scale * bvec_len, 0)
                        / rscale ** abs(c)
                        * sym.exp(sym.I * c * -target_angle_rel_center), bvec)
                 for c in self.get_coefficient_identifiers())
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, precomputed_exprs=None):
-        from sumpy.symbolic import sym_real_norm_2
+        from sumpy.symbolic import sym_real_norm_2, BesselJ, Hankel1
 
         if not self.use_rscale:
             src_rscale = 1
@@ -596,13 +591,12 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
         if isinstance(src_expansion, type(self)):
             dvec_len = sym_real_norm_2(dvec)
-            bessel_j = sym.Function("bessel_j")
             new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
             translated_coeffs = []
             for j in self.get_coefficient_identifiers():
                 translated_coeffs.append(
                     sum(src_coeff_exprs[src_expansion.get_storage_index(m)]
-                        * bessel_j(m - j, arg_scale * dvec_len)
+                        * BesselJ(m - j, arg_scale * dvec_len, 0)
                         / src_rscale ** abs(m)
                         * tgt_rscale ** abs(j)
                         * sym.exp(sym.I * (m - j) * -new_center_angle_rel_old_center)
@@ -611,14 +605,13 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
         if isinstance(src_expansion, self.mpole_expn_class):
             dvec_len = sym_real_norm_2(dvec)
-            hankel_1 = sym.Function("hankel_1")
             new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
             translated_coeffs = []
             for j in self.get_coefficient_identifiers():
                 translated_coeffs.append(
                     sum(
                         sym.Integer(-1) ** j
-                        * hankel_1(m + j, arg_scale * dvec_len)
+                        * Hankel1(m + j, arg_scale * dvec_len, 0)
                         * src_rscale ** abs(m)
                         * tgt_rscale ** abs(j)
                         * sym.exp(sym.I * (m + j) * new_center_angle_rel_old_center)

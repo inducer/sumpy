@@ -88,19 +88,20 @@ jobs:
             env:
                 DOWNSTREAM_PROJECT: ${{ matrix.downstream_project }}
             run: |
-                if [[ "$DOWNSTREAM_PROJECT" = "pytential" ]] && [[ "$GITHUB_HEAD_REF" = "derivtaker" ]]; then
-                  git clone "https://github.com/isuruf/$DOWNSTREAM_PROJECT.git" -b "$GITHUB_HEAD_REF"
+                curl -L -O https://tiker.net/ci-support-v0
+                . ./ci-support-v0
+                if [[ "$DOWNSTREAM_PROJECT" = "pytential" ]] && [[ "$GITHUB_HEAD_REF" = "remove-block-index-ranges" ]]; then
+                  git clone "https://github.com/alexfikl/$DOWNSTREAM_PROJECT.git" -b "block-index-ranges"
                 else
                   git clone "https://github.com/inducer/$DOWNSTREAM_PROJECT.git"
                 fi
                 cd "$DOWNSTREAM_PROJECT"
                 echo "*** $DOWNSTREAM_PROJECT version: $(git rev-parse --short HEAD)"
+                transfer_requirements_git_urls ../requirements.txt ./requirements.txt
                 sed -i "/egg=sumpy/ c git+file://$(readlink -f ..)#egg=sumpy" requirements.txt
                 export CONDA_ENVIRONMENT=.test-conda-env-py3.yml
                 # Avoid slow or complicated tests in downstream projects
                 export PYTEST_ADDOPTS="-k 'not (slowtest or octave or mpi)'"
-                curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/ci-support.sh
-                . ./ci-support.sh
                 build_py_project_in_conda_env
                 test_py_project
 

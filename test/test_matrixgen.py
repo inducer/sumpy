@@ -28,7 +28,6 @@ import pyopencl as cl
 import pyopencl.array  # noqa
 
 from sumpy.tools import vector_to_device
-from sumpy.tools import MatrixBlockIndexRanges
 
 import pytest
 from pyopencl.tools import (  # noqa
@@ -71,27 +70,23 @@ def _build_geometry(queue, n, mode, target_radius=1.0):
             cl.array.to_device(queue, sigma))
 
 
-def _build_block_index(queue, nnodes, nblks, factor):
-    indices = np.arange(0, nnodes)
-    ranges = np.arange(0, nnodes + 1, nnodes // nblks)
+def _build_subset_indices(queue, ntargets, nsources, factor):
+    tgtindices = np.arange(0, ntargets)
+    srcindices = np.arange(0, nsources)
 
-    if abs(factor - 1.0) < 1.0e-14:
-        ranges_ = ranges
-        indices_ = indices
+    rng = np.random.default_rng()
+    if abs(factor - 1.0) > 1.0e-14:
+        tgtindices = rng.choice(tgtindices,
+                size=int(factor * ntargets), replace=False)
+        srcindices = rng.choice(srcindices,
+                size=int(factor * nsources), replace=False)
     else:
-        indices_ = np.empty(ranges.shape[0] - 1, dtype=np.object)
-        for i in range(ranges.shape[0] - 1):
-            iidx = indices[np.s_[ranges[i]:ranges[i + 1]]]
-            indices_[i] = np.sort(np.random.choice(iidx,
-                size=int(factor * len(iidx)), replace=False))
+        rng.shuffle(tgtindices)
+        rng.shuffle(srcindices)
 
-        ranges_ = np.cumsum([0] + [r.shape[0] for r in indices_])
-        indices_ = np.hstack(indices_)
-
-    from sumpy.tools import BlockIndexRanges
-    return BlockIndexRanges(queue.context,
-                            cl.array.to_device(queue, indices_).with_queue(None),
-                            cl.array.to_device(queue, ranges_).with_queue(None))
+    return (
+            cl.array.to_device(queue, tgtindices).with_queue(None),
+            cl.array.to_device(queue, srcindices).with_queue(None))
 
 
 @pytest.mark.parametrize("factor", [1.0, 0.6])
@@ -103,7 +98,6 @@ def test_qbx_direct(ctx_factory, factor, lpot_id):
     queue = cl.CommandQueue(ctx)
 
     ndim = 2
-    nblks = 10
     order = 12
     mode_nr = 25
 
@@ -128,8 +122,8 @@ def test_qbx_direct(ctx_factory, factor, lpot_id):
     mat_gen = LayerPotentialMatrixGenerator(ctx, expansion=expn,
             source_kernels=(knl,), target_kernels=(base_knl,))
 
-    from sumpy.qbx import LayerPotentialMatrixBlockGenerator
-    blk_gen = LayerPotentialMatrixBlockGenerator(ctx, expansion=expn,
+    from sumpy.qbx import LayerPotentialMatrixSubsetGenerator
+    blk_gen = LayerPotentialMatrixSubsetGenerator(ctx, expansion=expn,
             source_kernels=(knl,), target_kernels=(base_knl,))
 
     for n in [200, 300, 400]:
@@ -138,10 +132,8 @@ def test_qbx_direct(ctx_factory, factor, lpot_id):
 
         h = 2 * np.pi / n
         strengths = (sigma * h,)
-
-        tgtindices = _build_block_index(queue, n, nblks, factor)
-        srcindices = _build_block_index(queue, n, nblks, factor)
-        index_set = MatrixBlockIndexRanges(ctx, tgtindices, srcindices)
+        tgtindices, srcindices = _build_subset_indices(queue,
+                ntargets=n, nsources=n, factor=factor)
 
         extra_kwargs = {}
         if lpot_id == 2:
@@ -170,15 +162,16 @@ def test_qbx_direct(ctx_factory, factor, lpot_id):
                 sources=sources,
                 centers=centers,
                 expansion_radii=expansion_radii,
-                index_set=index_set, **extra_kwargs)
+                tgtindices=tgtindices,
+                srcindices=srcindices, **extra_kwargs)
         blk = blk.get()
 
-        rowindices = index_set.linear_row_indices.get(queue)
-        colindices = index_set.linear_col_indices.get(queue)
+        tgtindices = tgtindices.get(queue)
+        srcindices = srcindices.get(queue)
 
         eps = 1.0e-10 * la.norm(result_lpot)
         assert la.norm(result_mat - result_lpot) < eps
-        assert la.norm(blk - mat[rowindices, colindices]) < eps
+        assert la.norm(blk - mat[tgtindices, srcindices]) < eps
 
 
 @pytest.mark.parametrize("exclude_self", [True, False])
@@ -191,7 +184,6 @@ def test_p2p_direct(ctx_factory, exclude_self, factor, lpot_id):
     queue = cl.CommandQueue(ctx)
 
     ndim = 2
-    nblks = 10
     mode_nr = 25
 
     from sumpy.kernel import LaplaceKernel, DirectionalSourceDerivative
@@ -209,8 +201,8 @@ def test_p2p_direct(ctx_factory, exclude_self, factor, lpot_id):
     from sumpy.p2p import P2PMatrixGenerator
     mat_gen = P2PMatrixGenerator(ctx, [lknl], exclude_self=exclude_self)
 
-    from sumpy.p2p import P2PMatrixBlockGenerator
-    blk_gen = P2PMatrixBlockGenerator(ctx, [lknl], exclude_self=exclude_self)
+    from sumpy.p2p import P2PMatrixSubsetGenerator
+    blk_gen = P2PMatrixSubsetGenerator(ctx, [lknl], exclude_self=exclude_self)
 
     for n in [200, 300, 400]:
         targets, sources, _, _, sigma = \
@@ -218,10 +210,8 @@ def test_p2p_direct(ctx_factory, exclude_self, factor, lpot_id):
 
         h = 2 * np.pi / n
         strengths = (sigma * h,)
-
-        tgtindices = _build_block_index(queue, n, nblks, factor)
-        srcindices = _build_block_index(queue, n, nblks, factor)
-        index_set = MatrixBlockIndexRanges(ctx, tgtindices, srcindices)
+        tgtindices, srcindices = _build_subset_indices(queue,
+                ntargets=n, nsources=n, factor=factor)
 
         extra_kwargs = {}
         if exclude_self:
@@ -247,16 +237,16 @@ def test_p2p_direct(ctx_factory, exclude_self, factor, lpot_id):
         _, (blk,) = blk_gen(queue,
                 targets=targets,
                 sources=sources,
-                index_set=index_set, **extra_kwargs)
+                tgtindices=tgtindices,
+                srcindices=srcindices, **extra_kwargs)
         blk = blk.get()
+
+        tgtindices = tgtindices.get(queue)
+        srcindices = srcindices.get(queue)
 
         eps = 1.0e-10 * la.norm(result_lpot)
         assert la.norm(result_mat - result_lpot) < eps
-
-        index_set = index_set.get(queue)
-        for i in range(index_set.nblocks):
-            assert la.norm(index_set.block_take(blk, i)
-                           - index_set.take(mat, i)) < eps
+        assert la.norm(blk - mat[tgtindices, srcindices]) < eps
 
 
 # You can test individual routines by typing

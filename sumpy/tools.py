@@ -28,8 +28,6 @@ __doc__ = """
  Misc tools
  ==========
 
- .. autoclass:: BlockIndexRanges
- .. autoclass:: MatrixBlockIndexRanges
  .. autoclass:: ExprDerivativeTaker
  .. autoclass:: LaplaceDerivativeTaker
  .. autoclass:: RadialDerivativeTaker
@@ -37,17 +35,14 @@ __doc__ = """
  .. autoclass:: DifferentiatedExprDerivativeTaker
 """
 
-from pytools import memoize_method, memoize_in
+from pytools import memoize_method
 from pytools.tag import Tag, tag_dataclass
+from pymbolic.mapper import WalkMapper
 
 import numpy as np
 import sumpy.symbolic as sym
 
-import pyopencl as cl
-import pyopencl.array  # noqa
-
 import loopy as lp
-from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 
 import logging
 logger = logging.getLogger(__name__)
@@ -217,7 +212,7 @@ class ExprDerivativeTaker(object):
         current_mi = np.array(start_mi, dtype=int)
         for idx, (mi_i, vec_i) in enumerate(
                 zip(self.mi_dist(end_mi, start_mi), self.var_list)):
-            for i in range(1, 1 + mi_i):
+            for _ in range(1, 1 + mi_i):
                 current_mi[idx] += 1
                 yield vec_i, tuple(current_mi)
 
@@ -435,6 +430,24 @@ class DifferentiatedExprDerivativeTaker:
 # }}}
 
 
+# {{{ get variables
+
+class GatherAllVariables(WalkMapper):
+    def __init__(self):
+        self.vars = set()
+
+    def map_variable(self, expr):
+        self.vars.add(expr)
+
+
+def get_all_variables(expr):
+    mapper = GatherAllVariables()
+    mapper(expr)
+    return mapper.vars
+
+# }}}
+
+
 def build_matrix(op, dtype=None, shape=None):
     dtype = dtype or op.dtype
     from pytools import ProgressBar
@@ -593,254 +606,6 @@ class KernelComputation:
                     tags=frozenset([ScalingAssignmentTag()]))
                 for i, (kernel, dtype) in enumerate(
                     zip(self.target_kernels, self.value_dtypes))]
-
-# }}}
-
-
-# {{{
-
-
-def _to_host(x, queue=None):
-    if isinstance(x, cl.array.Array):
-        queue = queue or x.queue
-        return x.get(queue)
-    return x
-
-
-class BlockIndexRanges:
-    """Convenience class for working with blocks of a global array.
-
-    .. attribute:: indices
-
-        A list of not necessarily continuous or increasing integers
-        representing the indices of a global array. The individual blocks are
-        delimited using :attr:`ranges`.
-
-    .. attribute:: ranges
-
-        A list of nondecreasing integers used to index into :attr:`indices`.
-        A block :math:`i` can be retrieved using
-        `indices[ranges[i]:ranges[i + 1]]`.
-
-    .. automethod:: block_shape
-    .. automethod:: get
-    .. automethod:: take
-    """
-
-    def __init__(self, cl_context, indices, ranges):
-        self.cl_context = cl_context
-        self.indices = indices
-        self.ranges = ranges
-
-    @property
-    @memoize_method
-    def _ranges(self):
-        with cl.CommandQueue(self.cl_context) as queue:
-            return _to_host(self.ranges, queue=queue)
-
-    @property
-    def nblocks(self):
-        return self.ranges.shape[0] - 1
-
-    def block_shape(self, i):
-        return (self._ranges[i + 1] - self._ranges[i],)
-
-    def block_indices(self, i):
-        return self.indices[self._ranges[i]:self._ranges[i + 1]]
-
-    def get(self, queue=None):
-        return BlockIndexRanges(self.cl_context,
-                                _to_host(self.indices, queue=queue),
-                                _to_host(self.ranges, queue=queue))
-
-    def take(self, x, i):
-        """Return the subset of a global array `x` that is defined by
-        the :attr:`indices` in block :math:`i`.
-        """
-
-        return x[self.block_indices(i)]
-
-
-class MatrixBlockIndexRanges:
-    """Keep track of different ways to index into matrix blocks.
-
-    .. attribute:: row
-
-        A :class:`BlockIndexRanges` encapsulating row block indices.
-
-    .. attribute:: col
-
-        A :class:`BlockIndexRanges` encapsulating column block indices.
-
-    .. automethod:: block_shape
-    .. automethod:: block_take
-    .. automethod:: get
-    .. autoattribute:: linear_row_indices
-    .. automethod:: take
-
-    """
-
-    def __init__(self, cl_context, row, col):
-        self.cl_context = cl_context
-        self.row = row
-        self.col = col
-        assert self.row.nblocks == self.col.nblocks
-
-        self.blkranges = np.cumsum([0] + [
-            self.row.block_shape(i)[0] * self.col.block_shape(i)[0]
-            for i in range(self.row.nblocks)])
-
-        if isinstance(self.row.indices, cl.array.Array):
-            with cl.CommandQueue(self.cl_context) as queue:
-                self.blkranges = \
-                    cl.array.to_device(queue, self.blkranges).with_queue(None)
-
-    @property
-    def nblocks(self):
-        return self.row.nblocks
-
-    def block_shape(self, i):
-        return self.row.block_shape(i) + self.col.block_shape(i)
-
-    def block_indices(self, i):
-        return (self.row.block_indices(i),
-                self.col.block_indices(i))
-
-    @property
-    def linear_row_indices(self):
-        r, _ = self._linear_indices()
-        return r
-
-    @property
-    def linear_col_indices(self):
-        _, c = self._linear_indices()
-        return c
-
-    @property
-    def linear_ranges(self):
-        return self.blkranges
-
-    def get(self, queue=None):
-        """Transfer data to the host. Only the initial given data is
-        transfered, not the arrays returned by :meth:`linear_row_indices` and
-        friends.
-
-        :return: a copy of `self` in which all data lives on the host, i.e.
-                 all :class:`pyopencl.array.Array` instances are replaces by
-                 :class:`numpy.ndarray` instances.
-        """
-        return MatrixBlockIndexRanges(self.cl_context,
-                row=self.row.get(queue=queue),
-                col=self.col.get(queue=queue))
-
-    def take(self, x, i):
-        """Retrieve a block from a global matrix.
-
-        :arg x: a 2D :class:`numpy.ndarray`.
-        :arg i: block index.
-        :return: requested block from the matrix.
-        """
-
-        if isinstance(self.row.indices, cl.array.Array) or \
-                isinstance(self.col.indices, cl.array.Array):
-            raise ValueError("CL `Array`s are not supported."
-                    "Use MatrixBlockIndexRanges.get() and then view into matrices.")
-
-        irow, icol = self.block_indices(i)
-        return x[np.ix_(irow, icol)]
-
-    def block_take(self, x, i):
-        """Retrieve a block from a linear representation of the matrix blocks.
-        A linear representation of the matrix blocks can be obtained, or
-        should be consistent with
-
-        .. code-block:: python
-
-            i = index.linear_row_indices()
-            j = index.linear_col_indices()
-            linear_blks = global_mat[i, j]
-
-            for k in range(index.nblocks):
-                assert np.allclose(index.block_take(linear_blks, k),
-                                   index.take(global_mat, k))
-
-        :arg x: a 1D :class:`numpy.ndarray`.
-        :arg i: block index.
-        :return: requested block, reshaped into a 2D array.
-        """
-
-        iblk = np.s_[self.blkranges[i]:self.blkranges[i + 1]]
-        return x[iblk].reshape(*self.block_shape(i))
-
-    @memoize_method
-    def _linear_indices(self):
-        """
-        :return: a tuple of `(rowindices, colindices)` that can be
-            used to provide linear indexing into a set of matrix blocks. These
-            index arrays are just the concatenated Cartesian products of all
-            the block arrays described by :attr:`row` and :attr:`col`.
-
-            They can be used to index directly into a matrix as follows:
-
-            .. code-block:: python
-
-                mat[rowindices[blkranges[i]:blkranges[i + 1]],
-                    colindices[blkranges[i]:blkranges[i + 1]]]
-
-            The same block can be obtained more easily using
-
-            .. code-block:: python
-
-                index.view(mat, i).reshape(-1)
-        """
-
-        @memoize_in(self, "block_index_knl")
-        def _build_index():
-            loopy_knl = lp.make_kernel([
-                "{[irange]: 0 <= irange < nranges}",
-                "{[itgt, isrc]: 0 <= itgt < ntgtblock and 0 <= isrc < nsrcblock}"
-                ],
-                """
-                for irange
-                    <> ntgtblock = tgtranges[irange + 1] - tgtranges[irange]
-                    <> nsrcblock = srcranges[irange + 1] - srcranges[irange]
-
-                    for itgt, isrc
-                        <> imat = blkranges[irange] + (nsrcblock * itgt + isrc)
-
-                        rowindices[imat] = tgtindices[tgtranges[irange] + itgt] \
-                            {id_prefix=write_index}
-                        colindices[imat] = srcindices[srcranges[irange] + isrc] \
-                            {id_prefix=write_index}
-                    end
-                end
-                """,
-                [
-                    lp.GlobalArg("blkranges", None, shape="nranges + 1"),
-                    lp.GlobalArg("rowindices", None, shape="nresults"),
-                    lp.GlobalArg("colindices", None, shape="nresults"),
-                    lp.ValueArg("nresults", None),
-                    "..."
-                ],
-                name="block_index_knl",
-                default_offset=lp.auto,
-                assumptions="nranges>=1",
-                silenced_warnings="write_race(write_index*)",
-                lang_version=MOST_RECENT_LANGUAGE_VERSION)
-            loopy_knl = lp.split_iname(loopy_knl, "irange", 128, outer_tag="g.0")
-
-            return loopy_knl
-
-        with cl.CommandQueue(self.cl_context) as queue:
-            _, (rowindices, colindices) = _build_index()(queue,
-                tgtindices=self.row.indices,
-                srcindices=self.col.indices,
-                tgtranges=self.row.ranges,
-                srcranges=self.col.ranges,
-                blkranges=self.blkranges,
-                nresults=_to_host(self.blkranges[-1], queue=queue))
-            return (rowindices.with_queue(None),
-                    colindices.with_queue(None))
 
 # }}}
 

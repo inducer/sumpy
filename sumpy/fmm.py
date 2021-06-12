@@ -155,10 +155,14 @@ class SumpyExpansionWranglerCodeContainer:
                           strength_usage=self.strength_usage)
 
     def get_wrangler(self, queue, tree, dtype, fmm_level_to_order,
-            source_extra_kwargs={},
+            source_extra_kwargs=None,
             kernel_extra_kwargs=None,
             self_extra_kwargs=None,
             translation_classes_data=None):
+
+        if source_extra_kwargs is None:
+            source_extra_kwargs = {}
+
         return SumpyExpansionWrangler(self, queue, tree, dtype, fmm_level_to_order,
                 source_extra_kwargs, kernel_extra_kwargs, self_extra_kwargs,
                 translation_classes_data=translation_classes_data)

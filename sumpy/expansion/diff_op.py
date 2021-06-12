@@ -65,6 +65,13 @@ class LinearPDESystemOperator:
     def __hash__(self):
         return hash((self.dim, self.eqs))
 
+    @property
+    def order(self):
+        deg = 0
+        for eq in self.eqs:
+            deg = max(deg, max(sum(ident.mi) for ident in eq.keys()))
+        return deg
+
     def __mul__(self, param):
         eqs = []
         for eq in self.eqs:
@@ -131,7 +138,7 @@ class LinearPDESystemOperator:
             for deriv_ident, coeff in eq.items():
                 expr = funcs[deriv_ident.vec_idx]
                 for i, val in enumerate(deriv_ident.mi):
-                    for j in range(val):
+                    for _ in range(val):
                         expr = expr.diff(x[i])
                 sym_eq += expr * coeff
             res.append(sym_eq)
@@ -209,7 +216,7 @@ def as_scalar_pde(pde, vec_idx):
             return LinearPDESystemOperator(pde.dim, pmap(pde_dict))
 
     plog.done()
-    assert False
+    raise AssertionError
 
 
 def laplacian(diff_op):

@@ -96,7 +96,7 @@ def preprocess_for_cse(expr, optimizations):
 
     :return: The transformed expression.
     """
-    for pre, post in optimizations:
+    for pre, _post in optimizations:
         if pre is not None:
             expr = pre(expr)
     return expr
@@ -115,7 +115,7 @@ def postprocess_for_cse(expr, optimizations):
 
     :return: The transformed expression.
     """
-    for pre, post in reversed(optimizations):
+    for _pre, post in reversed(optimizations):
         if post is not None:
             expr = post(expr)
     return expr
