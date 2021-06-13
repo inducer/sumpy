@@ -26,6 +26,7 @@ import sumpy.symbolic as sym
 
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 from sumpy.tools import KernelCacheWrapper
+from pytools import memoize_method
 
 import logging
 logger = logging.getLogger(__name__)
@@ -61,20 +62,22 @@ class E2EBase(KernelCacheWrapper):
             device = ctx.devices[0]
 
         if src_expansion is tgt_expansion:
-            from sumpy.kernel import TargetDerivativeRemover, SourceDerivativeRemover
+            from sumpy.kernel import (TargetTransformationRemover,
+                    SourceTransformationRemover)
             tgt_expansion = src_expansion = src_expansion.with_kernel(
-                    SourceDerivativeRemover()(
-                        TargetDerivativeRemover()(src_expansion.kernel)))
+                    SourceTransformationRemover()(
+                        TargetTransformationRemover()(src_expansion.kernel)))
 
         else:
 
-            from sumpy.kernel import TargetDerivativeRemover, SourceDerivativeRemover
+            from sumpy.kernel import (TargetTransformationRemover,
+                    SourceTransformationRemover)
             src_expansion = src_expansion.with_kernel(
-                    SourceDerivativeRemover()(
-                        TargetDerivativeRemover()(src_expansion.kernel)))
+                    SourceTransformationRemover()(
+                        TargetTransformationRemover()(src_expansion.kernel)))
             tgt_expansion = tgt_expansion.with_kernel(
-                    SourceDerivativeRemover()(
-                        TargetDerivativeRemover()(tgt_expansion.kernel)))
+                    SourceTransformationRemover()(
+                        TargetTransformationRemover()(tgt_expansion.kernel)))
 
         self.ctx = ctx
         self.src_expansion = src_expansion
@@ -88,6 +91,7 @@ class E2EBase(KernelCacheWrapper):
 
         self.dim = src_expansion.dim
 
+    @memoize_method
     def get_translation_loopy_insns(self):
         from sumpy.symbolic import make_sym_vector
         dvec = make_sym_vector("d", self.dim)
@@ -105,7 +109,7 @@ class E2EBase(KernelCacheWrapper):
                 for i, coeff_i in enumerate(
                     self.tgt_expansion.translate_from(
                         self.src_expansion, src_coeff_exprs, src_rscale,
-                        dvec, tgt_rscale, sac=sac))]
+                        dvec=dvec, tgt_rscale=tgt_rscale, sac=sac))]
 
         sac.run_global_cse()
 

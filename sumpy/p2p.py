@@ -39,7 +39,7 @@ Particle-to-particle
 .. autoclass:: P2PBase
 .. autoclass:: P2P
 .. autoclass:: P2PMatrixGenerator
-.. autoclass:: P2PMatrixBlockGenerator
+.. autoclass:: P2PMatrixSubsetGenerator
 .. autoclass:: P2PFromCSR
 
 """
@@ -64,22 +64,22 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
           Default: all kernels use the same strength.
         """
         from pytools import single_valued
-        from sumpy.kernel import (TargetDerivativeRemover,
-                SourceDerivativeRemover)
-        tdr = TargetDerivativeRemover()
-        sdr = SourceDerivativeRemover()
+        from sumpy.kernel import (TargetTransformationRemover,
+                SourceTransformationRemover)
+        txr = TargetTransformationRemover()
+        sxr = SourceTransformationRemover()
 
         if source_kernels is None:
-            source_kernels = [single_valued(tdr(knl) for knl in target_kernels)]
-            target_kernels = [sdr(knl) for knl in target_kernels]
+            source_kernels = [single_valued(txr(knl) for knl in target_kernels)]
+            target_kernels = [sxr(knl) for knl in target_kernels]
         else:
             for knl in source_kernels:
-                assert(tdr(knl) == knl)
+                assert(txr(knl) == knl)
             for knl in target_kernels:
-                assert(sdr(knl) == knl)
+                assert(sxr(knl) == knl)
 
-        base_source_kernel = single_valued(sdr(knl) for knl in source_kernels)
-        base_target_kernel = single_valued(tdr(knl) for knl in target_kernels)
+        base_source_kernel = single_valued(sxr(knl) for knl in source_kernels)
+        base_target_kernel = single_valued(txr(knl) for knl in target_kernels)
         assert base_source_kernel == base_target_kernel
 
         KernelComputation.__init__(self, ctx=ctx, target_kernels=target_kernels,
@@ -109,7 +109,7 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
         isrc_sym = var("isrc")
 
         exprs = []
-        for i, out_knl in enumerate(self.target_kernels):
+        for out_knl in self.target_kernels:
             expr_sum = 0
             for j, in_knl in enumerate(self.source_kernels):
                 expr = in_knl.postprocess_at_source(
@@ -157,9 +157,6 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
 
         return assignments + loopy_insns, result_names
 
-    def get_kernel_scaling_or_not(self, kernel_idx):
-        return f"knl_{kernel_idx}_scaling"
-
     def get_strength_or_not(self, isrc, kernel_idx):
         from sumpy.symbolic import Symbol
         return Symbol(f"strength_{self.strength_usage[kernel_idx]}")
@@ -190,6 +187,8 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
             knl = lp.tag_array_axes(knl, "targets", "sep,C")
 
         knl = lp.split_iname(knl, "itgt", 1024, outer_tag="g.0")
+        knl = self._allow_redundant_execution_of_knl_scaling(knl)
+
         return knl
 
 
@@ -236,6 +235,7 @@ class P2P(P2PBase):
             arguments,
             assumptions="nsources>=1 and ntargets>=1",
             name=self.name,
+            default_offset=lp.auto,
             fixed_parameters=dict(
                 dim=self.dim,
                 nstrengths=self.strength_count,
@@ -318,15 +318,18 @@ class P2PMatrixGenerator(P2PBase):
 # }}}
 
 
-# {{{ P2P matrix block writer
+# {{{ P2P matrix subset generator
 
-class P2PMatrixBlockGenerator(P2PBase):
+class P2PMatrixSubsetGenerator(P2PBase):
     """Generator for a subset of P2P interaction matrix entries.
+
+    This generator evaluates a generic set of entries in the matrix. See
+    :class:`P2PFromCSR` for when a compressed row storage format is available.
 
     .. automethod:: __call__
     """
 
-    default_name = "p2p_block"
+    default_name = "p2p_subset"
 
     def get_strength_or_not(self, isrc, kernel_idx):
         return 1
@@ -392,29 +395,24 @@ class P2PMatrixBlockGenerator(P2PBase):
             knl = lp.tag_array_axes(knl, "targets", "sep,C")
 
         knl = lp.split_iname(knl, "imat", 1024, outer_tag="g.0")
+        knl = self._allow_redundant_execution_of_knl_scaling(knl)
         return knl
 
-    def __call__(self, queue, targets, sources, index_set, **kwargs):
-        """Construct a set of blocks of the full P2P interaction matrix.
+    def __call__(self, queue, targets, sources, tgtindices, srcindices, **kwargs):
+        """Evaluate a subset of the P2P matrix interactions.
 
-        The blocks are returned as one-dimensional arrays, for performance
-        and storage reasons. If the two-dimensional form is desired, it can
-        be obtained using the information in the `index_set` for a block
-        :math:`i` in the following way:
+        :arg targets: target point coordinates, which can be an object
+            :class:`~numpy.ndarray`, :class:`list` or :class:`tuple` of
+            coordinates or a single stacked array.
+        :arg sources: source point coordinates, which can also be in any of the
+            formats of the *targets*,
 
-        .. code-block:: python
+        :arg srcindices: an array of indices into *sources*.
+        :arg tgtindices: an array of indices into *targets*, of the same size
+            as *srcindices*.
 
-            blkranges = index_set.linear_ranges()
-            blkshape = index_set.block_shape(i)
-
-            block2d = result[blkranges[i]:blkranges[i + 1]].reshape(*blkshape)
-
-        :arg targets: target point coordinates.
-        :arg sources: source point coordinates.
-        :arg index_set: a :class:`sumpy.tools.MatrixBlockIndexRanges` used
-            to define the blocks.
-        :return: a tuple of one-dimensional arrays of kernel evaluations at
-            target-source pairs described by `index_set`.
+        :returns: a one-dimensional array of interactions, for each index pair
+            in (*srcindices*, *tgtindices*)
         """
         knl = self.get_cached_optimized_kernel(
                 targets_is_obj_array=is_obj_array_like(targets),
@@ -423,8 +421,8 @@ class P2PMatrixBlockGenerator(P2PBase):
         return knl(queue,
                    targets=targets,
                    sources=sources,
-                   tgtindices=index_set.linear_row_indices,
-                   srcindices=index_set.linear_col_indices, **kwargs)
+                   tgtindices=tgtindices,
+                   srcindices=srcindices, **kwargs)
 
 # }}}
 
@@ -535,6 +533,8 @@ class P2PFromCSR(P2PBase):
             knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
         else:
             knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
+
+        knl = self._allow_redundant_execution_of_knl_scaling(knl)
 
         return knl
 

@@ -22,13 +22,10 @@ THE SOFTWARE.
 
 import sumpy.symbolic as sym  # noqa
 
-from sumpy.symbolic import vector_xreplace
 from sumpy.expansion import (
-    ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
-    HelmholtzConformingVolumeTaylorExpansion,
-    BiharmonicConformingVolumeTaylorExpansion)
-from sumpy.tools import mi_set_axis
-from pytools import cartesian_product, factorial
+    ExpansionBase, VolumeTaylorExpansion, LinearPDEConformingVolumeTaylorExpansion)
+from pytools import factorial
+from sumpy.tools import mi_set_axis, add_to_sac
 
 import logging
 logger = logging.getLogger(__name__)
@@ -54,93 +51,53 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
     Coefficients represent the terms in front of the kernel derivatives.
     """
 
-    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
-        from sumpy.kernel import DirectionalSourceDerivative
-        if kernel is None:
-            kernel = self.kernel
-
+    def coefficients_from_source_vec(self, kernels, avec, bvec, rscale, weights,
+            sac=None):
+        """This method calculates the full coefficients, sums them up and
+        compresses them. This is more efficient that calculating full
+        coefficients, compressing and then summing.
+        """
+        from sumpy.kernel import KernelWrapper
         from sumpy.tools import mi_power, mi_factorial
 
         if not self.use_rscale:
             rscale = 1
 
-        if isinstance(kernel, DirectionalSourceDerivative):
-            from sumpy.symbolic import make_sym_vector
+        result = [0]*len(self.get_full_coefficient_identifiers())
+        for kernel, weight in zip(kernels, weights):
+            if isinstance(kernel, KernelWrapper):
+                coeffs = [
+                        kernel.postprocess_at_source(mi_power(avec, mi), avec)
+                        / rscale ** sum(mi)
+                        for mi in self.get_full_coefficient_identifiers()]
+            else:
+                avec_scaled = [sym.UnevaluatedExpr(a * rscale**-1) for a in avec]
+                coeffs = [mi_power(avec_scaled, mi)
+                          for mi in self.get_full_coefficient_identifiers()]
 
-            dir_vecs = []
-            tmp_kernel = kernel
-            while isinstance(tmp_kernel, DirectionalSourceDerivative):
-                dir_vecs.append(make_sym_vector(tmp_kernel.dir_vec_name, kernel.dim))
-                tmp_kernel = tmp_kernel.inner_kernel
-
-            if kernel.get_base_kernel() is not tmp_kernel:
-                raise NotImplementedError("Unknown kernel wrapper.")
-
-            nderivs = len(dir_vecs)
-
-            coeff_identifiers = self.get_full_coefficient_identifiers()
-            result = [0] * len(coeff_identifiers)
-
-            for i, mi in enumerate(coeff_identifiers):
-                # One source derivative is the dot product of the gradient and
-                # directional vector.
-                # For multiple derivatives, gradient of gradients is taken.
-                # For eg: in 3D, 2 source derivatives gives 9 terms and
-                # cartesian_product below enumerates these 9 terms.
-                for deriv_terms in cartesian_product(*[range(kernel.dim)]*nderivs):
-                    prod = 1
-                    derivative_mi = list(mi)
-                    for nderivative, deriv_dim in enumerate(deriv_terms):
-                        prod *= -derivative_mi[deriv_dim]
-                        prod *= dir_vecs[nderivative][deriv_dim]
-                        derivative_mi[deriv_dim] -= 1
-                    if any(v < 0 for v in derivative_mi):
-                        continue
-                    result[i] += mi_power(avec, derivative_mi) * prod
-
-            for i, mi in enumerate(coeff_identifiers):
-                result[i] /= (mi_factorial(mi) * rscale ** sum(mi))
-        else:
-            avec = [sym.UnevaluatedExpr(a * rscale**-1) for a in avec]
-
-            result = [
-                    mi_power(avec, mi) / mi_factorial(mi)
-                    for mi in self.get_full_coefficient_identifiers()]
+            for i, mi in enumerate(self.get_full_coefficient_identifiers()):
+                result[i] += coeffs[i] * weight / mi_factorial(mi)
         return (
             self.expansion_terms_wrangler.get_stored_mpole_coefficients_from_full(
                 result, rscale, sac=sac))
 
-    def get_scaled_multipole(self, kernel, expr, bvec, rscale, nderivatives,
-            nderivatives_for_scaling=None):
-        if nderivatives_for_scaling is None:
-            nderivatives_for_scaling = nderivatives
-
-        if self.kernel.has_efficient_scale_adjustment:
-            return (
-                    kernel.adjust_for_kernel_scaling(
-                        vector_xreplace(
-                            expr,
-                            bvec, bvec * rscale**-1),
-                        rscale, nderivatives)
-                    / rscale ** (nderivatives - nderivatives_for_scaling))
-        else:
-            return (rscale**nderivatives_for_scaling * expr)
+    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
+        return self.coefficients_from_source_vec((kernel,), avec, bvec,
+                rscale, (1,), sac=sac)
 
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         if not self.use_rscale:
             rscale = 1
 
-        taker = self.get_kernel_derivative_taker(kernel, bvec)
+        base_taker = kernel.get_derivative_taker(bvec, rscale, sac)
+        taker = kernel.postprocess_at_target(base_taker, bvec)
 
-        result = sym.Add(*tuple(coeff * self.get_scaled_multipole(kernel,
-                    taker.diff(mi), bvec, rscale, sum(mi))
-                for coeff, mi in zip(coeffs, self.get_coefficient_identifiers())))
+        result = []
+        for coeff, mi in zip(coeffs, self.get_coefficient_identifiers()):
+            result.append(coeff * taker.diff(mi, lambda x: add_to_sac(sac, x)))
 
-        return kernel.postprocess_at_target(result, bvec)
-
-    def get_kernel_derivative_taker(self, kernel, bvec):
-        from sumpy.tools import MiDerivativeTaker
-        return MiDerivativeTaker(kernel.get_expression(bvec), bvec)
+        result = sym.Add(*tuple(result))
+        return result
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, _fast_version=True):
@@ -153,8 +110,9 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             src_rscale = 1
             tgt_rscale = 1
 
-        logger.info("building translation operator: %s(%d) -> %s(%d): start"
-                % (type(src_expansion).__name__,
+        logger.info("building translation operator for %s: %s(%d) -> %s(%d): start"
+                % (src_expansion.kernel,
+                    type(src_expansion).__name__,
                     src_expansion.order,
                     type(self).__name__,
                     self.order))
@@ -386,34 +344,47 @@ class VolumeTaylorMultipoleExpansion(
         VolumeTaylorExpansion.__init__(self, kernel, order, use_rscale)
 
 
-class LaplaceConformingVolumeTaylorMultipoleExpansion(
-        LaplaceConformingVolumeTaylorExpansion,
+class LinearPDEConformingVolumeTaylorMultipoleExpansion(
+        LinearPDEConformingVolumeTaylorExpansion,
         VolumeTaylorMultipoleExpansionBase):
 
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
-        LaplaceConformingVolumeTaylorExpansion.__init__(
+        LinearPDEConformingVolumeTaylorExpansion.__init__(
                 self, kernel, order, use_rscale)
+
+
+class LaplaceConformingVolumeTaylorMultipoleExpansion(
+        LinearPDEConformingVolumeTaylorMultipoleExpansion):
+
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("LaplaceConformingVolumeTaylorMultipoleExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorMultipoleExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
 
 
 class HelmholtzConformingVolumeTaylorMultipoleExpansion(
-        HelmholtzConformingVolumeTaylorExpansion,
-        VolumeTaylorMultipoleExpansionBase):
+        LinearPDEConformingVolumeTaylorMultipoleExpansion):
 
-    def __init__(self, kernel, order, use_rscale=None):
-        VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
-        HelmholtzConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("HelmholtzConformingVolumeTaylorMultipoleExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorMultipoleExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
 
 
 class BiharmonicConformingVolumeTaylorMultipoleExpansion(
-        BiharmonicConformingVolumeTaylorExpansion,
-        VolumeTaylorMultipoleExpansionBase):
+        LinearPDEConformingVolumeTaylorMultipoleExpansion):
 
-    def __init__(self, kernel, order, use_rscale=None):
-        VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
-        BiharmonicConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("BiharmonicConformingVolumeTaylorMultipoleExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorMultipoleExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
 
 # }}}
 
@@ -434,8 +405,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
         if kernel is None:
             kernel = self.kernel
 
-        from sumpy.symbolic import sym_real_norm_2
-        bessel_j = sym.Function("bessel_j")
+        from sumpy.symbolic import sym_real_norm_2, BesselJ
         avec_len = sym_real_norm_2(avec)
 
         arg_scale = self.get_bessel_arg_scaling()
@@ -444,7 +414,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
         source_angle_rel_center = sym.atan2(-avec[1], -avec[0])
         return [
                 kernel.postprocess_at_source(
-                    bessel_j(c, arg_scale * avec_len)
+                    BesselJ(c, arg_scale * avec_len, 0)
                     / rscale ** abs(c)
                     * sym.exp(sym.I * c * -source_angle_rel_center),
                     avec)
@@ -454,8 +424,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
         if not self.use_rscale:
             rscale = 1
 
-        from sumpy.symbolic import sym_real_norm_2
-        hankel_1 = sym.Function("hankel_1")
+        from sumpy.symbolic import sym_real_norm_2, Hankel1
         bvec_len = sym_real_norm_2(bvec)
         target_angle_rel_center = sym.atan2(bvec[1], bvec[0])
 
@@ -463,7 +432,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
 
         return sum(coeffs[self.get_storage_index(c)]
                    * kernel.postprocess_at_target(
-                       hankel_1(c, arg_scale * bvec_len)
+                       Hankel1(c, arg_scale * bvec_len, 0)
                        * rscale ** abs(c)
                        * sym.exp(sym.I * c * target_angle_rel_center), bvec)
                 for c in self.get_coefficient_identifiers())
@@ -479,9 +448,8 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
             src_rscale = 1
             tgt_rscale = 1
 
-        from sumpy.symbolic import sym_real_norm_2
+        from sumpy.symbolic import sym_real_norm_2, BesselJ
         dvec_len = sym_real_norm_2(dvec)
-        bessel_j = sym.Function("bessel_j")
         new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
 
         arg_scale = self.get_bessel_arg_scaling()
@@ -490,7 +458,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
         for j in self.get_coefficient_identifiers():
             translated_coeffs.append(
                 sum(src_coeff_exprs[src_expansion.get_storage_index(m)]
-                    * bessel_j(m - j, arg_scale * dvec_len)
+                    * BesselJ(m - j, arg_scale * dvec_len, 0)
                     * src_rscale ** abs(m)
                     / tgt_rscale ** abs(j)
                     * sym.exp(sym.I * (m - j) * new_center_angle_rel_old_center)

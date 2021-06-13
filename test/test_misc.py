@@ -24,6 +24,7 @@ import numpy as np
 import numpy.linalg as la
 import sys
 import sumpy.toys as t
+import sumpy.symbolic as sym
 
 import pytest
 import pyopencl as cl  # noqa: F401
@@ -33,48 +34,69 @@ from pyopencl.tools import (  # noqa
 from pytools import Record
 
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel,
-        BiharmonicKernel, YukawaKernel)
+        BiharmonicKernel, YukawaKernel, StokesletKernel, StressletKernel,
+        ElasticityKernel, LineOfCompressionKernel)
 from sumpy.expansion.diff_op import (make_identity_diff_op, gradient,
         divergence, laplacian, concat, as_scalar_pde, curl, diff)
 
 
 # {{{ pde check for kernels
 
-class BiharmonicKernelInfo:
-    def __init__(self, dim):
-        self.kernel = BiharmonicKernel(dim)
-        self.extra_kwargs = {}
-
-    @staticmethod
-    def pde_func(cp, pot):
-        return cp.laplace(cp.laplace(pot))
-
-    nderivs = 4
-
-
-class YukawaKernelInfo:
-    def __init__(self, dim, lam):
-        self.kernel = YukawaKernel(dim)
-        self.lam = lam
-        self.extra_kwargs = {"lam": lam}
+class KernelInfo:
+    def __init__(self, kernel, **kwargs):
+        self.kernel = kernel
+        self.extra_kwargs = kwargs
+        diff_op = self.kernel.get_pde_as_diff_op()
+        assert len(diff_op.eqs) == 1
+        eq = diff_op.eqs[0]
+        self.eq = eq
 
     def pde_func(self, cp, pot):
-        return cp.laplace(pot) - self.lam**2*pot
+        subs_dict = {sym.Symbol(k): v for k, v in self.extra_kwargs.items()}
+        result = 0
+        for ident, coeff in self.eq.items():
+            lresult = pot
+            for axis, nderivs in enumerate(ident.mi):
+                lresult = cp.diff(axis, lresult, nderivs)
+            result += lresult*float(sym.sympify(coeff).xreplace(subs_dict))
+        return result
 
-    nderivs = 2
+    @property
+    def nderivs(self):
+        return max(sum(ident.mi) for ident in self.eq.keys())
 
 
 @pytest.mark.parametrize("knl_info", [
-    BiharmonicKernelInfo(2),
-    BiharmonicKernelInfo(3),
-    YukawaKernelInfo(2, 5),
-    YukawaKernelInfo(3, 5),
+    KernelInfo(BiharmonicKernel(2)),
+    KernelInfo(BiharmonicKernel(3)),
+    KernelInfo(YukawaKernel(2), lam=5),
+    KernelInfo(YukawaKernel(3), lam=5),
+    KernelInfo(LaplaceKernel(2)),
+    KernelInfo(LaplaceKernel(3)),
+    KernelInfo(HelmholtzKernel(2), k=5),
+    KernelInfo(HelmholtzKernel(3), k=5),
+    KernelInfo(StokesletKernel(2, 0, 1), mu=5),
+    KernelInfo(StokesletKernel(2, 1, 1), mu=5),
+    KernelInfo(StokesletKernel(3, 0, 1), mu=5),
+    KernelInfo(StokesletKernel(3, 1, 1), mu=5),
+    KernelInfo(StressletKernel(2, 0, 0, 0), mu=5),
+    KernelInfo(StressletKernel(2, 0, 0, 1), mu=5),
+    KernelInfo(StressletKernel(3, 0, 0, 0), mu=5),
+    KernelInfo(StressletKernel(3, 0, 0, 1), mu=5),
+    KernelInfo(StressletKernel(3, 0, 1, 2), mu=5),
+    KernelInfo(ElasticityKernel(2, 0, 1), mu=5, nu=0.2),
+    KernelInfo(ElasticityKernel(2, 0, 0), mu=5, nu=0.2),
+    KernelInfo(ElasticityKernel(3, 0, 1), mu=5, nu=0.2),
+    KernelInfo(ElasticityKernel(3, 0, 0), mu=5, nu=0.2),
+    KernelInfo(LineOfCompressionKernel(3, 0), mu=5, nu=0.2),
+    KernelInfo(LineOfCompressionKernel(3, 1), mu=5, nu=0.2),
     ])
 def test_pde_check_kernels(ctx_factory, knl_info, order=5):
     dim = knl_info.kernel.dim
     tctx = t.ToyContext(ctx_factory(), knl_info.kernel,
             extra_source_kwargs=knl_info.extra_kwargs)
 
+    np.random.seed(17)
     pt_src = t.PointSources(
             tctx,
             np.random.rand(dim, 50) - 0.5,
@@ -390,8 +412,27 @@ def test_as_scalar_pde_elasticity():
     ]
 
     pde = concat(*exprs)
+    assert pde.order == 1
     for i in range(5):
-        assert as_scalar_pde(pde, i) == laplacian(laplacian(diff_op[0]))
+        scalar_pde = as_scalar_pde(pde, i)
+        assert scalar_pde == laplacian(laplacian(diff_op[0]))
+        assert scalar_pde.order == 4
+
+
+def test_elasticity_new():
+    from pickle import dumps, loads
+    stokes_knl = StokesletKernel(3, 0, 1, "mu1", 0.5)
+    stokes_knl2 = ElasticityKernel(3, 0, 1, "mu1", 0.5)
+    elasticity_knl = ElasticityKernel(3, 0, 1, "mu1", "nu")
+    elasticity_helper_knl = LineOfCompressionKernel(3, 0, "mu1", "nu")
+
+    assert isinstance(stokes_knl2, StokesletKernel)
+    assert stokes_knl == stokes_knl2
+    assert loads(dumps(stokes_knl)) == stokes_knl
+
+    for knl in [elasticity_knl, elasticity_helper_knl]:
+        assert not isinstance(knl, StokesletKernel)
+        assert loads(dumps(knl)) == knl
 
 
 # You can test individual routines by typing

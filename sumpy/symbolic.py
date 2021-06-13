@@ -71,7 +71,7 @@ _find_symbolic_backend()
 # Before adding a function here, make sure it's present in both modules.
 SYMBOLIC_API = """
 Add Basic Mul Pow exp sqrt log symbols sympify cos sin atan2 Function Symbol
-Derivative Integer Matrix Subs I pi functions""".split()
+Derivative Integer Matrix Subs I pi functions Number""".split()
 
 if USE_SYMENGINE:
     import symengine as sym
@@ -240,5 +240,54 @@ class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):
             return sym.Symbol("%s%d" % (expr.aggregate.name, expr.index))
         else:
             self.raise_conversion_error(expr)
+
+    def map_call(self, expr):
+        if expr.function.name == "hankel_1":
+            args = [self.rec(param) for param in expr.parameters]
+            args.append(0)
+            return Hankel1(*args)
+        elif expr.function.name == "bessel_j":
+            args = [self.rec(param) for param in expr.parameters]
+            args.append(0)
+            return BesselJ(*args)
+        else:
+            return PymbolicToSympyMapper.map_call(self, expr)
+
+
+import sympy
+
+
+class _BesselOrHankel(sympy.Function):
+    """A symbolic function for BesselJ or Hankel1 functions
+    that keeps track of the derivatives taken of the function.
+    Arguments are ``(order, z, nderivs)``.
+    """
+    nargs = (3,)
+
+    def fdiff(self, argindex=1):
+        if argindex in (1, 3):
+            # we are not differentiating w.r.t order or nderivs
+            raise ValueError()
+        order, z, nderivs = self.args
+        return self.func(order, z, nderivs+1)
+
+
+class BesselJ(_BesselOrHankel):
+    pass
+
+
+class Hankel1(_BesselOrHankel):
+    pass
+
+
+_SympyBesselJ = BesselJ
+_SympyHankel1 = Hankel1
+
+if USE_SYMENGINE:
+    def BesselJ(*args):   # noqa: N802
+        return sym.sympify(_SympyBesselJ(*args))
+
+    def Hankel1(*args):   # noqa: N802
+        return sym.sympify(_SympyHankel1(*args))
 
 # vim: fdm=marker

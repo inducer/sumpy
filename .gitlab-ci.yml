@@ -6,7 +6,7 @@
 #   - export PY_EXE=python3.5
 #   - export PYOPENCL_TEST=nvi:k40
 #   - export EXTRA_INSTALL="numpy mako"
-#   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project.sh
+#   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project.sh
 #   - ". ./build-and-test-py-project.sh"
 #   tags:
 #   - python3.5
@@ -17,12 +17,17 @@
 #    reports:
 #      junit: test/pytest.xml
 
+stages:
+  - test
+  - deploy
+
 Pytest POCL:
+  stage: test
   script:
   - export PY_EXE=python3
   - export PYOPENCL_TEST=portable:pthread
   - export EXTRA_INSTALL="pybind11 numpy mako"
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project.sh
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project.sh
   - ". ./build-and-test-py-project.sh"
   tags:
   - python3
@@ -34,11 +39,12 @@ Pytest POCL:
       junit: test/pytest.xml
 
 Pytest Titan V:
+  stage: test
   script:
   - py_version=3
   - export PYOPENCL_TEST=nvi:titan
   - EXTRA_INSTALL="pybind11 numpy mako"
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project.sh
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project.sh
   - ". ./build-and-test-py-project.sh"
   tags:
   - python3
@@ -51,13 +57,14 @@ Pytest Titan V:
       junit: test/pytest.xml
 
 Pytest Conda:
+  stage: test
   script:
   # Disable caching to ensure SymEngine code generation is exercised.
   - export SUMPY_NO_CACHE=1
   - export SUMPY_FORCE_SYMBOLIC_BACKEND=symengine
   - export PYOPENCL_TEST=portable:pthread
   - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project-within-miniconda.sh
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project-within-miniconda.sh
   - ". ./build-and-test-py-project-within-miniconda.sh"
   tags:
   - large-node
@@ -68,13 +75,14 @@ Pytest Conda:
       junit: test/pytest.xml
 
 Pytest POCL Titan V:
+  stage: test
   script:
   # Disable caching to ensure SymEngine code generation is exercised.
   - export SUMPY_NO_CACHE=1
   - export SUMPY_FORCE_SYMBOLIC_BACKEND=symengine
   - export PYOPENCL_TEST=portable:titan
   - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project-within-miniconda.sh
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project-within-miniconda.sh
   - ". ./build-and-test-py-project-within-miniconda.sh"
   tags:
   - nvidia-titan-v
@@ -85,10 +93,11 @@ Pytest POCL Titan V:
       junit: test/pytest.xml
 
 Examples Conda:
+  stage: test
   script: |
     grep -v symengine .test-conda-env-py3.yml > .test-conda-env.yml
     CONDA_ENVIRONMENT=.test-conda-env.yml
-    curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/ci-support.sh
+    curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/ci-support.sh
     . ci-support.sh
     EXTRA_INSTALL="pyvisfile scipy"
     build_py_project_in_conda_env
@@ -99,16 +108,22 @@ Examples Conda:
   - tags
 
 Documentation:
-  script:
-  - EXTRA_INSTALL="pybind11 numpy mako"
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-docs.sh
-  - ". ./build-docs.sh"
+  stage: deploy
+  script: |
+    PROJECT=sumpy
+    EXTRA_INSTALL="pybind11 numpy mako"
+    curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/ci-support.sh
+    . ci-support.sh
+    build_py_project_in_venv
+    build_docs
+    maybe_upload_docs
   tags:
-  - python3
+  - linux
 
 Flake8:
+  stage: test
   script:
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/prepare-and-run-flake8.sh
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-flake8.sh
   - . ./prepare-and-run-flake8.sh "$CI_PROJECT_NAME" test examples benchmarks
   tags:
   - python3
@@ -116,11 +131,12 @@ Flake8:
   - tags
 
 Benchmarks:
+  stage: test
   script:
   - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
   - PROJECT=sumpy
   - PYOPENCL_TEST=portable:pthread
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-benchmark-py-project.sh
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-benchmark-py-project.sh
   - ". ./build-and-benchmark-py-project.sh"
   tags:
   - linux

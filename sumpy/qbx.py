@@ -46,7 +46,7 @@ QBX for Layer Potentials
 .. autoclass:: LayerPotentialBase
 .. autoclass:: LayerPotential
 .. autoclass:: LayerPotentialMatrixGenerator
-.. autoclass:: LayerPotentialMatrixBlockGenerator
+.. autoclass:: LayerPotentialMatrixSubsetGenerator
 
 """
 
@@ -87,30 +87,36 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                 self.device.hashable_model_and_version_identifier)
 
     def _expand(self, sac, avec, bvec, rscale, isrc):
-        coefficients = np.zeros(len(self.expansion), dtype=object)
         from sumpy.symbolic import PymbolicToSympyMapper
         conv = PymbolicToSympyMapper()
-        for idx, knl in enumerate(self.source_kernels):
-            strength = conv(self.get_strength_or_not(isrc, idx))
-            coefficients += np.array([coeff * strength for
-                                i, coeff in enumerate(
-                                    self.expansion.coefficients_from_source(knl,
-                                          avec, bvec, rscale))])
+        strengths = [conv(self.get_strength_or_not(isrc, idx))
+                     for idx in range(len(self.source_kernels))]
+        coefficients = self.expansion.coefficients_from_source_vec(
+            self.source_kernels, avec, bvec, rscale=rscale, weights=strengths,
+            sac=sac)
 
-        return list(coefficients)
+        return coefficients
 
     def _evaluate(self, sac, avec, bvec, rscale, expansion_nr, coefficients):
-        expn = self.target_kernels[expansion_nr]
+        from sumpy.expansion.local import LineTaylorLocalExpansion
+        tgt_knl = self.target_kernels[expansion_nr]
+        if isinstance(tgt_knl, LineTaylorLocalExpansion):
+            # In LineTaylorLocalExpansion.evaluate, we can't run
+            # postprocess_at_target because the coefficients are assigned
+            # symbols and postprocess with a derivative will make them zero.
+            # Instead run postprocess here before the coeffients are assigned.
+            coefficients = [tgt_knl.postprocess_at_target(coeff, bvec) for
+                    coeff in coefficients]
+
         assigned_coeffs = [
             sym.Symbol(
                 sac.assign_unique("expn%dcoeff%s" % (
                     expansion_nr, stringify_expn_index(i)),
-                    expn.postprocess_at_target(
-                        coefficients[self.expansion.get_storage_index(i)], bvec)))
+                        coefficients[self.expansion.get_storage_index(i)]))
             for i in self.expansion.get_coefficient_identifiers()]
 
         return sac.assign_unique("expn%d_result" % expansion_nr,
-            self.expansion.evaluate(expn, assigned_coeffs, bvec, rscale))
+            self.expansion.evaluate(tgt_knl, assigned_coeffs, bvec, rscale))
 
     def get_loopy_insns_and_result_names(self):
         from sumpy.symbolic import make_sym_vector
@@ -161,9 +167,9 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
     def get_default_src_tgt_arguments(self):
         from sumpy.tools import gather_loopy_source_arguments
         return ([
-                lp.GlobalArg("src", None,
+                lp.GlobalArg("sources", None,
                     shape=(self.dim, "nsources"), order="C"),
-                lp.GlobalArg("tgt", None,
+                lp.GlobalArg("targets", None,
                     shape=(self.dim, "ntargets"), order="C"),
                 lp.GlobalArg("center", None,
                     shape=(self.dim, "ntargets"), order="C"),
@@ -177,29 +183,34 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
         raise NotImplementedError
 
     def get_optimized_kernel(self,
-            targets_is_obj_array, sources_is_obj_array, centers_is_obj_array):
+            targets_is_obj_array, sources_is_obj_array, centers_is_obj_array,
+            # Used by pytential to override the name of the loop to be
+            # parallelized. In the case of QBX, that's the loop over QBX
+            # targets (not global targets).
+            itgt_name="itgt"):
         # FIXME specialize/tune for GPU/CPU
         loopy_knl = self.get_kernel()
 
         if targets_is_obj_array:
-            loopy_knl = lp.tag_array_axes(loopy_knl, "tgt", "sep,C")
+            loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
         if sources_is_obj_array:
-            loopy_knl = lp.tag_array_axes(loopy_knl, "src", "sep,C")
+            loopy_knl = lp.tag_array_axes(loopy_knl, "sources", "sep,C")
         if centers_is_obj_array:
             loopy_knl = lp.tag_array_axes(loopy_knl, "center", "sep,C")
 
         import pyopencl as cl
         dev = self.context.devices[0]
         if dev.type & cl.device_type.CPU:
-            loopy_knl = lp.split_iname(loopy_knl, "itgt", 16, outer_tag="g.0",
+            loopy_knl = lp.split_iname(loopy_knl, itgt_name, 16, outer_tag="g.0",
                     inner_tag="l.0")
             loopy_knl = lp.split_iname(loopy_knl, "isrc", 256)
             loopy_knl = lp.prioritize_loops(loopy_knl,
-                    ["isrc_outer", "itgt_inner"])
+                    ["isrc_outer", f"{itgt_name}_inner"])
         else:
             from warnings import warn
             warn("don't know how to tune layer potential computation for '%s'" % dev)
-            loopy_knl = lp.split_iname(loopy_knl, "itgt", 128, outer_tag="g.0")
+            loopy_knl = lp.split_iname(loopy_knl, itgt_name, 128, outer_tag="g.0")
+        loopy_knl = self._allow_redundant_execution_of_knl_scaling(loopy_knl)
 
         return loopy_knl
 
@@ -237,8 +248,8 @@ class LayerPotential(LayerPotentialBase):
             """],
             self.get_kernel_scaling_assignments()
             + ["for itgt, isrc"]
-            + ["<> a[idim] = center[idim, itgt] - src[idim, isrc] {dup=idim}"]
-            + ["<> b[idim] = tgt[idim, itgt] - center[idim, itgt] {dup=idim}"]
+            + ["<> a[idim] = center[idim, itgt] - sources[idim, isrc] {dup=idim}"]
+            + ["<> b[idim] = targets[idim, itgt] - center[idim, itgt] {dup=idim}"]
             + ["<> rscale = expansion_radii[itgt]"]
             + [f"<> strength_{i}_isrc = strength_{i}[isrc]" for i in
                     range(self.strength_count)]
@@ -279,7 +290,7 @@ class LayerPotential(LayerPotentialBase):
         for i, dens in enumerate(strengths):
             kwargs["strength_%d" % i] = dens
 
-        return knl(queue, src=sources, tgt=targets, center=centers,
+        return knl(queue, sources=sources, targets=targets, center=centers,
                 expansion_radii=expansion_radii, **kwargs)
 
 # }}}
@@ -313,8 +324,8 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
             """],
             self.get_kernel_scaling_assignments()
             + ["for itgt, isrc"]
-            + ["<> a[idim] = center[idim, itgt] - src[idim, isrc] {dup=idim}"]
-            + ["<> b[idim] = tgt[idim, itgt] - center[idim, itgt] {dup=idim}"]
+            + ["<> a[idim] = center[idim, itgt] - sources[idim, isrc] {dup=idim}"]
+            + ["<> b[idim] = targets[idim, itgt] - center[idim, itgt] {dup=idim}"]
             + ["<> rscale = expansion_radii[itgt]"]
             + loopy_insns + kernel_exprs
             + ["""
@@ -343,21 +354,21 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
                 sources_is_obj_array=is_obj_array_like(sources),
                 centers_is_obj_array=is_obj_array_like(centers))
 
-        return knl(queue, src=sources, tgt=targets, center=centers,
+        return knl(queue, sources=sources, targets=targets, center=centers,
                 expansion_radii=expansion_radii, **kwargs)
 
 # }}}
 
 
-# {{{
+# {{{ matrix subset generator
 
-class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
+class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
     """Generator for a subset of the layer potential matrix entries.
 
     .. automethod:: __call__
     """
 
-    default_name = "qbx_block"
+    default_name = "qbx_subset"
 
     def get_strength_or_not(self, isrc, kernel_idx):
         return 1
@@ -388,8 +399,8 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
                     <> itgt = tgtindices[imat]
                     <> isrc = srcindices[imat]
 
-                    <> a[idim] = center[idim, itgt] - src[idim, isrc] {dup=idim}
-                    <> b[idim] = tgt[idim, itgt] - center[idim, itgt] {dup=idim}
+                    <> a[idim] = center[idim, itgt] - sources[idim, isrc] {dup=idim}
+                    <> b[idim] = targets[idim, itgt] - center[idim, itgt] {dup=idim}
                     <> rscale = expansion_radii[itgt]
             """]
             + loopy_insns + kernel_exprs
@@ -421,39 +432,51 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
         loopy_knl = self.get_kernel()
 
         if targets_is_obj_array:
-            loopy_knl = lp.tag_array_axes(loopy_knl, "tgt", "sep,C")
+            loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
         if sources_is_obj_array:
-            loopy_knl = lp.tag_array_axes(loopy_knl, "src", "sep,C")
+            loopy_knl = lp.tag_array_axes(loopy_knl, "sources", "sep,C")
         if centers_is_obj_array:
             loopy_knl = lp.tag_array_axes(loopy_knl, "center", "sep,C")
 
         loopy_knl = lp.split_iname(loopy_knl, "imat", 1024, outer_tag="g.0")
+        loopy_knl = self._allow_redundant_execution_of_knl_scaling(loopy_knl)
         return loopy_knl
 
     def __call__(self, queue, targets, sources, centers, expansion_radii,
-                 index_set, **kwargs):
-        """
-        :arg targets: target point coordinates.
-        :arg sources: source point coordinates.
-        :arg centers: QBX target expansion centers.
+                 tgtindices, srcindices, **kwargs):
+        """Evaluate a subset of the QBX matrix interactions.
+
+        :arg targets: target point coordinates, which can be an object
+            :class:`~numpy.ndarray`, :class:`list` or :class:`tuple` of
+            coordinates or a single stacked array.
+        :arg sources: source point coordinates, which can also be in any of the
+            formats of the *targets*,
+
+        :arg centers: QBX target expansion center coordinates, which can also
+            be in any of the formats of the *targets*. The number of centers
+            must match the number of targets.
         :arg expansion_radii: radii for each expansion center.
-        :arg index_set: a :class:`sumpy.tools.MatrixBlockIndexRanges` used
-            to define the blocks.
-        :return: a tuple of one-dimensional arrays of kernel evaluations at
-            target-source pairs described by `index_set`.
+
+        :arg srcindices: an array of indices into *sources*.
+        :arg tgtindices: an array of indices into *targets*, of the same size
+            as *srcindices*.
+
+        :returns: a one-dimensional array of interactions, for each index pair
+            in (*srcindices*, *tgtindices*)
         """
+
         knl = self.get_cached_optimized_kernel(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources),
                 centers_is_obj_array=is_obj_array_like(centers))
 
         return knl(queue,
-                   src=sources,
-                   tgt=targets,
+                   sources=sources,
+                   targets=targets,
                    center=centers,
                    expansion_radii=expansion_radii,
-                   tgtindices=index_set.linear_row_indices,
-                   srcindices=index_set.linear_col_indices, **kwargs)
+                   tgtindices=tgtindices,
+                   srcindices=srcindices, **kwargs)
 
 # }}}
 
@@ -464,6 +487,7 @@ class LayerPotentialMatrixBlockGenerator(LayerPotentialBase):
 
 def find_jump_term(kernel, arg_provider):
     from sumpy.kernel import (
+            AxisSourceDerivative,
             AxisTargetDerivative,
             DirectionalSourceDerivative,
             DirectionalTargetDerivative,
@@ -478,6 +502,9 @@ def find_jump_term(kernel, arg_provider):
             kernel = kernel.kernel
         elif isinstance(kernel, DirectionalTargetDerivative):
             tgt_derivatives.append(kernel.dir_vec_name)
+            kernel = kernel.kernel
+        elif isinstance(kernel, AxisSourceDerivative):
+            src_derivatives.append(kernel.axis)
             kernel = kernel.kernel
         elif isinstance(kernel, DirectionalSourceDerivative):
             src_derivatives.append(kernel.dir_vec_name)

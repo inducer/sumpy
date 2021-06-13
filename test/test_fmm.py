@@ -31,13 +31,11 @@ from sumpy.kernel import LaplaceKernel, HelmholtzKernel, YukawaKernel
 from sumpy.expansion.multipole import (
     VolumeTaylorMultipoleExpansion,
     H2DMultipoleExpansion, Y2DMultipoleExpansion,
-    LaplaceConformingVolumeTaylorMultipoleExpansion,
-    HelmholtzConformingVolumeTaylorMultipoleExpansion)
+    LinearPDEConformingVolumeTaylorMultipoleExpansion)
 from sumpy.expansion.local import (
     VolumeTaylorLocalExpansion,
     H2DLocalExpansion, Y2DLocalExpansion,
-    LaplaceConformingVolumeTaylorLocalExpansion,
-    HelmholtzConformingVolumeTaylorLocalExpansion)
+    LinearPDEConformingVolumeTaylorLocalExpansion)
 
 import pytest
 
@@ -55,18 +53,18 @@ else:
 
 @pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class", [
     (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
-    (LaplaceKernel(2), LaplaceConformingVolumeTaylorLocalExpansion,
-                       LaplaceConformingVolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+                       LinearPDEConformingVolumeTaylorMultipoleExpansion),
     (LaplaceKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
-    (LaplaceKernel(3), LaplaceConformingVolumeTaylorLocalExpansion,
-                       LaplaceConformingVolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
+                       LinearPDEConformingVolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(2), HelmholtzConformingVolumeTaylorLocalExpansion,
-                         HelmholtzConformingVolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+                         LinearPDEConformingVolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion),
     (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(3), HelmholtzConformingVolumeTaylorLocalExpansion,
-                         HelmholtzConformingVolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
+                         LinearPDEConformingVolumeTaylorMultipoleExpansion),
     (YukawaKernel(2), Y2DLocalExpansion, Y2DMultipoleExpansion),
     ])
 def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class):
@@ -210,8 +208,8 @@ def test_unified_single_and_double(ctx_factory):
     queue = cl.CommandQueue(ctx)
 
     knl = LaplaceKernel(2)
-    local_expn_class = LaplaceConformingVolumeTaylorLocalExpansion
-    mpole_expn_class = LaplaceConformingVolumeTaylorMultipoleExpansion
+    local_expn_class = LinearPDEConformingVolumeTaylorLocalExpansion
+    mpole_expn_class = LinearPDEConformingVolumeTaylorMultipoleExpansion
 
     nsources = 1000
     ntargets = 300
@@ -416,6 +414,141 @@ def test_sumpy_fmm_exclude_self(ctx_factory):
     logger.info("order %d -> relative l2 error: %g" % (order, rel_err))
 
     assert np.isclose(rel_err, 0, atol=1e-7)
+
+
+def test_sumpy_axis_source_derivative(ctx_factory):
+    logging.basicConfig(level=logging.INFO)
+
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    nsources = 500
+    dtype = np.float64
+
+    from boxtree.tools import (
+            make_normal_particle_array as p_normal)
+
+    knl = LaplaceKernel(2)
+    local_expn_class = VolumeTaylorLocalExpansion
+    mpole_expn_class = VolumeTaylorMultipoleExpansion
+    order = 10
+
+    sources = p_normal(queue, nsources, knl.dim, dtype, seed=15)
+
+    from boxtree import TreeBuilder
+    tb = TreeBuilder(ctx)
+
+    tree, _ = tb(queue, sources,
+            max_particles_in_box=30, debug=True)
+
+    from boxtree.traversal import FMMTraversalBuilder
+    tbuild = FMMTraversalBuilder(ctx)
+    trav, _ = tbuild(queue, tree, debug=True)
+
+    from pyopencl.clrandom import PhiloxGenerator
+    rng = PhiloxGenerator(ctx, seed=12)
+    weights = rng.uniform(queue, nsources, dtype=np.float64)
+
+    target_to_source = np.arange(tree.ntargets, dtype=np.int32)
+    self_extra_kwargs = {"target_to_source": target_to_source}
+
+    from functools import partial
+
+    from sumpy.fmm import SumpyExpansionWranglerCodeContainer
+    from sumpy.kernel import AxisTargetDerivative, AxisSourceDerivative
+
+    pots = []
+    for tgt_knl, src_knl in [(AxisTargetDerivative(0, knl), knl),
+            (knl, AxisSourceDerivative(0, knl))]:
+
+        wcc = SumpyExpansionWranglerCodeContainer(
+                ctx,
+                partial(mpole_expn_class, knl),
+                partial(local_expn_class, knl),
+                target_kernels=[tgt_knl],
+                source_kernels=[src_knl],
+                exclude_self=True)
+
+        wrangler = wcc.get_wrangler(queue, tree, dtype,
+                fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
+                self_extra_kwargs=self_extra_kwargs)
+
+        from boxtree.fmm import drive_fmm
+
+        pot, = drive_fmm(trav, wrangler, (weights,))
+        pots.append(pot.get())
+
+    rel_err = la.norm(pots[0] + pots[1]) / la.norm(pots[0])
+    logger.info("order %d -> relative l2 error: %g" % (order, rel_err))
+
+    assert np.isclose(rel_err, 0, atol=1e-5)
+
+
+def test_sumpy_target_point_multiplier(ctx_factory):
+    logging.basicConfig(level=logging.INFO)
+
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    nsources = 500
+    dtype = np.float64
+
+    from boxtree.tools import (
+            make_normal_particle_array as p_normal)
+
+    knl = LaplaceKernel(2)
+    local_expn_class = VolumeTaylorLocalExpansion
+    mpole_expn_class = VolumeTaylorMultipoleExpansion
+    order = 5
+
+    sources = p_normal(queue, nsources, knl.dim, dtype, seed=15)
+
+    from boxtree import TreeBuilder
+    tb = TreeBuilder(ctx)
+
+    tree, _ = tb(queue, sources,
+            max_particles_in_box=30, debug=True)
+
+    from boxtree.traversal import FMMTraversalBuilder
+    tbuild = FMMTraversalBuilder(ctx)
+    trav, _ = tbuild(queue, tree, debug=True)
+
+    from pyopencl.clrandom import PhiloxGenerator
+    rng = PhiloxGenerator(ctx, seed=12)
+    weights = rng.uniform(queue, nsources, dtype=np.float64)
+
+    target_to_source = np.arange(tree.ntargets, dtype=np.int32)
+    self_extra_kwargs = {"target_to_source": target_to_source}
+
+    from functools import partial
+
+    from sumpy.fmm import SumpyExpansionWranglerCodeContainer
+    from sumpy.kernel import TargetPointMultiplier
+
+    tgt_knls = [TargetPointMultiplier(0, knl), knl]
+
+    wcc = SumpyExpansionWranglerCodeContainer(
+            ctx,
+            partial(mpole_expn_class, knl),
+            partial(local_expn_class, knl),
+            target_kernels=tgt_knls,
+            source_kernels=[knl],
+            exclude_self=True)
+
+    wrangler = wcc.get_wrangler(queue, tree, dtype,
+            fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
+            self_extra_kwargs=self_extra_kwargs)
+
+    from boxtree.fmm import drive_fmm
+
+    pot0, pot1 = drive_fmm(trav, wrangler, (weights,))
+    pot0, pot1 = pot0.get(), pot1.get()
+    pot1 = pot1 * sources[0].get()
+
+    rel_err = la.norm(pot0 - pot1) / la.norm(pot1)
+    logger.info("order %d -> relative l2 error: %g" % (order, rel_err))
+
+    assert np.isclose(rel_err, 0, atol=1e-5)
 
 
 # You can test individual routines by typing

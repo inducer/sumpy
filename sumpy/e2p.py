@@ -56,15 +56,16 @@ class E2PBase(KernelCacheWrapper):
         if device is None:
             device = ctx.devices[0]
 
-        from sumpy.kernel import SourceDerivativeRemover, TargetDerivativeRemover
-        sdr = SourceDerivativeRemover()
-        tdr = TargetDerivativeRemover()
+        from sumpy.kernel import (SourceTransformationRemover,
+                TargetTransformationRemover)
+        sxr = SourceTransformationRemover()
+        txr = TargetTransformationRemover()
         expansion = expansion.with_kernel(
-                sdr(expansion.kernel))
+                sxr(expansion.kernel))
 
-        kernels = [sdr(knl) for knl in kernels]
+        kernels = [sxr(knl) for knl in kernels]
         for knl in kernels:
-            assert tdr(knl) == expansion.kernel
+            assert txr(knl) == expansion.kernel
 
         self.ctx = ctx
         self.expansion = expansion
@@ -99,7 +100,8 @@ class E2PBase(KernelCacheWrapper):
         loopy_insns = to_loopy_insns(
                 sac.assignments.items(),
                 vector_names={"b"},
-                pymbolic_expr_maps=[self.expansion.get_code_transformer()],
+                pymbolic_expr_maps=[
+                    knl.get_code_transformer() for knl in self.kernels],
                 retain_names=result_names,
                 complex_dtype=np.complex128  # FIXME
                 )
@@ -108,12 +110,15 @@ class E2PBase(KernelCacheWrapper):
 
     def get_kernel_scaling_assignment(self):
         from sumpy.symbolic import SympyToPymbolicMapper
+        from sumpy.tools import ScalingAssignmentTag
         sympy_conv = SympyToPymbolicMapper()
         return [lp.Assignment(id=None,
                     assignee="kernel_scaling",
                     expression=sympy_conv(
                         self.expansion.kernel.get_global_scaling_const()),
-                    temp_var_type=lp.Optional(None))]
+                    temp_var_type=lp.Optional(None),
+                    tags=frozenset([ScalingAssignmentTag()]),
+                    )]
 
     def get_cache_key(self):
         return (type(self).__name__, self.expansion, tuple(self.kernels))
@@ -196,6 +201,8 @@ class E2PFromSingleBox(E2PBase):
         # FIXME
         knl = self.get_kernel()
         knl = lp.tag_inames(knl, dict(itgt_box="g.0"))
+        knl = self._allow_redundant_execution_of_knl_scaling(knl)
+
         return knl
 
     def __call__(self, queue, **kwargs):
@@ -306,6 +313,7 @@ class E2PFromCSR(E2PBase):
         # FIXME
         knl = self.get_kernel()
         knl = lp.tag_inames(knl, dict(itgt_box="g.0"))
+        knl = self._allow_redundant_execution_of_knl_scaling(knl)
         return knl
 
     def __call__(self, queue, **kwargs):
