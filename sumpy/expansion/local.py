@@ -73,14 +73,11 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
         from sumpy.symbolic import USE_SYMENGINE
 
         if USE_SYMENGINE:
-            from sumpy.tools import ExprDerivativeTaker, my_syntactic_subs
+            from sumpy.tools import ExprDerivativeTaker
             deriv_taker = ExprDerivativeTaker(line_kernel, (tau,), sac=sac, rscale=1)
 
-            return [my_syntactic_subs(
-                        kernel.postprocess_at_source(
-                            deriv_taker.diff(i),
-                            avec),
-                    {tau: 0})
+            return [kernel.postprocess_at_source(
+                        deriv_taker.diff(i), avec).subs("tau", 0)
                     for i in self.get_coefficient_identifiers()]
         else:
             # Workaround for sympy. The automatic distribution after
