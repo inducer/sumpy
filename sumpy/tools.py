@@ -757,10 +757,14 @@ def reduced_row_echelon_form(m, atol=0):
             break
         pivot = nrows
         for k in range(index, nrows):
-            if ((isinstance(mat[k, i], sym.Basic) and not mat[k, i].is_number)
-                    or abs(mat[k, i]) > atol) and pivot == nrows:
+            symbolic = isinstance(mat[k, i], sym.Basic) and not mat[k, i].is_number
+            if (symbolic or abs(mat[k, i]) > atol) and pivot == nrows:
                 pivot = k
-            if abs(mat[k, i] - 1) <= atol:
+            # If there's a pivot that's close to 1 use that as it avoids
+            # having to divide.
+            # When checking for a number close to 1, we shouldn't consider
+            # symbolic values
+            if not symbolic and abs(mat[k, i] - 1) <= atol:
                 pivot = k
                 break
         if pivot == nrows:
