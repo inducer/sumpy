@@ -737,11 +737,12 @@ def is_obj_array_like(ary):
             or (isinstance(ary, np.ndarray) and ary.dtype.char == "O"))
 
 
-def reduced_row_echelon_form(m):
+def reduced_row_echelon_form(m, atol=0):
     """Calculates a reduced row echelon form of a
     matrix `m`.
 
     :arg m: a 2D :class:`numpy.ndarray` or a list of lists or a sympy Matrix
+    :arg tol: absolute tolerance for values to be considered zero
     :return: reduced row echelon form as a 2D :class:`numpy.ndarray`
              and a list of pivots
     """
@@ -756,9 +757,11 @@ def reduced_row_echelon_form(m):
             break
         pivot = nrows
         for k in range(index, nrows):
-            if mat[k, i] != 0 and pivot == nrows:
+            if isinstance(mat[k, i], sym.Basic) and not sym.is_number:
+                continue
+            if abs(mat[k, i]) > atol and pivot == nrows:
                 pivot = k
-            if abs(mat[k, i]) == 1:
+            if abs(mat[k, i] - 1) <= atol:
                 pivot = k
                 break
         if pivot == nrows:
@@ -793,13 +796,14 @@ def reduced_row_echelon_form(m):
     return mat, pivot_cols
 
 
-def nullspace(m):
+def nullspace(m, atol=0):
     """Calculates the nullspace of a matrix `m`.
 
     :arg m: a 2D :class:`numpy.ndarray` or a list of lists or a sympy Matrix
+    :arg tol: absolute tolerance for values to be considered zero
     :return: nullspace of `m` as a 2D :class:`numpy.ndarray`
     """
-    mat, pivot_cols = reduced_row_echelon_form(m)
+    mat, pivot_cols = reduced_row_echelon_form(m, atol=atol)
     pivot_cols = list(pivot_cols)
     cols = mat.shape[1]
 
