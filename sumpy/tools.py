@@ -804,7 +804,7 @@ def nullspace(m, atol=0):
     """Calculates the nullspace of a matrix `m`.
 
     :arg m: a 2D :class:`numpy.ndarray` or a list of lists or a sympy Matrix
-    :arg tol: absolute tolerance for values to be considered zero
+    :arg atol: absolute tolerance for values to be considered zero
     :return: nullspace of `m` as a 2D :class:`numpy.ndarray`
     """
     mat, pivot_cols = reduced_row_echelon_form(m, atol=atol)
