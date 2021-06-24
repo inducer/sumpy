@@ -757,7 +757,7 @@ def reduced_row_echelon_form(m, atol=0):
             break
         pivot = nrows
         for k in range(index, nrows):
-            if isinstance(mat[k, i], sym.Basic) and not sym.is_number:
+            if isinstance(mat[k, i], sym.Basic) and not mat[k, i].is_number:
                 continue
             if abs(mat[k, i]) > atol and pivot == nrows:
                 pivot = k
