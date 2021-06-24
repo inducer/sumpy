@@ -742,7 +742,7 @@ def reduced_row_echelon_form(m, atol=0):
     matrix `m`.
 
     :arg m: a 2D :class:`numpy.ndarray` or a list of lists or a sympy Matrix
-    :arg tol: absolute tolerance for values to be considered zero
+    :arg atol: absolute tolerance for values to be considered zero
     :return: reduced row echelon form as a 2D :class:`numpy.ndarray`
              and a list of pivots
     """
@@ -757,14 +757,14 @@ def reduced_row_echelon_form(m, atol=0):
             break
         pivot = nrows
         for k in range(index, nrows):
-            if isinstance(mat[k, i], sym.Basic) and not mat[k, i].is_number:
-                continue
-            if abs(mat[k, i]) > atol and pivot == nrows:
+            if ((isinstance(mat[k, i], sym.Basic) and not mat[k, i].is_number)
+                    or abs(mat[k, i]) > atol) and pivot == nrows:
                 pivot = k
             if abs(mat[k, i] - 1) <= atol:
                 pivot = k
                 break
         if pivot == nrows:
+            # no nonzero pivot found, next column
             continue
         if pivot != index:
             mat[[pivot, index], :] = mat[[index, pivot], :]
