@@ -3,11 +3,10 @@ Welcome to sumpy's documentation!
 
 .. automodule:: sumpy
 
-Example
--------
-
-See :download:`example/curve-pot.py <../examples/curve-pot.py>`
-for a usage example.
+Sumpy is mainly a 'scaffolding' package for Fast Multipole and quadrature methods.
+If you're building one of those and need code generation for the required Multipole
+and local expansions, come right on in. Together with boxtree, there is a full,
+symbolically kernel-independent FMM implementation here.
 
 Contents
 --------
@@ -30,4 +29,9 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
+
+Example
+-------
+
+.. literalinclude:: ../examples/curve-pot.py
 
