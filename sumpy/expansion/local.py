@@ -230,7 +230,16 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
     def _m2l_global_precompute_mis(self, src_expansion):
         """A helper method to calculate multi-indices used in M2L global
-        precomputation step.
+        precomputation step. To transform the M2L translation matrix to
+        a Toeplitz matrix, we need to add some dummy rows. Each row in
+        M2L translation matrix represents a derivative and therefore
+        a multi-index. A dummy row also represents a multi-index, but the
+        derivative is considered to be zero.
+
+        This method returns the multi-indices representing the rows
+        of the Toeplitz matrix, the multi-indices representing the rows
+        of the M2L translation matrix and the maximum multi-index of the
+        latter.
         """
         from pytools import generate_nonnegative_integer_tuples_below as gnitb
         from sumpy.tools import add_mi
@@ -245,16 +254,18 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             max_mi[i] += max(mi[i] for mi in
                               self.get_coefficient_identifiers())
 
-        # These are the multi-indices in the Toeplitz matrix.
-        # Note that to get the Toeplitz matrix structure some
-        # multi-indices that is not in the M2L computation were
-        # added. This corresponds to adding $\mathcal{O}(p^{d-1})$
+        # These are the multi-indices representing the rows
+        # in the Toeplitz matrix.  Note that to get the Toeplitz
+        # matrix structure some multi-indices that is not in the
+        # M2L translation matrix are added.
+        # This corresponds to adding $\mathcal{O}(p^{d-1})$
         # additional rows and columns in the case of some PDEs
         # like Laplace and $\mathcal{O}(p^d)$ in other cases.
         toeplitz_matrix_coeffs = list(gnitb([m + 1 for m in max_mi]))
 
-        # These are the multi-indices in the computation of M2L
-        # without the additional mis in the Toeplitz matrix
+        # These are the multi-indices representing the rows
+        # in the M2L translation matrix without the additional
+        # multi-indices in the Toeplitz matrix
         needed_vector_terms = set()
         # For eg: 2D full Taylor Laplace, we only need kernel derivatives
         # (n1+n2, m1+m2), n1+m1<=p, n2+m2<=p
