@@ -617,7 +617,7 @@ class SumpyExpansionWrangler:
 
         return m2l_precomputed_exprs, events
 
-    def _use_multipole_to_local_precompute(self, kwargs_for_multipole_to_local,
+    def _use_multipole_to_local_precompute(self, kwargs_for_m2l,
             lev):
         """This method is used for addin the information needed for a
         multipole-to-local translation with precomputation to the keywords
@@ -625,23 +625,18 @@ class SumpyExpansionWrangler:
         """
         if not self.supports_optimized_m2l:
             return
-        src_rscale = kwargs_for_multipole_to_local["src_rscale"]
+        src_rscale = kwargs_for_m2l["src_rscale"]
         m2l_precomputed_exprs, events = \
             self.multipole_to_local_precompute(src_rscale)
         translation_classes_level_start, precomputed_exprs_view = \
             self.m2l_precomputed_exprs_view(m2l_precomputed_exprs, lev)
-        kwargs_for_multipole_to_local["m2l_precomputed_exprs"] = \
-                precomputed_exprs_view
-        kwargs_for_multipole_to_local["translation_classes_level_start"] = \
-                translation_classes_level_start
-        kwargs_for_multipole_to_local["m2l_translation_classes_lists"] = \
+        kwargs_for_m2l["m2l_precomputed_exprs"] = precomputed_exprs_view
+        kwargs_for_m2l["translation_classes_level_start"] = \
+            translation_classes_level_start
+        kwargs_for_m2l["m2l_translation_classes_lists"] = \
             self.translation_classes_data.m2l_translation_classes_lists()
 
-        if "wait_for" in kwargs_for_multipole_to_local:
-            kwargs_for_multipole_to_local["wait_for"].append(events[lev])
-        else:
-            kwargs_for_multipole_to_local["wait_for"] = events[lev]
-        return
+        kwargs_for_m2l.setdefault("wait_for", []).append(events[lev])
 
     def multipole_to_local(self,
             level_start_target_box_nrs,
