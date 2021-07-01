@@ -298,7 +298,6 @@ class E2EFromCSR(E2EBase):
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-        loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
 
         return loopy_knl
 
