@@ -617,7 +617,7 @@ class SumpyExpansionWrangler:
 
         return m2l_precomputed_exprs, events
 
-    def _use_multipole_to_local_precompute(self, kwargs_for_m2l,
+    def _add_m2l_precompute_kwargs(self, kwargs_for_m2l,
             lev):
         """This method is used for addin the information needed for a
         multipole-to-local translation with precomputation to the keywords
@@ -675,7 +675,7 @@ class SumpyExpansionWrangler:
 
                     **self.kernel_extra_kwargs)
 
-            self._use_multipole_to_local_precompute(kwargs, lev)
+            self._add_m2l_precompute_kwargs(kwargs, lev)
             if "m2l_precomputed_exprs" in kwargs and \
                     kwargs["m2l_precomputed_exprs"].size == 0:
                 # There's nothing to do for this level
