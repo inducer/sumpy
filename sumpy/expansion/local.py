@@ -283,13 +283,13 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         # We know the general form of the multipole expansion is:
         #
         #  coeff0 * diff(kernel(src - c1), mi0) +
-        #    coeff1 * diff(kernel(src - c1, mi1) + ...
+        #    coeff1 * diff(kernel(src - c1), mi1) + ...
         #
         # To get the local expansion coefficients, we take derivatives of
         # the multipole expansion. For eg: the coefficient w.r.t mir is
         #
         #  coeff0 * diff(kernel(c2 - c1), mi0 + mir) +
-        #    coeff1 * diff(kernel(c2 - c1, mi1 + mir) + ...
+        #    coeff1 * diff(kernel(c2 - c1), mi1 + mir) + ...
         #
         # The derivatives above depends only on `c2 - c1` and can be precomputed
         # globally as there are only a finite number of values for `c2 - c1` for
