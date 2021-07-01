@@ -28,6 +28,7 @@ from sumpy.expansion import (
 
 from sumpy.tools import mi_increment_axis, matvec_toeplitz_upper_triangular
 from pytools import single_valued
+from typing import Tuple, Any
 
 import logging
 logger = logging.getLogger(__name__)
@@ -51,7 +52,7 @@ class LocalExpansionBase(ExpansionBase):
     .. automethod:: translate_from
     """
     def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
-            dvec, tgt_rscale, sac):
+            dvec, tgt_rscale, sac) -> Tuple[Any]:
         """Return an iterable of expressions that needs to be precomputed
         for multipole-to-local translations that depend only on the
         distance between the multipole center and the local center which
