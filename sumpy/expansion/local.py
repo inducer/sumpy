@@ -67,6 +67,11 @@ class LocalExpansionBase(ExpansionBase):
     def m2l_global_precompute_nexpr(self, src_expansion):
         """Return the number of expressions returned by
         :func:`~sumpy.expansion.local.LocalExpansionBase.m2l_global_precompute_exprs`.
+        This method exists because calculating the number of expressions using the above
+        method might be costly and
+        :func:`~sumpy.expansion.local.LocalExpansionBase.m2l_global_precompute_exprs`
+        cannot be memoized due to it having side effects through the argument
+        *sac*.
         """
         return 0
 
