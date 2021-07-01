@@ -239,9 +239,7 @@ class SumpyTranslationClassesData:
 
     @memoize_method
     def build_translation_classes_lists(self):
-        trav = self.trav.to_device(self.queue)
-        tree = self.tree.to_device(self.queue)
-        return self.translation_classes_builder(self.queue, trav, tree,
+        return self.translation_classes_builder(self.queue, self.trav, self.tree,
             is_translation_per_level=self.is_translation_per_level)[0]
 
     @memoize_method
