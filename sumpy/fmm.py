@@ -343,31 +343,8 @@ class SumpyExpansionWrangler:
 
     # {{{ data vector utilities
     def _expansions_level_starts(self, order_to_size):
-        return self.build_csr_level_starts(order_to_size,
+        return build_csr_level_starts(self.level_orders, order_to_size,
                 self.tree.level_start_box_nrs)
-
-    def build_csr_level_starts(self, order_to_size, level_starts):
-        """Given a list of starts of boxes for each level and a callable
-        that outputs the length of an expansion for a level, return
-        a list of starts of an expansion for each level.
-        Here, a list of starts for an object for each level means the
-        starting indexes in an array for each level that stores the object
-        in a row-major.
-
-        :arg order_to_size: A callable that returns the length of the
-                expansion for the input level
-        :arg level_starts: A list of starts of boxes for each level.
-        """
-        result = [0]
-        for lev in range(self.tree.nlevels):
-            lev_nboxes = level_starts[lev+1] - level_starts[lev]
-
-            expn_size = order_to_size(self.level_orders[lev])
-            result.append(
-                    result[-1]
-                    + expn_size * lev_nboxes)
-
-        return result
 
     @memoize_method
     def multipole_expansions_level_starts(self):
@@ -391,7 +368,7 @@ class SumpyExpansionWrangler:
             local_expn = self.code.local_expansion_factory(order)
             return local_expn.m2l_global_precompute_nexpr(mpole_expn)
 
-        return self.build_csr_level_starts(order_to_size,
+        return build_csr_level_starts(self.level_orders, order_to_size,
                 level_starts=self.m2l_translation_class_level_start_box_nrs())
 
     def multipole_expansion_zeros(self):
@@ -892,5 +869,35 @@ class SumpyExpansionWrangler:
         return potentials
 
 # }}}
+
+
+# {{{ build_csr_level_starts
+
+def build_csr_level_starts(level_orders, order_to_size, level_starts):
+    """Given a list of starts of boxes for each level and a callable
+    that outputs the length of an expansion for a level, return
+    a list of starts of an expansion for each level.
+    Here, a list of starts for an object for each level means the
+    starting indexes in an array for each level that stores the object
+    in a row-major.
+
+    :arg level_orders: A list of orders for each level.
+    :arg order_to_size: A callable that returns the length of the
+            expansion for the input level.
+    :arg level_starts: A list of starts of boxes for each level.
+    """
+    result = [0]
+    for lev in range(len(level_orders)):
+        lev_nboxes = level_starts[lev+1] - level_starts[lev]
+
+        expn_size = order_to_size(level_orders[lev])
+        result.append(
+                result[-1]
+                + expn_size * lev_nboxes)
+
+    return result
+
+# }}}
+
 
 # vim: foldmethod=marker
