@@ -234,9 +234,9 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         To get the matrix representing the M2L into Toeplitz form, a certain
         numbering of rows and columns (as identified by multi-indices) is
         required. This routine returns that numbering.
-        
+
         .. note::
-        
+
             The set of multi-indices returned may be a superset of the
             coefficients used by the expansion. On the input end, those
             coefficients are taken as zero. On output, they are simply
