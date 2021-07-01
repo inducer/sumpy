@@ -351,6 +351,9 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             tgt_rscale = 1
 
         from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansionBase
+
+        # {{{ M2L
+
         if isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
             toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
                 self._m2l_global_precompute_mis(src_expansion)
@@ -389,6 +392,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             logger.info("building translation operator: done")
             return result
 
+        # }}}
+
+        # {{{ L2L
+
+        # not coming from a Taylor multipole: expand via derivatives
         rscale_ratio = add_to_sac(sac, tgt_rscale/src_rscale)
 
         from math import factorial
@@ -514,6 +522,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             result = [
                     (taker.diff(mi).xreplace(replace_dict) * rscale_ratio**sum(mi))
                     for mi in self.get_coefficient_identifiers()]
+        # }}}
         # }}}
         logger.info("building translation operator: done")
         return result
