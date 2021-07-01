@@ -255,7 +255,6 @@ class SumpyTranslationClassesData:
                 .build_translation_classes_lists()
                 .from_sep_siblings_translation_class_to_distance_vector)
 
-    @memoize_method
     def m2l_translation_classes_level_starts(self):
         return (self
                 .build_translation_classes_lists()
