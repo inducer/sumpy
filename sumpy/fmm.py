@@ -650,7 +650,7 @@ class SumpyExpansionWrangler:
             return
         src_rscale = kwargs_for_multipole_to_local["src_rscale"]
         m2l_precomputed_exprs, events = \
-            self._multipole_to_local_precompute(src_rscale)
+            self.multipole_to_local_precompute(src_rscale)
         translation_classes_level_start, precomputed_exprs_view = \
             self.m2l_precomputed_exprs_view(m2l_precomputed_exprs, lev)
         kwargs_for_multipole_to_local["m2l_precomputed_exprs"] = \
