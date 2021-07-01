@@ -230,12 +230,17 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         return len(self._m2l_global_precompute_mis(src_expansion)[1])
 
     def _m2l_global_precompute_mis(self, src_expansion):
-        """A helper method to calculate multi-indices used in M2L global
-        precomputation step. To transform the M2L translation matrix to
-        a Toeplitz matrix, we need to add some dummy rows. Each row in
-        M2L translation matrix represents a derivative and therefore
-        a multi-index. A dummy row also represents a multi-index, but the
-        derivative is considered to be zero.
+        """We would like to compute the M2L by way of a Toeplitz matrix below.
+        To get the matrix representing the M2L into Toeplitz form, a certain
+        numbering of rows and columns (as identified by multi-indices) is
+        required. This routine returns that numbering.
+        
+        .. note::
+        
+            The set of multi-indices returned may be a superset of the
+            coefficients used by the expansion. On the input end, those
+            coefficients are taken as zero. On output, they are simply
+            dropped from the computed result.
 
         This method returns the multi-indices representing the rows
         of the Toeplitz matrix, the multi-indices representing the rows
