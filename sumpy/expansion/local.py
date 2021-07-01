@@ -362,8 +362,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         if isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
             toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
                 self._m2l_global_precompute_mis(src_expansion)
-            toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
-                                enumerate(toeplitz_matrix_coeffs))
+            toeplitz_matrix_ident_to_index = {ident: i for i, ident in
+                                enumerate(toeplitz_matrix_coeffs)}
 
             if not precomputed_exprs:
                 derivatives = self.m2l_global_precompute_exprs(src_expansion,
