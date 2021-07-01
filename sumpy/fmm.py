@@ -342,8 +342,22 @@ class SumpyExpansionWrangler:
         self.translation_classes_data = translation_classes_data
 
     # {{{ data vector utilities
+    def _expansions_level_starts(self, order_to_size):
+        return build_csr_level_starts(self, order_to_size,
+                self.tree.level_start_box_nrs)
 
-    def _expansions_level_starts(self, order_to_size, level_starts):
+    def build_csr_level_starts(self, order_to_size, level_starts):
+        """Given a list of starts of boxes for each level and a callable
+        that outputs the length of an expansion for a level, return
+        a list of starts of an expansion for each level.
+        Here, a list of starts for an object for each level means the
+        starting indexes in an array for each level that stores the object
+        in a row-major.
+
+        :arg order_to_size: A callable that returns the length of the
+                expansion for the input level
+        :arg level_starts: A list of starts of boxes for each level.
+        """
         result = [0]
         for lev in range(self.tree.nlevels):
             lev_nboxes = level_starts[lev+1] - level_starts[lev]
@@ -358,14 +372,12 @@ class SumpyExpansionWrangler:
     @memoize_method
     def multipole_expansions_level_starts(self):
         return self._expansions_level_starts(
-                lambda order: len(self.code.multipole_expansion_factory(order)),
-                level_starts=self.tree.level_start_box_nrs)
+                lambda order: len(self.code.multipole_expansion_factory(order)))
 
     @memoize_method
     def local_expansions_level_starts(self):
         return self._expansions_level_starts(
-                lambda order: len(self.code.local_expansion_factory(order)),
-                level_starts=self.tree.level_start_box_nrs)
+                lambda order: len(self.code.local_expansion_factory(order)))
 
     @memoize_method
     def m2l_translation_class_level_start_box_nrs(self):
@@ -379,7 +391,7 @@ class SumpyExpansionWrangler:
             local_expn = self.code.local_expansion_factory(order)
             return local_expn.m2l_global_precompute_nexpr(mpole_expn)
 
-        return self._expansions_level_starts(order_to_size,
+        return self.build_csr_level_starts(order_to_size,
                 level_starts=self.m2l_translation_class_level_start_box_nrs())
 
     def multipole_expansion_zeros(self):
