@@ -54,7 +54,8 @@ class LocalExpansionBase(ExpansionBase):
             dvec, tgt_rscale, sac):
         """Return an iterable of expressions that needs to be precomputed
         for multipole-to-local translations that depend only on the
-        distance between the multipole center and the local center.
+        distance between the multipole center and the local center which
+        is given as *dvec*.
 
         Since there are only a finite amount of different values for the
         distance between per level, these can be precomputed for the tree.
