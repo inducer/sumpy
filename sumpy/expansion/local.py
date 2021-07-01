@@ -57,7 +57,7 @@ class LocalExpansionBase(ExpansionBase):
         distance between the multipole center and the local center which
         is given as *dvec*.
 
-        Since there are only a finite amount of different values for the
+        Since there are only a finite number of different values for the
         distance between per level, these can be precomputed for the tree.
         """
         return tuple()
