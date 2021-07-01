@@ -704,8 +704,8 @@ class SumpyExpansionWrangler:
                     **self.kernel_extra_kwargs)
 
             self._use_multipole_to_local_precompute(kwargs, lev)
-            if "precomputed_exprs_view" in kwargs and \
-                    kwargs["precomputed_exprs_view"].size == 0:
+            if "m2l_precomputed_exprs" in kwargs and \
+                    kwargs["m2l_precomputed_exprs"].size == 0:
                 # There's nothing to do for this level
                 continue
             evt, _ = m2l(self.queue, **kwargs)
