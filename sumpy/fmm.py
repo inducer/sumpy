@@ -225,6 +225,7 @@ class SumpyTranslationClassesData:
     precomputation of translation classes passed to the expansion wrangler."""
 
     def __init__(self, queue, trav, is_translation_per_level=True):
+        # FIXME: Queues should not be part of data.
         self.queue = queue
         self.trav = trav
         self.tree = trav.tree
