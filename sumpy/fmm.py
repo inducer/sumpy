@@ -584,7 +584,6 @@ class SumpyExpansionWrangler:
     @memoize_method
     def multipole_to_local_precompute(self, src_rscale):
         m2l_precomputed_exprs = self.m2l_precomputed_exprs_zeros()
-        events = []
         for lev in range(self.tree.nlevels):
             order = self.level_orders[lev]
             precompute_kernel = \
@@ -596,7 +595,6 @@ class SumpyExpansionWrangler:
             ntranslation_classes = precomputed_exprs_view.shape[0]
 
             if ntranslation_classes == 0:
-                events.append([])
                 continue
 
             m2l_translation_vectors = (
@@ -612,10 +610,12 @@ class SumpyExpansionWrangler:
                 ntranslation_vectors=m2l_translation_vectors.shape[1],
                 **self.kernel_extra_kwargs
             )
+            m2l_precomputed_exprs.add_event(evt)
 
-            events.append([evt])
+        m2l_precomputed_exprs.finish()
 
-        return m2l_precomputed_exprs, events
+        return (m2l_precomputed_exprs, SumpyTimingFuture(self.queue,
+            m2l_precomputed_exprs.events[:]))
 
     def _add_m2l_precompute_kwargs(self, kwargs_for_m2l,
             lev):
@@ -626,8 +626,7 @@ class SumpyExpansionWrangler:
         if not self.supports_optimized_m2l:
             return
         src_rscale = kwargs_for_m2l["src_rscale"]
-        m2l_precomputed_exprs, events = \
-            self.multipole_to_local_precompute(src_rscale)
+        m2l_precomputed_exprs = self.multipole_to_local_precompute(src_rscale)
         translation_classes_level_start, precomputed_exprs_view = \
             self.m2l_precomputed_exprs_view(m2l_precomputed_exprs, lev)
         kwargs_for_m2l["m2l_precomputed_exprs"] = precomputed_exprs_view
@@ -635,8 +634,6 @@ class SumpyExpansionWrangler:
             translation_classes_level_start
         kwargs_for_m2l["m2l_translation_classes_lists"] = \
             self.translation_classes_data.m2l_translation_classes_lists()
-
-        kwargs_for_m2l.setdefault("wait_for", []).append(events[lev])
 
     def multipole_to_local(self,
             level_start_target_box_nrs,
