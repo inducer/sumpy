@@ -626,7 +626,7 @@ class SumpyExpansionWrangler:
         if not self.supports_optimized_m2l:
             return
         src_rscale = kwargs_for_m2l["src_rscale"]
-        m2l_precomputed_exprs = self.multipole_to_local_precompute(src_rscale)
+        m2l_precomputed_exprs, _ = self.multipole_to_local_precompute(src_rscale)
         translation_classes_level_start, precomputed_exprs_view = \
             self.m2l_precomputed_exprs_view(m2l_precomputed_exprs, lev)
         kwargs_for_m2l["m2l_precomputed_exprs"] = precomputed_exprs_view
