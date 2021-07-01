@@ -67,8 +67,8 @@ class LocalExpansionBase(ExpansionBase):
     def m2l_global_precompute_nexpr(self, src_expansion):
         """Return the number of expressions returned by
         :func:`~sumpy.expansion.local.LocalExpansionBase.m2l_global_precompute_exprs`.
-        This method exists because calculating the number of expressions using the above
-        method might be costly and
+        This method exists because calculating the number of expressions using
+        the above method might be costly and
         :func:`~sumpy.expansion.local.LocalExpansionBase.m2l_global_precompute_exprs`
         cannot be memoized due to it having side effects through the argument
         *sac*.
@@ -77,6 +77,22 @@ class LocalExpansionBase(ExpansionBase):
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, precomputed_exprs=None):
+        """Translate from a multipole or local expansion to a local expansion
+
+        :arg src_expansion: The source expansion to translate from.
+        :arg src_coeff_exprs: An iterable of symbolic expressions representing the
+                coefficients of the source expansion.
+        :arg src_rscale: scaling factor for the source expansion.
+        :arg dvec: symbolic expression for the distance between target and
+                source centers.
+        :arg tgt_rscale: scaling factor for the target expansion.
+        :arg sac: An object of type
+                :class:`sumpy.assignment_collection.SymbolicAssignmentCollection`
+                to collect common subexpressions or None.
+        :arg precomputed_exprs: An iterable of symbolic expressions representing the
+                expressions returned by
+                :func:`~sumpy.expansion.local.LocalExpansionBase.m2l_global_precompute_exprs`.
+        """
         raise NotImplementedError
 
 
