@@ -343,7 +343,7 @@ class SumpyExpansionWrangler:
 
     # {{{ data vector utilities
     def _expansions_level_starts(self, order_to_size):
-        return self.build_csr_level_starts(self, order_to_size,
+        return self.build_csr_level_starts(order_to_size,
                 self.tree.level_start_box_nrs)
 
     def build_csr_level_starts(self, order_to_size, level_starts):
