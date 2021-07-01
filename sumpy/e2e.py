@@ -412,7 +412,7 @@ class E2EFromCSRTranslationClassesPrecompute(E2EFromCSR):
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
-        knl = lp.split_iname(knl, "itr_class", 16, outer_tag="g.0")
+        knl = lp.tag_inames(knl, {"itr_class": "g.0"})
 
         return knl
 
