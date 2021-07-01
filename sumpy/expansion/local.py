@@ -45,6 +45,10 @@ __doc__ = """
 
 class LocalExpansionBase(ExpansionBase):
     """Base class for local expansions.
+
+    .. automethod:: m2l_global_precompute_exprs
+    .. automethod:: m2l_global_precompute_nexpr
+    .. automethod:: translate_from
     """
     def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
             dvec, tgt_rscale, sac):
