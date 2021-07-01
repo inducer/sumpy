@@ -59,6 +59,8 @@ class LocalExpansionBase(ExpansionBase):
 
         Since there are only a finite number of different values for the
         distance between per level, these can be precomputed for the tree.
+        In :mod:`boxtree`, these distances are referred to as translation
+        classes.
         """
         return tuple()
 
