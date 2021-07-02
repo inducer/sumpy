@@ -852,4 +852,14 @@ def find_linear_relationship(matrix):
             mat[j, :] = mat[j, :]*mat[i, col] - mat[i, :]*mat[j, col]
     return {}
 
+
+def matvec_toeplitz_upper_triangular(first_row, vector):
+    n = len(first_row)
+    assert len(vector) == n
+    output = [0]*n
+    for row in range(n):
+        terms = tuple(first_row[col-row]*vector[col] for col in range(row, n))
+        output[row] = sym.Add(*terms)
+    return output
+
 # vim: fdm=marker

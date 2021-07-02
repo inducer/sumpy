@@ -51,23 +51,36 @@ else:
     faulthandler.enable()
 
 
-@pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class", [
-    (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+@pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class, optimized_m2l", [
+    (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
+                       False),
+    (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
+                       True),
     (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
-                       LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (LaplaceKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+                       LinearPDEConformingVolumeTaylorMultipoleExpansion, True),
+    (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+                       LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (LaplaceKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
+                       False),
+    (LaplaceKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
+                       True),
     (LaplaceKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
-                       LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+                       LinearPDEConformingVolumeTaylorMultipoleExpansion, True),
+    (LaplaceKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
+                       LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
+                         False),
     (HelmholtzKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
-                         LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion),
-    (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+                         LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion, False),
+    (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
+                         False),
     (HelmholtzKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
-                         LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (YukawaKernel(2), Y2DLocalExpansion, Y2DMultipoleExpansion),
+                         LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (YukawaKernel(2), Y2DLocalExpansion, Y2DMultipoleExpansion, False),
     ])
-def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class):
+def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
+        optimized_m2l):
     logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_factory()
@@ -165,15 +178,24 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class):
     for order in order_values:
         target_kernels = [knl]
 
-        from sumpy.fmm import SumpyExpansionWranglerCodeContainer
+        from sumpy.fmm import (SumpyExpansionWranglerCodeContainer,
+            SumpyTranslationClassesData)
+
+        if optimized_m2l:
+            translation_classes_data = SumpyTranslationClassesData(queue, trav)
+        else:
+            translation_classes_data = None
+
         wcc = SumpyExpansionWranglerCodeContainer(
                 ctx,
                 partial(mpole_expn_class, knl),
                 partial(local_expn_class, knl),
                 target_kernels)
+
         wrangler = wcc.get_wrangler(queue, tree, dtype,
                 fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
-                kernel_extra_kwargs=extra_kwargs)
+                kernel_extra_kwargs=extra_kwargs,
+                translation_classes_data=translation_classes_data)
 
         from boxtree.fmm import drive_fmm
 
