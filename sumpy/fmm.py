@@ -784,20 +784,6 @@ class SumpyExpansionWrangler:
 
             source_level_start_ibox, source_mpoles_view = \
                     self.multipole_expansions_view(mpole_exps, isrc_level)
-        kwargs.update(self.box_target_list_kwargs())
-
-        events = []
-
-        wait_for = mpole_exps.events
-
-        for isrc_level, ssn in enumerate(source_boxes_by_level):
-            if len(target_boxes_by_source_level[isrc_level]) == 0:
-                continue
-
-            m2p = self.code.m2p(self.level_orders[isrc_level])
-
-            source_level_start_ibox, source_mpoles_view = \
-                    self.multipole_expansions_view(mpole_exps, isrc_level)
 
             evt, pot_res = m2p(
                     self.queue,
