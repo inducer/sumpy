@@ -448,7 +448,7 @@ class SumpyExpansionWrangler:
             res = local_expn.m2l_global_precompute_nexpr(mpole_expn)
             return res
 
-        return self._expansions_level_starts(order_to_size,
+        return build_csr_level_starts(self.level_orders, order_to_size,
                 level_starts=self.tree.level_start_box_nrs)
 
     def pp_multipole_expansion_zeros(self):
