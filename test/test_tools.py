@@ -40,7 +40,7 @@ def test_fft():
     matvec = matvec_toeplitz_upper_triangular(v, x)
 
     for i in range(k):
-        assert abs(fft[i] - matvec[i]) < 1e-15
+        assert abs(fft[i] - matvec[i]) < 1e-14
 
 
 def test_fft_small_floats():
