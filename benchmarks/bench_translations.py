@@ -5,12 +5,10 @@ from pyopencl.tools import (  # noqa
 
 from sumpy.expansion.multipole import (
         VolumeTaylorMultipoleExpansion, H2DMultipoleExpansion,
-        LaplaceConformingVolumeTaylorMultipoleExpansion,
-        HelmholtzConformingVolumeTaylorMultipoleExpansion)
+        LinearPDEConformingVolumeTaylorMultipoleExpansion)
 from sumpy.expansion.local import (
         VolumeTaylorLocalExpansion, H2DLocalExpansion,
-        LaplaceConformingVolumeTaylorLocalExpansion,
-        HelmholtzConformingVolumeTaylorLocalExpansion)
+        LinearPDEConformingVolumeTaylorLocalExpansion)
 
 from sumpy.kernel import LaplaceKernel, HelmholtzKernel
 
@@ -97,8 +95,8 @@ class LaplaceVolumeTaylorTranslation(TranslationBenchmarkSuite):
 
 class LaplaceConformingVolumeTaylorTranslation(TranslationBenchmarkSuite):
     knl = LaplaceKernel
-    local_expn_class = LaplaceConformingVolumeTaylorLocalExpansion
-    mpole_expn_class = LaplaceConformingVolumeTaylorMultipoleExpansion
+    local_expn_class = LinearPDEConformingVolumeTaylorLocalExpansion
+    mpole_expn_class = LinearPDEConformingVolumeTaylorMultipoleExpansion
 
 
 class HelmholtzVolumeTaylorTranslation(TranslationBenchmarkSuite):
@@ -113,8 +111,8 @@ class HelmholtzVolumeTaylorTranslation(TranslationBenchmarkSuite):
 
 class HelmholtzConformingVolumeTaylorTranslation(TranslationBenchmarkSuite):
     knl = HelmholtzKernel
-    local_expn_class = HelmholtzConformingVolumeTaylorLocalExpansion
-    mpole_expn_class = HelmholtzConformingVolumeTaylorMultipoleExpansion
+    local_expn_class = LinearPDEConformingVolumeTaylorLocalExpansion
+    mpole_expn_class = LinearPDEConformingVolumeTaylorMultipoleExpansion
 
 
 class Helmholtz2DTranslation(TranslationBenchmarkSuite):

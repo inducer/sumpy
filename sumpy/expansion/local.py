@@ -24,13 +24,12 @@ import sumpy.symbolic as sym
 from sumpy.tools import add_to_sac, fft
 
 from sumpy.expansion import (
-    ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
-    HelmholtzConformingVolumeTaylorExpansion,
-    BiharmonicConformingVolumeTaylorExpansion)
+    ExpansionBase, VolumeTaylorExpansion, LinearPDEConformingVolumeTaylorExpansion)
 
 from sumpy.tools import (mi_increment_axis, matvec_toeplitz_upper_triangular,
     fft_toeplitz_upper_triangular)
 from pytools import single_valued
+from typing import Tuple, Any
 
 import logging
 logger = logging.getLogger(__name__)
@@ -48,6 +47,10 @@ __doc__ = """
 
 class LocalExpansionBase(ExpansionBase):
     """Base class for local expansions.
+
+    .. automethod:: m2l_global_precompute_exprs
+    .. automethod:: m2l_global_precompute_nexpr
+    .. automethod:: translate_from
     """
     init_arg_names = ("kernel", "order", "use_rscale", "use_fft")
 
@@ -72,24 +75,48 @@ class LocalExpansionBase(ExpansionBase):
                 and self.use_fft == other.use_fft)
 
     def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
-            dvec, tgt_rscale, sac):
+            dvec, tgt_rscale, sac) -> Tuple[Any]:
         """Return an iterable of expressions that needs to be precomputed
         for multipole-to-local translations that depend only on the
-        distance between the multipole center and the local center.
+        distance between the multipole center and the local center which
+        is given as *dvec*.
 
-        Since there are only a finite amount of different values for the
+        Since there are only a finite number of different values for the
         distance between per level, these can be precomputed for the tree.
+        In :mod:`boxtree`, these distances are referred to as translation
+        classes.
         """
         return tuple()
 
     def m2l_global_precompute_nexpr(self, src_expansion):
         """Return the number of expressions returned by
         :func:`~sumpy.expansion.local.LocalExpansionBase.m2l_global_precompute_exprs`.
+        This method exists because calculating the number of expressions using
+        the above method might be costly and
+        :func:`~sumpy.expansion.local.LocalExpansionBase.m2l_global_precompute_exprs`
+        cannot be memoized due to it having side effects through the argument
+        *sac*.
         """
         return 0
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, precomputed_exprs=None):
+        """Translate from a multipole or local expansion to a local expansion
+
+        :arg src_expansion: The source expansion to translate from.
+        :arg src_coeff_exprs: An iterable of symbolic expressions representing the
+                coefficients of the source expansion.
+        :arg src_rscale: scaling factor for the source expansion.
+        :arg dvec: symbolic expression for the distance between target and
+                source centers.
+        :arg tgt_rscale: scaling factor for the target expansion.
+        :arg sac: An object of type
+                :class:`sumpy.assignment_collection.SymbolicAssignmentCollection`
+                to collect common subexpressions or None.
+        :arg precomputed_exprs: An iterable of symbolic expressions representing the
+                expressions returned by
+                :func:`~sumpy.expansion.local.LocalExpansionBase.m2l_global_precompute_exprs`.
+        """
         raise NotImplementedError
 
 
@@ -119,14 +146,11 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
         from sumpy.symbolic import USE_SYMENGINE
 
         if USE_SYMENGINE:
-            from sumpy.tools import ExprDerivativeTaker, my_syntactic_subs
+            from sumpy.tools import ExprDerivativeTaker
             deriv_taker = ExprDerivativeTaker(line_kernel, (tau,), sac=sac, rscale=1)
 
-            return [my_syntactic_subs(
-                        kernel.postprocess_at_source(
-                            deriv_taker.diff(i),
-                            avec),
-                    {tau: 0})
+            return [kernel.postprocess_at_source(
+                        deriv_taker.diff(i), avec).subs("tau", 0)
                     for i in self.get_coefficient_identifiers()]
         else:
             # Workaround for sympy. The automatic distribution after
@@ -141,7 +165,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
                     .subs("tau", 0)
                     for i in self.get_coefficient_identifiers()]
 
-    def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
+    def evaluate(self, tgt_kernel, coeffs, bvec, rscale, sac=None):
         # no point in heeding rscale here--just ignore it
         from pytools import factorial
         return sym.Add(*(
@@ -232,8 +256,22 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             return len(self._m2l_global_precompute_mis(src_expansion)[1])
 
     def _m2l_global_precompute_mis(self, src_expansion):
-        """A helper method to calculate multi-indices used in M2L global
-        precomputation step.
+        """We would like to compute the M2L by way of a Toeplitz matrix below.
+        To get the matrix representing the M2L into Toeplitz form, a certain
+        numbering of rows and columns (as identified by multi-indices) is
+        required. This routine returns that numbering.
+
+        .. note::
+
+            The set of multi-indices returned may be a superset of the
+            coefficients used by the expansion. On the input end, those
+            coefficients are taken as zero. On output, they are simply
+            dropped from the computed result.
+
+        This method returns the multi-indices representing the rows
+        of the Toeplitz matrix, the multi-indices representing the rows
+        of the M2L translation matrix and the maximum multi-index of the
+        latter.
         """
         from pytools import generate_nonnegative_integer_tuples_below as gnitb
         from sumpy.tools import add_mi
@@ -248,16 +286,18 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             max_mi[i] += max(mi[i] for mi in
                               self.get_coefficient_identifiers())
 
-        # These are the multi-indices in the Toeplitz matrix.
-        # Note that to get the Toeplitz matrix structure some
-        # multi-indices that is not in the M2L computation were
-        # added. This corresponds to adding $\mathcal{O}(p^{d-1})$
+        # These are the multi-indices representing the rows
+        # in the Toeplitz matrix.  Note that to get the Toeplitz
+        # matrix structure some multi-indices that is not in the
+        # M2L translation matrix are added.
+        # This corresponds to adding $\mathcal{O}(p^{d-1})$
         # additional rows and columns in the case of some PDEs
         # like Laplace and $\mathcal{O}(p^d)$ in other cases.
         toeplitz_matrix_coeffs = list(gnitb([m + 1 for m in max_mi]))
 
-        # These are the multi-indices in the computation of M2L
-        # without the additional mis in the Toeplitz matrix
+        # These are the multi-indices representing the rows
+        # in the M2L translation matrix without the additional
+        # multi-indices in the Toeplitz matrix
         needed_vector_terms = set()
         # For eg: 2D full Taylor Laplace, we only need kernel derivatives
         # (n1+n2, m1+m2), n1+m1<=p, n2+m2<=p
@@ -275,13 +315,13 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         # We know the general form of the multipole expansion is:
         #
         #  coeff0 * diff(kernel(src - c1), mi0) +
-        #    coeff1 * diff(kernel(src - c1, mi1) + ...
+        #    coeff1 * diff(kernel(src - c1), mi1) + ...
         #
         # To get the local expansion coefficients, we take derivatives of
         # the multipole expansion. For eg: the coefficient w.r.t mir is
         #
         #  coeff0 * diff(kernel(c2 - c1), mi0 + mir) +
-        #    coeff1 * diff(kernel(c2 - c1, mi1 + mir) + ...
+        #    coeff1 * diff(kernel(c2 - c1), mi1 + mir) + ...
         #
         # The derivatives above depends only on `c2 - c1` and can be precomputed
         # globally as there are only a finite number of values for `c2 - c1` for
@@ -396,11 +436,13 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansionBase
 
+        # {{{ M2L
+
         if isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
             toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
                 self._m2l_global_precompute_mis(src_expansion)
-            toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
-                                enumerate(toeplitz_matrix_coeffs))
+            toeplitz_matrix_ident_to_index = {ident: i for i, ident in
+                                enumerate(toeplitz_matrix_coeffs)}
 
             if not precomputed_exprs:
                 derivatives = self.m2l_global_precompute_exprs(src_expansion,
@@ -439,6 +481,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             logger.info("building translation operator: done")
             return result
 
+        # }}}
+
+        # {{{ L2L
+
+        # not coming from a Taylor multipole: expand via derivatives
         rscale_ratio = add_to_sac(sac, tgt_rscale/src_rscale)
 
         from math import factorial
@@ -565,6 +612,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                     (taker.diff(mi).xreplace(replace_dict) * rscale_ratio**sum(mi))
                     for mi in self.get_coefficient_identifiers()]
         # }}}
+        # }}}
         logger.info("building translation operator: done")
         return result
 
@@ -579,37 +627,48 @@ class VolumeTaylorLocalExpansion(
         VolumeTaylorExpansion.__init__(self, kernel, order, use_rscale)
 
 
-class LaplaceConformingVolumeTaylorLocalExpansion(
-        LaplaceConformingVolumeTaylorExpansion,
+class LinearPDEConformingVolumeTaylorLocalExpansion(
+        LinearPDEConformingVolumeTaylorExpansion,
         VolumeTaylorLocalExpansionBase):
 
     def __init__(self, kernel, order, use_rscale=None, use_fft=False):
         VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale,
                 use_fft)
-        LaplaceConformingVolumeTaylorExpansion.__init__(
+        LinearPDEConformingVolumeTaylorExpansion.__init__(
                 self, kernel, order, use_rscale)
+
+
+class LaplaceConformingVolumeTaylorLocalExpansion(
+        LinearPDEConformingVolumeTaylorLocalExpansion):
+
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("LaplaceConformingVolumeTaylorLocalExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorLocalExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
 
 
 class HelmholtzConformingVolumeTaylorLocalExpansion(
-        HelmholtzConformingVolumeTaylorExpansion,
-        VolumeTaylorLocalExpansionBase):
+        LinearPDEConformingVolumeTaylorLocalExpansion):
 
-    def __init__(self, kernel, order, use_rscale=None, use_fft=False):
-        VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale,
-                use_fft)
-        HelmholtzConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("HelmholtzConformingVolumeTaylorLocalExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorLocalExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
 
 
 class BiharmonicConformingVolumeTaylorLocalExpansion(
-        BiharmonicConformingVolumeTaylorExpansion,
-        VolumeTaylorLocalExpansionBase):
+        LinearPDEConformingVolumeTaylorLocalExpansion):
 
-    def __init__(self, kernel, order, use_rscale=None, use_fft=False):
-        VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale,
-                use_fft)
-        BiharmonicConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("BiharmonicConformingVolumeTaylorLocalExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorLocalExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
 
 # }}}
 
@@ -627,8 +686,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         if not self.use_rscale:
             rscale = 1
 
-        from sumpy.symbolic import sym_real_norm_2
-        hankel_1 = sym.Function("hankel_1")
+        from sumpy.symbolic import sym_real_norm_2, Hankel1
 
         arg_scale = self.get_bessel_arg_scaling()
 
@@ -636,7 +694,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         source_angle_rel_center = sym.atan2(-avec[1], -avec[0])
         avec_len = sym_real_norm_2(avec)
         return [kernel.postprocess_at_source(
-                    hankel_1(c, arg_scale * avec_len)
+                    Hankel1(c, arg_scale * avec_len, 0)
                     * rscale ** abs(c)
                     * sym.exp(sym.I * c * source_angle_rel_center), avec)
                     for c in self.get_coefficient_identifiers()]
@@ -645,8 +703,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         if not self.use_rscale:
             rscale = 1
 
-        from sumpy.symbolic import sym_real_norm_2
-        bessel_j = sym.Function("bessel_j")
+        from sumpy.symbolic import sym_real_norm_2, BesselJ
         bvec_len = sym_real_norm_2(bvec)
         target_angle_rel_center = sym.atan2(bvec[1], bvec[0])
 
@@ -654,7 +711,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
         return sum(coeffs[self.get_storage_index(c)]
                    * kernel.postprocess_at_target(
-                       bessel_j(c, arg_scale * bvec_len)
+                       BesselJ(c, arg_scale * bvec_len, 0)
                        / rscale ** abs(c)
                        * sym.exp(sym.I * c * -target_angle_rel_center), bvec)
                 for c in self.get_coefficient_identifiers())
@@ -722,7 +779,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, precomputed_exprs=None):
-        from sumpy.symbolic import sym_real_norm_2
+        from sumpy.symbolic import sym_real_norm_2, BesselJ, Hankel1
 
         if not self.use_rscale:
             src_rscale = 1
@@ -732,14 +789,13 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
         if isinstance(src_expansion, type(self)):
             dvec_len = sym_real_norm_2(dvec)
-            bessel_j = sym.Function("bessel_j")
             new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
             translated_coeffs = []
 
             for j in self.get_coefficient_identifiers():
                 translated_coeffs.append(
                     sum(src_coeff_exprs[src_expansion.get_storage_index(m)]
-                        * bessel_j(m - j, arg_scale * dvec_len)
+                        * BesselJ(m - j, arg_scale * dvec_len, 0)
                         / src_rscale ** abs(m)
                         * tgt_rscale ** abs(j)
                         * sym.exp(sym.I * (m - j) * -new_center_angle_rel_old_center)
@@ -766,7 +822,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
             for j in self.get_coefficient_identifiers():
                 translated_coeffs.append(
-                      sum(derivatives[m + j + self.order + src_expansion.order]
+                    sum(derivatives[m + j + self.order + src_expansion.order]
                         * src_coeff_exprs[src_expansion.get_storage_index(m)]
                         for m in src_expansion.get_coefficient_identifiers()))
 

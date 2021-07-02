@@ -116,14 +116,9 @@ Documentation:
     . ci-support.sh
     build_py_project_in_venv
     build_docs
-    if [[ -d ~/.scicomp-benchmarks/asv/$PROJECT ]]; then
-      cp -rf ~/.scicomp-benchmarks/asv/$PROJECT _build/html/benchmarks
-    fi
     maybe_upload_docs
-
   tags:
   - linux
-  - benchmark
 
 Flake8:
   stage: test

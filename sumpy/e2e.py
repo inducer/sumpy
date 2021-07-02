@@ -26,6 +26,7 @@ import sumpy.symbolic as sym
 
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 from sumpy.tools import KernelCacheWrapper, to_complex_dtype
+from pytools import memoize_method
 
 import logging
 logger = logging.getLogger(__name__)
@@ -61,20 +62,22 @@ class E2EBase(KernelCacheWrapper):
             device = ctx.devices[0]
 
         if src_expansion is tgt_expansion:
-            from sumpy.kernel import TargetDerivativeRemover, SourceDerivativeRemover
+            from sumpy.kernel import (TargetTransformationRemover,
+                    SourceTransformationRemover)
             tgt_expansion = src_expansion = src_expansion.with_kernel(
-                    SourceDerivativeRemover()(
-                        TargetDerivativeRemover()(src_expansion.kernel)))
+                    SourceTransformationRemover()(
+                        TargetTransformationRemover()(src_expansion.kernel)))
 
         else:
 
-            from sumpy.kernel import TargetDerivativeRemover, SourceDerivativeRemover
+            from sumpy.kernel import (TargetTransformationRemover,
+                    SourceTransformationRemover)
             src_expansion = src_expansion.with_kernel(
-                    SourceDerivativeRemover()(
-                        TargetDerivativeRemover()(src_expansion.kernel)))
+                    SourceTransformationRemover()(
+                        TargetTransformationRemover()(src_expansion.kernel)))
             tgt_expansion = tgt_expansion.with_kernel(
-                    SourceDerivativeRemover()(
-                        TargetDerivativeRemover()(tgt_expansion.kernel)))
+                    SourceTransformationRemover()(
+                        TargetTransformationRemover()(tgt_expansion.kernel)))
 
         self.ctx = ctx
         self.src_expansion = src_expansion
@@ -92,6 +95,7 @@ class E2EBase(KernelCacheWrapper):
 
         self.dim = src_expansion.dim
 
+    @memoize_method
     def get_translation_loopy_insns(self):
         from sumpy.symbolic import make_sym_vector
         dvec = make_sym_vector("d", self.dim)
@@ -360,7 +364,6 @@ class E2EFromCSR(E2EBase):
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-        loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
         loopy_knl = lp.set_options(loopy_knl,
                 enforce_variable_access_ordered="no_check")
 
@@ -493,7 +496,7 @@ class E2EFromCSRTranslationClassesPrecompute(E2EFromCSR):
     def get_optimized_kernel(self, result_dtype):
         # FIXME
         knl = self.get_kernel(result_dtype)
-        knl = lp.split_iname(knl, "itr_class", 16, outer_tag="g.0")
+        knl = lp.tag_inames(knl, {"itr_class": "g.0"})
 
         return knl
 

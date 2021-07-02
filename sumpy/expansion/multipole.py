@@ -23,9 +23,7 @@ THE SOFTWARE.
 import sumpy.symbolic as sym  # noqa
 
 from sumpy.expansion import (
-    ExpansionBase, VolumeTaylorExpansion, LaplaceConformingVolumeTaylorExpansion,
-    HelmholtzConformingVolumeTaylorExpansion,
-    BiharmonicConformingVolumeTaylorExpansion)
+    ExpansionBase, VolumeTaylorExpansion, LinearPDEConformingVolumeTaylorExpansion)
 from pytools import factorial
 from sumpy.tools import mi_set_axis, add_to_sac
 
@@ -346,34 +344,47 @@ class VolumeTaylorMultipoleExpansion(
         VolumeTaylorExpansion.__init__(self, kernel, order, use_rscale)
 
 
-class LaplaceConformingVolumeTaylorMultipoleExpansion(
-        LaplaceConformingVolumeTaylorExpansion,
+class LinearPDEConformingVolumeTaylorMultipoleExpansion(
+        LinearPDEConformingVolumeTaylorExpansion,
         VolumeTaylorMultipoleExpansionBase):
 
     def __init__(self, kernel, order, use_rscale=None):
         VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
-        LaplaceConformingVolumeTaylorExpansion.__init__(
+        LinearPDEConformingVolumeTaylorExpansion.__init__(
                 self, kernel, order, use_rscale)
+
+
+class LaplaceConformingVolumeTaylorMultipoleExpansion(
+        LinearPDEConformingVolumeTaylorMultipoleExpansion):
+
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("LaplaceConformingVolumeTaylorMultipoleExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorMultipoleExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
 
 
 class HelmholtzConformingVolumeTaylorMultipoleExpansion(
-        HelmholtzConformingVolumeTaylorExpansion,
-        VolumeTaylorMultipoleExpansionBase):
+        LinearPDEConformingVolumeTaylorMultipoleExpansion):
 
-    def __init__(self, kernel, order, use_rscale=None):
-        VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
-        HelmholtzConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("HelmholtzConformingVolumeTaylorMultipoleExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorMultipoleExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
 
 
 class BiharmonicConformingVolumeTaylorMultipoleExpansion(
-        BiharmonicConformingVolumeTaylorExpansion,
-        VolumeTaylorMultipoleExpansionBase):
+        LinearPDEConformingVolumeTaylorMultipoleExpansion):
 
-    def __init__(self, kernel, order, use_rscale=None):
-        VolumeTaylorMultipoleExpansionBase.__init__(self, kernel, order, use_rscale)
-        BiharmonicConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
+    def __init__(self, *args, **kwargs):
+        from warnings import warn
+        warn("BiharmonicConformingVolumeTaylorMultipoleExpansion is deprecated. "
+             "Use LinearPDEConformingVolumeTaylorMultipoleExpansion instead.",
+                DeprecationWarning, stacklevel=2)
+        super().__init__(*args, **kwargs)
 
 # }}}
 
@@ -394,8 +405,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
         if kernel is None:
             kernel = self.kernel
 
-        from sumpy.symbolic import sym_real_norm_2
-        bessel_j = sym.Function("bessel_j")
+        from sumpy.symbolic import sym_real_norm_2, BesselJ
         avec_len = sym_real_norm_2(avec)
 
         arg_scale = self.get_bessel_arg_scaling()
@@ -404,7 +414,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
         source_angle_rel_center = sym.atan2(-avec[1], -avec[0])
         return [
                 kernel.postprocess_at_source(
-                    bessel_j(c, arg_scale * avec_len)
+                    BesselJ(c, arg_scale * avec_len, 0)
                     / rscale ** abs(c)
                     * sym.exp(sym.I * c * -source_angle_rel_center),
                     avec)
@@ -414,8 +424,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
         if not self.use_rscale:
             rscale = 1
 
-        from sumpy.symbolic import sym_real_norm_2
-        hankel_1 = sym.Function("hankel_1")
+        from sumpy.symbolic import sym_real_norm_2, Hankel1
         bvec_len = sym_real_norm_2(bvec)
         target_angle_rel_center = sym.atan2(bvec[1], bvec[0])
 
@@ -423,7 +432,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
 
         return sum(coeffs[self.get_storage_index(c)]
                    * kernel.postprocess_at_target(
-                       hankel_1(c, arg_scale * bvec_len)
+                       Hankel1(c, arg_scale * bvec_len, 0)
                        * rscale ** abs(c)
                        * sym.exp(sym.I * c * target_angle_rel_center), bvec)
                 for c in self.get_coefficient_identifiers())
@@ -439,9 +448,8 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
             src_rscale = 1
             tgt_rscale = 1
 
-        from sumpy.symbolic import sym_real_norm_2
+        from sumpy.symbolic import sym_real_norm_2, BesselJ
         dvec_len = sym_real_norm_2(dvec)
-        bessel_j = sym.Function("bessel_j")
         new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
 
         arg_scale = self.get_bessel_arg_scaling()
@@ -450,7 +458,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
         for j in self.get_coefficient_identifiers():
             translated_coeffs.append(
                 sum(src_coeff_exprs[src_expansion.get_storage_index(m)]
-                    * bessel_j(m - j, arg_scale * dvec_len)
+                    * BesselJ(m - j, arg_scale * dvec_len, 0)
                     * src_rscale ** abs(m)
                     / tgt_rscale ** abs(j)
                     * sym.exp(sym.I * (m - j) * new_center_angle_rel_old_center)

@@ -25,8 +25,10 @@ import loopy as lp
 import numpy as np
 from pymbolic.mapper import IdentityMapper, CSECachingMapperMixin
 from sumpy.symbolic import pymbolic_real_norm_2
+import sumpy.symbolic as sym
 from pymbolic.primitives import make_sym_vector
-from pymbolic import var
+from pymbolic import var, parse
+from pytools import memoize_method
 from collections import defaultdict
 
 __doc__ = """
@@ -50,6 +52,8 @@ PDE kernels
 .. autoclass:: YukawaKernel
 .. autoclass:: StokesletKernel
 .. autoclass:: StressletKernel
+.. autoclass:: ElasticityKernel
+.. autoclass:: LineOfCompressionKernel
 
 Derivatives
 -----------
@@ -131,7 +135,7 @@ class Kernel:
     .. automethod:: get_source_args
     """
 
-    def __init__(self, dim=None):
+    def __init__(self, dim):
         self.dim = dim
 
     # {{{ hashing/pickling/equality
@@ -379,6 +383,14 @@ class ExpressionKernel(Kernel):
         from sumpy.tools import ExprDerivativeTaker
         return ExprDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
+    def get_pde_as_diff_op(self):
+        r"""
+        Returns the PDE for the kernel as a
+        :class:`sumpy.expansion.diff_op.LinearPDESystemOperator` object `L`
+        where `L(u) = 0` is the PDE.
+        """
+        raise NotImplementedError
+
 
 one_kernel_2d = ExpressionKernel(
         dim=2,
@@ -397,7 +409,7 @@ one_kernel_3d = ExpressionKernel(
 class LaplaceKernel(ExpressionKernel):
     init_arg_names = ("dim",)
 
-    def __init__(self, dim=None):
+    def __init__(self, dim):
         # See (Kress LIE, Thm 6.2) for scaling
         if dim == 2:
             r = pymbolic_real_norm_2(make_sym_vector("d", dim))
@@ -431,11 +443,16 @@ class LaplaceKernel(ExpressionKernel):
         from sumpy.tools import LaplaceDerivativeTaker
         return LaplaceDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
+    def get_pde_as_diff_op(self):
+        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+        w = make_identity_diff_op(self.dim)
+        return laplacian(w)
+
 
 class BiharmonicKernel(ExpressionKernel):
     init_arg_names = ("dim",)
 
-    def __init__(self, dim=None):
+    def __init__(self, dim):
         r = pymbolic_real_norm_2(make_sym_vector("d", dim))
         if dim == 2:
             # Ref: Farkas, Peter. Mathematical foundations for fast algorithms
@@ -475,11 +492,16 @@ class BiharmonicKernel(ExpressionKernel):
         return RadialDerivativeTaker(self.get_expression(dvec), dvec, rscale,
                 sac)
 
+    def get_pde_as_diff_op(self):
+        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+        w = make_identity_diff_op(self.dim)
+        return laplacian(laplacian(w))
+
 
 class HelmholtzKernel(ExpressionKernel):
     init_arg_names = ("dim", "helmholtz_k_name", "allow_evanescent")
 
-    def __init__(self, dim=None, helmholtz_k_name="k",
+    def __init__(self, dim, helmholtz_k_name="k",
             allow_evanescent=False):
         """
         :arg helmholtz_k_name: The argument name to use for the Helmholtz
@@ -524,13 +546,8 @@ class HelmholtzKernel(ExpressionKernel):
                 self.dim, self.helmholtz_k_name)
 
     def prepare_loopy_kernel(self, loopy_knl):
-        from sumpy.codegen import (bessel_preamble_generator, bessel_mangler)
-        loopy_knl = lp.register_function_manglers(loopy_knl,
-                [bessel_mangler])
-        loopy_knl = lp.register_preamble_generators(loopy_knl,
-                [bessel_preamble_generator])
-
-        return loopy_knl
+        from sumpy.codegen import register_bessel_callables
+        return register_bessel_callables(loopy_knl)
 
     def get_args(self):
         if self.allow_evanescent:
@@ -552,11 +569,18 @@ class HelmholtzKernel(ExpressionKernel):
         from sumpy.tools import HelmholtzDerivativeTaker
         return HelmholtzDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
+    def get_pde_as_diff_op(self):
+        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+
+        w = make_identity_diff_op(self.dim)
+        k = sym.Symbol(self.helmholtz_k_name)
+        return (laplacian(w) + k**2 * w)
+
 
 class YukawaKernel(ExpressionKernel):
     init_arg_names = ("dim", "yukawa_lambda_name")
 
-    def __init__(self, dim=None, yukawa_lambda_name="lam"):
+    def __init__(self, dim, yukawa_lambda_name="lam"):
         """
         :arg yukawa_lambda_name: The argument name to use for the Yukawa
             parameter when generating functions to evaluate this kernel.
@@ -610,13 +634,8 @@ class YukawaKernel(ExpressionKernel):
                 self.dim, self.yukawa_lambda_name)
 
     def prepare_loopy_kernel(self, loopy_knl):
-        from sumpy.codegen import (bessel_preamble_generator, bessel_mangler)
-        loopy_knl = lp.register_function_manglers(loopy_knl,
-                [bessel_mangler])
-        loopy_knl = lp.register_preamble_generators(loopy_knl,
-                [bessel_preamble_generator])
-
-        return loopy_knl
+        from sumpy.codegen import register_bessel_callables
+        return register_bessel_callables(loopy_knl)
 
     def get_args(self):
         return [
@@ -633,45 +652,68 @@ class YukawaKernel(ExpressionKernel):
         from sumpy.tools import HelmholtzDerivativeTaker
         return HelmholtzDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
+    def get_pde_as_diff_op(self):
+        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+        w = make_identity_diff_op(self.dim)
+        lam = sym.Symbol(self.yukawa_lambda_name)
+        return (laplacian(w) - lam**2 * w)
 
-class StokesletKernel(ExpressionKernel):
-    init_arg_names = ("dim", "icomp", "jcomp", "viscosity_mu_name")
 
-    def __init__(self, dim, icomp, jcomp, viscosity_mu_name="mu"):
+class ElasticityKernel(ExpressionKernel):
+    init_arg_names = ("dim", "icomp", "jcomp", "viscosity_mu", "poisson_ratio")
+
+    def __new__(cls, dim, icomp, jcomp, viscosity_mu="mu", poisson_ratio="nu"):
+        if poisson_ratio == 0.5:
+            instance = super(ElasticityKernel, cls).__new__(StokesletKernel)
+        else:
+            instance = super(ElasticityKernel, cls).__new__(cls)
+        return instance
+
+    def __init__(self, dim, icomp, jcomp, viscosity_mu="mu", poisson_ratio="nu"):
         r"""
-        :arg viscosity_mu_name: The argument name to use for
-                dynamic viscosity :math:`\mu` the then generating functions to
-                evaluate this kernel.
+        :arg viscosity_mu: The argument name to use for
+                dynamic viscosity :math:`\mu` when generating functions to
+                evaluate this kernel. Can also be a numeric value.
+        :arg poisson_ratio: The argument name to use for
+                Poisson's ratio :math:`\nu` when generating functions to
+                evaluate this kernel. Can also be a numeric value.
         """
-        mu = var(viscosity_mu_name)
+        if isinstance(viscosity_mu, str):
+            mu = parse(viscosity_mu)
+        else:
+            mu = viscosity_mu
+        if isinstance(poisson_ratio, str):
+            nu = parse(poisson_ratio)
+        else:
+            nu = poisson_ratio
 
         if dim == 2:
             d = make_sym_vector("d", dim)
             r = pymbolic_real_norm_2(d)
+            # See (Berger and Karageorghis 2001)
             expr = (
-                -var("log")(r)*(1 if icomp == jcomp else 0)
+                -var("log")(r)*((3 - 4 * nu) if icomp == jcomp else 0)
                 +  # noqa: W504
                 d[icomp]*d[jcomp]/r**2
                 )
-            scaling = -1/(4*var("pi")*mu)
+            scaling = -1/(8*var("pi")*(1 - nu)*mu)
 
         elif dim == 3:
             d = make_sym_vector("d", dim)
             r = pymbolic_real_norm_2(d)
+            # Kelvin solution
             expr = (
-                (1/r)*(1 if icomp == jcomp else 0)
+                (1/r)*((3 - 4*nu) if icomp == jcomp else 0)
                 +  # noqa: W504
                 d[icomp]*d[jcomp]/r**3
                 )
-            scaling = -1/(8*var("pi")*mu)
+            scaling = -1/(16*var("pi")*(1 - nu)*mu)
 
-        elif dim is None:
-            expr = None
-            scaling = None
         else:
             raise RuntimeError("unsupported dimensionality")
 
-        self.viscosity_mu_name = viscosity_mu_name
+        self.viscosity_mu = mu
+        self.poisson_ratio = nu
         self.icomp = icomp
         self.jcomp = jcomp
 
@@ -682,37 +724,71 @@ class StokesletKernel(ExpressionKernel):
                 is_complex_valued=False)
 
     def __getinitargs__(self):
-        return (self.dim, self.icomp, self.jcomp, self.viscosity_mu_name)
+        return (self.dim, self.icomp, self.jcomp, self.viscosity_mu,
+                self.poisson_ratio)
+
+    def __reduce__(self):
+        return (ElasticityKernel, self.__getinitargs__())
 
     def update_persistent_hash(self, key_hash, key_builder):
+        from pymbolic.mapper.persistent_hash import PersistentHashWalkMapper
         key_hash.update(type(self).__name__.encode())
         key_builder.rec(key_hash,
-                (self.dim, self.icomp, self.jcomp, self.viscosity_mu_name))
+                (self.dim, self.icomp, self.jcomp))
+        mapper = PersistentHashWalkMapper(key_hash)
+        mapper(self.viscosity_mu)
+        mapper(self.poisson_ratio)
+
+    def __repr__(self):
+        return "ElasticityKnl%dD_%d%d" % (self.dim, self.icomp, self.jcomp)
+
+    @memoize_method
+    def get_args(self):
+        from sumpy.tools import get_all_variables
+        variables = get_all_variables(self.viscosity_mu)
+        res = []
+        for v in variables:
+            res.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
+        return res + self.get_source_args()
+
+    @memoize_method
+    def get_source_args(self):
+        from sumpy.tools import get_all_variables
+        variables = get_all_variables(self.poisson_ratio)
+        res = []
+        for v in variables:
+            res.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
+        return res
+
+    mapper_method = "map_elasticity_kernel"
+
+    def get_pde_as_diff_op(self):
+        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+        w = make_identity_diff_op(self.dim)
+        return laplacian(laplacian(w))
+
+
+class StokesletKernel(ElasticityKernel):
+    def __new__(cls, dim, icomp, jcomp, viscosity_mu="mu", poisson_ratio="0.5"):
+        return object.__new__(cls)
+
+    def __init__(self, dim, icomp, jcomp, viscosity_mu="mu", poisson_ratio=0.5):
+        super().__init__(dim, icomp, jcomp, viscosity_mu, poisson_ratio)
 
     def __repr__(self):
         return "StokesletKnl%dD_%d%d" % (self.dim, self.icomp, self.jcomp)
 
-    def get_args(self):
-        return [
-                KernelArgument(
-                    loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64),
-                    )]
-
-    mapper_method = "map_stokeslet_kernel"
-
 
 class StressletKernel(ExpressionKernel):
-    init_arg_names = ("dim", "icomp", "jcomp", "kcomp", "viscosity_mu_name")
+    init_arg_names = ("dim", "icomp", "jcomp", "kcomp", "viscosity_mu")
 
-    def __init__(self, dim=None, icomp=None, jcomp=None, kcomp=None,
-                        viscosity_mu_name="mu"):
+    def __init__(self, dim, icomp, jcomp, kcomp, viscosity_mu="mu"):
         r"""
-        :arg viscosity_mu_name: The argument name to use for
+        :arg viscosity_mu: The argument name to use for
                 dynamic viscosity :math:`\mu` the then generating functions to
                 evaluate this kernel.
         """
         # Mu is unused but kept for consistency with the stokeslet.
-
         if dim == 2:
             d = make_sym_vector("d", dim)
             r = pymbolic_real_norm_2(d)
@@ -729,16 +805,13 @@ class StressletKernel(ExpressionKernel):
                 )
             scaling = 3/(4*var("pi"))
 
-        elif dim is None:
-            expr = None
-            scaling = None
         else:
             raise RuntimeError("unsupported dimensionality")
 
-        self.viscosity_mu_name = viscosity_mu_name
         self.icomp = icomp
         self.jcomp = jcomp
         self.kcomp = kcomp
+        self.viscosity_mu = viscosity_mu
 
         super().__init__(
                 dim,
@@ -747,27 +820,111 @@ class StressletKernel(ExpressionKernel):
                 is_complex_valued=False)
 
     def __getinitargs__(self):
-        return (self.dim, self.icomp, self.jcomp, self.kcomp,
-                      self.viscosity_mu_name)
+        return (self.dim, self.icomp, self.jcomp, self.kcomp, self.viscosity_mu)
 
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode())
-        key_builder.rec(key_hash, (
-            self.dim, self.icomp, self.jcomp, self.kcomp,
-            self.viscosity_mu_name))
+        key_builder.rec(key_hash,
+                (self.dim, self.icomp, self.jcomp, self.kcomp, self.viscosity_mu))
 
     def __repr__(self):
         return "StressletKnl%dD_%d%d%d" % (self.dim, self.icomp, self.jcomp,
                 self.kcomp)
 
+    mapper_method = "map_stresslet_kernel"
+
+    def get_pde_as_diff_op(self):
+        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+        w = make_identity_diff_op(self.dim)
+        return laplacian(laplacian(w))
+
     def get_args(self):
         return [
                 KernelArgument(
-                    loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64),
+                    loopy_arg=lp.ValueArg(self.viscosity_mu, np.float64),
                     )
                 ]
 
-    mapper_method = "map_stresslet_kernel"
+
+class LineOfCompressionKernel(ExpressionKernel):
+    """A kernel for the line of compression or dilatation of constant strength
+    along the axis "axis" from zero to negative infinity. This is used for the
+    explicit solution to half-space Elasticity problem. See [1] for details.
+
+    [1]: Mindlin, R.: Force at a Point in the Interior of a Semi-Infinite Solid
+         https://doi.org/10.1063/1.1745385
+    """
+    init_arg_names = ("dim", "axis", "viscosity_mu", "poisson_ratio")
+
+    def __init__(self, dim=3, axis=2, viscosity_mu="mu", poisson_ratio="nu"):
+        r"""
+        :arg axis: axis number defaulting to 2 for the z axis.
+        :arg viscosity_mu: The argument name to use for
+                dynamic viscosity :math:`\mu` when generating functions to
+                evaluate this kernel. Can also be a numeric value.
+        :arg poisson_ratio: The argument name to use for
+                Poisson's ratio :math:`\nu` when generating functions to
+                evaluate this kernel. Can also be a numeric value.
+        """
+        if isinstance(viscosity_mu, str):
+            mu = parse(viscosity_mu)
+        else:
+            mu = viscosity_mu
+        if isinstance(poisson_ratio, str):
+            nu = parse(poisson_ratio)
+        else:
+            nu = poisson_ratio
+
+        if dim == 3:
+            d = make_sym_vector("d", dim)
+            r = pymbolic_real_norm_2(d)
+            # Kelvin solution
+            expr = d[axis] * var("log")(r + d[axis]) - r
+            scaling = (1 - 2*nu)/(4*var("pi")*mu)
+        else:
+            raise RuntimeError("unsupported dimensionality")
+
+        self.viscosity_mu = mu
+        self.poisson_ratio = nu
+        self.axis = axis
+
+        super().__init__(
+                dim,
+                expression=expr,
+                global_scaling_const=scaling,
+                is_complex_valued=False)
+
+    def __getinitargs__(self):
+        return (self.dim, self.axis, self.viscosity_mu, self.poisson_ratio)
+
+    def update_persistent_hash(self, key_hash, key_builder):
+        from pymbolic.mapper.persistent_hash import PersistentHashWalkMapper
+        key_hash.update(type(self).__name__.encode())
+        key_builder.rec(key_hash, (self.dim, self.axis))
+        mapper = PersistentHashWalkMapper(key_hash)
+        mapper(self.viscosity_mu)
+        mapper(self.poisson_ratio)
+
+    def __repr__(self):
+        return "LineOfCompressionKnl%dD_%d" % (self.dim, self.axis)
+
+    @memoize_method
+    def get_args(self):
+        from sumpy.tools import get_all_variables
+        variables = list(get_all_variables(self.viscosity_mu)) \
+            + list(get_all_variables(self.poisson_ratio))
+        res = []
+        for v in variables:
+            res.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
+        return res
+
+    mapper_method = "map_line_of_compression_kernel"
+
+    def get_pde_as_diff_op(self):
+        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+        w = make_identity_diff_op(self.dim)
+        return laplacian(w)
+
 
 # }}}
 
@@ -1040,6 +1197,70 @@ class DirectionalSourceDerivative(DirectionalDerivative):
 
     mapper_method = "map_directional_source_derivative"
 
+
+class TargetPointMultiplier(KernelWrapper):
+    """Wraps a kernel :math:`G(x, y)` and outputs :math:`x_j G(x, y)`
+    where :math:`x, y` are targets and sources respectively.
+    """
+
+    init_arg_names = ("axis", "inner_kernel")
+    target_array_name = "targets"
+
+    def __init__(self, axis, inner_kernel):
+        KernelWrapper.__init__(self, inner_kernel)
+        self.axis = axis
+
+    def __getinitargs__(self):
+        return (self.axis, self.inner_kernel)
+
+    def __str__(self):
+        return "x%d %s" % (self.axis, self.inner_kernel)
+
+    def __repr__(self):
+        return "TargetPointMultiplier(%d, %r)" % (self.axis, self.inner_kernel)
+
+    def replace_base_kernel(self, new_base_kernel):
+        return type(self)(self.axis,
+            self.inner_kernel.replace_base_kernel(new_base_kernel))
+
+    def replace_inner_kernel(self, new_inner_kernel):
+        return type(self)(self.axis, new_inner_kernel)
+
+    def postprocess_at_target(self, expr, avec):
+        from sumpy.symbolic import make_sym_vector as make_sympy_vector
+        from sumpy.tools import (ExprDerivativeTaker,
+            DifferentiatedExprDerivativeTaker)
+
+        expr = self.inner_kernel.postprocess_at_target(expr, avec)
+        target_vec = make_sympy_vector(self.target_array_name, self.dim)
+
+        if isinstance(expr,
+                (ExprDerivativeTaker, DifferentiatedExprDerivativeTaker)):
+            class DerivativeTakerWrapper:
+                def __init__(self, taker, vec, axis):
+                    self.taker = taker
+                    self.vec = vec
+                    self.axis = axis
+
+                def diff(self, *args, **kwargs):
+                    return self.vec[self.axis] * self.taker.diff(*args, **kwargs)
+
+            return DerivativeTakerWrapper(expr, target_vec, self.axis)
+        return target_vec[self.axis] * expr
+
+    def get_code_transformer(self):
+        from sumpy.codegen import VectorComponentRewriter
+        vcr = VectorComponentRewriter([self.target_array_name])
+        from pymbolic.primitives import Variable
+        via = _VectorIndexAdder(self.target_array_name, (Variable("itgt"),))
+
+        def transform(expr):
+            return via(vcr(expr))
+
+        return transform
+
+    mapper_method = "map_target_point_multiplier"
+
 # }}}
 
 
@@ -1070,6 +1291,7 @@ class KernelCombineMapper(KernelMapper):
     map_directional_target_derivative = map_axis_target_derivative
     map_directional_source_derivative = map_axis_target_derivative
     map_axis_source_derivative = map_axis_target_derivative
+    map_target_point_multiplier = map_axis_target_derivative
 
 
 class KernelIdentityMapper(KernelMapper):
@@ -1080,13 +1302,15 @@ class KernelIdentityMapper(KernelMapper):
     map_biharmonic_kernel = map_expression_kernel
     map_helmholtz_kernel = map_expression_kernel
     map_yukawa_kernel = map_expression_kernel
-    map_stokeslet_kernel = map_expression_kernel
+    map_elasticity_kernel = map_expression_kernel
+    map_line_of_compression_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
 
     def map_axis_target_derivative(self, kernel):
         return type(kernel)(kernel.axis, self.rec(kernel.inner_kernel))
 
     map_axis_source_derivative = map_axis_target_derivative
+    map_target_point_multiplier = map_axis_target_derivative
 
     def map_directional_target_derivative(self, kernel):
         return type(kernel)(
@@ -1116,6 +1340,14 @@ class SourceDerivativeRemover(AxisSourceDerivativeRemover):
         return self.rec(kernel.inner_kernel)
 
 
+class TargetTransformationRemover(TargetDerivativeRemover):
+    def map_target_point_multiplier(self, kernel):
+        return self.rec(kernel.inner_kernel)
+
+
+SourceTransformationRemover = SourceDerivativeRemover
+
+
 class DerivativeCounter(KernelCombineMapper):
     def combine(self, values):
         return max(values)
@@ -1127,7 +1359,7 @@ class DerivativeCounter(KernelCombineMapper):
     map_biharmonic_kernel = map_expression_kernel
     map_helmholtz_kernel = map_expression_kernel
     map_yukawa_kernel = map_expression_kernel
-    map_stokeslet_kernel = map_expression_kernel
+    map_line_of_compression_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
 
     def map_axis_target_derivative(self, kernel):
