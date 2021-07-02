@@ -723,11 +723,10 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
     def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
             dvec, tgt_rscale, sac):
 
-        from sumpy.symbolic import sym_real_norm_2
+        from sumpy.symbolic import sym_real_norm_2, Hankel1
         from sumpy.tools import fft
 
         dvec_len = sym_real_norm_2(dvec)
-        hankel_1 = sym.Function("hankel_1")
         new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
         arg_scale = self.get_bessel_arg_scaling()
         precomputed_exprs = [0] * (2*self.order + 2 * src_expansion.order + 1)
@@ -736,7 +735,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             for m in src_expansion.get_coefficient_identifiers():
                 idx_m = src_expansion.get_storage_index(m)
                 precomputed_exprs[idx_j + idx_m] = (
-                    hankel_1(m + j, arg_scale * dvec_len)
+                    Hankel1(m + j, arg_scale * dvec_len, 0)
                     * sym.exp(sym.I * (m + j) * new_center_angle_rel_old_center))
 
         if self.use_fft:
@@ -779,7 +778,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, precomputed_exprs=None):
-        from sumpy.symbolic import sym_real_norm_2, BesselJ, Hankel1
+        from sumpy.symbolic import sym_real_norm_2, BesselJ
 
         if not self.use_rscale:
             src_rscale = 1
