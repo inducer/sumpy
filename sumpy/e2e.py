@@ -204,6 +204,15 @@ class E2EFromCSR(E2EBase):
                 )
 
     def get_postprocess_loopy_insns(self, result_dtype):
+        """Loopy instructions that happen only once for each target box.
+
+        :arg result_dtype: A numpy dtype for the result. This is important
+            because depending on the input to the M2L being real or not
+            the code needs to be different. If the input was real, the
+            result should be the real part of the complex values from the
+            inverse FFT. In the input was complex, the result matches the
+            values from the inverse FFT.
+        """
 
         ncoeff_tgt = len(self.tgt_expansion)
         if self.use_precomputed_exprs:

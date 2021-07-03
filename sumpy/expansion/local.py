@@ -48,6 +48,11 @@ __doc__ = """
 class LocalExpansionBase(ExpansionBase):
     """Base class for local expansions.
 
+    .. attribute:: kernel
+    .. attribute:: order
+    .. attribute:: use_rscale
+    .. attribute:: use_fft
+
     .. automethod:: m2l_global_precompute_exprs
     .. automethod:: m2l_global_precompute_nexpr
     .. automethod:: translate_from
@@ -98,6 +103,28 @@ class LocalExpansionBase(ExpansionBase):
         *sac*.
         """
         return 0
+
+    def m2l_preprocess_exprs(self, src_expansion, src_coeff_exprs, sac,
+            src_rscale):
+        """Return preprocessed input expressions for the Toeplitz matrix
+        used for M2L. When FFT is turned on, the input expressions are
+        transformed into Fourier space. These expressions are used in
+        a separate :mod:`loopy` kernel to avoid having to transform for each
+        target and source box pair. When FFT is turned off, the expressions
+        are equal to the multipole expansion coefficients with zeros added
+        to make the M2L computation a Toeplitz matvec.
+        """
+        raise NotImplementedError
+
+    def m2l_postprocess_exprs(self, src_expansion, m2l_result, src_rscale,
+            tgt_rscale, sac):
+        """Return postprocessed output expressions for the Toeplitz matrix
+        used for M2L. When FFT is turned on, the output expressions are
+        transformed from Fourier space back to the original space.
+        This needs to happen only for a target box and hence done only at the
+        end of the M2L translation from all source boxes.
+        """
+        raise NotImplementedError
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, precomputed_exprs=None):
