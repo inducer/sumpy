@@ -737,11 +737,12 @@ def is_obj_array_like(ary):
             or (isinstance(ary, np.ndarray) and ary.dtype.char == "O"))
 
 
-def reduced_row_echelon_form(m):
+def reduced_row_echelon_form(m, atol=0):
     """Calculates a reduced row echelon form of a
     matrix `m`.
 
     :arg m: a 2D :class:`numpy.ndarray` or a list of lists or a sympy Matrix
+    :arg atol: absolute tolerance for values to be considered zero
     :return: reduced row echelon form as a 2D :class:`numpy.ndarray`
              and a list of pivots
     """
@@ -756,12 +757,18 @@ def reduced_row_echelon_form(m):
             break
         pivot = nrows
         for k in range(index, nrows):
-            if mat[k, i] != 0 and pivot == nrows:
+            symbolic = isinstance(mat[k, i], sym.Basic) and not mat[k, i].is_number
+            if (symbolic or abs(mat[k, i]) > atol) and pivot == nrows:
                 pivot = k
-            if abs(mat[k, i]) == 1:
+            # If there's a pivot that's close to 1 use that as it avoids
+            # having to divide.
+            # When checking for a number close to 1, we shouldn't consider
+            # symbolic values
+            if not symbolic and abs(mat[k, i] - 1) <= atol:
                 pivot = k
                 break
         if pivot == nrows:
+            # no nonzero pivot found, next column
             continue
         if pivot != index:
             mat[[pivot, index], :] = mat[[index, pivot], :]
@@ -793,13 +800,14 @@ def reduced_row_echelon_form(m):
     return mat, pivot_cols
 
 
-def nullspace(m):
+def nullspace(m, atol=0):
     """Calculates the nullspace of a matrix `m`.
 
     :arg m: a 2D :class:`numpy.ndarray` or a list of lists or a sympy Matrix
+    :arg atol: absolute tolerance for values to be considered zero
     :return: nullspace of `m` as a 2D :class:`numpy.ndarray`
     """
-    mat, pivot_cols = reduced_row_echelon_form(m)
+    mat, pivot_cols = reduced_row_echelon_form(m, atol=atol)
     pivot_cols = list(pivot_cols)
     cols = mat.shape[1]
 
@@ -817,5 +825,15 @@ def nullspace(m):
                     vec[piv_col] -= mat[piv_row, pos]
         n.append(vec)
     return np.array(n, dtype=object).T
+
+
+def matvec_toeplitz_upper_triangular(first_row, vector):
+    n = len(first_row)
+    assert len(vector) == n
+    output = [0]*n
+    for row in range(n):
+        terms = tuple(first_row[col-row]*vector[col] for col in range(row, n))
+        output[row] = sym.Add(*terms)
+    return output
 
 # vim: fdm=marker

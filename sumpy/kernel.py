@@ -120,6 +120,7 @@ class Kernel:
     """Basic kernel interface.
 
     .. attribute:: is_complex_valued
+    .. attribute:: is_translation_invariant
     .. attribute:: dim
 
     .. automethod:: get_base_kernel
@@ -296,6 +297,9 @@ class Kernel:
         from point sources.
         """
         return []
+
+    # TODO: Allow kernels that are not translation invariant
+    is_translation_invariant = True
 
 # }}}
 
