@@ -7,10 +7,7 @@ dependencies:
 - git
 - numpy
 - sympy
-
-# https://github.com/pocl/pocl/issues/955
-- pocl<=1.6
-
+- pocl
 - pocl-cuda
 - islpy
 - pyopencl
