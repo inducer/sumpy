@@ -85,9 +85,10 @@ class E2EBase(KernelCacheWrapper):
         self.name = name or self.default_name
         self.device = device
         try:
-            self.use_fft = self.tgt_expansion.use_fft
+            self.use_preprocessing_for_m2l \
+                = self.tgt_expansion.use_preprocessing_for_m2l
         except AttributeError:
-            self.use_fft = False
+            self.use_preprocessing_for_m2l = False
 
         if src_expansion.dim != tgt_expansion.dim:
             raise ValueError("source and target expansions must have "
@@ -175,7 +176,7 @@ class E2EFromCSR(E2EBase):
         else:
             nprecomputed_exprs = 0
 
-        if self.use_fft:
+        if self.use_preprocessing_for_m2l:
             ncoeff_src = nprecomputed_exprs
         else:
             ncoeff_src = len(self.src_expansion)
@@ -221,7 +222,7 @@ class E2EFromCSR(E2EBase):
         else:
             nprecomputed_exprs = 0
 
-        if self.use_fft:
+        if self.use_preprocessing_for_m2l:
             ncoeff_tgt = nprecomputed_exprs
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
@@ -234,7 +235,7 @@ class E2EFromCSR(E2EBase):
         src_rscale = sym.Symbol("src_rscale")
         tgt_rscale = sym.Symbol("tgt_rscale")
 
-        if self.use_fft:
+        if self.use_preprocessing_for_m2l:
             tgt_coeff_post_exprs = self.tgt_expansion.m2l_postprocess_exprs(
                 self.src_expansion, tgt_coeff_exprs, src_rscale, tgt_rscale,
                 sac=sac)
@@ -269,7 +270,7 @@ class E2EFromCSR(E2EBase):
         else:
             nprecomputed_exprs = 0
 
-        if self.use_fft:
+        if self.use_preprocessing_for_m2l:
             ncoeff_src = nprecomputed_exprs
             ncoeff_post = nprecomputed_exprs
         else:

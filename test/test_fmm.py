@@ -52,7 +52,8 @@ else:
 
 
 @pytest.mark.parametrize(
-    "knl, local_expn_class, mpole_expn_class, optimized_m2l, use_fft",
+    "knl, local_expn_class, mpole_expn_class, optimized_m2l,"
+    " use_preprocessing_for_m2l",
     [
         (LaplaceKernel(2), VolumeTaylorLocalExpansion,
             VolumeTaylorMultipoleExpansion, False, False),
@@ -90,7 +91,7 @@ else:
             Y2DMultipoleExpansion, False, False),
     ])
 def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
-        optimized_m2l, use_fft):
+        optimized_m2l, use_preprocessing_for_m2l):
     logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_factory()
@@ -200,7 +201,7 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
                 ctx,
                 partial(mpole_expn_class, knl),
                 partial(local_expn_class, knl),
-                target_kernels, use_fft=use_fft)
+                target_kernels, use_preprocessing_for_m2l=use_preprocessing_for_m2l)
 
         wrangler = wcc.get_wrangler(queue, tree, dtype,
                 fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,

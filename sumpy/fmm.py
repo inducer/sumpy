@@ -64,7 +64,8 @@ class SumpyExpansionWranglerCodeContainer:
             multipole_expansion_factory,
             local_expansion_factory,
             target_kernels, exclude_self=False, use_rscale=None,
-            strength_usage=None, source_kernels=None, use_fft=False):
+            strength_usage=None, source_kernels=None,
+            use_preprocessing_for_m2l=False):
         """
         :arg multipole_expansion_factory: a callable of a single argument (order)
             that returns a multipole expansion.
@@ -82,7 +83,7 @@ class SumpyExpansionWranglerCodeContainer:
         self.exclude_self = exclude_self
         self.use_rscale = use_rscale
         self.strength_usage = strength_usage
-        self.use_fft = use_fft
+        self.use_preprocessing_for_m2l = use_preprocessing_for_m2l
 
         self.cl_context = cl_context
 
@@ -98,7 +99,7 @@ class SumpyExpansionWranglerCodeContainer:
     @memoize_method
     def local_expansion(self, order):
         return self.local_expansion_factory(order, self.use_rscale,
-                use_fft=self.use_fft)
+                use_preprocessing_for_m2l=self.use_preprocessing_for_m2l)
 
     @memoize_method
     def p2m(self, tgt_order):
@@ -311,7 +312,7 @@ class SumpyExpansionWrangler:
 
         self.dtype = dtype
 
-        if not self.code.use_fft:
+        if not self.code.use_preprocessing_for_m2l:
             # If not FFT, we don't need complex dtypes
             self.complex_dtype = dtype
         elif complex_dtype is not None:
@@ -344,7 +345,7 @@ class SumpyExpansionWrangler:
         if base_kernel.is_translation_invariant:
             if translation_classes_data is None:
                 from warnings import warn
-                if self.code.use_fft:
+                if self.code.use_preprocessing_for_m2l:
                     raise NotImplementedError(
                          "FFT based List 2 (multipole-to-local) translations "
                          "without translation_classes_data argument is not "
@@ -364,7 +365,7 @@ class SumpyExpansionWrangler:
             self.supports_optimized_m2l = False
 
         self.translation_classes_data = translation_classes_data
-        self.use_fft = self.code.use_fft
+        self.use_preprocessing_for_m2l = self.code.use_preprocessing_for_m2l
 
     # {{{ data vector utilities
     def _expansions_level_starts(self, order_to_size):
@@ -690,7 +691,7 @@ class SumpyExpansionWrangler:
             target_boxes, src_box_starts, src_box_lists,
             mpole_exps):
 
-        if self.use_fft:
+        if self.use_preprocessing_for_m2l:
             pp_mpole_exps = self.pp_multipole_expansion_zeros()
             events = []
             for lev in range(self.tree.nlevels):
