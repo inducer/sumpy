@@ -55,6 +55,8 @@ class LocalExpansionBase(ExpansionBase):
 
     .. automethod:: m2l_global_precompute_exprs
     .. automethod:: m2l_global_precompute_nexpr
+    .. automethod:: m2l_preprocess_exprs
+    .. automethod:: m2l_postprocess_exprs
     .. automethod:: translate_from
     """
     init_arg_names = ("kernel", "order", "use_rscale", "use_preprocessing_for_m2l")
