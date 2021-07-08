@@ -547,7 +547,7 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
 
         m2l_translation_classes_dependent_data = kwargs.pop(
                 "m2l_translation_classes_dependent_data")
-        result_dtype = m2l_translation_classes_dependent_data.dtype
+        result_dtype = m2l_translation_classes_dependent_data.dtype.type
 
         knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
 
@@ -653,7 +653,7 @@ class M2LPreprocessMultipole(E2EBase):
         :arg preprocessed_src_expansions
         """
         preprocessed_src_expansions = kwargs.pop("preprocessed_src_expansions")
-        result_dtype = preprocessed_src_expansions.dtype
+        result_dtype = preprocessed_src_expansions.dtype.type
         knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
         return knl(queue,
             preprocessed_src_expansions=preprocessed_src_expansions, **kwargs)
