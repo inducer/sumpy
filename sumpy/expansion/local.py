@@ -26,8 +26,7 @@ from sumpy.tools import add_to_sac, fft
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LinearPDEConformingVolumeTaylorExpansion)
 
-from sumpy.tools import (mi_increment_axis, matvec_toeplitz_upper_triangular,
-    fft_toeplitz_upper_triangular)
+from sumpy.tools import mi_increment_axis, matvec_toeplitz_upper_triangular
 from pytools import single_valued
 from typing import Tuple, Any
 
@@ -118,7 +117,7 @@ class LocalExpansionBase(ExpansionBase):
         to avoid having to transform for each target and source box pair.
         When FFT is turned off, the expressions are equal to the multipole
         expansion coefficients with zeros added
-        to make the M2L computation a Toeplitz matvec.
+        to make the M2L computation a circulant matvec.
         """
         raise NotImplementedError
 
@@ -294,8 +293,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             return len(mis_without_dummy_rows)
 
     def _m2l_translation_classes_dependent_data_mis(self, src_expansion):
-        """We would like to compute the M2L by way of a Toeplitz matrix below.
-        To get the matrix representing the M2L into Toeplitz form, a certain
+        """We would like to compute the M2L by way of a circulant matrix below.
+        To get the matrix representing the M2L into circulant form, a certain
         numbering of rows and columns (as identified by multi-indices) is
         required. This routine returns that numbering.
 
@@ -307,7 +306,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             dropped from the computed result.
 
         This method returns the multi-indices representing the rows
-        of the Toeplitz matrix, the multi-indices representing the rows
+        of the circulant matrix, the multi-indices representing the rows
         of the M2L translation matrix and the maximum multi-index of the
         latter.
         """
@@ -325,17 +324,17 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                               self.get_coefficient_identifiers())
 
         # These are the multi-indices representing the rows
-        # in the Toeplitz matrix.  Note that to get the Toeplitz
+        # in the circulant matrix.  Note that to get the circulant
         # matrix structure some multi-indices that is not in the
         # M2L translation matrix are added.
         # This corresponds to adding $\mathcal{O}(p^{d-1})$
         # additional rows and columns in the case of some PDEs
         # like Laplace and $\mathcal{O}(p^d)$ in other cases.
-        toeplitz_matrix_coeffs = list(gnitb([m + 1 for m in max_mi]))
+        circulant_matrix_mis = list(gnitb([m + 1 for m in max_mi]))
 
         # These are the multi-indices representing the rows
         # in the M2L translation matrix without the additional
-        # multi-indices in the Toeplitz matrix
+        # multi-indices in the circulant matrix
         needed_vector_terms = set()
         # For eg: 2D full Taylor Laplace, we only need kernel derivatives
         # (n1+n2, m1+m2), n1+m1<=p, n2+m2<=p
@@ -345,7 +344,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 if needed not in needed_vector_terms:
                     needed_vector_terms.add(needed)
 
-        return toeplitz_matrix_coeffs, tuple(needed_vector_terms), max_mi
+        return circulant_matrix_mis, tuple(needed_vector_terms), max_mi
 
     def m2l_translation_classes_dependent_data(self, src_expansion, src_rscale,
             dvec, tgt_rscale, sac):
@@ -368,11 +367,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         if not self.use_rscale:
             src_rscale = 1
 
-        toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
+        circulant_matrix_mis, needed_vector_terms, max_mi = \
             self._m2l_translation_classes_dependent_data_mis(src_expansion)
 
-        toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
-                                enumerate(toeplitz_matrix_coeffs))
+        circulant_matrix_ident_to_index = dict((ident, i) for i, ident in
+                                enumerate(circulant_matrix_mis))
 
         # Create a expansion terms wrangler for derivatives up to order
         # (tgt order)+(src order) including a corresponding reduction matrix
@@ -409,51 +408,59 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                         vector_full[srcplusderiv_ident_to_index[term]])
 
         if self.use_preprocessing_for_m2l:
-            # Add zero values needed to make the translation matrix toeplitz
-            derivatives_full = [0]*len(toeplitz_matrix_coeffs)
+            # Add zero values needed to make the translation matrix circulant
+            derivatives_full = [0]*len(circulant_matrix_mis)
             for expr, mi in zip(vector, needed_vector_terms):
-                derivatives_full[toeplitz_matrix_ident_to_index[mi]] = expr
+                derivatives_full[circulant_matrix_ident_to_index[mi]] = expr
+
+            # Note that the matrix we have now is a mirror image of a
+            # circulant matrix. We reverse the first column to get the
+            # first column for the circulant matrix and then finally
+            # use the FFT for convolution represented by the circulant
+            # matrix.
             return fft(list(reversed(derivatives_full)), sac=sac)
 
         return vector
 
     def m2l_preprocess_multipole_exprs(self, src_expansion, src_coeff_exprs, sac,
             src_rscale):
-        toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
+        circulant_matrix_mis, needed_vector_terms, max_mi = \
                 self._m2l_translation_classes_dependent_data_mis(src_expansion)
-        toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
-                            enumerate(toeplitz_matrix_coeffs))
+        circulant_matrix_ident_to_index = dict((ident, i) for i, ident in
+                            enumerate(circulant_matrix_mis))
 
-        # Calculate the first row of the upper triangular Toeplitz matrix
-        toeplitz_first_row = [0] * len(toeplitz_matrix_coeffs)
+        # Calculate the input vector for the circulant matrix
+        input_vector = [0] * len(circulant_matrix_mis)
         for coeff, term in zip(
                 src_coeff_exprs,
                 src_expansion.get_coefficient_identifiers()):
-            toeplitz_first_row[toeplitz_matrix_ident_to_index[term]] = \
+            input_vector[circulant_matrix_ident_to_index[term]] = \
                     add_to_sac(sac, coeff)
 
         if self.use_preprocessing_for_m2l:
-            return fft(toeplitz_first_row, sac=sac)
+            return fft(input_vector, sac=sac)
         else:
-            return toeplitz_first_row
+            return input_vector
 
     def m2l_postprocess_local_exprs(self, src_expansion, m2l_result, src_rscale,
             tgt_rscale, sac):
-        toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
+        circulant_matrix_mis, needed_vector_terms, max_mi = \
                 self._m2l_translation_classes_dependent_data_mis(src_expansion)
-        toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
-                            enumerate(toeplitz_matrix_coeffs))
+        circulant_matrix_ident_to_index = dict((ident, i) for i, ident in
+                            enumerate(circulant_matrix_mis))
 
         if self.use_preprocessing_for_m2l:
-            n = len(toeplitz_matrix_coeffs)
+            n = len(circulant_matrix_mis)
             m2l_result = fft(m2l_result, inverse=True, sac=sac)
+            # since we reversed the M2L matrix, we reverse the result
+            # to get the correct result
             m2l_result = list(reversed(m2l_result[:n]))
 
         # Filter out the dummy rows and scale them for target
         result = []
         rscale_ratio = add_to_sac(sac, tgt_rscale/src_rscale)
         for term in self.get_coefficient_identifiers():
-            index = toeplitz_matrix_ident_to_index[term]
+            index = circulant_matrix_ident_to_index[term]
             result.append(m2l_result[index]*rscale_ratio**sum(term))
 
         return result
@@ -477,10 +484,10 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         # {{{ M2L
 
         if isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
-            toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
+            circulant_matrix_mis, needed_vector_terms, max_mi = \
                 self._m2l_translation_classes_dependent_data_mis(src_expansion)
-            toeplitz_matrix_ident_to_index = {ident: i for i, ident in
-                                enumerate(toeplitz_matrix_coeffs)}
+            circulant_matrix_ident_to_index = {ident: i for i, ident in
+                                enumerate(circulant_matrix_mis)}
 
             if not m2l_translation_classes_dependent_data:
                 derivatives = self.m2l_translation_classes_dependent_data(
@@ -499,20 +506,16 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                     result.append(a*b)
                 return result
 
-            derivatives_full = [0]*len(toeplitz_matrix_coeffs)
+            derivatives_full = [0]*len(circulant_matrix_mis)
             for expr, mi in zip(derivatives, needed_vector_terms):
-                derivatives_full[toeplitz_matrix_ident_to_index[mi]] = expr
+                derivatives_full[circulant_matrix_ident_to_index[mi]] = expr
 
-            toeplitz_first_row = self.m2l_preprocess_multipole_exprs(src_expansion,
+            input_vector = self.m2l_preprocess_multipole_exprs(src_expansion,
                 src_coeff_exprs, sac, src_rscale)
 
             # Do the matvec
-            if 0:
-                output = fft_toeplitz_upper_triangular(toeplitz_first_row,
-                                derivatives_full, sac=sac)
-            else:
-                output = matvec_toeplitz_upper_triangular(toeplitz_first_row,
-                                derivatives_full)
+            output = matvec_toeplitz_upper_triangular(input_vector,
+                derivatives_full)
 
             result = self.m2l_postprocess_local_exprs(src_expansion, output,
                 src_rscale, tgt_rscale, sac)
@@ -782,9 +785,24 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
         if self.use_preprocessing_for_m2l:
             order = src_expansion.order
-            first, last = m2l_translation_classes_dependent_data[:2*order], \
-                m2l_translation_classes_dependent_data[2*order:]
-            return fft(list(last)+list(first), sac)
+            # For this expansion, we have a mirror image of a Toeplitz matrix.
+            # First, we have to take the mirror image of the M2L matrix.
+            #
+            # After that the Toeplitz matrix has to be embedded in a circulant
+            # matrix. In this cicrcular matrix the first part of the first
+            # column is the first column of the Toeplitz matrix which is
+            # the last column of the M2L matrix. The second part is the
+            # reverse of the first row of the Toeplitz matrix which
+            # is the reverse of the first row of the M2L matrix.
+            first_row_m2l, last_column_m2l = \
+                m2l_translation_classes_dependent_data[:2*order], \
+                    m2l_translation_classes_dependent_data[2*order:]
+            first_column_toeplitz = last_column_m2l
+            first_row_toeplitz = list(reversed(first_row_m2l))
+
+            first_column_circulant = list(first_column_toeplitz) + \
+                    list(reversed(first_row_toeplitz))
+            return fft(first_column_circulant, sac)
 
         return m2l_translation_classes_dependent_data
 
