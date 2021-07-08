@@ -285,10 +285,13 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
     def m2l_translation_classes_dependent_ndata(self, src_expansion):
         """Returns number of expressions in M2L global precomputation step.
         """
+        mis_with_dummy_rows, mis_without_dummy_rows = \
+            self._m2l_translation_classes_dependent_data_mis(src_expansion)
+
         if self.use_preprocessing_for_m2l:
-            return len(self._m2l_translation_classes_dependent_data_mis(src_expansion)[0])
+            return len(mis_with_dummy_rows)
         else:
-            return len(self._m2l_translation_classes_dependent_data_mis(src_expansion)[1])
+            return len(mis_without_dummy_rows)
 
     def _m2l_translation_classes_dependent_data_mis(self, src_expansion):
         """We would like to compute the M2L by way of a Toeplitz matrix below.
