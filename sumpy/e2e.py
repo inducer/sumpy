@@ -428,10 +428,10 @@ class E2EFromCSR(E2EBase):
 
         if "tgt_expansions" in kwargs:
             tgt_expansions = kwargs["tgt_expansions"]
-            result_dtype = tgt_expansions.dtype
+            result_dtype = tgt_expansions.dtype.type
         else:
             src_expansions = kwargs["src_expansions"]
-            result_dtype = src_expansions.dtype
+            result_dtype = src_expansions.dtype.type
 
         knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
 
