@@ -170,19 +170,19 @@ class E2EFromCSR(E2EBase):
 
         extra_kwargs = dict()
         if self.m2l_use_translation_classes_dependent_data:
-            nm2l_translation_classes_dependent_data = \
+            m2l_translation_classes_dependent_ndata = \
                 self.tgt_expansion.m2l_translation_classes_dependent_ndata(
                         self.src_expansion)
             m2l_translation_classes_dependent_data = \
                     [sym.Symbol("m2l_translation_classes_dependent_expr%d" % i)
-                for i in range(nm2l_translation_classes_dependent_data)]
+                for i in range(m2l_translation_classes_dependent_ndata)]
             extra_kwargs["m2l_translation_classes_dependent_data"] = \
                     m2l_translation_classes_dependent_data
         else:
-            nm2l_translation_classes_dependent_data = 0
+            m2l_translation_classes_dependent_ndata = 0
 
         if self.use_preprocessing_for_m2l:
-            ncoeff_src = nm2l_translation_classes_dependent_data
+            ncoeff_src = m2l_translation_classes_dependent_ndata
         else:
             ncoeff_src = len(self.src_expansion)
 
@@ -222,14 +222,14 @@ class E2EFromCSR(E2EBase):
 
         ncoeff_tgt = len(self.tgt_expansion)
         if self.m2l_use_translation_classes_dependent_data:
-            nm2l_translation_classes_dependent_data = \
+            m2l_translation_classes_dependent_ndata = \
                 self.tgt_expansion.m2l_translation_classes_dependent_ndata(
                         self.src_expansion)
         else:
-            nm2l_translation_classes_dependent_data = 0
+            m2l_translation_classes_dependent_ndata = 0
 
         if self.use_preprocessing_for_m2l:
-            ncoeff_tgt = nm2l_translation_classes_dependent_data
+            ncoeff_tgt = m2l_translation_classes_dependent_ndata
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
@@ -242,7 +242,7 @@ class E2EFromCSR(E2EBase):
         tgt_rscale = sym.Symbol("tgt_rscale")
 
         if self.use_preprocessing_for_m2l:
-            tgt_coeff_post_exprs = self.tgt_expansion.m2l_postprocess_exprs(
+            tgt_coeff_post_exprs = self.tgt_expansion.m2l_postprocess_local_exprs(
                 self.src_expansion, tgt_coeff_exprs, src_rscale, tgt_rscale,
                 sac=sac)
             if result_dtype in (np.float32, np.float64):
