@@ -724,8 +724,8 @@ class SumpyExpansionWrangler:
                                 preprocessed_mpole_exps, lev)
 
                 tr_classes = self.m2l_translation_class_level_start_box_nrs()
-                # There's no M2L happening in this level
                 if tr_classes[lev] == tr_classes[lev + 1]:
+                    # There is no M2L happening in this level
                     continue
 
                 evt, _ = preprocess_mpole_kernel(
@@ -776,7 +776,7 @@ class SumpyExpansionWrangler:
             self._add_m2l_precompute_kwargs(kwargs, lev)
             if "m2l_translation_classes_dependent_data" in kwargs and \
                     kwargs["m2l_translation_classes_dependent_data"].size == 0:
-                # There's nothing to do for this level
+                # There is nothing to do for this level
                 continue
             evt, _ = m2l(self.queue, **kwargs)
 
