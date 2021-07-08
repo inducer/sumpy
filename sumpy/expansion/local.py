@@ -110,23 +110,27 @@ class LocalExpansionBase(ExpansionBase):
 
     def m2l_preprocess_multipole_exprs(self, src_expansion, src_coeff_exprs, sac,
             src_rscale):
-        """Return preprocessed input expressions for the Toeplitz matrix
-        used for M2L. When FFT is turned on, the input expressions are
-        transformed into Fourier space. These expressions are used in
-        a separate :mod:`loopy` kernel to avoid having to transform for each
-        target and source box pair. When FFT is turned off, the expressions
-        are equal to the multipole expansion coefficients with zeros added
+        """Return the preprocessed multipole expansion for an optimized M2L.
+        Preprocessing happens once per source box before M2L translation is done.
+
+        When FFT is turned on, the input expressions are transformed into Fourier
+        space. These expressions are used in a separate :mod:`loopy` kernel
+        to avoid having to transform for each target and source box pair.
+        When FFT is turned off, the expressions are equal to the multipole
+        expansion coefficients with zeros added
         to make the M2L computation a Toeplitz matvec.
         """
         raise NotImplementedError
 
     def m2l_postprocess_local_exprs(self, src_expansion, m2l_result, src_rscale,
             tgt_rscale, sac):
-        """Return postprocessed output expressions for the Toeplitz matrix
-        used for M2L. When FFT is turned on, the output expressions are
-        transformed from Fourier space back to the original space.
-        This needs to happen only for a target box and hence done only at the
-        end of the M2L translation from all source boxes.
+        """Return postprocessed local expansion for an optimized M2L.
+        Postprocessing happens once per target box just after the M2L translation
+        is done and before storing the expansion coefficients for the local
+        expansion.
+
+        When FFT is turned on, the output expressions are transformed from Fourier
+        space back to the original space.
         """
         raise NotImplementedError
 
