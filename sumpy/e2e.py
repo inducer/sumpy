@@ -207,7 +207,7 @@ class E2EFromCSR(E2EBase):
                 vector_names=set(["d"]),
                 pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
                 retain_names=tgt_coeff_names,
-                complex_dtype=to_complex_dtype(result_dtype),
+                complex_dtype=to_complex_dtype(result_dtype.type),
                 )
 
     def get_postprocess_loopy_insns(self, result_dtype):
@@ -266,7 +266,7 @@ class E2EFromCSR(E2EBase):
                 vector_names=set(["d"]),
                 pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
                 retain_names=tgt_coeff_post_names,
-                complex_dtype=to_complex_dtype(result_dtype),
+                complex_dtype=to_complex_dtype(result_dtype.type),
                 )
         return insns
 
@@ -428,10 +428,10 @@ class E2EFromCSR(E2EBase):
 
         if "tgt_expansions" in kwargs:
             tgt_expansions = kwargs["tgt_expansions"]
-            result_dtype = tgt_expansions.dtype.type
+            result_dtype = tgt_expansions.dtype
         else:
             src_expansions = kwargs["src_expansions"]
-            result_dtype = src_expansions.dtype.type
+            result_dtype = src_expansions.dtype
 
         knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
 
@@ -472,7 +472,7 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                 vector_names=set(["d"]),
                 pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
                 retain_names=tgt_coeff_names,
-                complex_dtype=to_complex_dtype(result_dtype),
+                complex_dtype=to_complex_dtype(result_dtype.type),
                 )
 
     def get_kernel(self, result_dtype):
@@ -547,7 +547,7 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
 
         m2l_translation_classes_dependent_data = kwargs.pop(
                 "m2l_translation_classes_dependent_data")
-        result_dtype = m2l_translation_classes_dependent_data.dtype.type
+        result_dtype = m2l_translation_classes_dependent_data.dtype
 
         knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
 
@@ -592,7 +592,7 @@ class M2LPreprocessMultipole(E2EBase):
                 vector_names=set(["d"]),
                 pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
                 retain_names=preprocessed_src_coeff_names,
-                complex_dtype=to_complex_dtype(result_dtype),
+                complex_dtype=to_complex_dtype(result_dtype.type),
                 )
 
     def get_kernel(self, result_dtype):
@@ -652,7 +652,7 @@ class M2LPreprocessMultipole(E2EBase):
         :arg preprocessed_src_expansions
         """
         preprocessed_src_expansions = kwargs.pop("preprocessed_src_expansions")
-        result_dtype = preprocessed_src_expansions.dtype.type
+        result_dtype = preprocessed_src_expansions.dtype
         knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
         return knl(queue,
             preprocessed_src_expansions=preprocessed_src_expansions, **kwargs)
