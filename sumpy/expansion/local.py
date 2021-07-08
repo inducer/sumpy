@@ -53,10 +53,10 @@ class LocalExpansionBase(ExpansionBase):
     .. attribute:: use_rscale
     .. attribute:: use_preprocessing_for_m2l
 
-    .. automethod:: m2l_global_precompute_exprs
-    .. automethod:: m2l_global_precompute_nexpr
-    .. automethod:: m2l_preprocess_exprs
-    .. automethod:: m2l_postprocess_exprs
+    .. automethod:: m2l_translation_classes_dependent_data
+    .. automethod:: m2l_translation_classes_dependent_ndata
+    .. automethod:: m2l_preprocess_multipole_exprs
+    .. automethod:: m2l_postprocess_local_exprs
     .. automethod:: translate_from
     """
     init_arg_names = ("kernel", "order", "use_rscale", "use_preprocessing_for_m2l")
@@ -83,7 +83,7 @@ class LocalExpansionBase(ExpansionBase):
             and self.use_preprocessing_for_m2l == other.use_preprocessing_for_m2l
         )
 
-    def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
+    def m2l_translation_classes_dependent_data(self, src_expansion, src_rscale,
             dvec, tgt_rscale, sac) -> Tuple[Any]:
         """Return an iterable of expressions that needs to be precomputed
         for multipole-to-local translations that depend only on the
@@ -97,18 +97,18 @@ class LocalExpansionBase(ExpansionBase):
         """
         return tuple()
 
-    def m2l_global_precompute_nexpr(self, src_expansion):
+    def m2l_translation_classes_dependent_ndata(self, src_expansion):
         """Return the number of expressions returned by
-        :func:`~sumpy.expansion.local.LocalExpansionBase.m2l_global_precompute_exprs`.
+        :func:`~sumpy.expansion.local.LocalExpansionBase.m2l_translation_classes_dependent_data`.
         This method exists because calculating the number of expressions using
         the above method might be costly and
-        :func:`~sumpy.expansion.local.LocalExpansionBase.m2l_global_precompute_exprs`
+        :func:`~sumpy.expansion.local.LocalExpansionBase.m2l_translation_classes_dependent_data`
         cannot be memoized due to it having side effects through the argument
         *sac*.
         """
         return 0
 
-    def m2l_preprocess_exprs(self, src_expansion, src_coeff_exprs, sac,
+    def m2l_preprocess_multipole_exprs(self, src_expansion, src_coeff_exprs, sac,
             src_rscale):
         """Return preprocessed input expressions for the Toeplitz matrix
         used for M2L. When FFT is turned on, the input expressions are
@@ -120,7 +120,7 @@ class LocalExpansionBase(ExpansionBase):
         """
         raise NotImplementedError
 
-    def m2l_postprocess_exprs(self, src_expansion, m2l_result, src_rscale,
+    def m2l_postprocess_local_exprs(self, src_expansion, m2l_result, src_rscale,
             tgt_rscale, sac):
         """Return postprocessed output expressions for the Toeplitz matrix
         used for M2L. When FFT is turned on, the output expressions are
@@ -131,7 +131,7 @@ class LocalExpansionBase(ExpansionBase):
         raise NotImplementedError
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale, sac=None, precomputed_exprs=None):
+            dvec, tgt_rscale, sac=None, m2l_translation_classes_dependent_data=None):
         """Translate from a multipole or local expansion to a local expansion
 
         :arg src_expansion: The source expansion to translate from.
@@ -144,9 +144,9 @@ class LocalExpansionBase(ExpansionBase):
         :arg sac: An object of type
                 :class:`sumpy.assignment_collection.SymbolicAssignmentCollection`
                 to collect common subexpressions or None.
-        :arg precomputed_exprs: An iterable of symbolic expressions representing the
+        :arg m2l_translation_classes_dependent_data: An iterable of symbolic expressions representing the
                 expressions returned by
-                :func:`~sumpy.expansion.local.LocalExpansionBase.m2l_global_precompute_exprs`.
+                :func:`~sumpy.expansion.local.LocalExpansionBase.m2l_translation_classes_dependent_data`.
         """
         raise NotImplementedError
 
@@ -278,15 +278,15 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         return kernel.postprocess_at_target(result, bvec)
 
-    def m2l_global_precompute_nexpr(self, src_expansion):
+    def m2l_translation_classes_dependent_ndata(self, src_expansion):
         """Returns number of expressions in M2L global precomputation step.
         """
         if self.use_preprocessing_for_m2l:
-            return len(self._m2l_global_precompute_mis(src_expansion)[0])
+            return len(self._m2l_translation_classes_dependent_data_mis(src_expansion)[0])
         else:
-            return len(self._m2l_global_precompute_mis(src_expansion)[1])
+            return len(self._m2l_translation_classes_dependent_data_mis(src_expansion)[1])
 
-    def _m2l_global_precompute_mis(self, src_expansion):
+    def _m2l_translation_classes_dependent_data_mis(self, src_expansion):
         """We would like to compute the M2L by way of a Toeplitz matrix below.
         To get the matrix representing the M2L into Toeplitz form, a certain
         numbering of rows and columns (as identified by multi-indices) is
@@ -340,7 +340,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         return toeplitz_matrix_coeffs, tuple(needed_vector_terms), max_mi
 
-    def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
+    def m2l_translation_classes_dependent_data(self, src_expansion, src_rscale,
             dvec, tgt_rscale, sac):
 
         # We know the general form of the multipole expansion is:
@@ -362,7 +362,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             src_rscale = 1
 
         toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
-            self._m2l_global_precompute_mis(src_expansion)
+            self._m2l_translation_classes_dependent_data_mis(src_expansion)
 
         toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
                                 enumerate(toeplitz_matrix_coeffs))
@@ -410,10 +410,10 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         return vector
 
-    def m2l_preprocess_exprs(self, src_expansion, src_coeff_exprs, sac,
+    def m2l_preprocess_multipole_exprs(self, src_expansion, src_coeff_exprs, sac,
             src_rscale):
         toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
-                self._m2l_global_precompute_mis(src_expansion)
+                self._m2l_translation_classes_dependent_data_mis(src_expansion)
         toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
                             enumerate(toeplitz_matrix_coeffs))
 
@@ -430,10 +430,10 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         else:
             return toeplitz_first_row
 
-    def m2l_postprocess_exprs(self, src_expansion, m2l_result, src_rscale,
+    def m2l_postprocess_local_exprs(self, src_expansion, m2l_result, src_rscale,
             tgt_rscale, sac):
         toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
-                self._m2l_global_precompute_mis(src_expansion)
+                self._m2l_translation_classes_dependent_data_mis(src_expansion)
         toeplitz_matrix_ident_to_index = dict((ident, i) for i, ident in
                             enumerate(toeplitz_matrix_coeffs))
 
@@ -453,7 +453,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, _fast_version=True,
-            precomputed_exprs=None):
+            m2l_translation_classes_dependent_data=None):
         logger.info("building translation operator for %s: %s(%d) -> %s(%d): start",
                     src_expansion.kernel,
                     type(src_expansion).__name__,
@@ -471,22 +471,22 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         if isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
             toeplitz_matrix_coeffs, needed_vector_terms, max_mi = \
-                self._m2l_global_precompute_mis(src_expansion)
+                self._m2l_translation_classes_dependent_data_mis(src_expansion)
             toeplitz_matrix_ident_to_index = {ident: i for i, ident in
                                 enumerate(toeplitz_matrix_coeffs)}
 
-            if not precomputed_exprs:
-                derivatives = self.m2l_global_precompute_exprs(src_expansion,
+            if not m2l_translation_classes_dependent_data:
+                derivatives = self.m2l_translation_classes_dependent_data(src_expansion,
                         src_rscale, dvec, tgt_rscale, sac)
             else:
-                derivatives = precomputed_exprs
+                derivatives = m2l_translation_classes_dependent_data
 
             if self.use_preprocessing_for_m2l:
-                assert precomputed_exprs is not None
-                assert len(src_coeff_exprs) == len(precomputed_exprs)
+                assert m2l_translation_classes_dependent_data is not None
+                assert len(src_coeff_exprs) == len(m2l_translation_classes_dependent_data)
                 result = []
-                for i in range(len(precomputed_exprs)):
-                    a = precomputed_exprs[i]
+                for i in range(len(m2l_translation_classes_dependent_data)):
+                    a = m2l_translation_classes_dependent_data[i]
                     b = src_coeff_exprs[i]
                     result.append(a*b)
                 return result
@@ -495,7 +495,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             for expr, mi in zip(derivatives, needed_vector_terms):
                 derivatives_full[toeplitz_matrix_ident_to_index[mi]] = expr
 
-            toeplitz_first_row = self.m2l_preprocess_exprs(src_expansion,
+            toeplitz_first_row = self.m2l_preprocess_multipole_exprs(src_expansion,
                 src_coeff_exprs, sac, src_rscale)
 
             # Do the matvec
@@ -506,7 +506,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 output = matvec_toeplitz_upper_triangular(toeplitz_first_row,
                                 derivatives_full)
 
-            result = self.m2l_postprocess_exprs(src_expansion, output, src_rscale,
+            result = self.m2l_postprocess_local_exprs(src_expansion, output, src_rscale,
                 tgt_rscale, sac)
 
             logger.info("building translation operator: done")
@@ -749,11 +749,11 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                        * sym.exp(sym.I * c * -target_angle_rel_center), bvec)
                 for c in self.get_coefficient_identifiers())
 
-    def m2l_global_precompute_nexpr(self, src_expansion):
+    def m2l_translation_classes_dependent_ndata(self, src_expansion):
         nexpr = 2 * self.order + 2 * src_expansion.order + 1
         return nexpr
 
-    def m2l_global_precompute_exprs(self, src_expansion, src_rscale,
+    def m2l_translation_classes_dependent_data(self, src_expansion, src_rscale,
             dvec, tgt_rscale, sac):
 
         from sumpy.symbolic import sym_real_norm_2, Hankel1
@@ -762,23 +762,23 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         dvec_len = sym_real_norm_2(dvec)
         new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
         arg_scale = self.get_bessel_arg_scaling()
-        precomputed_exprs = [0] * (2*self.order + 2 * src_expansion.order + 1)
+        m2l_translation_classes_dependent_data = [0] * (2*self.order + 2 * src_expansion.order + 1)
         for j in self.get_coefficient_identifiers():
             idx_j = self.get_storage_index(j)
             for m in src_expansion.get_coefficient_identifiers():
                 idx_m = src_expansion.get_storage_index(m)
-                precomputed_exprs[idx_j + idx_m] = (
+                m2l_translation_classes_dependent_data[idx_j + idx_m] = (
                     Hankel1(m + j, arg_scale * dvec_len, 0)
                     * sym.exp(sym.I * (m + j) * new_center_angle_rel_old_center))
 
         if self.use_preprocessing_for_m2l:
             order = src_expansion.order
-            first, last = precomputed_exprs[:2*order], precomputed_exprs[2*order:]
+            first, last = m2l_translation_classes_dependent_data[:2*order], m2l_translation_classes_dependent_data[2*order:]
             return fft(list(last)+list(first), sac)
 
-        return precomputed_exprs
+        return m2l_translation_classes_dependent_data
 
-    def m2l_preprocess_exprs(self, src_expansion, src_coeff_exprs, sac,
+    def m2l_preprocess_multipole_exprs(self, src_expansion, src_coeff_exprs, sac,
             src_rscale):
 
         from sumpy.tools import fft
@@ -794,7 +794,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         else:
             return src_coeff_exprs
 
-    def m2l_postprocess_exprs(self, src_expansion, m2l_result, src_rscale,
+    def m2l_postprocess_local_exprs(self, src_expansion, m2l_result, src_rscale,
             tgt_rscale, sac):
 
         if self.use_preprocessing_for_m2l:
@@ -810,7 +810,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         return result
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale, sac=None, precomputed_exprs=None):
+            dvec, tgt_rscale, sac=None, m2l_translation_classes_dependent_data=None):
         from sumpy.symbolic import sym_real_norm_2, BesselJ
 
         if not self.use_rscale:
@@ -835,21 +835,21 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             return translated_coeffs
 
         if isinstance(src_expansion, self.mpole_expn_class):
-            if precomputed_exprs is None:
-                derivatives = self.m2l_global_precompute_exprs(src_expansion,
+            if m2l_translation_classes_dependent_data is None:
+                derivatives = self.m2l_translation_classes_dependent_data(src_expansion,
                     src_rscale, dvec, tgt_rscale, sac=sac)
             else:
-                derivatives = precomputed_exprs
+                derivatives = m2l_translation_classes_dependent_data
 
             translated_coeffs = []
             if self.use_preprocessing_for_m2l:
-                assert precomputed_exprs is not None
+                assert m2l_translation_classes_dependent_data is not None
                 assert len(derivatives) == len(src_coeff_exprs)
                 for a, b in zip(derivatives, src_coeff_exprs):
                     translated_coeffs.append(a * b)
                 return translated_coeffs
 
-            src_coeff_exprs = self.m2l_preprocess_exprs(src_expansion,
+            src_coeff_exprs = self.m2l_preprocess_multipole_exprs(src_expansion,
                     src_coeff_exprs, sac, src_rscale)
 
             for j in self.get_coefficient_identifiers():
@@ -858,7 +858,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                         * src_coeff_exprs[src_expansion.get_storage_index(m)]
                         for m in src_expansion.get_coefficient_identifiers()))
 
-            translated_coeffs = self.m2l_postprocess_exprs(src_expansion,
+            translated_coeffs = self.m2l_postprocess_local_exprs(src_expansion,
                 translated_coeffs, src_rscale, tgt_rscale, sac)
             return translated_coeffs
 
