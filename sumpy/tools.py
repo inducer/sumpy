@@ -919,6 +919,7 @@ to_complex_dtype_dict = {
     np.float64: np.complex128,
 }
 
+
 def to_complex_dtype(dtype):
     try:
         return to_complex_dtype_dict[dtype]
