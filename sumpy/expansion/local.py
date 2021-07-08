@@ -284,7 +284,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
     def m2l_translation_classes_dependent_ndata(self, src_expansion):
         """Returns number of expressions in M2L global precomputation step.
         """
-        mis_with_dummy_rows, mis_without_dummy_rows = \
+        mis_with_dummy_rows, mis_without_dummy_rows, _ = \
             self._m2l_translation_classes_dependent_data_mis(src_expansion)
 
         if self.use_preprocessing_for_m2l:
