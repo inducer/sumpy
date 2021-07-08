@@ -449,7 +449,7 @@ class SumpyExpansionWrangler:
                             translation_class_stop - translation_class_start, -1))
 
     @memoize_method
-    def preprocessed_multipole_expansions_level_starts(self):
+    def m2l_preproc_mpole_expansions_level_starts(self):
         def order_to_size(order):
             mpole_expn = self.code.multipole_expansion(order)
             local_expn = self.code.local_expansion(order)
@@ -459,15 +459,15 @@ class SumpyExpansionWrangler:
         return build_csr_level_starts(self.level_orders, order_to_size,
                 level_starts=self.tree.level_start_box_nrs)
 
-    def preprocessed_multipole_expansion_zeros(self):
+    def m2l_preproc_mpole_expansion_zeros(self):
         return cl.array.zeros(
                 self.queue,
-                self.preprocessed_multipole_expansions_level_starts()[-1],
+                self.m2l_preproc_mpole_expansions_level_starts()[-1],
                 dtype=self.preprocessed_mpole_dtype)
 
-    def preprocessed_multipole_expansions_view(self, mpole_exps, level):
+    def m2l_preproc_mpole_expansions_view(self, mpole_exps, level):
         expn_start, expn_stop = \
-                self.preprocessed_multipole_expansions_level_starts()[level:level+2]
+                self.m2l_preproc_mpole_expansions_level_starts()[level:level+2]
         box_start, box_stop = self.tree.level_start_box_nrs[level:level+2]
 
         return (box_start,
@@ -709,7 +709,7 @@ class SumpyExpansionWrangler:
             mpole_exps):
 
         if self.use_preprocessing_for_m2l:
-            preprocessed_mpole_exps = self.preprocessed_multipole_expansion_zeros()
+            preprocessed_mpole_exps = self.m2l_preproc_mpole_expansion_zeros()
             events = []
             for lev in range(self.tree.nlevels):
                 order = self.level_orders[lev]
@@ -720,7 +720,7 @@ class SumpyExpansionWrangler:
                         self.multipole_expansions_view(mpole_exps, lev)
 
                 _, preprocessed_source_mpoles_view = \
-                        self.preprocessed_multipole_expansions_view(
+                        self.m2l_preproc_mpole_expansions_view(
                                 preprocessed_mpole_exps, lev)
 
                 tr_classes = self.m2l_translation_class_level_start_box_nrs()
@@ -737,7 +737,7 @@ class SumpyExpansionWrangler:
                 )
                 events.append(evt)
             mpole_exps = preprocessed_mpole_exps
-            mpole_exps_view_func = self.preprocessed_multipole_expansions_view
+            mpole_exps_view_func = self.m2l_preproc_mpole_expansions_view
         else:
             mpole_exps_view_func = self.multipole_expansions_view
 
