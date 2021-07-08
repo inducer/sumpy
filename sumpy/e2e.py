@@ -318,12 +318,12 @@ class E2EFromCSR(E2EBase):
                                 m2l_translation_classes_lists[isrc_box]
                         <> translation_class_rel = translation_class - \
                                                     translation_classes_level_start
-                        """] if nm2l_translation_classes_dependent_data != 0 else []) + ["""
+                        """] if m2l_translation_classes_dependent_ndata != 0 else []) + ["""
                         <> m2l_translation_classes_dependent_expr{idx} = \
                             m2l_translation_classes_dependent_data[ \
                                 translation_class_rel, {idx}]
                         """.format(idx=idx) for idx in range(
-                            nm2l_translation_classes_dependent_data)] + ["""
+                            m2l_translation_classes_dependent_ndata)] + ["""
                         <> src_coeff{coeffidx} = \
                             src_expansions[src_ibox - src_base_ibox, {coeffidx}] \
                             {{dep=read_src_ibox}}
@@ -368,7 +368,7 @@ class E2EFromCSR(E2EBase):
                         offset=lp.auto),
                     lp.ValueArg("ntranslation_classes, ntranslation_classes_lists",
                         np.int32),
-                ] if nm2l_translation_classes_dependent_data != 0 else [])
+                ] if m2l_translation_classes_dependent_ndata != 0 else [])
                 + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
