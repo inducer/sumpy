@@ -564,9 +564,8 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
 # {{{ M2LPreprocessMultipole
 
 class M2LPreprocessMultipole(E2EBase):
-    """Computes the preprocessed multipole expansion for optimized
-    M2L
-    """
+    """Computes the preprocessed multipole expansion for accelerated M2L"""
+
     default_name = "m2l_preprocess_multipole"
 
     def get_translation_loopy_insns(self, result_dtype):
