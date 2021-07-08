@@ -182,7 +182,8 @@ class E2EFromCSR(E2EBase):
             m2l_translation_classes_dependent_ndata = 0
 
         if self.use_preprocessing_for_m2l:
-            ncoeff_src = m2l_translation_classes_dependent_ndata
+            ncoeff_src = self.tgt_expansion.m2l_preprocess_multipole_nexprs(
+                self.src_expansion)
         else:
             ncoeff_src = len(self.src_expansion)
 
@@ -278,11 +279,16 @@ class E2EFromCSR(E2EBase):
             m2l_translation_classes_dependent_ndata = 0
 
         if self.use_preprocessing_for_m2l:
-            ncoeff_src = m2l_translation_classes_dependent_ndata
-            ncoeff_post = m2l_translation_classes_dependent_ndata
+            # number of expressions given as input to M2L after preprocessing
+            ncoeff_src = self.tgt_expansion.m2l_preprocess_multipole_nexprs(
+                    self.src_expansion)
+            # number of expressions given as input to postprocessing
+            ncoeff_tgt_before_postprocess = \
+                    self.tgt_expansion.m2l_postprocess_local_nexprs(
+                        self.src_expansion)
         else:
             ncoeff_src = len(self.src_expansion)
-            ncoeff_post = len(self.tgt_expansion)
+            ncoeff_tgt_before_postprocess = len(self.tgt_expansion)
 
         ncoeff_tgt = len(self.tgt_expansion)
 
@@ -335,7 +341,8 @@ class E2EFromCSR(E2EBase):
                     """] + ["""
                     <> coeff_sum{coeffidx} = \
                         simul_reduce(sum, isrc_box, coeff{coeffidx})
-                    """.format(coeffidx=i) for i in range(ncoeff_post)] + [
+                    """.format(coeffidx=i) for i in
+                        range(ncoeff_tgt_before_postprocess)] + [
                     ] + self.get_postprocess_loopy_insns(result_dtype) + [f"""
                     tgt_expansions[tgt_ibox - tgt_base_ibox, {coeffidx}] = \
                             coeff_post{coeffidx} {{id_prefix=write_expn}}
@@ -592,8 +599,7 @@ class M2LPreprocessMultipole(E2EBase):
     def get_kernel(self, result_dtype):
         nsrc_coeffs = len(self.src_expansion)
         npreprocessed_src_coeffs = \
-            self.tgt_expansion.m2l_translation_classes_dependent_ndata(
-                    self.src_expansion)
+            self.tgt_expansion.m2l_preprocess_multipole_nexprs(self.src_expansion)
         from sumpy.tools import gather_loopy_arguments
         loopy_knl = lp.make_kernel(
                 [

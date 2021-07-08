@@ -55,7 +55,9 @@ class LocalExpansionBase(ExpansionBase):
     .. automethod:: m2l_translation_classes_dependent_data
     .. automethod:: m2l_translation_classes_dependent_ndata
     .. automethod:: m2l_preprocess_multipole_exprs
+    .. automethod:: m2l_preprocess_multipole_nexprs
     .. automethod:: m2l_postprocess_local_exprs
+    .. automethod:: m2l_postprocess_local_nexprs
     .. automethod:: translate_from
     """
     init_arg_names = ("kernel", "order", "use_rscale", "use_preprocessing_for_m2l")
@@ -121,6 +123,17 @@ class LocalExpansionBase(ExpansionBase):
         """
         raise NotImplementedError
 
+    def m2l_preprocess_multipole_nexprs(self, src_expansion):
+        """Return the number of expressions returned by
+        :func:`~sumpy.expansion.local.LocalExpansionBase.m2l_preprocess_multipole_exprs`.
+        This method exists because calculating the number of expressions using
+        the above method might be costly and it cannot be memoized due to it having
+        side effects through the argument *sac*.
+        """
+        # For all use-cases we have right now, this is equal to the number of
+        # translation classes dependent exprs. Use that as a default.
+        return self.m2l_translation_classes_dependent_ndata(src_expansion)
+
     def m2l_postprocess_local_exprs(self, src_expansion, m2l_result, src_rscale,
             tgt_rscale, sac):
         """Return postprocessed local expansion for an optimized M2L.
@@ -132,6 +145,17 @@ class LocalExpansionBase(ExpansionBase):
         space back to the original space.
         """
         raise NotImplementedError
+
+    def m2l_postprocess_local_nexprs(self, src_expansion):
+        """Return the number of expressions given as input to
+        :func:`~sumpy.expansion.local.LocalExpansionBase.m2l_postprocess_local_exprs`.
+        This method exists because calculating the number of expressions using
+        the above method might be costly and it cannot be memoized due to it
+        having side effects through the argument *sac*.
+        """
+        # For all use-cases we have right now, this is equal to the number of
+        # translation classes dependent exprs. Use that as a default.
+        return self.m2l_translation_classes_dependent_ndata(src_expansion)
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, m2l_translation_classes_dependent_data=None):
