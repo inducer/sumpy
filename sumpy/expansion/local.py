@@ -148,8 +148,8 @@ class LocalExpansionBase(ExpansionBase):
         :arg sac: An object of type
                 :class:`sumpy.assignment_collection.SymbolicAssignmentCollection`
                 to collect common subexpressions or None.
-        :arg m2l_translation_classes_dependent_data: An iterable of symbolic expressions representing the
-                expressions returned by
+        :arg m2l_translation_classes_dependent_data: An iterable of symbolic
+                expressions representing the expressions returned by
                 :func:`~sumpy.expansion.local.LocalExpansionBase.m2l_translation_classes_dependent_data`.
         """
         raise NotImplementedError
@@ -483,14 +483,15 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                                 enumerate(toeplitz_matrix_coeffs)}
 
             if not m2l_translation_classes_dependent_data:
-                derivatives = self.m2l_translation_classes_dependent_data(src_expansion,
-                        src_rscale, dvec, tgt_rscale, sac)
+                derivatives = self.m2l_translation_classes_dependent_data(
+                        src_expansion, src_rscale, dvec, tgt_rscale, sac)
             else:
                 derivatives = m2l_translation_classes_dependent_data
 
             if self.use_preprocessing_for_m2l:
                 assert m2l_translation_classes_dependent_data is not None
-                assert len(src_coeff_exprs) == len(m2l_translation_classes_dependent_data)
+                assert len(src_coeff_exprs) == len(
+                        m2l_translation_classes_dependent_data)
                 result = []
                 for i in range(len(m2l_translation_classes_dependent_data)):
                     a = m2l_translation_classes_dependent_data[i]
@@ -513,8 +514,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 output = matvec_toeplitz_upper_triangular(toeplitz_first_row,
                                 derivatives_full)
 
-            result = self.m2l_postprocess_local_exprs(src_expansion, output, src_rscale,
-                tgt_rscale, sac)
+            result = self.m2l_postprocess_local_exprs(src_expansion, output,
+                src_rscale, tgt_rscale, sac)
 
             logger.info("building translation operator: done")
             return result
@@ -769,7 +770,8 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         dvec_len = sym_real_norm_2(dvec)
         new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
         arg_scale = self.get_bessel_arg_scaling()
-        m2l_translation_classes_dependent_data = [0] * (2*self.order + 2 * src_expansion.order + 1)
+        m2l_translation_classes_dependent_data = \
+                [0] * (2*self.order + 2 * src_expansion.order + 1)
         for j in self.get_coefficient_identifiers():
             idx_j = self.get_storage_index(j)
             for m in src_expansion.get_coefficient_identifiers():
@@ -780,7 +782,8 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
         if self.use_preprocessing_for_m2l:
             order = src_expansion.order
-            first, last = m2l_translation_classes_dependent_data[:2*order], m2l_translation_classes_dependent_data[2*order:]
+            first, last = m2l_translation_classes_dependent_data[:2*order], \
+                m2l_translation_classes_dependent_data[2*order:]
             return fft(list(last)+list(first), sac)
 
         return m2l_translation_classes_dependent_data
@@ -843,8 +846,8 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
         if isinstance(src_expansion, self.mpole_expn_class):
             if m2l_translation_classes_dependent_data is None:
-                derivatives = self.m2l_translation_classes_dependent_data(src_expansion,
-                    src_rscale, dvec, tgt_rscale, sac=sac)
+                derivatives = self.m2l_translation_classes_dependent_data(
+                    src_expansion, src_rscale, dvec, tgt_rscale, sac=sac)
             else:
                 derivatives = m2l_translation_classes_dependent_data
 

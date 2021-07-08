@@ -153,10 +153,12 @@ class E2EFromCSR(E2EBase):
     default_name = "e2e_from_csr"
 
     def __init__(self, ctx, src_expansion, tgt_expansion,
-            name=None, device=None, m2l_use_translation_classes_dependent_data=False):
+            name=None, device=None,
+            m2l_use_translation_classes_dependent_data=False):
         super().__init__(ctx, src_expansion, tgt_expansion,
             name=name, device=device)
-        self.m2l_use_translation_classes_dependent_data = m2l_use_translation_classes_dependent_data
+        self.m2l_use_translation_classes_dependent_data = \
+                m2l_use_translation_classes_dependent_data
 
     def get_translation_loopy_insns(self, result_dtype):
         from sumpy.symbolic import make_sym_vector
@@ -169,10 +171,13 @@ class E2EFromCSR(E2EBase):
         extra_kwargs = dict()
         if self.m2l_use_translation_classes_dependent_data:
             nm2l_translation_classes_dependent_data = \
-                self.tgt_expansion.m2l_translation_classes_dependent_ndata(self.src_expansion)
-            m2l_translation_classes_dependent_data = [sym.Symbol("m2l_translation_classes_dependent_expr%d" % i)
+                self.tgt_expansion.m2l_translation_classes_dependent_ndata(
+                        self.src_expansion)
+            m2l_translation_classes_dependent_data = \
+                    [sym.Symbol("m2l_translation_classes_dependent_expr%d" % i)
                 for i in range(nm2l_translation_classes_dependent_data)]
-            extra_kwargs["m2l_translation_classes_dependent_data"] = m2l_translation_classes_dependent_data
+            extra_kwargs["m2l_translation_classes_dependent_data"] = \
+                    m2l_translation_classes_dependent_data
         else:
             nm2l_translation_classes_dependent_data = 0
 
@@ -218,7 +223,8 @@ class E2EFromCSR(E2EBase):
         ncoeff_tgt = len(self.tgt_expansion)
         if self.m2l_use_translation_classes_dependent_data:
             nm2l_translation_classes_dependent_data = \
-                self.tgt_expansion.m2l_translation_classes_dependent_ndata(self.src_expansion)
+                self.tgt_expansion.m2l_translation_classes_dependent_ndata(
+                        self.src_expansion)
         else:
             nm2l_translation_classes_dependent_data = 0
 
@@ -265,14 +271,15 @@ class E2EFromCSR(E2EBase):
 
     def get_kernel(self, result_dtype):
         if self.m2l_use_translation_classes_dependent_data:
-            nm2l_translation_classes_dependent_data = \
-                self.tgt_expansion.m2l_translation_classes_dependent_ndata(self.src_expansion)
+            m2l_translation_classes_dependent_ndata = \
+                self.tgt_expansion.m2l_translation_classes_dependent_ndata(
+                        self.src_expansion)
         else:
             nm2l_translation_classes_dependent_data = 0
 
         if self.use_preprocessing_for_m2l:
-            ncoeff_src = nm2l_translation_classes_dependent_data
-            ncoeff_post = nm2l_translation_classes_dependent_data
+            ncoeff_src = m2l_translation_classes_dependent_ndata
+            ncoeff_post = m2l_translation_classes_dependent_ndata
         else:
             ncoeff_src = len(self.src_expansion)
             ncoeff_post = len(self.tgt_expansion)
@@ -313,7 +320,8 @@ class E2EFromCSR(E2EBase):
                                                     translation_classes_level_start
                         """] if nm2l_translation_classes_dependent_data != 0 else []) + ["""
                         <> m2l_translation_classes_dependent_expr{idx} = \
-                            m2l_translation_classes_dependent_data[translation_class_rel, {idx}]
+                            m2l_translation_classes_dependent_data[ \
+                                translation_class_rel, {idx}]
                         """.format(idx=idx) for idx in range(
                             nm2l_translation_classes_dependent_data)] + ["""
                         <> src_coeff{coeffidx} = \
@@ -352,7 +360,8 @@ class E2EFromCSR(E2EBase):
                     lp.ValueArg("translation_classes_level_start",
                         np.int32),
                     lp.GlobalArg("m2l_translation_classes_dependent_data", None,
-                        shape=("ntranslation_classes", nm2l_translation_classes_dependent_data),
+                        shape=("ntranslation_classes",
+                            m2l_translation_classes_dependent_ndata),
                         offset=lp.auto),
                     lp.GlobalArg("m2l_translation_classes_lists", np.int32,
                         shape=("ntranslation_classes_lists"), strides=(1,),
@@ -366,7 +375,8 @@ class E2EFromCSR(E2EBase):
                 silenced_warnings="write_race(write_expn*)",
                 default_offset=lp.auto,
                 fixed_parameters=dict(dim=self.dim,
-                                      nm2l_translation_classes_dependent_data=nm2l_translation_classes_dependent_data),
+                        m2l_translation_classes_dependent_ndata=(
+                            m2l_translation_classes_dependent_ndata)),
                 lang_version=MOST_RECENT_LANGUAGE_VERSION
                 )
 
@@ -440,7 +450,8 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
         tgt_coeff_names = [
-                sac.assign_unique("m2l_translation_classes_dependent_expr%d" % i, coeff_i)
+                sac.assign_unique("m2l_translation_classes_dependent_expr%d" % i,
+                    coeff_i)
                 for i, coeff_i in enumerate(
                     self.tgt_expansion.m2l_translation_classes_dependent_data(
                         self.src_expansion, src_rscale,
@@ -458,8 +469,9 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                 )
 
     def get_kernel(self, result_dtype):
-        nm2l_translation_classes_dependent_data = \
-            self.tgt_expansion.m2l_translation_classes_dependent_ndata(self.src_expansion)
+        m2l_translation_classes_dependent_ndata = \
+            self.tgt_expansion.m2l_translation_classes_dependent_ndata(
+                    self.src_expansion)
         from sumpy.tools import gather_loopy_arguments
         loopy_knl = lp.make_kernel(
                 [
@@ -472,14 +484,17 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                             itr_class + translation_classes_level_start] {dup=idim}
 
                     """] + self.get_translation_loopy_insns(result_dtype) + ["""
-                    m2l_translation_classes_dependent_data[itr_class, {idx}] = m2l_translation_classes_dependent_expr{idx}
-                    """.format(idx=i) for i in range(nm2l_translation_classes_dependent_data)] + ["""
+                    m2l_translation_classes_dependent_data[itr_class, {idx}] = \
+                            m2l_translation_classes_dependent_expr{idx}
+                    """.format(idx=i) for i in range(
+                        m2l_translation_classes_dependent_ndata)] + ["""
                 end
                 """],
                 [
                     lp.ValueArg("src_rscale", None),
                     lp.GlobalArg("m2l_translation_classes_dependent_data", None,
-                        shape=("ntranslation_classes", nm2l_translation_classes_dependent_data),
+                        shape=("ntranslation_classes",
+                            m2l_translation_classes_dependent_ndata),
                         offset=lp.auto),
                     lp.GlobalArg("m2l_translation_vectors", None,
                         shape=("dim", "ntranslation_vectors")),
@@ -523,7 +538,8 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
         # meaningfully inferred. Make the type of rscale explicit.
         src_rscale = m2l_translation_vectors.dtype.type(kwargs.pop("src_rscale"))
 
-        m2l_translation_classes_dependent_data = kwargs.pop("m2l_translation_classes_dependent_data")
+        m2l_translation_classes_dependent_data = kwargs.pop(
+                "m2l_translation_classes_dependent_data")
         result_dtype = m2l_translation_classes_dependent_data.dtype
 
         knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
@@ -531,7 +547,8 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
         return knl(queue,
                 src_rscale=src_rscale,
                 m2l_translation_vectors=m2l_translation_vectors,
-                m2l_translation_classes_dependent_data=m2l_translation_classes_dependent_data,
+                m2l_translation_classes_dependent_data=(
+                    m2l_translation_classes_dependent_data),
                 **kwargs)
 
 # }}}
@@ -575,7 +592,8 @@ class M2LPreprocessMultipole(E2EBase):
     def get_kernel(self, result_dtype):
         nsrc_coeffs = len(self.src_expansion)
         npreprocessed_src_coeffs = \
-            self.tgt_expansion.m2l_translation_classes_dependent_ndata(self.src_expansion)
+            self.tgt_expansion.m2l_translation_classes_dependent_ndata(
+                    self.src_expansion)
         from sumpy.tools import gather_loopy_arguments
         loopy_knl = lp.make_kernel(
                 [
@@ -587,8 +605,10 @@ class M2LPreprocessMultipole(E2EBase):
                     <> src_coeff{idx} = src_expansions[isrc_box, {idx}]
                 """.format(idx=i) for i in range(nsrc_coeffs)] + [
                 ] + self.get_translation_loopy_insns(result_dtype) + ["""
-                    preprocessed_src_expansions[isrc_box, {idx}] = preprocessed_src_coeff{idx}
-                    """.format(idx=i) for i in range(npreprocessed_src_coeffs)] + ["""
+                    preprocessed_src_expansions[isrc_box, {idx}] = \
+                        preprocessed_src_coeff{idx}
+                    """.format(idx=i) for i in range(
+                        npreprocessed_src_coeffs)] + ["""
                 end
                 """],
                 [
@@ -597,7 +617,8 @@ class M2LPreprocessMultipole(E2EBase):
                     lp.GlobalArg("src_expansions", None,
                         shape=("nsrc_boxes", nsrc_coeffs), offset=lp.auto),
                     lp.GlobalArg("preprocessed_src_expansions", None,
-                        shape=("nsrc_boxes", npreprocessed_src_coeffs), offset=lp.auto),
+                        shape=("nsrc_boxes", npreprocessed_src_coeffs),
+                        offset=lp.auto),
                     "..."
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
@@ -628,7 +649,8 @@ class M2LPreprocessMultipole(E2EBase):
         preprocessed_src_expansions = kwargs.pop("preprocessed_src_expansions")
         result_dtype = preprocessed_src_expansions.dtype
         knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
-        return knl(queue, preprocessed_src_expansions=preprocessed_src_expansions, **kwargs)
+        return knl(queue,
+            preprocessed_src_expansions=preprocessed_src_expansions, **kwargs)
 # }}}
 
 
