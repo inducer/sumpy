@@ -708,9 +708,10 @@ class SumpyExpansionWrangler:
             target_boxes, src_box_starts, src_box_lists,
             mpole_exps):
 
+        events = []
+
         if self.use_preprocessing_for_m2l:
             preprocessed_mpole_exps = self.m2l_preproc_mpole_expansion_zeros()
-            events = []
             for lev in range(self.tree.nlevels):
                 order = self.level_orders[lev]
                 preprocess_mpole_kernel = \
@@ -743,7 +744,6 @@ class SumpyExpansionWrangler:
 
         local_exps = self.local_expansion_zeros()
 
-        events = []
         for lev in range(self.tree.nlevels):
             start, stop = level_start_target_box_nrs[lev:lev+2]
             if start == stop:
