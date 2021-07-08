@@ -440,6 +440,10 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         if self.use_preprocessing_for_m2l:
             return fft(input_vector, sac=sac)
         else:
+            # When FFT is turned off, there is no preprocessing needed
+            # Therefore no copying is done and the multipole expansion is sent to
+            # the main M2L routine as it is. This method is used internally in the
+            # the main M2l routine to avoid code duplication.
             return input_vector
 
     def m2l_postprocess_local_exprs(self, src_expansion, m2l_result, src_rscale,
