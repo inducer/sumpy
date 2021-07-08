@@ -299,6 +299,10 @@ class SumpyExpansionWrangler:
         Keyword arguments to be passed for handling
         self interactions (source and target particles are the same),
         provided special handling is needed
+
+    .. attribute:: preprocessed_mpole_dtype
+
+        Type for the preprocessed multipole expansion if used for M2L.
     """
 
     def __init__(self, code_container, queue, tree, dtype, fmm_level_to_order,
@@ -306,7 +310,7 @@ class SumpyExpansionWrangler:
             kernel_extra_kwargs=None,
             self_extra_kwargs=None,
             translation_classes_data=None,
-            complex_dtype=None):
+            preprocessed_mpole_dtype=None):
         self.code = code_container
         self.queue = queue
         self.tree = tree
@@ -316,11 +320,11 @@ class SumpyExpansionWrangler:
 
         if not self.code.use_preprocessing_for_m2l:
             # If not FFT, we don't need complex dtypes
-            self.complex_dtype = dtype
-        elif complex_dtype is not None:
-            self.complex_dtype = complex_dtype
+            self.preprocessed_mpole_dtype = dtype
+        elif preprocessed_mpole_dtype is not None:
+            self.preprocessed_mpole_dtype = preprocessed_mpole_dtype
         else:
-            self.complex_dtype = to_complex_dtype(dtype)
+            self.preprocessed_mpole_dtype = to_complex_dtype(dtype)
 
         if kernel_extra_kwargs is None:
             kernel_extra_kwargs = {}
@@ -415,7 +419,7 @@ class SumpyExpansionWrangler:
         return cl.array.zeros(
                 self.queue,
                 self.m2l_translation_classes_dependent_data_level_starts()[-1],
-                dtype=self.complex_dtype)
+                dtype=self.preprocessed_mpole_dtype)
 
     def multipole_expansions_view(self, mpole_exps, level):
         expn_start, expn_stop = \
@@ -459,7 +463,7 @@ class SumpyExpansionWrangler:
         return cl.array.zeros(
                 self.queue,
                 self.preprocessed_multipole_expansions_level_starts()[-1],
-                dtype=self.complex_dtype)
+                dtype=self.preprocessed_mpole_dtype)
 
     def preprocessed_multipole_expansions_view(self, mpole_exps, level):
         expn_start, expn_stop = \
