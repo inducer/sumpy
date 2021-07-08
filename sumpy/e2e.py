@@ -275,7 +275,7 @@ class E2EFromCSR(E2EBase):
                 self.tgt_expansion.m2l_translation_classes_dependent_ndata(
                         self.src_expansion)
         else:
-            nm2l_translation_classes_dependent_data = 0
+            m2l_translation_classes_dependent_ndata = 0
 
         if self.use_preprocessing_for_m2l:
             ncoeff_src = m2l_translation_classes_dependent_ndata
