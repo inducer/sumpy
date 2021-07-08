@@ -461,11 +461,11 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             m2l_result = list(reversed(m2l_result[:n]))
 
         # Filter out the dummy rows and scale them for target
-        result = []
         rscale_ratio = add_to_sac(sac, tgt_rscale/src_rscale)
-        for term in self.get_coefficient_identifiers():
-            index = circulant_matrix_ident_to_index[term]
-            result.append(m2l_result[index]*rscale_ratio**sum(term))
+        result = [
+            m2l_result[circulant_matrix_ident_to_index[term]]
+            * rscale_ratio**sum(term)
+            for term in self.get_coefficient_identifiers()]
 
         return result
 
