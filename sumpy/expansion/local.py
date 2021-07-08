@@ -503,12 +503,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 assert m2l_translation_classes_dependent_data is not None
                 assert len(src_coeff_exprs) == len(
                         m2l_translation_classes_dependent_data)
-                result = []
-                for i in range(len(m2l_translation_classes_dependent_data)):
-                    a = m2l_translation_classes_dependent_data[i]
-                    b = src_coeff_exprs[i]
-                    result.append(a*b)
-                return result
+                return [a*b for a, b in zip(m2l_translation_classes_dependent_data,
+                    src_coeff_exprs)]
 
             derivatives_full = [0]*len(circulant_matrix_mis)
             for expr, mi in zip(derivatives, needed_vector_terms):
