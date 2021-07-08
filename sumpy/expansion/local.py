@@ -773,8 +773,14 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         dvec_len = sym_real_norm_2(dvec)
         new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
         arg_scale = self.get_bessel_arg_scaling()
+        # [-(src_order+tgt_order), ..., 0, ..., (src_order + tgt_order)]
         m2l_translation_classes_dependent_data = \
                 [0] * (2*self.order + 2 * src_expansion.order + 1)
+
+        # The M2L is a mirror image of a Toeplitz matvec with Hankel function
+        # evaluations. https://dlmf.nist.gov/10.23.F1
+        # This loop computes the first row and the last column vector sufficient
+        # to specify the matrix entries.
         for j in self.get_coefficient_identifiers():
             idx_j = self.get_storage_index(j)
             for m in src_expansion.get_coefficient_identifiers():
