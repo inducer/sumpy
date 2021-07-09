@@ -740,6 +740,26 @@ class BiharmonicConformingVolumeTaylorLocalExpansion(
 
 # }}}
 
+def _chop(expr, tol):
+    nums = expr.atoms(sym.Number)
+    replace_dict = {}
+    for num in nums:
+        if float(abs(num)) < tol:
+            replace_dict[num] = 0
+        elif isinstance(num, sym.Float):
+            new_num = float(num)
+            if abs((int(new_num) - new_num)/new_num) < tol:
+                new_num = int(new_num)
+            replace_dict[num] = new_num
+        elif num.is_complex:
+            real = _chop(num.real, tol)
+            imag = _chop(num.imag, tol)
+            if real == num.real and imag == num.imag:
+                continue
+            replace_dict[num] = real + sym.I * imag
+    return expr.xreplace(replace_dict)
+
+
 
 # {{{ 2D Bessel-based-expansion
 
@@ -803,8 +823,8 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
         # The M2L is a mirror image of a Toeplitz matvec with Hankel function
         # evaluations. https://dlmf.nist.gov/10.23.F1
-        # This loop computes the first row and the last column vector sufficient
-        # to specify the matrix entries.
+        # This loop computes the first row vector and the last column vector
+        # sufficient to specify the matrix entries.
         for j in self.get_coefficient_identifiers():
             idx_j = self.get_storage_index(j)
             for m in src_expansion.get_coefficient_identifiers():
@@ -860,10 +880,9 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             m2l_result = m2l_result[:2*self.order+1]
 
         # Filter out the dummy rows and scale them for target
-        result = []
-        for j in self.get_coefficient_identifiers():
-            result.append(m2l_result[self.get_storage_index(j)]
-                    * tgt_rscale**(abs(j)) * sym.Integer(-1)**j)
+        result = [m2l_result[self.get_storage_index(j)] \
+                    * tgt_rscale**(abs(j)) * sym.Integer(-1)**j
+            for j in self.get_coefficient_identifiers()]
 
         return result
 
@@ -899,22 +918,44 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             else:
                 derivatives = m2l_translation_classes_dependent_data
 
-            translated_coeffs = []
             if self.use_preprocessing_for_m2l:
                 assert m2l_translation_classes_dependent_data is not None
                 assert len(derivatives) == len(src_coeff_exprs)
-                for a, b in zip(derivatives, src_coeff_exprs):
-                    translated_coeffs.append(a * b)
-                return translated_coeffs
+                return [a * b for a, b in zip(derivatives, src_coeff_exprs)]
 
             src_coeff_exprs = self.m2l_preprocess_multipole_exprs(src_expansion,
                     src_coeff_exprs, sac, src_rscale)
 
+            translated_coeffs = []
             for j in self.get_coefficient_identifiers():
                 translated_coeffs.append(
                     sum(derivatives[m + j + self.order + src_expansion.order]
-                        * src_coeff_exprs[src_expansion.get_storage_index(m)]
+                        * src_coeff_exprs[m + self.order]
                         for m in src_expansion.get_coefficient_identifiers()))
+
+            print(translated_coeffs)
+            first_row_m2l, last_column_m2l = \
+                m2l_translation_classes_dependent_data[:2*self.order], \
+                    m2l_translation_classes_dependent_data[2*self.order:]
+            first_column_toeplitz = last_column_m2l
+            first_row_toeplitz = list(reversed(first_row_m2l))
+            first_column_circulant = list(first_column_toeplitz) + \
+                    list(reversed(first_row_toeplitz))
+            fft0 = fft(first_column_circulant, sac=None)
+
+            src_coeff_exprs = list(reversed(src_coeff_exprs))
+            src_coeff_exprs += [0] * (len(src_coeff_exprs) - 1)
+            fft1 = fft(src_coeff_exprs, sac=None)
+
+            res = [a*b for a, b in zip(fft0, fft1)]
+            res = fft(res, inverse=True, sac=None)
+            res = res[:2*self.order+1]
+
+
+            for a, b in zip(res, translated_coeffs):
+                a = _chop(a.simplify(), 1e-8)
+                print((a-b).simplify())
+
 
             translated_coeffs = self.m2l_postprocess_local_exprs(src_expansion,
                 translated_coeffs, src_rscale, tgt_rscale, sac)
