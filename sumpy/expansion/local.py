@@ -935,6 +935,9 @@ class H2DLocalExpansion(_FourierBesselLocalExpansion):
         super().__init__(kernel, order, use_rscale,
                 use_preprocessing_for_m2l=use_preprocessing_for_m2l)
 
+        if use_preprocessing_for_m2l:
+            raise ValueError("H2DLocalExpansion with FFT is not implemented yet.")
+
         from sumpy.expansion.multipole import H2DMultipoleExpansion
         self.mpole_expn_class = H2DMultipoleExpansion
 
@@ -951,6 +954,9 @@ class Y2DLocalExpansion(_FourierBesselLocalExpansion):
 
         super().__init__(kernel, order, use_rscale,
                 use_preprocessing_for_m2l=use_preprocessing_for_m2l)
+
+        if use_preprocessing_for_m2l:
+            raise ValueError("Y2DLocalExpansion with FFT is not implemented yet.")
 
         from sumpy.expansion.multipole import Y2DMultipoleExpansion
         self.mpole_expn_class = Y2DMultipoleExpansion
