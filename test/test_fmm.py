@@ -51,48 +51,34 @@ else:
     faulthandler.enable()
 
 
-@pytest.mark.parametrize(
-    "knl, local_expn_class, mpole_expn_class, optimized_m2l,"
-    " use_preprocessing_for_m2l",
-    [
-        (LaplaceKernel(2), VolumeTaylorLocalExpansion,
-            VolumeTaylorMultipoleExpansion, False, False),
-        (LaplaceKernel(2), VolumeTaylorLocalExpansion,
-            VolumeTaylorMultipoleExpansion, True, False),
-        (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
-            LinearPDEConformingVolumeTaylorMultipoleExpansion, True, False),
-        (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
-            LinearPDEConformingVolumeTaylorMultipoleExpansion, True, True),
-        (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
-            LinearPDEConformingVolumeTaylorMultipoleExpansion, False, False),
-        (LaplaceKernel(3), VolumeTaylorLocalExpansion,
-            VolumeTaylorMultipoleExpansion, False, False),
-        (LaplaceKernel(3), VolumeTaylorLocalExpansion,
-            VolumeTaylorMultipoleExpansion, True, False),
-        (LaplaceKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
-            LinearPDEConformingVolumeTaylorMultipoleExpansion, True, False),
-        (LaplaceKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
-            LinearPDEConformingVolumeTaylorMultipoleExpansion, False, False),
-        (HelmholtzKernel(2), VolumeTaylorLocalExpansion,
-            VolumeTaylorMultipoleExpansion, False, False),
-        (HelmholtzKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
-            LinearPDEConformingVolumeTaylorMultipoleExpansion, False, False),
-        (HelmholtzKernel(2), H2DLocalExpansion,
-            H2DMultipoleExpansion, False, False),
-        (HelmholtzKernel(2), H2DLocalExpansion,
-            H2DMultipoleExpansion, True, False),
-        #(HelmholtzKernel(2), H2DLocalExpansion,
-        #    H2DMultipoleExpansion, True, True),
-        (HelmholtzKernel(3), VolumeTaylorLocalExpansion,
-            VolumeTaylorMultipoleExpansion, False, False),
-        (HelmholtzKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
-            LinearPDEConformingVolumeTaylorMultipoleExpansion, False, False),
-        (YukawaKernel(2), Y2DLocalExpansion,
-            Y2DMultipoleExpansion, False, False),
-    ])
+@pytest.mark.parametrize("optimized_m2l, use_fft",
+    [(False, False), (True, False), (True, True)])
+@pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class",
+[
+    (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+        LinearPDEConformingVolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
+        LinearPDEConformingVolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+        LinearPDEConformingVolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion),
+    (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
+        LinearPDEConformingVolumeTaylorMultipoleExpansion),
+    (YukawaKernel(2), Y2DLocalExpansion, Y2DMultipoleExpansion),
+])
 def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
-        optimized_m2l, use_preprocessing_for_m2l):
+        optimized_m2l, use_fft):
     logging.basicConfig(level=logging.INFO)
+
+    if local_expn_class == VolumeTaylorLocalExpansion and use_fft:
+        pytest.skip("VolumeTaylorExpansion with FFT takes a lot of resources.")
+
+    if local_expn_class in [H2DLocalExpansion, Y2DLocalExpansion] and use_fft:
+        pytest.skip("Fourier/Bessel based expansions with FFT is not supported yet.")
 
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
@@ -174,7 +160,7 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
         if knl.dim == 3:
             order_values = [1, 2]
         elif knl.dim == 2 and issubclass(local_expn_class, H2DLocalExpansion):
-            order_values = [10, 12]
+            order_values = [4, 5]
 
     elif isinstance(knl, YukawaKernel):
         extra_kwargs["lam"] = 2
@@ -201,7 +187,7 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
                 ctx,
                 partial(mpole_expn_class, knl),
                 partial(local_expn_class, knl),
-                target_kernels, use_preprocessing_for_m2l=use_preprocessing_for_m2l)
+                target_kernels, use_preprocessing_for_m2l=use_fft)
 
         wrangler = wcc.get_wrangler(queue, tree, dtype,
                 fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
