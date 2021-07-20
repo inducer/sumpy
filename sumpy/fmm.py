@@ -708,7 +708,7 @@ class SumpyExpansionWrangler:
             target_boxes, src_box_starts, src_box_lists,
             mpole_exps):
 
-        events = []
+        precompute_evts = []
 
         if self.use_preprocessing_for_m2l:
             preprocessed_mpole_exps = self.m2l_preproc_mpole_expansion_zeros()
@@ -736,12 +736,13 @@ class SumpyExpansionWrangler:
                     src_rscale=level_to_rscale(self.tree, lev),
                     **self.kernel_extra_kwargs
                 )
-                events.append(evt)
+                precompute_evts.append(evt)
             mpole_exps = preprocessed_mpole_exps
             mpole_exps_view_func = self.m2l_preproc_mpole_expansions_view
         else:
             mpole_exps_view_func = self.multipole_expansions_view
 
+        events = []
         local_exps = self.local_expansion_zeros()
 
         for lev in range(self.tree.nlevels):
@@ -778,7 +779,7 @@ class SumpyExpansionWrangler:
                     kwargs["m2l_translation_classes_dependent_data"].size == 0:
                 # There is nothing to do for this level
                 continue
-            evt, _ = m2l(self.queue, **kwargs)
+            evt, _ = m2l(self.queue, **kwargs, wait_for=precompute_evts)
 
             events.append(evt)
 
