@@ -187,7 +187,7 @@ class E2EFromCSR(E2EBase):
                 complex_dtype=to_complex_dtype(result_dtype),
                 )
 
-    def get_kernel(self, result_dtype):
+    def get_kernel(self):
         ncoeff_src = len(self.src_expansion)
         ncoeff_tgt = len(self.tgt_expansion)
 
