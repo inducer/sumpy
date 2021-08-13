@@ -394,8 +394,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         circulant_matrix_mis, needed_vector_terms, max_mi = \
             self._m2l_translation_classes_dependent_data_mis(src_expansion)
 
-        circulant_matrix_ident_to_index = dict((ident, i) for i, ident in
-                                enumerate(circulant_matrix_mis))
+        circulant_matrix_ident_to_index = {ident: i for i, ident in
+                                enumerate(circulant_matrix_mis)}
 
         # Create a expansion terms wrangler for derivatives up to order
         # (tgt order)+(src order) including a corresponding reduction matrix
