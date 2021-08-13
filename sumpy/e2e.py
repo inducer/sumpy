@@ -84,11 +84,8 @@ class E2EBase(KernelCacheWrapper):
         self.tgt_expansion = tgt_expansion
         self.name = name or self.default_name
         self.device = device
-        try:
-            self.use_preprocessing_for_m2l \
-                = self.tgt_expansion.use_preprocessing_for_m2l
-        except AttributeError:
-            self.use_preprocessing_for_m2l = False
+        self.use_preprocessing_for_m2l = getattr(self.tgt_expansion,
+            'use_preprocessing_for_m2l', False)
 
         if src_expansion.dim != tgt_expansion.dim:
             raise ValueError("source and target expansions must have "
