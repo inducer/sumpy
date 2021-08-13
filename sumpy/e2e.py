@@ -565,7 +565,7 @@ class M2LPreprocessMultipole(E2EBase):
 
     default_name = "m2l_preprocess_multipole"
 
-    def get_translation_loopy_insns(self, result_dtype):
+    def get_loopy_insns(self, result_dtype):
         src_coeff_exprs = [sym.Symbol("src_coeff%d" % i)
                 for i in range(len(self.src_expansion))]
 
@@ -606,7 +606,7 @@ class M2LPreprocessMultipole(E2EBase):
                 """] + ["""
                     <> src_coeff{idx} = src_expansions[isrc_box, {idx}]
                 """.format(idx=i) for i in range(nsrc_coeffs)] + [
-                ] + self.get_translation_loopy_insns(result_dtype) + ["""
+                ] + self.get_loopy_insns(result_dtype) + ["""
                     preprocessed_src_expansions[isrc_box, {idx}] = \
                         preprocessed_src_coeff{idx}
                     """.format(idx=i) for i in range(
