@@ -184,7 +184,6 @@ class E2EFromCSR(E2EBase):
                 vector_names=set(["d"]),
                 pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
                 retain_names=tgt_coeff_names,
-                complex_dtype=to_complex_dtype(result_dtype),
                 )
 
     def get_kernel(self):
