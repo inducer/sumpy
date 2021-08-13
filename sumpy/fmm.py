@@ -324,6 +324,7 @@ class SumpyExpansionWrangler:
         elif preprocessed_mpole_dtype is not None:
             self.preprocessed_mpole_dtype = preprocessed_mpole_dtype
         else:
+            # FIXME: It is weird that the wrangler has to compute this.
             self.preprocessed_mpole_dtype = to_complex_dtype(dtype)
 
         if kernel_extra_kwargs is None:
