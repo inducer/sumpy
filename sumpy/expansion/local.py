@@ -760,7 +760,6 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         super().__init__(kernel, order, use_rscale,
                 use_preprocessing_for_m2l=use_preprocessing_for_m2l)
 
-
     def get_storage_index(self, k):
         return self.order+k
 
