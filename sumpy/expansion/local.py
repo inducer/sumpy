@@ -351,9 +351,9 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         # in the circulant matrix.  Note that to get the circulant
         # matrix structure some multi-indices that are not in the
         # M2L translation matrix are added.
-        # This corresponds to adding $\mathcal{O}(p^{d-1})$
+        # This corresponds to adding O(p^(d-1))
         # additional rows and columns in the case of some PDEs
-        # like Laplace and $\mathcal{O}(p^d)$ in other cases.
+        # like Laplace and O(p^d) in other cases.
         circulant_matrix_mis = list(gnitb([m + 1 for m in max_mi]))
 
         # These are the multi-indices representing the rows
