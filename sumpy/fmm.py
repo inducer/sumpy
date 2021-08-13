@@ -36,7 +36,8 @@ from sumpy import (
         P2EFromSingleBox, P2EFromCSR,
         E2PFromSingleBox, E2PFromCSR,
         P2PFromCSR,
-        E2EFromCSR, E2EFromChildren, E2EFromParent,
+        E2EFromCSR, M2LUsingTranslationClassesDependentData,
+        E2EFromChildren, E2EFromParent,
         M2LGenerateTranslationClassesDependentData,
         M2LPreprocessMultipole)
 from sumpy.tools import to_complex_dtype
@@ -124,11 +125,13 @@ class SumpyExpansionWranglerCodeContainer:
     @memoize_method
     def m2l(self, src_order, tgt_order,
             m2l_use_translation_classes_dependent_data=False):
-        return E2EFromCSR(self.cl_context,
+        if m2l_use_translation_classes_dependent_data:
+            m2l_class = M2LUsingTranslationClassesDependentData
+        else:
+            m2l_class = E2EFromCSR
+        return m2l_class(self.cl_context,
                 self.multipole_expansion(src_order),
-                self.local_expansion(tgt_order),
-                m2l_use_translation_classes_dependent_data=(
-                    m2l_use_translation_classes_dependent_data))
+                self.local_expansion(tgt_order))
 
     @memoize_method
     def m2l_translation_class_dependent_data_kernel(self, src_order, tgt_order):
