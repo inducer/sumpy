@@ -35,6 +35,7 @@ __all__ = [
     "P2EFromSingleBox", "P2EFromCSR",
     "E2PFromSingleBox", "E2PFromCSR",
     "E2EFromCSR", "E2EFromChildren", "E2EFromParent",
+    "M2LUsingTranslationClassesDependentData",
     "M2LGenerateTranslationClassesDependentData",
     "M2LPreprocessMultipole"]
 
