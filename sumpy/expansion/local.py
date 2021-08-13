@@ -744,6 +744,23 @@ class BiharmonicConformingVolumeTaylorLocalExpansion(
 # {{{ 2D Bessel-based-expansion
 
 class _FourierBesselLocalExpansion(LocalExpansionBase):
+    def __init__(self, kernel, order, use_rscale=None,
+            use_preprocessing_for_m2l=False):
+
+        if use_preprocessing_for_m2l:
+            # FIXME: expansion with FFT is correct symbolically and can be verified
+            # with sympy. However there are numerical issues that we have to deal
+            # with. Greengard and Rokhlin 1988 attributes this to numerical
+            # instability but gives rscale as a possible solution. Sumpy's rscale
+            # choice is slightly different from Greengard and Rokhlin and that
+            # might be the reason for this numerical issue.
+            raise ValueError("Bessel based expansions with FFT is not fully "
+                             "supported yet.")
+
+        super().__init__(kernel, order, use_rscale,
+                use_preprocessing_for_m2l=use_preprocessing_for_m2l)
+
+
     def get_storage_index(self, k):
         return self.order+k
 
@@ -935,9 +952,6 @@ class H2DLocalExpansion(_FourierBesselLocalExpansion):
         super().__init__(kernel, order, use_rscale,
                 use_preprocessing_for_m2l=use_preprocessing_for_m2l)
 
-        if use_preprocessing_for_m2l:
-            raise ValueError("H2DLocalExpansion with FFT is not implemented yet.")
-
         from sumpy.expansion.multipole import H2DMultipoleExpansion
         self.mpole_expn_class = H2DMultipoleExpansion
 
@@ -954,9 +968,6 @@ class Y2DLocalExpansion(_FourierBesselLocalExpansion):
 
         super().__init__(kernel, order, use_rscale,
                 use_preprocessing_for_m2l=use_preprocessing_for_m2l)
-
-        if use_preprocessing_for_m2l:
-            raise ValueError("Y2DLocalExpansion with FFT is not implemented yet.")
 
         from sumpy.expansion.multipole import Y2DMultipoleExpansion
         self.mpole_expn_class = Y2DMultipoleExpansion
