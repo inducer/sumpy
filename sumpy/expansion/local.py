@@ -527,22 +527,22 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 assert m2l_translation_classes_dependent_data is not None
                 assert len(src_coeff_exprs) == len(
                         m2l_translation_classes_dependent_data)
-                return [a*b for a, b in zip(m2l_translation_classes_dependent_data,
+                result = [a*b for a, b in zip(m2l_translation_classes_dependent_data,
                     src_coeff_exprs)]
+            else:
+                derivatives_full = [0]*len(circulant_matrix_mis)
+                for expr, mi in zip(derivatives, needed_vector_terms):
+                    derivatives_full[circulant_matrix_ident_to_index[mi]] = expr
 
-            derivatives_full = [0]*len(circulant_matrix_mis)
-            for expr, mi in zip(derivatives, needed_vector_terms):
-                derivatives_full[circulant_matrix_ident_to_index[mi]] = expr
+                input_vector = self.m2l_preprocess_multipole_exprs(src_expansion,
+                    src_coeff_exprs, sac, src_rscale)
 
-            input_vector = self.m2l_preprocess_multipole_exprs(src_expansion,
-                src_coeff_exprs, sac, src_rscale)
+                # Do the matvec
+                output = matvec_toeplitz_upper_triangular(input_vector,
+                    derivatives_full)
 
-            # Do the matvec
-            output = matvec_toeplitz_upper_triangular(input_vector,
-                derivatives_full)
-
-            result = self.m2l_postprocess_local_exprs(src_expansion, output,
-                src_rscale, tgt_rscale, sac)
+                result = self.m2l_postprocess_local_exprs(src_expansion, output,
+                    src_rscale, tgt_rscale, sac)
 
             logger.info("building translation operator: done")
             return result
@@ -833,8 +833,8 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             first_column_circulant = list(first_column_toeplitz) + \
                     list(reversed(first_row_toeplitz))
             return fft(first_column_circulant, sac)
-
-        return m2l_translation_classes_dependent_data
+        else:
+            return m2l_translation_classes_dependent_data
 
     def m2l_preprocess_multipole_exprs(self, src_expansion, src_coeff_exprs, sac,
             src_rscale):
