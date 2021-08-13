@@ -165,7 +165,7 @@ class E2EFromCSR(E2EBase):
 
         tgt_rscale = sym.Symbol("tgt_rscale")
 
-        extra_kwargs = dict()
+        extra_kwargs = {}
         if self.m2l_use_translation_classes_dependent_data:
             m2l_translation_classes_dependent_ndata = \
                 self.tgt_expansion.m2l_translation_classes_dependent_ndata(
