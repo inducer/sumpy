@@ -154,7 +154,7 @@ class E2EFromCSR(E2EBase):
         super().__init__(ctx, src_expansion, tgt_expansion,
             name=name, device=device)
 
-    def get_translation_loopy_insns(self, result_dtype):
+    def get_translation_loopy_insns(self):
         from sumpy.symbolic import make_sym_vector
         dvec = make_sym_vector("d", self.dim)
 
