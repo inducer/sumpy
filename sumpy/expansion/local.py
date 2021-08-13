@@ -349,7 +349,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         # These are the multi-indices representing the rows
         # in the circulant matrix.  Note that to get the circulant
-        # matrix structure some multi-indices that is not in the
+        # matrix structure some multi-indices that are not in the
         # M2L translation matrix are added.
         # This corresponds to adding $\mathcal{O}(p^{d-1})$
         # additional rows and columns in the case of some PDEs
