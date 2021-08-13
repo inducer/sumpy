@@ -144,7 +144,8 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
 
         # "1" may be passed for rscale, which won't have its type
         # meaningfully inferred. Make the type of rscale explicit.
-        rscale = centers.dtype.type(kwargs.pop("rscale"))
+        dtype = centers[0].dtype if is_obj_array_like(centers) else centers.dtype
+        rscale = dtype.type(kwargs.pop("rscale"))
 
         return knl(queue, sources=sources, centers=centers, rscale=rscale, **kwargs)
 
