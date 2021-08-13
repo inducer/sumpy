@@ -912,7 +912,7 @@ def matvec_toeplitz_upper_triangular(first_row, vector):
     return output
 
 
-to_complex_dtype_dict = {
+to_complex_type_dict = {
     np.complex64: np.complex64,
     np.complex128: np.complex128,
     np.float32: np.complex64,
@@ -921,8 +921,9 @@ to_complex_dtype_dict = {
 
 
 def to_complex_dtype(dtype):
+    np_type = np.dtype(dtype).type
     try:
-        return to_complex_dtype_dict[dtype]
+        return to_complex_type_dict[np_type]
     except KeyError:
         raise RuntimeError(f"Unknown dtype: {dtype}")
 

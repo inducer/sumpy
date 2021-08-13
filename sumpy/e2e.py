@@ -204,7 +204,7 @@ class E2EFromCSR(E2EBase):
                 vector_names=set(["d"]),
                 pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
                 retain_names=tgt_coeff_names,
-                complex_dtype=to_complex_dtype(result_dtype.type),
+                complex_dtype=to_complex_dtype(result_dtype),
                 )
 
     def get_postprocess_loopy_insns(self, result_dtype):
@@ -263,7 +263,7 @@ class E2EFromCSR(E2EBase):
                 vector_names=set(["d"]),
                 pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
                 retain_names=tgt_coeff_post_names,
-                complex_dtype=to_complex_dtype(result_dtype.type),
+                complex_dtype=to_complex_dtype(result_dtype),
                 )
         return insns
 
@@ -469,7 +469,7 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                 vector_names=set(["d"]),
                 pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
                 retain_names=tgt_coeff_names,
-                complex_dtype=to_complex_dtype(result_dtype.type),
+                complex_dtype=to_complex_dtype(result_dtype),
                 )
 
     def get_kernel(self, result_dtype):
@@ -589,7 +589,7 @@ class M2LPreprocessMultipole(E2EBase):
                 vector_names=set(["d"]),
                 pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
                 retain_names=preprocessed_src_coeff_names,
-                complex_dtype=to_complex_dtype(result_dtype.type),
+                complex_dtype=to_complex_dtype(result_dtype),
                 )
 
     def get_kernel(self, result_dtype):
