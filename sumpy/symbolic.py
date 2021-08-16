@@ -71,7 +71,7 @@ _find_symbolic_backend()
 # Before adding a function here, make sure it's present in both modules.
 SYMBOLIC_API = """
 Add Basic Mul Pow exp sqrt log symbols sympify cos sin atan2 Function Symbol
-Derivative Integer Matrix Subs I pi functions Number""".split()
+Derivative Integer Matrix Subs I pi functions Number Float""".split()
 
 if USE_SYMENGINE:
     import symengine as sym

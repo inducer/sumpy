@@ -36,8 +36,11 @@ from sumpy import (
         P2EFromSingleBox, P2EFromCSR,
         E2PFromSingleBox, E2PFromCSR,
         P2PFromCSR,
-        E2EFromCSR, E2EFromChildren, E2EFromParent,
-        E2EFromCSRTranslationClassesPrecompute)
+        E2EFromCSR, M2LUsingTranslationClassesDependentData,
+        E2EFromChildren, E2EFromParent,
+        M2LGenerateTranslationClassesDependentData,
+        M2LPreprocessMultipole)
+from sumpy.tools import to_complex_dtype
 
 
 def level_to_rscale(tree, level):
@@ -62,7 +65,8 @@ class SumpyExpansionWranglerCodeContainer:
             multipole_expansion_factory,
             local_expansion_factory,
             target_kernels, exclude_self=False, use_rscale=None,
-            strength_usage=None, source_kernels=None):
+            strength_usage=None, source_kernels=None,
+            use_preprocessing_for_m2l=False):
         """
         :arg multipole_expansion_factory: a callable of a single argument (order)
             that returns a multipole expansion.
@@ -80,6 +84,7 @@ class SumpyExpansionWranglerCodeContainer:
         self.exclude_self = exclude_self
         self.use_rscale = use_rscale
         self.strength_usage = strength_usage
+        self.use_preprocessing_for_m2l = use_preprocessing_for_m2l
 
         self.cl_context = cl_context
 
@@ -94,7 +99,8 @@ class SumpyExpansionWranglerCodeContainer:
 
     @memoize_method
     def local_expansion(self, order):
-        return self.local_expansion_factory(order, self.use_rscale)
+        return self.local_expansion_factory(order, self.use_rscale,
+                use_preprocessing_for_m2l=self.use_preprocessing_for_m2l)
 
     @memoize_method
     def p2m(self, tgt_order):
@@ -117,15 +123,25 @@ class SumpyExpansionWranglerCodeContainer:
                 self.multipole_expansion(tgt_order))
 
     @memoize_method
-    def m2l(self, src_order, tgt_order, use_precomputed_exprs=False):
-        return E2EFromCSR(self.cl_context,
+    def m2l(self, src_order, tgt_order,
+            m2l_use_translation_classes_dependent_data=False):
+        if m2l_use_translation_classes_dependent_data:
+            m2l_class = M2LUsingTranslationClassesDependentData
+        else:
+            m2l_class = E2EFromCSR
+        return m2l_class(self.cl_context,
                 self.multipole_expansion(src_order),
-                self.local_expansion(tgt_order),
-                use_precomputed_exprs=use_precomputed_exprs)
+                self.local_expansion(tgt_order))
 
     @memoize_method
-    def m2l_optimized_precompute_kernel(self, src_order, tgt_order):
-        return E2EFromCSRTranslationClassesPrecompute(self.cl_context,
+    def m2l_translation_class_dependent_data_kernel(self, src_order, tgt_order):
+        return M2LGenerateTranslationClassesDependentData(self.cl_context,
+                self.multipole_expansion(src_order),
+                self.local_expansion(tgt_order))
+
+    @memoize_method
+    def m2l_preprocess_mpole_kernel(self, src_order, tgt_order):
+        return M2LPreprocessMultipole(self.cl_context,
                 self.multipole_expansion(src_order),
                 self.local_expansion(tgt_order))
 
@@ -166,7 +182,6 @@ class SumpyExpansionWranglerCodeContainer:
         return SumpyExpansionWrangler(self, queue, tree, dtype, fmm_level_to_order,
                 source_extra_kwargs, kernel_extra_kwargs, self_extra_kwargs,
                 translation_classes_data=translation_classes_data)
-
 # }}}
 
 
@@ -287,19 +302,33 @@ class SumpyExpansionWrangler:
         Keyword arguments to be passed for handling
         self interactions (source and target particles are the same),
         provided special handling is needed
+
+    .. attribute:: preprocessed_mpole_dtype
+
+        Type for the preprocessed multipole expansion if used for M2L.
     """
 
     def __init__(self, code_container, queue, tree, dtype, fmm_level_to_order,
             source_extra_kwargs,
             kernel_extra_kwargs=None,
             self_extra_kwargs=None,
-            translation_classes_data=None):
+            translation_classes_data=None,
+            preprocessed_mpole_dtype=None):
         self.code = code_container
         self.queue = queue
         self.tree = tree
         self.issued_timing_data_warning = False
 
         self.dtype = dtype
+
+        if not self.code.use_preprocessing_for_m2l:
+            # If not FFT, we don't need complex dtypes
+            self.preprocessed_mpole_dtype = dtype
+        elif preprocessed_mpole_dtype is not None:
+            self.preprocessed_mpole_dtype = preprocessed_mpole_dtype
+        else:
+            # FIXME: It is weird that the wrangler has to compute this.
+            self.preprocessed_mpole_dtype = to_complex_dtype(dtype)
 
         if kernel_extra_kwargs is None:
             kernel_extra_kwargs = {}
@@ -326,13 +355,19 @@ class SumpyExpansionWrangler:
         if base_kernel.is_translation_invariant:
             if translation_classes_data is None:
                 from warnings import warn
-                warn(
-                     "List 2 (multipole-to-local) translations will be "
-                     "unoptimized. Supply a translation_classes_data argument to "
-                     "the wrangler for optimized List 2.",
-                     SumpyTranslationClassesDataNotSuppliedWarning,
-
-                     stacklevel=2)
+                if self.code.use_preprocessing_for_m2l:
+                    raise NotImplementedError(
+                         "FFT based List 2 (multipole-to-local) translations "
+                         "without translation_classes_data argument is not "
+                         "implemented. Supply a translation_classes_data argument "
+                         "to the wrangler for optimized List 2.")
+                else:
+                    warn(
+                         "List 2 (multipole-to-local) translations will be "
+                         "unoptimized. Supply a translation_classes_data argument "
+                         "to the wrangler for optimized List 2.",
+                         SumpyTranslationClassesDataNotSuppliedWarning,
+                         stacklevel=2)
                 self.supports_optimized_m2l = False
             else:
                 self.supports_optimized_m2l = True
@@ -340,6 +375,7 @@ class SumpyExpansionWrangler:
             self.supports_optimized_m2l = False
 
         self.translation_classes_data = translation_classes_data
+        self.use_preprocessing_for_m2l = self.code.use_preprocessing_for_m2l
 
     # {{{ data vector utilities
     def _expansions_level_starts(self, order_to_size):
@@ -349,12 +385,12 @@ class SumpyExpansionWrangler:
     @memoize_method
     def multipole_expansions_level_starts(self):
         return self._expansions_level_starts(
-                lambda order: len(self.code.multipole_expansion_factory(order)))
+                lambda order: len(self.code.multipole_expansion(order)))
 
     @memoize_method
     def local_expansions_level_starts(self):
         return self._expansions_level_starts(
-                lambda order: len(self.code.local_expansion_factory(order)))
+                lambda order: len(self.code.local_expansion(order)))
 
     @memoize_method
     def m2l_translation_class_level_start_box_nrs(self):
@@ -362,11 +398,11 @@ class SumpyExpansionWrangler:
         return data.m2l_translation_classes_level_starts().get(self.queue)
 
     @memoize_method
-    def m2l_precomputed_exprs_level_starts(self):
+    def m2l_translation_classes_dependent_data_level_starts(self):
         def order_to_size(order):
-            mpole_expn = self.code.multipole_expansion_factory(order)
-            local_expn = self.code.local_expansion_factory(order)
-            return local_expn.m2l_global_precompute_nexpr(mpole_expn)
+            mpole_expn = self.code.multipole_expansion(order)
+            local_expn = self.code.local_expansion(order)
+            return local_expn.m2l_translation_classes_dependent_ndata(mpole_expn)
 
         return build_csr_level_starts(self.level_orders, order_to_size,
                 level_starts=self.m2l_translation_class_level_start_box_nrs())
@@ -383,11 +419,11 @@ class SumpyExpansionWrangler:
                 self.local_expansions_level_starts()[-1],
                 dtype=self.dtype)
 
-    def m2l_precomputed_exprs_zeros(self):
+    def m2l_translation_classes_dependent_data_zeros(self):
         return cl.array.zeros(
                 self.queue,
-                self.m2l_precomputed_exprs_level_starts()[-1],
-                dtype=self.dtype)
+                self.m2l_translation_classes_dependent_data_level_starts()[-1],
+                dtype=self.preprocessed_mpole_dtype)
 
     def multipole_expansions_view(self, mpole_exps, level):
         expn_start, expn_stop = \
@@ -405,15 +441,41 @@ class SumpyExpansionWrangler:
         return (box_start,
                 local_exps[expn_start:expn_stop].reshape(box_stop-box_start, -1))
 
-    def m2l_precomputed_exprs_view(self, m2l_precomputed_exprs, level):
+    def m2l_translation_classes_dependent_data_view(self,
+                m2l_translation_classes_dependent_data, level):
         expn_start, expn_stop = \
-                self.m2l_precomputed_exprs_level_starts()[level:level+2]
+            self.m2l_translation_classes_dependent_data_level_starts()[level:level+2]
         translation_class_start, translation_class_stop = \
-                self.m2l_translation_class_level_start_box_nrs()[level:level+2]
+            self.m2l_translation_class_level_start_box_nrs()[level:level+2]
 
-        exprs_level = m2l_precomputed_exprs[expn_start:expn_stop]
+        exprs_level = m2l_translation_classes_dependent_data[expn_start:expn_stop]
         return (translation_class_start, exprs_level.reshape(
                             translation_class_stop - translation_class_start, -1))
+
+    @memoize_method
+    def m2l_preproc_mpole_expansions_level_starts(self):
+        def order_to_size(order):
+            mpole_expn = self.code.multipole_expansion(order)
+            local_expn = self.code.local_expansion(order)
+            res = local_expn.m2l_translation_classes_dependent_ndata(mpole_expn)
+            return res
+
+        return build_csr_level_starts(self.level_orders, order_to_size,
+                level_starts=self.tree.level_start_box_nrs)
+
+    def m2l_preproc_mpole_expansion_zeros(self):
+        return cl.array.zeros(
+                self.queue,
+                self.m2l_preproc_mpole_expansions_level_starts()[-1],
+                dtype=self.preprocessed_mpole_dtype)
+
+    def m2l_preproc_mpole_expansions_view(self, mpole_exps, level):
+        expn_start, expn_stop = \
+                self.m2l_preproc_mpole_expansions_level_starts()[level:level+2]
+        box_start, box_stop = self.tree.level_start_box_nrs[level:level+2]
+
+        return (box_start,
+                mpole_exps[expn_start:expn_stop].reshape(box_stop-box_start, -1))
 
     def output_zeros(self):
         from pytools.obj_array import make_obj_array
@@ -583,16 +645,20 @@ class SumpyExpansionWrangler:
 
     @memoize_method
     def multipole_to_local_precompute(self, src_rscale):
-        m2l_precomputed_exprs = self.m2l_precomputed_exprs_zeros()
+        m2l_translation_classes_dependent_data = \
+                self.m2l_translation_classes_dependent_data_zeros()
         for lev in range(self.tree.nlevels):
             order = self.level_orders[lev]
             precompute_kernel = \
-                self.code.m2l_optimized_precompute_kernel(order, order)
+                self.code.m2l_translation_class_dependent_data_kernel(order, order)
 
-            translation_classes_level_start, precomputed_exprs_view = \
-                    self.m2l_precomputed_exprs_view(m2l_precomputed_exprs, lev)
+            translation_classes_level_start, \
+                m2l_translation_classes_dependent_data_view = \
+                    self.m2l_translation_classes_dependent_data_view(
+                            m2l_translation_classes_dependent_data, lev)
 
-            ntranslation_classes = precomputed_exprs_view.shape[0]
+            ntranslation_classes = \
+                    m2l_translation_classes_dependent_data_view.shape[0]
 
             if ntranslation_classes == 0:
                 continue
@@ -605,17 +671,19 @@ class SumpyExpansionWrangler:
                 src_rscale=src_rscale,
                 translation_classes_level_start=translation_classes_level_start,
                 ntranslation_classes=ntranslation_classes,
-                m2l_precomputed_exprs=precomputed_exprs_view,
+                m2l_translation_classes_dependent_data=(
+                    m2l_translation_classes_dependent_data_view),
                 m2l_translation_vectors=m2l_translation_vectors,
                 ntranslation_vectors=m2l_translation_vectors.shape[1],
                 **self.kernel_extra_kwargs
             )
-            m2l_precomputed_exprs.add_event(evt)
+            m2l_translation_classes_dependent_data.add_event(evt)
 
-        m2l_precomputed_exprs.finish()
+        m2l_translation_classes_dependent_data.finish()
 
-        return (m2l_precomputed_exprs, SumpyTimingFuture(self.queue,
-            m2l_precomputed_exprs.events[:]))
+        return (m2l_translation_classes_dependent_data,
+                SumpyTimingFuture(self.queue,
+                    m2l_translation_classes_dependent_data.events[:]))
 
     def _add_m2l_precompute_kwargs(self, kwargs_for_m2l,
             lev):
@@ -626,10 +694,14 @@ class SumpyExpansionWrangler:
         if not self.supports_optimized_m2l:
             return
         src_rscale = kwargs_for_m2l["src_rscale"]
-        m2l_precomputed_exprs, _ = self.multipole_to_local_precompute(src_rscale)
-        translation_classes_level_start, precomputed_exprs_view = \
-            self.m2l_precomputed_exprs_view(m2l_precomputed_exprs, lev)
-        kwargs_for_m2l["m2l_precomputed_exprs"] = precomputed_exprs_view
+        m2l_translation_classes_dependent_data, _ = \
+                self.multipole_to_local_precompute(src_rscale)
+        translation_classes_level_start, \
+            m2l_translation_classes_dependent_data_view = \
+                self.m2l_translation_classes_dependent_data_view(
+                        m2l_translation_classes_dependent_data, lev)
+        kwargs_for_m2l["m2l_translation_classes_dependent_data"] = \
+            m2l_translation_classes_dependent_data_view
         kwargs_for_m2l["translation_classes_level_start"] = \
             translation_classes_level_start
         kwargs_for_m2l["m2l_translation_classes_lists"] = \
@@ -639,9 +711,43 @@ class SumpyExpansionWrangler:
             level_start_target_box_nrs,
             target_boxes, src_box_starts, src_box_lists,
             mpole_exps):
-        local_exps = self.local_expansion_zeros()
+
+        precompute_evts = []
+
+        if self.use_preprocessing_for_m2l:
+            preprocessed_mpole_exps = self.m2l_preproc_mpole_expansion_zeros()
+            for lev in range(self.tree.nlevels):
+                order = self.level_orders[lev]
+                preprocess_mpole_kernel = \
+                    self.code.m2l_preprocess_mpole_kernel(order, order)
+
+                source_level_start_ibox, source_mpoles_view = \
+                        self.multipole_expansions_view(mpole_exps, lev)
+
+                _, preprocessed_source_mpoles_view = \
+                        self.m2l_preproc_mpole_expansions_view(
+                                preprocessed_mpole_exps, lev)
+
+                tr_classes = self.m2l_translation_class_level_start_box_nrs()
+                if tr_classes[lev] == tr_classes[lev + 1]:
+                    # There is no M2L happening in this level
+                    continue
+
+                evt, _ = preprocess_mpole_kernel(
+                    self.queue,
+                    src_expansions=source_mpoles_view,
+                    preprocessed_src_expansions=preprocessed_source_mpoles_view,
+                    src_rscale=level_to_rscale(self.tree, lev),
+                    **self.kernel_extra_kwargs
+                )
+                precompute_evts.append(evt)
+            mpole_exps = preprocessed_mpole_exps
+            mpole_exps_view_func = self.m2l_preproc_mpole_expansions_view
+        else:
+            mpole_exps_view_func = self.multipole_expansions_view
 
         events = []
+        local_exps = self.local_expansion_zeros()
 
         for lev in range(self.tree.nlevels):
             start, stop = level_start_target_box_nrs[lev:lev+2]
@@ -652,7 +758,7 @@ class SumpyExpansionWrangler:
             m2l = self.code.m2l(order, order, self.supports_optimized_m2l)
 
             source_level_start_ibox, source_mpoles_view = \
-                    self.multipole_expansions_view(mpole_exps, lev)
+                    mpole_exps_view_func(mpole_exps, lev)
             target_level_start_ibox, target_local_exps_view = \
                     self.local_expansions_view(local_exps, lev)
 
@@ -673,11 +779,11 @@ class SumpyExpansionWrangler:
                     **self.kernel_extra_kwargs)
 
             self._add_m2l_precompute_kwargs(kwargs, lev)
-            if "m2l_precomputed_exprs" in kwargs and \
-                    kwargs["m2l_precomputed_exprs"].size == 0:
-                # There's nothing to do for this level
+            if "m2l_translation_classes_dependent_data" in kwargs and \
+                    kwargs["m2l_translation_classes_dependent_data"].size == 0:
+                # There is nothing to do for this level
                 continue
-            evt, _ = m2l(self.queue, **kwargs)
+            evt, _ = m2l(self.queue, **kwargs, wait_for=precompute_evts)
 
             events.append(evt)
 

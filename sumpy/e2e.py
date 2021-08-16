@@ -25,7 +25,7 @@ import loopy as lp
 import sumpy.symbolic as sym
 
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
-from sumpy.tools import KernelCacheWrapper
+from sumpy.tools import KernelCacheWrapper, to_complex_dtype
 from pytools import memoize_method
 
 import logging
@@ -84,6 +84,8 @@ class E2EBase(KernelCacheWrapper):
         self.tgt_expansion = tgt_expansion
         self.name = name or self.default_name
         self.device = device
+        self.use_preprocessing_for_m2l = getattr(self.tgt_expansion,
+            "use_preprocessing_for_m2l", False)
 
         if src_expansion.dim != tgt_expansion.dim:
             raise ValueError("source and target expansions must have "
@@ -119,14 +121,14 @@ class E2EBase(KernelCacheWrapper):
                 vector_names={"d"},
                 pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
                 retain_names=tgt_coeff_names,
-                complex_dtype=np.complex128  # FIXME
                 )
 
     def get_cache_key(self):
         return (
                 type(self).__name__,
                 self.src_expansion,
-                self.tgt_expansion)
+                self.tgt_expansion,
+        )
 
     def get_optimized_kernel(self):
         # FIXME
@@ -148,30 +150,22 @@ class E2EFromCSR(E2EBase):
     default_name = "e2e_from_csr"
 
     def __init__(self, ctx, src_expansion, tgt_expansion,
-            name=None, device=None, use_precomputed_exprs=False):
+            name=None, device=None):
         super().__init__(ctx, src_expansion, tgt_expansion,
             name=name, device=device)
-        self.use_precomputed_exprs = use_precomputed_exprs
 
     def get_translation_loopy_insns(self):
         from sumpy.symbolic import make_sym_vector
         dvec = make_sym_vector("d", self.dim)
 
-        src_coeff_exprs = [sym.Symbol("src_coeff%d" % i)
-                for i in range(len(self.src_expansion))]
         src_rscale = sym.Symbol("src_rscale")
 
         tgt_rscale = sym.Symbol("tgt_rscale")
 
-        extra_kwargs = dict()
-        if self.use_precomputed_exprs:
-            nprecomputed_exprs = \
-                self.tgt_expansion.m2l_global_precompute_nexpr(self.src_expansion)
-            precomputed_exprs = [sym.Symbol("precomputed_expr%d" % i)
-                for i in range(nprecomputed_exprs)]
-            extra_kwargs["precomputed_exprs"] = precomputed_exprs
-        else:
-            nprecomputed_exprs = 0
+        ncoeff_src = len(self.src_expansion)
+
+        src_coeff_exprs = [sym.Symbol("src_coeff%d" % i)
+                for i in range(ncoeff_src)]
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
@@ -180,7 +174,7 @@ class E2EFromCSR(E2EBase):
                 for i, coeff_i in enumerate(
                     self.tgt_expansion.translate_from(
                         self.src_expansion, src_coeff_exprs, src_rscale,
-                        dvec, tgt_rscale, sac, *extra_kwargs))]
+                        dvec, tgt_rscale, sac))]
 
         sac.run_global_cse()
 
@@ -190,18 +184,11 @@ class E2EFromCSR(E2EBase):
                 vector_names=set(["d"]),
                 pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
                 retain_names=tgt_coeff_names,
-                complex_dtype=np.complex128  # FIXME
                 )
 
     def get_kernel(self):
         ncoeff_src = len(self.src_expansion)
         ncoeff_tgt = len(self.tgt_expansion)
-
-        if self.use_precomputed_exprs:
-            nprecomputed_exprs = \
-                self.tgt_expansion.m2l_global_precompute_nexpr(self.src_expansion)
-        else:
-            nprecomputed_exprs = 0
 
         # To clarify terminology:
         #
@@ -220,42 +207,29 @@ class E2EFromCSR(E2EBase):
                 ["""
                 for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
-
-                    <> tgt_center[idim] = centers[idim, tgt_ibox] \
-
+                    <> tgt_center[idim] = centers[idim, tgt_ibox]
                     <> isrc_start = src_box_starts[itgt_box]
                     <> isrc_stop = src_box_starts[itgt_box+1]
 
                     for isrc_box
                         <> src_ibox = src_box_lists[isrc_box] \
                                 {id=read_src_ibox}
-
                         <> src_center[idim] = centers[idim, src_ibox] {dup=idim}
                         <> d[idim] = tgt_center[idim] - src_center[idim] \
                             {dup=idim}
-                        """] + (["""
-                        <> translation_class = \
-                                m2l_translation_classes_lists[isrc_box]
-                        <> translation_class_rel = translation_class - \
-                                                    translation_classes_level_start
-                        """] if nprecomputed_exprs != 0 else []) + ["""
-                        <> precomputed_expr{idx} = \
-                            m2l_precomputed_exprs[translation_class_rel, {idx}]
-                        """.format(idx=idx) for idx in range(
-                            nprecomputed_exprs)] + ["""
+                        """] + ["""
                         <> src_coeff{coeffidx} = \
                             src_expansions[src_ibox - src_base_ibox, {coeffidx}] \
                             {{dep=read_src_ibox}}
                         """.format(coeffidx=i) for i in range(ncoeff_src)] + [
-
                         ] + self.get_translation_loopy_insns() + ["""
                     end
 
-                    """] + ["""
+                    """] + [f"""
                     tgt_expansions[tgt_ibox - tgt_base_ibox, {coeffidx}] = \
-                            simul_reduce(sum, isrc_box, coeff{coeffidx}) \
+                        simul_reduce(sum, isrc_box, coeff{coeffidx}) \
                             {{id_prefix=write_expn}}
-                    """.format(coeffidx=i) for i in range(ncoeff_tgt)] + ["""
+                    """ for coeffidx in range(ncoeff_tgt)] + ["""
                 end
                 """],
                 [
@@ -272,25 +246,13 @@ class E2EFromCSR(E2EBase):
                     lp.GlobalArg("tgt_expansions", None,
                         shape=("ntgt_level_boxes", ncoeff_tgt), offset=lp.auto),
                     "..."
-                ] + ([
-                    lp.ValueArg("translation_classes_level_start",
-                        np.int32),
-                    lp.GlobalArg("m2l_precomputed_exprs", None,
-                        shape=("ntranslation_classes", nprecomputed_exprs),
-                        offset=lp.auto),
-                    lp.GlobalArg("m2l_translation_classes_lists", np.int32,
-                        shape=("ntranslation_classes_lists"), strides=(1,),
-                        offset=lp.auto),
-                    lp.ValueArg("ntranslation_classes, ntranslation_classes_lists",
-                        np.int32),
-                ] if nprecomputed_exprs != 0 else [])
-                + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
+                ] + gather_loopy_arguments([self.src_expansion,
+                                            self.tgt_expansion]),
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
                 default_offset=lp.auto,
-                fixed_parameters=dict(dim=self.dim,
-                                      nprecomputed_exprs=nprecomputed_exprs),
+                fixed_parameters=dict(dim=self.dim),
                 lang_version=MOST_RECENT_LANGUAGE_VERSION
                 )
 
@@ -298,14 +260,24 @@ class E2EFromCSR(E2EBase):
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+        loopy_knl = lp.set_options(loopy_knl,
+                enforce_variable_access_ordered="no_check")
 
         return loopy_knl
+
+    def get_optimized_kernel(self):
+        # FIXME
+        knl = self.get_kernel()
+        knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
+
+        return knl
 
     def get_cache_key(self):
         return (
                 type(self).__name__,
                 self.src_expansion,
-                self.tgt_expansion, self.use_precomputed_exprs)
+                self.tgt_expansion,
+        )
 
     def __call__(self, queue, **kwargs):
         """
@@ -316,13 +288,13 @@ class E2EFromCSR(E2EBase):
         :arg tgt_rscale:
         :arg centers:
         """
-        knl = self.get_cached_optimized_kernel()
-
         centers = kwargs.pop("centers")
         # "1" may be passed for rscale, which won't have its type
         # meaningfully inferred. Make the type of rscale explicit.
         src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
+
+        knl = self.get_cached_optimized_kernel()
 
         return knl(queue,
                 centers=centers,
@@ -330,13 +302,280 @@ class E2EFromCSR(E2EBase):
                 **kwargs)
 
 
-class E2EFromCSRTranslationClassesPrecompute(E2EFromCSR):
-    """Implements precomputing the translation classes dependent
-    derivatives.
+class M2LUsingTranslationClassesDependentData(E2EFromCSR):
+    """Implements translation from a "compressed sparse row"-like source box
+    list using M2L translation classes dependent data
     """
-    default_name = "e2e_from_csr_translation_classes_precompute"
 
-    def get_translation_loopy_insns(self):
+    default_name = "m2l_using_translation_classes_dependent_data"
+
+    def get_translation_loopy_insns(self, result_dtype):
+        from sumpy.symbolic import make_sym_vector
+        dvec = make_sym_vector("d", self.dim)
+
+        src_rscale = sym.Symbol("src_rscale")
+        tgt_rscale = sym.Symbol("tgt_rscale")
+
+        m2l_translation_classes_dependent_ndata = \
+                self.tgt_expansion.m2l_translation_classes_dependent_ndata(
+                        self.src_expansion)
+        m2l_translation_classes_dependent_data = \
+                    [sym.Symbol("m2l_translation_classes_dependent_expr%d" % i)
+                for i in range(m2l_translation_classes_dependent_ndata)]
+
+        if self.use_preprocessing_for_m2l:
+            ncoeff_src = self.tgt_expansion.m2l_preprocess_multipole_nexprs(
+                self.src_expansion)
+        else:
+            ncoeff_src = len(self.src_expansion)
+
+        src_coeff_exprs = [sym.Symbol("src_coeff%d" % i)
+                for i in range(ncoeff_src)]
+
+        from sumpy.assignment_collection import SymbolicAssignmentCollection
+        sac = SymbolicAssignmentCollection()
+        tgt_coeff_names = [
+                sac.assign_unique("coeff%d" % i, coeff_i)
+                for i, coeff_i in enumerate(
+                    self.tgt_expansion.translate_from(
+                        self.src_expansion, src_coeff_exprs, src_rscale,
+                        dvec, tgt_rscale, sac,
+                        m2l_translation_classes_dependent_data=(
+                            m2l_translation_classes_dependent_data)))]
+
+        sac.run_global_cse()
+
+        from sumpy.codegen import to_loopy_insns
+        return to_loopy_insns(
+                sac.assignments.items(),
+                vector_names=set(["d"]),
+                pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
+                retain_names=tgt_coeff_names,
+                complex_dtype=to_complex_dtype(result_dtype),
+                )
+
+    def get_postprocess_loopy_insns(self, result_dtype):
+        """Loopy instructions that happen only once for each target box.
+
+        :arg result_dtype: A numpy dtype for the result. This is important
+            because depending on the input to the M2L being real or not
+            the code needs to be different. If the input was real, the
+            result should be the real part of the complex values from the
+            inverse FFT. In the input was complex, the result matches the
+            values from the inverse FFT.
+        """
+
+        ncoeff_tgt = len(self.tgt_expansion)
+        m2l_translation_classes_dependent_ndata = \
+                self.tgt_expansion.m2l_translation_classes_dependent_ndata(
+                        self.src_expansion)
+
+        if self.use_preprocessing_for_m2l:
+            ncoeff_tgt = m2l_translation_classes_dependent_ndata
+
+        from sumpy.assignment_collection import SymbolicAssignmentCollection
+        sac = SymbolicAssignmentCollection()
+
+        tgt_coeff_exprs = [
+            sym.Symbol("coeff_sum%d" % i) for i in range(ncoeff_tgt)
+        ]
+
+        src_rscale = sym.Symbol("src_rscale")
+        tgt_rscale = sym.Symbol("tgt_rscale")
+
+        if self.use_preprocessing_for_m2l:
+            tgt_coeff_post_exprs = self.tgt_expansion.m2l_postprocess_local_exprs(
+                self.src_expansion, tgt_coeff_exprs, src_rscale, tgt_rscale,
+                sac=sac)
+            if result_dtype in (np.float32, np.float64):
+                real_func = sym.Function("real")
+                tgt_coeff_post_exprs = [real_func(expr) for expr in
+                    tgt_coeff_post_exprs]
+        else:
+            tgt_coeff_post_exprs = tgt_coeff_exprs
+
+        tgt_coeff_post_names = [
+            sac.assign_unique("coeff_post%d" % i, coeff)
+            for i, coeff in enumerate(tgt_coeff_post_exprs)
+        ]
+
+        sac.run_global_cse()
+
+        from sumpy.codegen import to_loopy_insns
+        insns = to_loopy_insns(
+                sac.assignments.items(),
+                vector_names=set(["d"]),
+                pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
+                retain_names=tgt_coeff_post_names,
+                complex_dtype=to_complex_dtype(result_dtype),
+                )
+        return insns
+
+    def get_kernel(self, result_dtype):
+        m2l_translation_classes_dependent_ndata = \
+                self.tgt_expansion.m2l_translation_classes_dependent_ndata(
+                        self.src_expansion)
+
+        if self.use_preprocessing_for_m2l:
+            # number of expressions given as input to M2L after preprocessing
+            ncoeff_src = self.tgt_expansion.m2l_preprocess_multipole_nexprs(
+                    self.src_expansion)
+            # number of expressions given as input to postprocessing
+            ncoeff_tgt_before_postprocess = \
+                    self.tgt_expansion.m2l_postprocess_local_nexprs(
+                        self.src_expansion)
+        else:
+            ncoeff_src = len(self.src_expansion)
+            ncoeff_tgt_before_postprocess = len(self.tgt_expansion)
+
+        ncoeff_tgt = len(self.tgt_expansion)
+
+        # To clarify terminology:
+        #
+        # isrc_box -> The index in a list of (in this case, source) boxes
+        # src_ibox -> The (global) box number for the (in this case, source) box
+        #
+        # (same for itgt_box, tgt_ibox)
+
+        from sumpy.tools import gather_loopy_arguments
+        loopy_knl = lp.make_kernel(
+                [
+                    "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
+                    "{[isrc_box]: isrc_start<=isrc_box<isrc_stop}",
+                    "{[idim]: 0<=idim<dim}",
+                    ],
+                ["""
+                for itgt_box
+                    <> tgt_ibox = target_boxes[itgt_box]
+                    <> tgt_center[idim] = centers[idim, tgt_ibox]
+                    <> isrc_start = src_box_starts[itgt_box]
+                    <> isrc_stop = src_box_starts[itgt_box+1]
+
+                    for isrc_box
+                        <> src_ibox = src_box_lists[isrc_box] \
+                                {id=read_src_ibox}
+                        <> src_center[idim] = centers[idim, src_ibox] {dup=idim}
+                        <> d[idim] = tgt_center[idim] - src_center[idim] \
+                            {dup=idim}
+                        <> translation_class = \
+                                m2l_translation_classes_lists[isrc_box]
+                        <> translation_class_rel = translation_class - \
+                                                    translation_classes_level_start
+                        """] + ["""
+                        <> m2l_translation_classes_dependent_expr{idx} = \
+                            m2l_translation_classes_dependent_data[ \
+                                translation_class_rel, {idx}]
+                        """.format(idx=idx) for idx in range(
+                            m2l_translation_classes_dependent_ndata)] + ["""
+                        <> src_coeff{coeffidx} = \
+                            src_expansions[src_ibox - src_base_ibox, {coeffidx}] \
+                            {{dep=read_src_ibox}}
+                        """.format(coeffidx=i) for i in range(ncoeff_src)] + [
+
+                        ] + self.get_translation_loopy_insns(result_dtype) + ["""
+                    end
+
+                    """] + ["""
+                    <> coeff_sum{coeffidx} = \
+                        simul_reduce(sum, isrc_box, coeff{coeffidx})
+                    """.format(coeffidx=i) for i in
+                        range(ncoeff_tgt_before_postprocess)] + [
+                    ] + self.get_postprocess_loopy_insns(result_dtype) + [f"""
+                    tgt_expansions[tgt_ibox - tgt_base_ibox, {coeffidx}] = \
+                            coeff_post{coeffidx} {{id_prefix=write_expn}}
+                    """ for coeffidx in range(ncoeff_tgt)] + ["""
+                end
+                """],
+                [
+                    lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
+                    lp.ValueArg("src_rscale,tgt_rscale", None),
+                    lp.GlobalArg("src_box_starts, src_box_lists",
+                        None, shape=None, strides=(1,), offset=lp.auto),
+                    lp.ValueArg("aligned_nboxes,tgt_base_ibox,src_base_ibox",
+                        np.int32),
+                    lp.ValueArg("nsrc_level_boxes,ntgt_level_boxes",
+                        np.int32),
+                    lp.GlobalArg("src_expansions", None,
+                        shape=("nsrc_level_boxes", ncoeff_src), offset=lp.auto),
+                    lp.GlobalArg("tgt_expansions", None,
+                        shape=("ntgt_level_boxes", ncoeff_tgt), offset=lp.auto),
+                    lp.ValueArg("translation_classes_level_start",
+                        np.int32),
+                    lp.GlobalArg("m2l_translation_classes_dependent_data", None,
+                        shape=("ntranslation_classes",
+                            m2l_translation_classes_dependent_ndata),
+                        offset=lp.auto),
+                    lp.GlobalArg("m2l_translation_classes_lists", np.int32,
+                        shape=("ntranslation_classes_lists"), strides=(1,),
+                        offset=lp.auto),
+                    lp.ValueArg("ntranslation_classes, ntranslation_classes_lists",
+                        np.int32),
+                    "..."
+                ] + gather_loopy_arguments([self.src_expansion,
+                                            self.tgt_expansion]),
+                name=self.name,
+                assumptions="ntgt_boxes>=1",
+                silenced_warnings="write_race(write_expn*)",
+                default_offset=lp.auto,
+                fixed_parameters=dict(dim=self.dim,
+                        m2l_translation_classes_dependent_ndata=(
+                            m2l_translation_classes_dependent_ndata)),
+                lang_version=MOST_RECENT_LANGUAGE_VERSION
+                )
+
+        for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
+            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
+
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+        loopy_knl = lp.set_options(loopy_knl,
+                enforce_variable_access_ordered="no_check")
+
+        return loopy_knl
+
+    def get_optimized_kernel(self, result_dtype):
+        # FIXME
+        knl = self.get_kernel(result_dtype)
+        knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
+
+        return knl
+
+    def __call__(self, queue, **kwargs):
+        """
+        :arg src_expansions:
+        :arg src_box_starts:
+        :arg src_box_lists:
+        :arg src_rscale:
+        :arg tgt_rscale:
+        :arg centers:
+        """
+        centers = kwargs.pop("centers")
+        # "1" may be passed for rscale, which won't have its type
+        # meaningfully inferred. Make the type of rscale explicit.
+        src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
+        tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
+
+        if "tgt_expansions" in kwargs:
+            tgt_expansions = kwargs["tgt_expansions"]
+            result_dtype = tgt_expansions.dtype
+        else:
+            src_expansions = kwargs["src_expansions"]
+            result_dtype = src_expansions.dtype
+
+        knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
+
+        return knl(queue,
+                centers=centers,
+                src_rscale=src_rscale, tgt_rscale=tgt_rscale,
+                **kwargs)
+
+
+class M2LGenerateTranslationClassesDependentData(E2EBase):
+    """Implements precomputing the M2L kernel dependent data which are
+    translation classes dependent derivatives.
+    """
+    default_name = "m2l_generate_translation_classes_dependent_data"
+
+    def get_translation_loopy_insns(self, result_dtype):
         from sumpy.symbolic import make_sym_vector
         dvec = make_sym_vector("d", self.dim)
 
@@ -346,9 +585,10 @@ class E2EFromCSRTranslationClassesPrecompute(E2EFromCSR):
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
         tgt_coeff_names = [
-                sac.assign_unique("precomputed_expr%d" % i, coeff_i)
+                sac.assign_unique("m2l_translation_classes_dependent_expr%d" % i,
+                    coeff_i)
                 for i, coeff_i in enumerate(
-                    self.tgt_expansion.m2l_global_precompute_exprs(
+                    self.tgt_expansion.m2l_translation_classes_dependent_data(
                         self.src_expansion, src_rscale,
                         dvec, tgt_rscale, sac))]
 
@@ -360,12 +600,13 @@ class E2EFromCSRTranslationClassesPrecompute(E2EFromCSR):
                 vector_names=set(["d"]),
                 pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
                 retain_names=tgt_coeff_names,
-                complex_dtype=np.complex128  # FIXME
+                complex_dtype=to_complex_dtype(result_dtype),
                 )
 
-    def get_kernel(self):
-        nprecomputed_exprs = \
-            self.tgt_expansion.m2l_global_precompute_nexpr(self.src_expansion)
+    def get_kernel(self, result_dtype):
+        m2l_translation_classes_dependent_ndata = \
+            self.tgt_expansion.m2l_translation_classes_dependent_ndata(
+                    self.src_expansion)
         from sumpy.tools import gather_loopy_arguments
         loopy_knl = lp.make_kernel(
                 [
@@ -377,15 +618,18 @@ class E2EFromCSRTranslationClassesPrecompute(E2EFromCSR):
                     <> d[idim] = m2l_translation_vectors[idim, \
                             itr_class + translation_classes_level_start] {dup=idim}
 
-                    """] + self.get_translation_loopy_insns() + ["""
-                    m2l_precomputed_exprs[itr_class, {idx}] = precomputed_expr{idx}
-                    """.format(idx=i) for i in range(nprecomputed_exprs)] + ["""
+                    """] + self.get_translation_loopy_insns(result_dtype) + ["""
+                    m2l_translation_classes_dependent_data[itr_class, {idx}] = \
+                            m2l_translation_classes_dependent_expr{idx}
+                    """.format(idx=i) for i in range(
+                        m2l_translation_classes_dependent_ndata)] + ["""
                 end
                 """],
                 [
                     lp.ValueArg("src_rscale", None),
-                    lp.GlobalArg("m2l_precomputed_exprs", None,
-                        shape=("ntranslation_classes", nprecomputed_exprs),
+                    lp.GlobalArg("m2l_translation_classes_dependent_data", None,
+                        shape=("ntranslation_classes",
+                            m2l_translation_classes_dependent_ndata),
                         offset=lp.auto),
                     lp.GlobalArg("m2l_translation_vectors", None,
                         shape=("dim", "ntranslation_vectors")),
@@ -409,9 +653,9 @@ class E2EFromCSRTranslationClassesPrecompute(E2EFromCSR):
 
         return loopy_knl
 
-    def get_optimized_kernel(self):
+    def get_optimized_kernel(self, result_dtype):
         # FIXME
-        knl = self.get_kernel()
+        knl = self.get_kernel(result_dtype)
         knl = lp.tag_inames(knl, {"itr_class": "g.0"})
 
         return knl
@@ -421,21 +665,125 @@ class E2EFromCSRTranslationClassesPrecompute(E2EFromCSR):
         :arg src_rscale:
         :arg translation_classes_level_start:
         :arg ntranslation_classes:
-        :arg m2l_precomputed_exprs:
+        :arg m2l_translation_classes_dependent_data:
         :arg m2l_translation_vectors:
         """
-        knl = self.get_cached_optimized_kernel()
-
         m2l_translation_vectors = kwargs.pop("m2l_translation_vectors")
         # "1" may be passed for rscale, which won't have its type
         # meaningfully inferred. Make the type of rscale explicit.
         src_rscale = m2l_translation_vectors.dtype.type(kwargs.pop("src_rscale"))
 
+        m2l_translation_classes_dependent_data = kwargs.pop(
+                "m2l_translation_classes_dependent_data")
+        result_dtype = m2l_translation_classes_dependent_data.dtype
+
+        knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
+
         return knl(queue,
                 src_rscale=src_rscale,
                 m2l_translation_vectors=m2l_translation_vectors,
+                m2l_translation_classes_dependent_data=(
+                    m2l_translation_classes_dependent_data),
                 **kwargs)
 
+# }}}
+
+
+# {{{ M2LPreprocessMultipole
+
+class M2LPreprocessMultipole(E2EBase):
+    """Computes the preprocessed multipole expansion for accelerated M2L"""
+
+    default_name = "m2l_preprocess_multipole"
+
+    def get_loopy_insns(self, result_dtype):
+        src_coeff_exprs = [sym.Symbol("src_coeff%d" % i)
+                for i in range(len(self.src_expansion))]
+
+        src_rscale = sym.Symbol("src_rscale")
+
+        from sumpy.assignment_collection import SymbolicAssignmentCollection
+        sac = SymbolicAssignmentCollection()
+
+        preprocessed_src_coeff_names = [
+                sac.assign_unique("preprocessed_src_coeff%d" % i, coeff_i)
+                for i, coeff_i in enumerate(
+                    self.tgt_expansion.m2l_preprocess_multipole_exprs(
+                        self.src_expansion, src_coeff_exprs,
+                        sac=sac, src_rscale=src_rscale))]
+
+        sac.run_global_cse()
+
+        from sumpy.codegen import to_loopy_insns
+        return to_loopy_insns(
+                sac.assignments.items(),
+                vector_names=set(["d"]),
+                pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
+                retain_names=preprocessed_src_coeff_names,
+                complex_dtype=to_complex_dtype(result_dtype),
+                )
+
+    def get_kernel(self, result_dtype):
+        nsrc_coeffs = len(self.src_expansion)
+        npreprocessed_src_coeffs = \
+            self.tgt_expansion.m2l_preprocess_multipole_nexprs(self.src_expansion)
+        from sumpy.tools import gather_loopy_arguments
+        loopy_knl = lp.make_kernel(
+                [
+                    "{[isrc_box]: 0<=isrc_box<nsrc_boxes}",
+                    ],
+                ["""
+                for isrc_box
+                """] + ["""
+                    <> src_coeff{idx} = src_expansions[isrc_box, {idx}]
+                """.format(idx=i) for i in range(nsrc_coeffs)] + [
+                ] + self.get_loopy_insns(result_dtype) + ["""
+                    preprocessed_src_expansions[isrc_box, {idx}] = \
+                        preprocessed_src_coeff{idx}
+                    """.format(idx=i) for i in range(
+                        npreprocessed_src_coeffs)] + ["""
+                end
+                """],
+                [
+                    lp.ValueArg("nsrc_boxes", np.int32),
+                    lp.ValueArg("src_rscale", lp.auto),
+                    lp.GlobalArg("src_expansions", None,
+                        shape=("nsrc_boxes", nsrc_coeffs), offset=lp.auto),
+                    lp.GlobalArg("preprocessed_src_expansions", None,
+                        shape=("nsrc_boxes", npreprocessed_src_coeffs),
+                        offset=lp.auto),
+                    "..."
+                ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
+                name=self.name,
+                assumptions="nsrc_boxes>=1",
+                default_offset=lp.auto,
+                fixed_parameters=dict(dim=self.dim),
+                lang_version=MOST_RECENT_LANGUAGE_VERSION
+                )
+
+        for expn in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
+            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+
+        loopy_knl = lp.set_options(loopy_knl,
+                enforce_variable_access_ordered="no_check")
+        return loopy_knl
+
+    def get_optimized_kernel(self, result_dtype):
+        # FIXME
+        knl = self.get_kernel(result_dtype)
+        knl = lp.split_iname(knl, "isrc_box", 16, outer_tag="g.0")
+        return knl
+
+    def __call__(self, queue, **kwargs):
+        """
+        :arg src_expansions
+        :arg preprocessed_src_expansions
+        """
+        preprocessed_src_expansions = kwargs.pop("preprocessed_src_expansions")
+        result_dtype = preprocessed_src_expansions.dtype
+        knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
+        return knl(queue,
+            preprocessed_src_expansions=preprocessed_src_expansions, **kwargs)
 # }}}
 
 
@@ -530,6 +878,8 @@ class E2EFromChildren(E2EBase):
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+        loopy_knl = lp.set_options(loopy_knl,
+                enforce_variable_access_ordered="no_check")
 
         return loopy_knl
 

@@ -1,6 +1,7 @@
 __copyright__ = """
 Copyright (C) 2012 Andreas Kloeckner
 Copyright (C) 2018 Alexandru Fikl
+Copyright (C) 2020 Isuru Fernando
 """
 
 __license__ = """
@@ -37,6 +38,7 @@ __doc__ = """
 
 from pytools import memoize_method
 from pytools.tag import Tag, tag_dataclass
+import numbers
 from pymbolic.mapper import WalkMapper
 
 import numpy as np
@@ -90,7 +92,8 @@ def add_to_sac(sac, expr):
     if sac is None:
         return expr
 
-    if expr.is_Number or expr.is_Symbol:
+    if isinstance(expr, (numbers.Number, sym.Number, int,
+                         float, complex, sym.Symbol)):
         return expr
 
     name = sac.assign_temp("temp", expr)
@@ -726,7 +729,6 @@ class KernelCacheWrapper:
     @staticmethod
     def _allow_redundant_execution_of_knl_scaling(knl):
         from loopy.match import ObjTagged
-        from sumpy.tools import ScalingAssignmentTag
         return lp.add_inames_for_unused_hw_axes(
                 knl, within=ObjTagged(ScalingAssignmentTag()))
 
@@ -736,6 +738,8 @@ def is_obj_array_like(ary):
             isinstance(ary, (tuple, list))
             or (isinstance(ary, np.ndarray) and ary.dtype.char == "O"))
 
+
+# {{{ matrices
 
 def reduced_row_echelon_form(m, atol=0):
     """Calculates a reduced row echelon form of a
@@ -853,6 +857,51 @@ def find_linear_relationship(matrix):
     return {}
 
 
+# }}}
+
+# {{{ FFT
+
+def fft(seq, inverse=False, sac=None):
+    """
+    Return the discrete fourier transform of the sequence seq.
+    seq should be a python iterable with tuples of length 2
+    corresponding to the real part and imaginary part.
+    """
+
+    from pymbolic.algorithm import fft as _fft, ifft as _ifft
+
+    def wrap(expr):
+        if isinstance(expr, np.ndarray):
+            res = [wrap(a) for a in expr]
+            return np.array(res, dtype=object).reshape(expr.shape)
+        return add_to_sac(sac, expr)
+
+    if inverse:
+        return _ifft(list(seq), wrap_intermediate=wrap).tolist()
+    else:
+        return _fft(list(seq), wrap_intermediate=wrap).tolist()
+
+
+def fft_toeplitz_upper_triangular(first_row, x, sac=None):
+    """
+    Returns the matvec of the Toeplitz matrix given by
+    the first row and the vector x using a Fourier transform
+    """
+    assert len(first_row) == len(x)
+    n = len(first_row)
+    v = list(first_row)
+    v += [0]*(n-1)
+
+    x = list(reversed(x))
+    x += [0]*(n-1)
+
+    v_fft = fft(v, sac)
+    x_fft = fft(x, sac)
+    res_fft = [add_to_sac(sac, a * b) for a, b in zip(v_fft, x_fft)]
+    res = fft(res_fft, inverse=True, sac=sac)
+    return list(reversed(res[:n]))
+
+
 def matvec_toeplitz_upper_triangular(first_row, vector):
     n = len(first_row)
     assert len(vector) == n
@@ -861,5 +910,23 @@ def matvec_toeplitz_upper_triangular(first_row, vector):
         terms = tuple(first_row[col-row]*vector[col] for col in range(row, n))
         output[row] = sym.Add(*terms)
     return output
+
+
+to_complex_type_dict = {
+    np.complex64: np.complex64,
+    np.complex128: np.complex128,
+    np.float32: np.complex64,
+    np.float64: np.complex128,
+}
+
+
+def to_complex_dtype(dtype):
+    np_type = np.dtype(dtype).type
+    try:
+        return to_complex_type_dict[np_type]
+    except KeyError:
+        raise RuntimeError(f"Unknown dtype: {dtype}")
+
+# }}}
 
 # vim: fdm=marker

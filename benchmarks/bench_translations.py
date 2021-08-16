@@ -62,9 +62,15 @@ class TranslationBenchmarkSuite:
         dvec = sym.make_sym_vector("d", knl.dim)
         src_rscale = sym.Symbol("src_rscale")
         tgt_rscale = sym.Symbol("tgt_rscale")
-        result = l_expn.translate_from(m_expn, src_coeff_exprs, src_rscale,
-                                       dvec, tgt_rscale)
         sac = SymbolicAssignmentCollection()
+        try:
+            result = l_expn.translate_from(m_expn, src_coeff_exprs, src_rscale,
+                                       dvec, tgt_rscale, sac)
+        except TypeError:
+            # Support older interface to make it possible to compare
+            # in CI run
+            result = l_expn.translate_from(m_expn, src_coeff_exprs, src_rscale,
+                                       dvec, tgt_rscale)
         for i, expr in enumerate(result):
             sac.assign_unique("coeff%d" % i, expr)
         sac.run_global_cse()
@@ -74,7 +80,7 @@ class TranslationBenchmarkSuite:
         return sum([counter.rec(insn.expression)+1 for insn in insns])
 
     track_m2l_op_count.unit = "ops"
-    track_m2l_op_count.timeout = 200.0
+    track_m2l_op_count.timeout = 300.0
 
 
 class LaplaceVolumeTaylorTranslation(TranslationBenchmarkSuite):
