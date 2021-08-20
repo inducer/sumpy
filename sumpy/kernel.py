@@ -788,7 +788,12 @@ class StressletKernel(ExpressionKernel):
                 dynamic viscosity :math:`\mu` the then generating functions to
                 evaluate this kernel.
         """
-        # Mu is unused but kept for consistency with the stokeslet.
+        # mu is unused but kept for consistency with the Stokeslet.
+        if isinstance(viscosity_mu, str):
+            mu = parse(viscosity_mu)
+        else:
+            mu = viscosity_mu
+
         if dim == 2:
             d = make_sym_vector("d", dim)
             r = pymbolic_real_norm_2(d)
@@ -811,7 +816,7 @@ class StressletKernel(ExpressionKernel):
         self.icomp = icomp
         self.jcomp = jcomp
         self.kcomp = kcomp
-        self.viscosity_mu = viscosity_mu
+        self.viscosity_mu = mu
 
         super().__init__(
                 dim,
@@ -824,12 +829,23 @@ class StressletKernel(ExpressionKernel):
 
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode())
-        key_builder.rec(key_hash,
-                (self.dim, self.icomp, self.jcomp, self.kcomp, self.viscosity_mu))
+        key_builder.rec(key_hash, (self.dim, self.icomp, self.jcomp, self.kcomp))
+
+        from pymbolic.mapper.persistent_hash import PersistentHashWalkMapper
+        mapper = PersistentHashWalkMapper(key_hash)
+        mapper(self.viscosity_mu)
 
     def __repr__(self):
         return "StressletKnl%dD_%d%d%d" % (self.dim, self.icomp, self.jcomp,
                 self.kcomp)
+
+    @memoize_method
+    def get_args(self):
+        from sumpy.tools import get_all_variables
+        variables = get_all_variables(self.viscosity_mu)
+        return [
+                KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64))
+                for v in variables]
 
     mapper_method = "map_stresslet_kernel"
 
@@ -837,13 +853,6 @@ class StressletKernel(ExpressionKernel):
         from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
         w = make_identity_diff_op(self.dim)
         return laplacian(laplacian(w))
-
-    def get_args(self):
-        return [
-                KernelArgument(
-                    loopy_arg=lp.ValueArg(self.viscosity_mu, np.float64),
-                    )
-                ]
 
 
 class LineOfCompressionKernel(ExpressionKernel):
