@@ -67,12 +67,6 @@ _find_symbolic_backend()
 
 # }}}
 
-# Symbolic API common to SymEngine and sympy.
-# Before adding a function here, make sure it's present in both modules.
-SYMBOLIC_API = """
-Add Basic Mul Pow exp sqrt log symbols sympify cos sin atan2 Function Symbol
-Derivative Integer Matrix Subs I pi functions Number Float""".split()
-
 if USE_SYMENGINE:
     import symengine as sym
     from pymbolic.interop.symengine import (
@@ -83,8 +77,31 @@ else:
     from pymbolic.interop.sympy import (
         PymbolicToSympyMapper, SympyToPymbolicMapper)
 
-for _apifunc in SYMBOLIC_API:
-    globals()[_apifunc] = getattr(sym, _apifunc)
+# Symbolic API common to SymEngine and sympy.
+# Before adding a function here, make sure it's present in both modules.
+Add = sym.Add
+Basic = sym.Basic
+Mul = sym.Mul
+Pow = sym.Pow
+exp = sym.exp
+sqrt = sym.sqrt
+log = sym.log
+symbols = sym.symbols
+sympify = sym.sympify
+cos = sym.cos
+sin = sym.sin
+atan2 = sym.atan2
+Function = sym.Function
+Symbol = sym.Symbol
+Derivative = sym.Derivative
+Integer = sym.Integer
+Matrix = sym.Matrix
+Subs = sym.Subs
+I = sym.I  # noqa: E741
+pi = sym.pi
+functions = sym.functions
+Number = sym.Number
+Float = sym.Float
 
 
 def _coeff_isneg(a):
