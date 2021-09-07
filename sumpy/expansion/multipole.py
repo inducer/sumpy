@@ -86,10 +86,13 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                 rscale, (1,), sac=sac)
 
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
+        from sumpy.tools import DifferentiatedExprDerivativeTaker
         if not self.use_rscale:
             rscale = 1
 
         base_taker = kernel.get_derivative_taker(bvec, rscale, sac)
+        base_taker = DifferentiatedExprDerivativeTaker(base_taker,
+                {tuple([0]*self.dim): 1})
         taker = kernel.postprocess_at_target(base_taker, bvec)
 
         result = []

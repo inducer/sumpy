@@ -39,6 +39,7 @@ __doc__ = """
 from pytools import memoize_method
 from pytools.tag import Tag, tag_dataclass
 import numbers
+from collections import defaultdict
 from pymbolic.mapper import WalkMapper
 
 import numpy as np
@@ -429,6 +430,18 @@ class DifferentiatedExprDerivativeTaker:
             for extra_mi, coeff in self.derivative_transformation.items())
 
         return result * save_intermediate(1 / self.taker.rscale ** max_order)
+
+
+def diff_transformation(derivative_transformation, variable_idx, variables):
+    new_transformation = defaultdict(lambda: 0)
+    for mi, coeff in derivative_transformation.items():
+        new_coeff = sym.sympify(coeff).diff(variables[variable_idx])
+        if new_coeff != 0:
+            new_transformation[mi] += new_coeff
+        new_mi = list(mi)
+        new_mi[variable_idx] += 1
+        new_transformation[tuple(new_mi)] += coeff
+    return dict(new_transformation)
 
 # }}}
 
