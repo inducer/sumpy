@@ -239,32 +239,10 @@ class Kernel:
         The typical use of this function is to apply target-variable
         derivatives to the kernel.
         """
-        from sumpy.tools import (ExprDerivativeTaker,
-            DifferentiatedExprDerivativeTaker)
-        expr_dict = {(0,)*self.dim: 1}
-        expr_dict = self.get_derivative_transformation_at_target(expr_dict)
-        if isinstance(expr, ExprDerivativeTaker):
-            return DifferentiatedExprDerivativeTaker(expr, expr_dict)
-
-        result = 0
-        for mi, coeff in expr_dict.items():
-            result += coeff * self._diff(expr, bvec, mi)
-        return result
+        return expr
 
     def get_derivative_transformation_at_source(self, expr_dict):
         r"""Get the derivative transformation of the expression at source
-        represented by the dictionary expr_dict which is mapping from multi-index
-        `mi` to coefficient `coeff`.
-        Expression represented by the dictionary `expr_dict` is
-        :math:`\sum_{mi} \frac{\partial^mi}{x^mi}G * coeff`. Returns an
-        expression of the same type.
-
-        This function is meant to be overridden by child classes where necessary.
-        """
-        return expr_dict
-
-    def get_derivative_transformation_at_target(self, expr_dict):
-        r"""Get the derivative transformation of the expression at target
         represented by the dictionary expr_dict which is mapping from multi-index
         `mi` to coefficient `coeff`.
         Expression represented by the dictionary `expr_dict` is
@@ -961,8 +939,8 @@ class KernelWrapper(Kernel):
     def get_derivative_transformation_at_source(self, expr_dict):
         return self.inner_kernel.get_derivative_transformation_at_source(expr_dict)
 
-    def get_derivative_transformation_at_target(self, expr_dict):
-        return self.inner_kernel.get_derivative_transformation_at_target(expr_dict)
+    def postprocess_at_target(self, expr, bvec):
+        return self.inner_kernel.postprocess_at_target(expr, bvec)
 
     def get_global_scaling_const(self):
         return self.inner_kernel.get_global_scaling_const()
@@ -1030,6 +1008,7 @@ class AxisSourceDerivative(DerivativeBase):
 
 class AxisTargetDerivative(DerivativeBase):
     init_arg_names = ("axis", "inner_kernel")
+    target_array_name = "targets"
 
     def __init__(self, axis, inner_kernel):
         KernelWrapper.__init__(self, inner_kernel)
@@ -1044,15 +1023,20 @@ class AxisTargetDerivative(DerivativeBase):
     def __repr__(self):
         return "AxisTargetDerivative(%d, %r)" % (self.axis, self.inner_kernel)
 
-    def get_derivative_transformation_at_target(self, expr_dict):
-        expr_dict = self.inner_kernel.get_derivative_transformation_at_target(
-            expr_dict)
-        result = dict()
-        for mi, coeff in expr_dict.items():
-            new_mi = list(mi)
-            new_mi[self.axis] += 1
-            result[tuple(new_mi)] = coeff
-        return result
+    def postprocess_at_target(self, expr, bvec):
+        from sumpy.tools import (DifferentiatedExprDerivativeTaker,
+                diff_transformation)
+        from sumpy.symbolic import make_sym_vector as make_sympy_vector
+
+        target_vec = make_sympy_vector(self.target_array_name, self.dim)
+
+        expr = self.inner_kernel.postprocess_at_target(expr, bvec)
+        if isinstance(expr, DifferentiatedExprDerivativeTaker):
+            transformation = diff_transformation(expr.derivative_transformation,
+                    self.axis, target_vec)
+            return DifferentiatedExprDerivativeTaker(expr.taker, transformation)
+        else:
+            return expr.diff(bvec[self.axis]) + expr.diff(target_vec[self.axis])
 
     def replace_base_kernel(self, new_base_kernel):
         return type(self)(self.axis,
@@ -1120,6 +1104,7 @@ class DirectionalDerivative(DerivativeBase):
 
 class DirectionalTargetDerivative(DirectionalDerivative):
     directional_kind = "tgt"
+    target_array_name = "targets"
 
     def get_code_transformer(self):
         from sumpy.codegen import VectorComponentRewriter
@@ -1127,26 +1112,40 @@ class DirectionalTargetDerivative(DirectionalDerivative):
         from pymbolic.primitives import Variable
         via = _VectorIndexAdder(self.dir_vec_name, (Variable("itgt"),))
 
+        inner_transform = self.inner_kernel.get_code_transformer()
+
         def transform(expr):
-            return via(vcr(expr))
+            return via(vcr(inner_transform(expr)))
 
         return transform
 
-    def get_derivative_transformation_at_target(self, expr_dict):
+    def postprocess_at_target(self, expr, bvec):
+        from sumpy.tools import (DifferentiatedExprDerivativeTaker,
+                diff_transformation)
+
         from sumpy.symbolic import make_sym_vector as make_sympy_vector
         dir_vec = make_sympy_vector(self.dir_vec_name, self.dim)
+        target_vec = make_sympy_vector(self.target_array_name, self.dim)
 
-        expr_dict = self.inner_kernel.get_derivative_transformation_at_target(
-            expr_dict)
+        expr = self.inner_kernel.postprocess_at_target(expr, bvec)
 
         # bvec = tgt - center
-        result = defaultdict(lambda: 0)
-        for mi, coeff in expr_dict.items():
+        if not isinstance(expr, DifferentiatedExprDerivativeTaker):
+            result = 0
             for axis in range(self.dim):
-                new_mi = list(mi)
-                new_mi[axis] += 1
-                result[tuple(new_mi)] += coeff * dir_vec[axis]
-        return result
+                result += (expr.diff(bvec[axis]) + expr.diff(target_vec[axis])) \
+                        * dir_vec[axis]
+            return result
+
+        new_transformation = defaultdict(lambda: 0)
+        for axis in range(self.dim):
+            axis_transformation = diff_transformation(
+                    expr.derivative_transformation, axis, target_vec)
+            for mi, coeff in axis_transformation.items():
+                new_transformation[mi] += coeff * dir_vec[axis]
+
+        return DifferentiatedExprDerivativeTaker(expr.taker,
+                dict(new_transformation))
 
     def get_source_args(self):
         return [
@@ -1243,19 +1242,17 @@ class TargetPointMultiplier(KernelWrapper):
         expr = self.inner_kernel.postprocess_at_target(expr, avec)
         target_vec = make_sympy_vector(self.target_array_name, self.dim)
 
-        if isinstance(expr,
-                (ExprDerivativeTaker, DifferentiatedExprDerivativeTaker)):
-            class DerivativeTakerWrapper:
-                def __init__(self, taker, vec, axis):
-                    self.taker = taker
-                    self.vec = vec
-                    self.axis = axis
+        zeros = tuple([0]*self.dim)
+        mult = target_vec[self.axis]
 
-                def diff(self, *args, **kwargs):
-                    return self.vec[self.axis] * self.taker.diff(*args, **kwargs)
-
-            return DerivativeTakerWrapper(expr, target_vec, self.axis)
-        return target_vec[self.axis] * expr
+        if isinstance(expr, DifferentiatedExprDerivativeTaker):
+            transform = {mi: coeff * mult for mi, coeff in
+                    expr.derivative_transformation.items()}
+            return DifferentiatedExprDerivativeTaker(expr.taker, transform)
+        elif isinstance(expr, ExprDerivativeTaker):
+            return DifferentiatedExprDerivativeTaker({zeros: mult})
+        else:
+            return mult * expr
 
     def get_code_transformer(self):
         from sumpy.codegen import VectorComponentRewriter
@@ -1263,8 +1260,10 @@ class TargetPointMultiplier(KernelWrapper):
         from pymbolic.primitives import Variable
         via = _VectorIndexAdder(self.target_array_name, (Variable("itgt"),))
 
+        inner_transform = self.inner_kernel.get_code_transformer()
+
         def transform(expr):
-            return via(vcr(expr))
+            return via(vcr(inner_transform(expr)))
 
         return transform
 
