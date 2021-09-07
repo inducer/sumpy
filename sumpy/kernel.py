@@ -1030,12 +1030,15 @@ class AxisTargetDerivative(DerivativeBase):
 
         target_vec = make_sympy_vector(self.target_array_name, self.dim)
 
+        # bvec = tgt - ctr
         expr = self.inner_kernel.postprocess_at_target(expr, bvec)
         if isinstance(expr, DifferentiatedExprDerivativeTaker):
             transformation = diff_transformation(expr.derivative_transformation,
                     self.axis, target_vec)
             return DifferentiatedExprDerivativeTaker(expr.taker, transformation)
         else:
+            # Since `bvec` and `tgt` are two different symbolic variables
+            # need to differentiate by both to get the correct answer
             return expr.diff(bvec[self.axis]) + expr.diff(target_vec[self.axis])
 
     def replace_base_kernel(self, new_base_kernel):
@@ -1129,6 +1132,8 @@ class DirectionalTargetDerivative(DirectionalDerivative):
         if not isinstance(expr, DifferentiatedExprDerivativeTaker):
             result = 0
             for axis in range(self.dim):
+                # Since `bvec` and `tgt` are two different symbolic variables
+                # need to differentiate by both to get the correct answer
                 result += (expr.diff(bvec[axis]) + expr.diff(target_vec[axis])) \
                         * dir_vec[axis]
             return result
