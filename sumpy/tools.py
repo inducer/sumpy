@@ -433,11 +433,19 @@ class DifferentiatedExprDerivativeTaker:
 
 
 def diff_transformation(derivative_transformation, variable_idx, variables):
+    """Differentiate a derivative transformation dictionary using the
+    variable given by **variable_idx** and return a new derivative transformation
+    dictionary
+    """
     new_transformation = defaultdict(lambda: 0)
     for mi, coeff in derivative_transformation.items():
+        # In the case where we have x * u.diff(x), the result should
+        # be x.diff(x) + x * u.diff(x, x)
+        # Calculate the first term by differentiating the coefficients
         new_coeff = sym.sympify(coeff).diff(variables[variable_idx])
         if new_coeff != 0:
             new_transformation[mi] += new_coeff
+        # Next calculate the second term by differentitating the derivatives
         new_mi = list(mi)
         new_mi[variable_idx] += 1
         new_transformation[tuple(new_mi)] += coeff
