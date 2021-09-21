@@ -1074,10 +1074,6 @@ class DirectionalDerivative(DerivativeBase):
     def __init__(self, inner_kernel, dir_vec_name=None):
         if dir_vec_name is None:
             dir_vec_name = self.directional_kind + "_derivative_dir"
-        else:
-            from warnings import warn
-            warn("specified the name of the direction vector",
-                    stacklevel=2)
 
         KernelWrapper.__init__(self, inner_kernel)
         self.dir_vec_name = dir_vec_name
