@@ -213,7 +213,7 @@ def test_p2p_direct(ctx_factory, exclude_self, factor, lpot_id):
         extra_kwargs = {}
         if exclude_self:
             extra_kwargs["target_to_source"] = \
-                cl.array.arange(queue, 0, n, dtype=np.int)
+                cl.array.arange(queue, 0, n, dtype=np.int32)
         if lpot_id == 2:
             from pytools.obj_array import make_obj_array
             extra_kwargs["dsource_vec"] = \
