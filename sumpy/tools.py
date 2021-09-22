@@ -443,13 +443,13 @@ def diff_transformation(derivative_transformation, variable_idx, variables):
         # be x.diff(x) + x * u.diff(x, x)
         # Calculate the first term by differentiating the coefficients
         new_coeff = sym.sympify(coeff).diff(variables[variable_idx])
-        if new_coeff != 0:
-            new_derivative_coeff_dict[mi] += new_coeff
-        # Next calculate the second term by differentitating the derivatives
+        new_derivative_coeff_dict[mi] += new_coeff
+        # Next calculate the second term by differentiating the derivatives
         new_mi = list(mi)
         new_mi[variable_idx] += 1
         new_derivative_coeff_dict[tuple(new_mi)] += coeff
-    return dict(new_derivative_coeff_dict)
+    return {derivative: coeff for derivative, coeff in
+            new_derivative_coeff_dict.items() if coeff != 0}
 
 # }}}
 
