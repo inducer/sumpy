@@ -91,6 +91,11 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
             rscale = 1
 
         base_taker = kernel.get_derivative_taker(bvec, rscale, sac)
+        # Following is a no-op, but reduces the cases we have to handle
+        # in AxisTargetDerivative.postprocess_at_target and
+        # DirectionalTargetDerivative.postprocess_at_target because
+        # the type will always be DifferentiatedExprDerivativeTaker
+        # that we are passing to postprocess_at_target
         base_taker = DifferentiatedExprDerivativeTaker(base_taker,
                 {tuple([0]*self.dim): 1})
         taker = kernel.postprocess_at_target(base_taker, bvec)
