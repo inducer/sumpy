@@ -745,7 +745,7 @@ class M2LPreprocessMultipole(E2EBase):
                 """],
                 [
                     lp.ValueArg("nsrc_boxes", np.int32),
-                    lp.ValueArg("src_rscale", lp.auto),
+                    lp.ValueArg("src_rscale", None),
                     lp.GlobalArg("src_expansions", None,
                         shape=("nsrc_boxes", nsrc_coeffs), offset=lp.auto),
                     lp.GlobalArg("preprocessed_src_expansions", None,
