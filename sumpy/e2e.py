@@ -616,7 +616,7 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                 ["""
                 for itr_class
                     <> d[idim] = m2l_translation_vectors[idim, \
-                            itr_class + translation_classes_level_start] {dup=idim}
+                            itr_class + translation_classes_level_start]
 
                     """] + self.get_translation_loopy_insns(result_dtype) + ["""
                     m2l_translation_classes_dependent_data[itr_class, {idx}] = \
@@ -649,7 +649,6 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-        loopy_knl = lp.tag_inames(loopy_knl, dict(idim="unr"))
 
         return loopy_knl
 

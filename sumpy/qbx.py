@@ -248,7 +248,7 @@ class LayerPotential(LayerPotentialBase):
             """],
             self.get_kernel_scaling_assignments()
             + ["for itgt, isrc"]
-            + ["<> a[idim] = center[idim, itgt] - sources[idim, isrc] {dup=idim}"]
+            + ["<> a[idim] = center[idim, itgt] - sources[idim, isrc]"]
             + ["<> b[idim] = targets[idim, itgt] - center[idim, itgt] {dup=idim}"]
             + ["<> rscale = expansion_radii[itgt]"]
             + [f"<> strength_{i}_isrc = strength_{i}[isrc]" for i in
@@ -324,7 +324,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
             """],
             self.get_kernel_scaling_assignments()
             + ["for itgt, isrc"]
-            + ["<> a[idim] = center[idim, itgt] - sources[idim, isrc] {dup=idim}"]
+            + ["<> a[idim] = center[idim, itgt] - sources[idim, isrc]"]
             + ["<> b[idim] = targets[idim, itgt] - center[idim, itgt] {dup=idim}"]
             + ["<> rscale = expansion_radii[itgt]"]
             + loopy_insns + kernel_exprs
@@ -399,7 +399,7 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
                     <> itgt = tgtindices[imat]
                     <> isrc = srcindices[imat]
 
-                    <> a[idim] = center[idim, itgt] - sources[idim, isrc] {dup=idim}
+                    <> a[idim] = center[idim, itgt] - sources[idim, isrc]
                     <> b[idim] = targets[idim, itgt] - center[idim, itgt] {dup=idim}
                     <> rscale = expansion_radii[itgt]
             """]
