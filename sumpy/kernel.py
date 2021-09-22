@@ -238,7 +238,7 @@ class Kernel:
 
         The typical use of this function is to apply target-variable
         derivatives to the kernel.
-        
+
         :arg expr: may be a :class:`sympy.Expr` or a
             :class:`sumpy.tools.DifferentiatedExprDerivativeTaker`.
         """
