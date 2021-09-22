@@ -222,7 +222,7 @@ class Kernel:
         from sumpy.tools import (ExprDerivativeTaker,
             DifferentiatedExprDerivativeTaker)
         expr_dict = {(0,)*self.dim: 1}
-        expr_dict = self.get_derivative_transformation_at_source(expr_dict)
+        expr_dict = self.get_derivative_coeff_dict_at_source(expr_dict)
         if isinstance(expr, ExprDerivativeTaker):
             return DifferentiatedExprDerivativeTaker(expr, expr_dict)
 
@@ -244,7 +244,7 @@ class Kernel:
         """
         return expr
 
-    def get_derivative_transformation_at_source(self, expr_dict):
+    def get_derivative_coeff_dict_at_source(self, expr_dict):
         r"""Get the derivative transformation of the expression at source
         represented by the dictionary expr_dict which is mapping from multi-index
         `mi` to coefficient `coeff`.
@@ -939,8 +939,8 @@ class KernelWrapper(Kernel):
     def get_expression(self, scaled_dist_vec):
         return self.inner_kernel.get_expression(scaled_dist_vec)
 
-    def get_derivative_transformation_at_source(self, expr_dict):
-        return self.inner_kernel.get_derivative_transformation_at_source(expr_dict)
+    def get_derivative_coeff_dict_at_source(self, expr_dict):
+        return self.inner_kernel.get_derivative_coeff_dict_at_source(expr_dict)
 
     def postprocess_at_target(self, expr, bvec):
         return self.inner_kernel.postprocess_at_target(expr, bvec)
@@ -989,8 +989,8 @@ class AxisSourceDerivative(DerivativeBase):
     def __repr__(self):
         return "AxisSourceDerivative(%d, %r)" % (self.axis, self.inner_kernel)
 
-    def get_derivative_transformation_at_source(self, expr_dict):
-        expr_dict = self.inner_kernel.get_derivative_transformation_at_source(
+    def get_derivative_coeff_dict_at_source(self, expr_dict):
+        expr_dict = self.inner_kernel.get_derivative_coeff_dict_at_source(
             expr_dict)
         result = dict()
         for mi, coeff in expr_dict.items():
@@ -1028,7 +1028,7 @@ class AxisTargetDerivative(DerivativeBase):
 
     def postprocess_at_target(self, expr, bvec):
         from sumpy.tools import (DifferentiatedExprDerivativeTaker,
-                diff_transformation)
+                diff_derivative_coeff_dict)
         from sumpy.symbolic import make_sym_vector as make_sympy_vector
 
         target_vec = make_sympy_vector(self.target_array_name, self.dim)
@@ -1036,7 +1036,7 @@ class AxisTargetDerivative(DerivativeBase):
         # bvec = tgt - ctr
         expr = self.inner_kernel.postprocess_at_target(expr, bvec)
         if isinstance(expr, DifferentiatedExprDerivativeTaker):
-            transformation = diff_transformation(expr.derivative_transformation,
+            transformation = diff_derivative_coeff_dict(expr.derivative_coeff_dict,
                     self.axis, target_vec)
             return DifferentiatedExprDerivativeTaker(expr.taker, transformation)
         else:
@@ -1123,7 +1123,7 @@ class DirectionalTargetDerivative(DirectionalDerivative):
 
     def postprocess_at_target(self, expr, bvec):
         from sumpy.tools import (DifferentiatedExprDerivativeTaker,
-                diff_transformation)
+                diff_derivative_coeff_dict)
 
         from sumpy.symbolic import make_sym_vector as make_sympy_vector
         dir_vec = make_sympy_vector(self.dir_vec_name, self.dim)
@@ -1143,8 +1143,8 @@ class DirectionalTargetDerivative(DirectionalDerivative):
 
         new_transformation = defaultdict(lambda: 0)
         for axis in range(self.dim):
-            axis_transformation = diff_transformation(
-                    expr.derivative_transformation, axis, target_vec)
+            axis_transformation = diff_derivative_coeff_dict(
+                    expr.derivative_coeff_dict, axis, target_vec)
             for mi, coeff in axis_transformation.items():
                 new_transformation[mi] += coeff * dir_vec[axis]
 
@@ -1180,11 +1180,11 @@ class DirectionalSourceDerivative(DirectionalDerivative):
 
         return transform
 
-    def get_derivative_transformation_at_source(self, expr_dict):
+    def get_derivative_coeff_dict_at_source(self, expr_dict):
         from sumpy.symbolic import make_sym_vector as make_sympy_vector
         dir_vec = make_sympy_vector(self.dir_vec_name, self.dim)
 
-        expr_dict = self.inner_kernel.get_derivative_transformation_at_source(
+        expr_dict = self.inner_kernel.get_derivative_coeff_dict_at_source(
             expr_dict)
 
         # avec = center-src -> minus sign from chain rule
@@ -1251,7 +1251,7 @@ class TargetPointMultiplier(KernelWrapper):
 
         if isinstance(expr, DifferentiatedExprDerivativeTaker):
             transform = {mi: coeff * mult for mi, coeff in
-                    expr.derivative_transformation.items()}
+                    expr.derivative_coeff_dict.items()}
             return DifferentiatedExprDerivativeTaker(expr.taker, transform)
         elif isinstance(expr, ExprDerivativeTaker):
             return DifferentiatedExprDerivativeTaker({zeros: mult})

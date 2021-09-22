@@ -404,41 +404,41 @@ class DifferentiatedExprDerivativeTaker:
     .. attribute:: taker
         A :class:`ExprDerivativeTaker` for the base expression.
 
-    .. attribute:: derivative_transformation
+    .. attribute:: derivative_coeff_dict
         A dictionary mapping a derivative multi-index to a coefficient.
         The expression represented by this derivative taker is the linear
         combination of the derivatives of the expression for the
         base expression.
     """
     taker: ExprDerivativeTaker
-    derivative_transformation: dict
+    derivative_coeff_dict: dict
 
     def diff(self, mi, save_intermediate=lambda x: x):
         # By passing `rscale` to the derivative taker we are taking a scaled
         # version of the derivative which is `expr.diff(mi)*rscale**sum(mi)`
         # which might be implemented efficiently for kernels like Laplace.
         # One caveat is that we are taking more derivatives because of
-        # :attr:`derivative_transformation` which would multiply the
+        # :attr:`derivative_coeff_dict` which would multiply the
         # expression by more `rscale`s than necessary. This is corrected by
         # dividing by `rscale`.
         max_order = max(sum(extra_mi) for extra_mi in
-                self.derivative_transformation.keys())
+                self.derivative_coeff_dict.keys())
 
         result = sum(
             coeff * self.taker.diff(add_mi(mi, extra_mi))
             / self.taker.rscale ** (sum(extra_mi) - max_order)
-            for extra_mi, coeff in self.derivative_transformation.items())
+            for extra_mi, coeff in self.derivative_coeff_dict.items())
 
         return result * save_intermediate(1 / self.taker.rscale ** max_order)
 
 
-def diff_transformation(derivative_transformation, variable_idx, variables):
-    """Differentiate a derivative transformation dictionary using the
-    variable given by **variable_idx** and return a new derivative transformation
-    dictionary
+def diff_derivative_coeff_dict(derivative_coeff_dict, variable_idx, variables):
+    """Differentiate a derivative transformation dictionary given by
+    *derivative_coeff_dict* using the variable given by **variable_idx**
+    and return a new derivative transformation dictionary.
     """
     new_derivative_coeff_dict = defaultdict(lambda: 0)
-    for mi, coeff in derivative_transformation.items():
+    for mi, coeff in derivative_coeff_dict.items():
         # In the case where we have x * u.diff(x), the result should
         # be x.diff(x) + x * u.diff(x, x)
         # Calculate the first term by differentiating the coefficients
