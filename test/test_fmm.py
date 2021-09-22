@@ -38,6 +38,7 @@ from sumpy.expansion.local import (
     LinearPDEConformingVolumeTaylorLocalExpansion)
 
 import pytest
+import warnings
 
 import logging
 logger = logging.getLogger(__name__)
@@ -176,7 +177,8 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
         target_kernels = [knl]
 
         from sumpy.fmm import (SumpyExpansionWranglerCodeContainer,
-            SumpyTranslationClassesData)
+            SumpyTranslationClassesData,
+            SumpyTranslationClassesDataNotSuppliedWarning)
 
         if optimized_m2l:
             translation_classes_data = SumpyTranslationClassesData(queue, trav)
@@ -189,7 +191,11 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
                 partial(local_expn_class, knl),
                 target_kernels, use_preprocessing_for_m2l=use_fft)
 
-        wrangler = wcc.get_wrangler(queue, tree, dtype,
+        with warnings.catch_warnings():
+            if not optimized_m2l:
+                warnings.simplefilter("ignore",
+                    SumpyTranslationClassesDataNotSuppliedWarning)
+            wrangler = wcc.get_wrangler(queue, tree, dtype,
                 fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
                 kernel_extra_kwargs=extra_kwargs,
                 translation_classes_data=translation_classes_data)
