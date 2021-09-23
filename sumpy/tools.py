@@ -858,6 +858,7 @@ def nullspace(m, atol=0):
 
 # }}}
 
+
 # {{{ FFT
 
 def fft(seq, inverse=False, sac=None):
