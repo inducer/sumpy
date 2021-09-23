@@ -37,31 +37,27 @@ from pyopencl.tools import (  # noqa
 import logging
 logger = logging.getLogger(__name__)
 
-try:
-    import faulthandler
-except ImportError:
-    pass
-else:
-    faulthandler.enable()
+import faulthandler
+faulthandler.enable()
 
 
-def _build_geometry(queue, n, mode, target_radius=1.0):
-    # parametrize circle
-    t = np.linspace(0.0, 2.0 * np.pi, n, endpoint=False)
-    unit_circle = np.exp(1j * t)
-    unit_circle = np.array([unit_circle.real, unit_circle.imag])
+def _build_geometry(queue, ntargets, nsources, mode, target_radius=1.0):
+    # source points
+    t = np.linspace(0.0, 2.0 * np.pi, nsources, endpoint=False)
+    sources = np.array([np.cos(t), np.sin(t)])
 
-    # create density
+    # density
     sigma = np.cos(mode * t)
 
-    # create sources and targets
-    h = 2.0 * np.pi / n
-    targets = target_radius * unit_circle
-    sources = unit_circle
+    # target points
+    t = np.linspace(0.0, 2.0 * np.pi, ntargets, endpoint=False)
+    targets = target_radius * np.array([np.cos(t), np.sin(t)])
 
+    # target centers and expansion radii
+    h = 2.0 * np.pi * target_radius / ntargets
     radius = 7.0 * h
-    centers = unit_circle * (1.0 - radius)
-    expansion_radii = radius * np.ones(n)
+    centers = (1.0 - radius) * targets
+    expansion_radii = np.full(ntargets, radius)
 
     return (cl.array.to_device(queue, targets),
             cl.array.to_device(queue, sources),
@@ -84,9 +80,10 @@ def _build_subset_indices(queue, ntargets, nsources, factor):
         rng.shuffle(tgtindices)
         rng.shuffle(srcindices)
 
+    tgtindices, srcindices = np.meshgrid(tgtindices, srcindices)
     return (
-            cl.array.to_device(queue, tgtindices).with_queue(None),
-            cl.array.to_device(queue, srcindices).with_queue(None))
+            cl.array.to_device(queue, tgtindices.ravel()).with_queue(None),
+            cl.array.to_device(queue, srcindices.ravel()).with_queue(None))
 
 
 @pytest.mark.parametrize("factor", [1.0, 0.6])
@@ -128,7 +125,7 @@ def test_qbx_direct(ctx_factory, factor, lpot_id):
 
     for n in [200, 300, 400]:
         targets, sources, centers, expansion_radii, sigma = \
-                _build_geometry(queue, n, mode_nr, target_radius=1.2)
+                _build_geometry(queue, n, n, mode_nr, target_radius=1.2)
 
         h = 2 * np.pi / n
         strengths = (sigma * h,)
@@ -206,7 +203,7 @@ def test_p2p_direct(ctx_factory, exclude_self, factor, lpot_id):
 
     for n in [200, 300, 400]:
         targets, sources, _, _, sigma = \
-            _build_geometry(queue, n, mode_nr, target_radius=1.2)
+            _build_geometry(queue, n, n, mode_nr, target_radius=1.2)
 
         h = 2 * np.pi / n
         strengths = (sigma * h,)
@@ -216,7 +213,7 @@ def test_p2p_direct(ctx_factory, exclude_self, factor, lpot_id):
         extra_kwargs = {}
         if exclude_self:
             extra_kwargs["target_to_source"] = \
-                cl.array.arange(queue, 0, n, dtype=np.int)
+                cl.array.arange(queue, 0, n, dtype=np.int32)
         if lpot_id == 2:
             from pytools.obj_array import make_obj_array
             extra_kwargs["dsource_vec"] = \

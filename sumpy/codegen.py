@@ -477,30 +477,31 @@ class BigIntegerKiller(CSECachingIdentityMapper, CallExternalRecMapper):
 # }}}
 
 
-# {{{ convert 123000000j to 123000000 * 1j
+# {{{ convert complex to np.complex
 
 class ComplexRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
 
-    def __init__(self, float_type=np.float32):
+    def __init__(self, complex_dtype=None):
         super().__init__()
-        self.float_type = float_type
+        self.complex_dtype = complex_dtype
 
     def map_constant(self, expr, rec_self=None, *args, **kwargs):
-        """Convert complex values not within complex64 to a product for loopy
+        """Convert complex values to numpy types
         """
-        if not isinstance(expr, complex):
-            return CSECachingIdentityMapper.map_constant(
-                    rec_self or self, expr)
+        if not isinstance(expr, (complex, np.complex64, np.complex128)):
+            return IdentityMapper.map_constant(rec_self or self, expr,
+                    rec_self=rec_self, *args, **kwargs)
 
-        if complex(self.float_type(expr.imag)) == expr.imag:
-            return CSECachingIdentityMapper.map_constant(
-                    rec_self or self, expr)
+        complex_dtype = self.complex_dtype
+        if complex_dtype is None:
+            if complex(np.complex64(expr)) == expr:
+                return np.complex64(expr)
+            complex_dtype = np.complex128
 
-        # avoid cycles
-        if expr == 1j:
-            return expr
-
-        return expr.real + prim.Product((expr.imag, 1j))
+        if isinstance(complex_dtype, np.dtype):
+            return complex_dtype.type(expr)
+        else:
+            return complex_dtype(expr)
 
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
@@ -664,7 +665,7 @@ def to_loopy_insns(assignments, vector_names=frozenset(), pymbolic_expr_maps=(),
     pwr = PowerRewriter()
     ssg = SumSignGrouper()
     bik = BigIntegerKiller()
-    cmr = ComplexRewriter()
+    cmr = ComplexRewriter(complex_dtype)
 
     cmb_mapper = combine_mappers(bdr, btog, vcr, pwr, ssg, bik, cmr)
 

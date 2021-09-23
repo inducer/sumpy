@@ -1,5 +1,5 @@
 numpy
-sympy==1.1.1
+sympy
 pyrsistent
 git+https://github.com/inducer/pytools.git#egg=pytools
 git+https://github.com/inducer/pymbolic.git#egg=pymbolic

@@ -1,6 +1,7 @@
 __copyright__ = """
 Copyright (C) 2012 Andreas Kloeckner
 Copyright (C) 2018 Alexandru Fikl
+Copyright (C) 2020 Isuru Fernando
 """
 
 __license__ = """
@@ -37,12 +38,15 @@ __doc__ = """
 
 from pytools import memoize_method
 from pytools.tag import Tag, tag_dataclass
+import numbers
+from collections import defaultdict
 from pymbolic.mapper import WalkMapper
 
 import numpy as np
 import sumpy.symbolic as sym
 
 import loopy as lp
+from typing import Dict, Tuple, Any
 
 import logging
 logger = logging.getLogger(__name__)
@@ -90,7 +94,8 @@ def add_to_sac(sac, expr):
     if sac is None:
         return expr
 
-    if expr.is_Number or expr.is_Symbol:
+    if isinstance(expr, (numbers.Number, sym.Number, int,
+                         float, complex, sym.Symbol)):
         return expr
 
     name = sac.assign_temp("temp", expr)
@@ -390,6 +395,9 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
         return expr
 
 
+DerivativeCoeffDict = Dict[Tuple[int], Any]
+
+
 @tag_dataclass
 class DifferentiatedExprDerivativeTaker:
     """Implements the :class:`ExprDerivativeTaker` interface
@@ -400,32 +408,53 @@ class DifferentiatedExprDerivativeTaker:
     .. attribute:: taker
         A :class:`ExprDerivativeTaker` for the base expression.
 
-    .. attribute:: derivative_transformation
+    .. attribute:: derivative_coeff_dict
         A dictionary mapping a derivative multi-index to a coefficient.
         The expression represented by this derivative taker is the linear
         combination of the derivatives of the expression for the
         base expression.
     """
     taker: ExprDerivativeTaker
-    derivative_transformation: dict
+    derivative_coeff_dict: DerivativeCoeffDict
 
     def diff(self, mi, save_intermediate=lambda x: x):
         # By passing `rscale` to the derivative taker we are taking a scaled
         # version of the derivative which is `expr.diff(mi)*rscale**sum(mi)`
         # which might be implemented efficiently for kernels like Laplace.
         # One caveat is that we are taking more derivatives because of
-        # :attr:`derivative_transformation` which would multiply the
+        # :attr:`derivative_coeff_dict` which would multiply the
         # expression by more `rscale`s than necessary. This is corrected by
         # dividing by `rscale`.
         max_order = max(sum(extra_mi) for extra_mi in
-                self.derivative_transformation.keys())
+                self.derivative_coeff_dict.keys())
 
         result = sum(
             coeff * self.taker.diff(add_mi(mi, extra_mi))
             / self.taker.rscale ** (sum(extra_mi) - max_order)
-            for extra_mi, coeff in self.derivative_transformation.items())
+            for extra_mi, coeff in self.derivative_coeff_dict.items())
 
         return result * save_intermediate(1 / self.taker.rscale ** max_order)
+
+
+def diff_derivative_coeff_dict(derivative_coeff_dict: DerivativeCoeffDict,
+        variable_idx, variables):
+    """Differentiate a derivative transformation dictionary given by
+    *derivative_coeff_dict* using the variable given by **variable_idx**
+    and return a new derivative transformation dictionary.
+    """
+    new_derivative_coeff_dict = defaultdict(lambda: 0)
+    for mi, coeff in derivative_coeff_dict.items():
+        # In the case where we have x * u.diff(x), the result should
+        # be x.diff(x) + x * u.diff(x, x)
+        # Calculate the first term by differentiating the coefficients
+        new_coeff = sym.sympify(coeff).diff(variables[variable_idx])
+        new_derivative_coeff_dict[mi] += new_coeff
+        # Next calculate the second term by differentiating the derivatives
+        new_mi = list(mi)
+        new_mi[variable_idx] += 1
+        new_derivative_coeff_dict[tuple(new_mi)] += coeff
+    return {derivative: coeff for derivative, coeff in
+            new_derivative_coeff_dict.items() if coeff != 0}
 
 # }}}
 
@@ -726,7 +755,6 @@ class KernelCacheWrapper:
     @staticmethod
     def _allow_redundant_execution_of_knl_scaling(knl):
         from loopy.match import ObjTagged
-        from sumpy.tools import ScalingAssignmentTag
         return lp.add_inames_for_unused_hw_axes(
                 knl, within=ObjTagged(ScalingAssignmentTag()))
 
@@ -736,6 +764,8 @@ def is_obj_array_like(ary):
             isinstance(ary, (tuple, list))
             or (isinstance(ary, np.ndarray) and ary.dtype.char == "O"))
 
+
+# {{{ matrices
 
 def reduced_row_echelon_form(m, atol=0):
     """Calculates a reduced row echelon form of a
@@ -826,6 +856,50 @@ def nullspace(m, atol=0):
         n.append(vec)
     return np.array(n, dtype=object).T
 
+# }}}
+
+# {{{ FFT
+
+def fft(seq, inverse=False, sac=None):
+    """
+    Return the discrete fourier transform of the sequence seq.
+    seq should be a python iterable with tuples of length 2
+    corresponding to the real part and imaginary part.
+    """
+
+    from pymbolic.algorithm import fft as _fft, ifft as _ifft
+
+    def wrap(expr):
+        if isinstance(expr, np.ndarray):
+            res = [wrap(a) for a in expr]
+            return np.array(res, dtype=object).reshape(expr.shape)
+        return add_to_sac(sac, expr)
+
+    if inverse:
+        return _ifft(list(seq), wrap_intermediate=wrap).tolist()
+    else:
+        return _fft(list(seq), wrap_intermediate=wrap).tolist()
+
+
+def fft_toeplitz_upper_triangular(first_row, x, sac=None):
+    """
+    Returns the matvec of the Toeplitz matrix given by
+    the first row and the vector x using a Fourier transform
+    """
+    assert len(first_row) == len(x)
+    n = len(first_row)
+    v = list(first_row)
+    v += [0]*(n-1)
+
+    x = list(reversed(x))
+    x += [0]*(n-1)
+
+    v_fft = fft(v, sac)
+    x_fft = fft(x, sac)
+    res_fft = [add_to_sac(sac, a * b) for a, b in zip(v_fft, x_fft)]
+    res = fft(res_fft, inverse=True, sac=sac)
+    return list(reversed(res[:n]))
+
 
 def matvec_toeplitz_upper_triangular(first_row, vector):
     n = len(first_row)
@@ -835,5 +909,23 @@ def matvec_toeplitz_upper_triangular(first_row, vector):
         terms = tuple(first_row[col-row]*vector[col] for col in range(row, n))
         output[row] = sym.Add(*terms)
     return output
+
+
+to_complex_type_dict = {
+    np.complex64: np.complex64,
+    np.complex128: np.complex128,
+    np.float32: np.complex64,
+    np.float64: np.complex128,
+}
+
+
+def to_complex_dtype(dtype):
+    np_type = np.dtype(dtype).type
+    try:
+        return to_complex_type_dict[np_type]
+    except KeyError:
+        raise RuntimeError(f"Unknown dtype: {dtype}")
+
+# }}}
 
 # vim: fdm=marker

@@ -36,8 +36,10 @@ from sumpy.expansion.local import (
     VolumeTaylorLocalExpansion,
     H2DLocalExpansion, Y2DLocalExpansion,
     LinearPDEConformingVolumeTaylorLocalExpansion)
+from sumpy.fmm import SumpyTranslationClassesData
 
 import pytest
+import warnings
 
 import logging
 logger = logging.getLogger(__name__)
@@ -51,37 +53,34 @@ else:
     faulthandler.enable()
 
 
-@pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class, optimized_m2l", [
-    (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
-                       False),
-    (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
-                       True),
+@pytest.mark.parametrize("optimized_m2l, use_fft",
+    [(False, False), (True, False), (True, True)])
+@pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class",
+[
+    (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
     (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
-                       LinearPDEConformingVolumeTaylorMultipoleExpansion, True),
-    (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
-                       LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
-    (LaplaceKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
-                       False),
-    (LaplaceKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
-                       True),
+        LinearPDEConformingVolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
     (LaplaceKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
-                       LinearPDEConformingVolumeTaylorMultipoleExpansion, True),
-    (LaplaceKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
-                       LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
-    (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
-                         False),
+        LinearPDEConformingVolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
-                         LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
-    (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion, False),
-    (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
-                         False),
+        LinearPDEConformingVolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion),
+    (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
-                         LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
-    (YukawaKernel(2), Y2DLocalExpansion, Y2DMultipoleExpansion, False),
-    ])
+        LinearPDEConformingVolumeTaylorMultipoleExpansion),
+    (YukawaKernel(2), Y2DLocalExpansion, Y2DMultipoleExpansion),
+])
 def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
-        optimized_m2l):
+        optimized_m2l, use_fft):
     logging.basicConfig(level=logging.INFO)
+
+    if local_expn_class == VolumeTaylorLocalExpansion and use_fft:
+        pytest.skip("VolumeTaylorExpansion with FFT takes a lot of resources.")
+
+    if local_expn_class in [H2DLocalExpansion, Y2DLocalExpansion] and use_fft:
+        pytest.skip("Fourier/Bessel based expansions with FFT is not supported yet.")
 
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
@@ -123,10 +122,10 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
     # {{{ plot tree
 
     if 0:
-        host_tree = tree.get()
-        host_trav = trav.get()
+        host_tree = tree.get(queue)
+        host_trav = trav.get(queue)
 
-        if 1:
+        if 0:
             print("src_box", host_tree.find_box_nr_for_source(403))
             print("tgt_box", host_tree.find_box_nr_for_target(28))
             print(list(host_trav.target_or_target_parent_boxes).index(37))
@@ -163,7 +162,7 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
         if knl.dim == 3:
             order_values = [1, 2]
         elif knl.dim == 2 and issubclass(local_expn_class, H2DLocalExpansion):
-            order_values = [10, 12]
+            order_values = [4, 5]
 
     elif isinstance(knl, YukawaKernel):
         extra_kwargs["lam"] = 2
@@ -179,7 +178,7 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
         target_kernels = [knl]
 
         from sumpy.fmm import (SumpyExpansionWranglerCodeContainer,
-            SumpyTranslationClassesData)
+            SumpyTranslationClassesDataNotSuppliedWarning)
 
         if optimized_m2l:
             translation_classes_data = SumpyTranslationClassesData(queue, trav)
@@ -190,9 +189,13 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
                 ctx,
                 partial(mpole_expn_class, knl),
                 partial(local_expn_class, knl),
-                target_kernels)
+                target_kernels, use_preprocessing_for_m2l=use_fft)
 
-        wrangler = wcc.get_wrangler(queue, tree, dtype,
+        with warnings.catch_warnings():
+            if not optimized_m2l:
+                warnings.simplefilter("ignore",
+                    SumpyTranslationClassesDataNotSuppliedWarning)
+            wrangler = wcc.get_wrangler(queue, tree, dtype,
                 fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
                 kernel_extra_kwargs=extra_kwargs,
                 translation_classes_data=translation_classes_data)
@@ -298,7 +301,8 @@ def test_unified_single_and_double(ctx_factory):
                 strength_usage=strength_usage)
         wrangler = wcc.get_wrangler(queue, tree, dtype,
                 fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
-                source_extra_kwargs=source_extra_kwargs)
+                source_extra_kwargs=source_extra_kwargs,
+                translation_classes_data=SumpyTranslationClassesData(queue, trav))
 
         from boxtree.fmm import drive_fmm
 
@@ -359,7 +363,8 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory):
             target_kernels)
 
     wrangler = wcc.get_wrangler(queue, tree, dtype,
-            fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order)
+            fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
+            translation_classes_data=SumpyTranslationClassesData(queue, trav))
     from boxtree.fmm import drive_fmm
 
     timing_data = {}
@@ -418,7 +423,8 @@ def test_sumpy_fmm_exclude_self(ctx_factory):
 
     wrangler = wcc.get_wrangler(queue, tree, dtype,
             fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
-            self_extra_kwargs=self_extra_kwargs)
+            self_extra_kwargs=self_extra_kwargs,
+            translation_classes_data=SumpyTranslationClassesData(queue, trav))
 
     from boxtree.fmm import drive_fmm
 
@@ -493,7 +499,8 @@ def test_sumpy_axis_source_derivative(ctx_factory):
 
         wrangler = wcc.get_wrangler(queue, tree, dtype,
                 fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
-                self_extra_kwargs=self_extra_kwargs)
+                self_extra_kwargs=self_extra_kwargs,
+                translation_classes_data=SumpyTranslationClassesData(queue, trav))
 
         from boxtree.fmm import drive_fmm
 
@@ -506,7 +513,8 @@ def test_sumpy_axis_source_derivative(ctx_factory):
     assert np.isclose(rel_err, 0, atol=1e-5)
 
 
-def test_sumpy_target_point_multiplier(ctx_factory):
+@pytest.mark.parametrize("deriv_axes", [(), (0,), (1,)])
+def test_sumpy_target_point_multiplier(ctx_factory, deriv_axes):
     logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_factory()
@@ -545,9 +553,12 @@ def test_sumpy_target_point_multiplier(ctx_factory):
     from functools import partial
 
     from sumpy.fmm import SumpyExpansionWranglerCodeContainer
-    from sumpy.kernel import TargetPointMultiplier
+    from sumpy.kernel import TargetPointMultiplier, AxisTargetDerivative
 
-    tgt_knls = [TargetPointMultiplier(0, knl), knl]
+    tgt_knls = [TargetPointMultiplier(0, knl), knl, knl]
+    for axis in deriv_axes:
+        tgt_knls[0] = AxisTargetDerivative(axis, tgt_knls[0])
+        tgt_knls[1] = AxisTargetDerivative(axis, tgt_knls[1])
 
     wcc = SumpyExpansionWranglerCodeContainer(
             ctx,
@@ -559,22 +570,27 @@ def test_sumpy_target_point_multiplier(ctx_factory):
 
     wrangler = wcc.get_wrangler(queue, tree, dtype,
             fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
-            self_extra_kwargs=self_extra_kwargs)
+            self_extra_kwargs=self_extra_kwargs,
+            translation_classes_data=SumpyTranslationClassesData(queue, trav))
 
     from boxtree.fmm import drive_fmm
 
-    pot0, pot1 = drive_fmm(trav, wrangler, (weights,))
-    pot0, pot1 = pot0.get(), pot1.get()
-    pot1 = pot1 * sources[0].get()
+    pot0, pot1, pot2 = drive_fmm(trav, wrangler, (weights,))
+    pot0, pot1, pot2 = pot0.get(), pot1.get(), pot2.get()
+    if deriv_axes == (0,):
+        ref_pot = pot1 * sources[0].get() + pot2
+    else:
+        ref_pot = pot1 * sources[0].get()
 
-    rel_err = la.norm(pot0 - pot1) / la.norm(pot1)
+    rel_err = la.norm(pot0 - ref_pot) / la.norm(ref_pot)
     logger.info("order %d -> relative l2 error: %g" % (order, rel_err))
 
     assert np.isclose(rel_err, 0, atol=1e-5)
 
 
 # You can test individual routines by typing
-# $ python test_fmm.py 'test_sumpy_fmm(cl.create_some_context)'
+# $ python test_fmm.py 'test_sumpy_fmm(cl.create_some_context, LaplaceKernel(2),
+#       VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion, False, False)'
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

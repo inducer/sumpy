@@ -139,7 +139,6 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
                     [knl.get_code_transformer() for knl in self.source_kernels]
                     + [knl.get_code_transformer() for knl in self.target_kernels]),
                 retain_names=result_names,
-                complex_dtype=np.complex128  # FIXME
                 )
 
         from pymbolic import var
@@ -482,7 +481,7 @@ class P2PFromCSR(P2PBase):
                     for itgt
                     for isrc
                         <> d[idim] = \
-                            targets[idim, itgt] - sources[idim, isrc] {dup=idim}
+                            targets[idim, itgt] - sources[idim, isrc]
             """] + ["""
                         <> is_self = (isrc == target_to_source[itgt])
                     """ if self.exclude_self else ""]
