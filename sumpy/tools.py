@@ -55,7 +55,7 @@ logger = logging.getLogger(__name__)
 # {{{ multi_index helpers
 
 def add_mi(mi1, mi2):
-    return tuple(mi1i+mi2i for mi1i, mi2i in zip(mi1, mi2))
+    return tuple([mi1i + mi2i for mi1i, mi2i in zip(mi1, mi2)])
 
 
 def mi_factorial(mi):
@@ -933,7 +933,7 @@ def matvec_toeplitz_upper_triangular(first_row, vector):
     assert len(vector) == n
     output = [0]*n
     for row in range(n):
-        terms = tuple(first_row[col-row]*vector[col] for col in range(row, n))
+        terms = tuple([first_row[col-row]*vector[col] for col in range(row, n)])
         output[row] = sym.Add(*terms)
     return output
 
