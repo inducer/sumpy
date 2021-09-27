@@ -145,13 +145,14 @@ class LinearPDESystemOperator:
         return res
 
 
-def _convert_to_matrix(module, *gens):
+def convert_module_to_matrix(module, *generators):
     import sympy
     result = []
     for syzygy in module:
         row = []
         for dmp in syzygy.data:
-            row.append(sympy.Poly(dmp.to_dict(), *gens, domain=sympy.EX).as_expr())
+            row.append(sympy.Poly(dmp.to_dict(), *generators,
+                domain=sympy.EX).as_expr())
         result.append(row)
     return sympy.Matrix(result)
 
@@ -235,7 +236,6 @@ def _get_all_scalar_pdes(pde):
             for i in range(pde_system_mat.shape[1])]
     column_syzygy_modules = [ideal.syzygy_module() for ideal in column_ideals]
 
-    ring = sympy.EX.old_poly_ring(*gens)
     ncols = len(column_syzygy_modules)
 
     # For each column i, we need to get the intersection of all the syzygy modules
@@ -275,7 +275,8 @@ def _get_all_scalar_pdes(pde):
     # the syzygy module intersection to get a set of scalar PDEs for that
     # column.
     scalar_pdes_vec = [
-        (_convert_to_matrix(module_intersections[i], *gens) * pde_system_mat)[:, i]
+        (convert_module_to_matrix(module_intersections[i],
+            *gens) * pde_system_mat)[:, i]
         for i in range(ncols)
     ]
     results = []
