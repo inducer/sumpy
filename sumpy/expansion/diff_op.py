@@ -154,7 +154,7 @@ def convert_module_to_matrix(module, generators):
 
 
 @memoize
-def _get_all_scalar_pdes(pde):
+def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> LinearPDESystemOperator:
     r"""
     Returns a scalar PDE for each component of a ``pde``.
 
@@ -296,7 +296,8 @@ def _get_all_scalar_pdes(pde):
     return results
 
 
-def as_scalar_pde(pde, vec_idx):
+def as_scalar_pde(pde: LinearPDESystemOperator, vec_idx: int) \
+        -> LinearPDESystemOperator:
     r"""
     Returns a scalar PDE that is satisfied by the *vec_idx* component
     of *pde*.
