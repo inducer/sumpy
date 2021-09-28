@@ -247,11 +247,7 @@ def as_scalar_pde(pde: LinearPDESystemOperator, vec_idx: int) \
         -> LinearPDESystemOperator:
     r"""
     Returns a scalar PDE that is satisfied by the *vec_idx* component
-    of *pde*.
-
-    :arg pde: An instance of :class:`LinearPDESystemOperator`
-    :arg vec_idx: the index of the vector-valued function that we
-                  want as a scalar PDE
+    of *pde*. 123.
 
     To do this, we first convert a system of PDEs into a matrix where each
     row represents one PDE of the system of PDEs and each column represents
@@ -260,25 +256,26 @@ def as_scalar_pde(pde: LinearPDESystemOperator, vec_idx: int) \
 
     eg:
 
-    \[
-      \frac{\partial^2 u}{\partial x^2} + 2 \frac{\partial^2 v}{\partial x y} = 0 \\
-      3 * \frac{\partial^2 u}{\partial y^2} + \frac{\partial^2 v}{\partial x^2} = 0
-    \]
+    .. math::
+        \frac{\partial^2 u}{\partial x^2} + \
+            2 \frac{\partial^2 v}{\partial x y} = 0 \\
+        3 \frac{\partial^2 u}{\partial y^2} + \
+            \frac{\partial^2 v}{\partial x^2} = 0
     is converted into,
-    \[
+
+    .. math::
       \begin{bmatrix}
         x^2   & 2xy \\
         2y^2  & x^2
-      \end{bmatrix}
-    \]
+      \end{bmatrix}.
 
-    Let $r_i$ be the rows of the above matrix.  In order find a scalar PDE for
+    Let :math:`r_i` be the columns of the above matrix.  In order find a scalar PDE for
     the i-th component, we need to find some polynomials,
-    $a_1, a_2, \ldots, a_n$ such that the vector $\sum_i a_i r_i$ has zeros
+    :math:`a_1, a_2, \ldots, a_n` such that the vector :math:`\sum_i a_i r_i` has zeros
     except for the i-th component. In other words, we need to find a vector of
     polynomials such that the inner product of it with each of the columns except
     for the i-th column is zero.
-    i.e. $a_1, a_2, \ldots, a_n$ is a syzygy of all columns except for the i-th
+    i.e. :math:`a_1, a_2, \ldots, a_n` is a syzygy of all columns except for the i-th
     column.
 
     To calculate this, we first calculate the syzygy module of each column.
@@ -289,7 +286,7 @@ def as_scalar_pde(pde: LinearPDESystemOperator, vec_idx: int) \
     resulting in one module of syzgies that is finitely generated and this module
     generates all the syzygies that when multiplied by the matrix gives a vector
     with zeros except for the i-th component. Therefore the vector
-    $a_1, a_2, \ldots, a_n$ is in this module.
+    :math:`a_1, a_2, \ldots, a_n` is in this module.
 
     For each syzygy in the generating set, we calculate the inner product with the
     first column to get a polynomial that represents a scalar PDE for the first
@@ -302,6 +299,10 @@ def as_scalar_pde(pde: LinearPDESystemOperator, vec_idx: int) \
     that the degree of any polynomial generated is greater than or equal to the
     degree of a polynomial in the Groebner basis. We choose that polynomial
     as our scalar PDE.
+
+    :arg pde: An instance of :class:`LinearPDESystemOperator`
+    :arg vec_idx: the index of the vector-valued function that we
+                  want as a scalar PDE
     """
     indices = set()
     for eq in pde.eqs:
