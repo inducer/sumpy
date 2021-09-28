@@ -147,16 +147,10 @@ class LinearPDESystemOperator:
 
 def convert_module_to_matrix(module, generators):
     import sympy
-    result = []
-    for ideal in module:
-        row = []
-        for poly in ideal.data:
-            # poly is a sympy DMP (dense multi-variate polynomial)
-            # type and we convert it to a sympy expression
-            row.append(sympy.Poly(poly.to_dict(), *generators,
-                domain=sympy.EX).as_expr())
-        result.append(row)
-    return sympy.Matrix(result)
+    # poly is a sympy DMP (dense multi-variate polynomial)
+    # type and we convert it to a sympy expression
+    return sympy.Matrix([[sympy.Poly(poly.to_dict(), *generators,
+            domain=sympy.EX).as_expr() for poly in ideal.data] for ideal in module])
 
 
 @memoize
