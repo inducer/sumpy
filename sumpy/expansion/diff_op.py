@@ -187,8 +187,8 @@ def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> LinearPDESystemOperato
     # for each column we calculate the intersection of the left modules and the
     # right modules. This requires only $3*(n-2)$ work.
 
-    # None represents the free module of the cartesian product of $m$ number of
-    # polynomials where $m$ is the number of rows of the PDE matrix.
+    # None represents the identity of the intersection operation.
+    # FIXME: find the equivalent sympy object to replace None.
     left_intersections = [None]*ncols
     right_intersections = [None]*ncols
 
