@@ -160,10 +160,8 @@ def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> LinearPDESystemOperato
     gens = [sympy.symbols(f"_x{i}") for i in range(pde.dim)]
     gens += [sympy.symbols(f"_t{i}") for i in range(pde.total_dims - pde.dim)]
 
-    max_vec_idx = 0
-    for eq in pde.eqs:
-        for deriv_ident in eq.keys():
-            max_vec_idx = max(max_vec_idx, deriv_ident.vec_idx)
+    max_vec_idx = max(deriv_ident.vec_idx for eq in pde.eqs
+                      for deriv_ident in eq.keys())
 
     pde_system_mat = sympy.zeros(len(pde.eqs), max_vec_idx + 1)
     for row, eq in enumerate(pde.eqs):
