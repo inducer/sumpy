@@ -261,6 +261,7 @@ def as_scalar_pde(pde: LinearPDESystemOperator, vec_idx: int) \
             2 \frac{\partial^2 v}{\partial x y} = 0 \\
         3 \frac{\partial^2 u}{\partial y^2} + \
             \frac{\partial^2 v}{\partial x^2} = 0
+
     is converted into,
 
     .. math::
@@ -285,7 +286,7 @@ def as_scalar_pde(pde: LinearPDESystemOperator, vec_idx: int) \
     After calculating the syzygy module of each column, we intersect them together
     resulting in one module of syzgies that is finitely generated and this module
     generates all the syzygies that when multiplied by the matrix gives a vector
-    with zeros except for the i-th component. Therefore the vector
+    with zeros **EXCEPT** for the i-th component. Therefore the vector
     :math:`a_1, a_2, \ldots, a_n` is in this module.
 
     For each syzygy in the generating set, we calculate the inner product with the
