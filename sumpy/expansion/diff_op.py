@@ -145,7 +145,7 @@ class LinearPDESystemOperator:
         return res
 
 
-def convert_module_to_matrix(module, *generators):
+def convert_module_to_matrix(module, generators):
     import sympy
     result = []
     for syzygy in module:
@@ -276,7 +276,7 @@ def _get_all_scalar_pdes(pde):
     # column.
     scalar_pdes_vec = [
         (convert_module_to_matrix(module_intersections[i],
-            *gens) * pde_system_mat)[:, i]
+            gens) * pde_system_mat)[:, i]
         for i in range(ncols)
     ]
     results = []
