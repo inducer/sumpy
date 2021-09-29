@@ -24,6 +24,7 @@ from collections import namedtuple
 from pyrsistent import pmap
 from pytools import memoize
 from sumpy.tools import add_mi
+import sumpy.symbolic as sym
 import logging
 
 logger = logging.getLogger(__name__)
@@ -148,9 +149,10 @@ class LinearPDESystemOperator:
 def convert_module_to_matrix(module, generators):
     import sympy
     # poly is a sympy DMP (dense multi-variate polynomial)
-    # type and we convert it to a sympy expression
+    # type and we convert it to a sympy expression because
+    # sympy matrices with polynomial entries are not supported.
     return sympy.Matrix([[sympy.Poly(poly.to_dict(), *generators,
-            domain=sympy.EX) for poly in ideal.data] for ideal in module])
+            domain=sympy.EX).as_expr() for poly in ideal.data] for ideal in module])
 
 
 @memoize
@@ -213,24 +215,25 @@ def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> LinearPDESystemOperato
         for i in range(ncols)
     ]
 
-    pde_system_mat_as_poly = pde_system_mat.applyfunc(
-        lambda x: sympy.Poly(x, *gens, domain=sympy.EX)
-    )
     # For each column in the PDE system matrix, we multiply that column by
     # the syzygy module intersection to get a set of scalar PDEs for that
     # column.
     scalar_pdes_vec = [
         (convert_module_to_matrix(module_intersections[i],
-            gens) * pde_system_mat_as_poly)[:, i]
+            gens) * pde_system_mat)[:, i]
         for i in range(ncols)
     ]
+
     results = []
     for col in range(ncols):
-        scalar_pdes = [pde for pde in scalar_pdes_vec[col] if pde.degree() > 0]
+        scalar_pde_polys = [sympy.Poly(pde, *gens, domain=sympy.EX) for \
+            pde in scalar_pdes_vec[col]]
+        scalar_pdes = [pde for pde in scalar_pde_polys if pde.degree() > 0]
         scalar_pde = min(scalar_pdes, key=lambda x: x.degree()).monic()
-        pde_dict = {}
-        for mi, coeff in zip(scalar_pde.monoms(), scalar_pde.coeffs()):
-            pde_dict[DerivativeIdentifier(mi, 0)] = coeff
+        pde_dict = {
+            DerivativeIdentifier(mi, 0): sym.sympify(coeff.as_expr()) for (mi, coeff) in
+            zip(scalar_pde.monoms(), scalar_pde.coeffs())
+        }
         results.append(LinearPDESystemOperator(pde.dim, pmap(pde_dict)))
 
     return results
