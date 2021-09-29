@@ -150,7 +150,7 @@ def convert_module_to_matrix(module, generators):
     # poly is a sympy DMP (dense multi-variate polynomial)
     # type and we convert it to a sympy expression
     return sympy.Matrix([[sympy.Poly(poly.to_dict(), *generators,
-            domain=sympy.EX).as_expr() for poly in ideal.data] for ideal in module])
+            domain=sympy.EX) for poly in ideal.data] for ideal in module])
 
 
 @memoize
@@ -212,27 +212,22 @@ def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> LinearPDESystemOperato
         intersect(left_intersections[i], right_intersections[i])._groebner_vec()
         for i in range(ncols)
     ]
+
+    pde_system_mat_as_poly = pde_system_mat.applyfunc(
+        lambda x: sympy.Poly(x, *gens, domain=sympy.EX)
+    )
     # For each column in the PDE system matrix, we multiply that column by
     # the syzygy module intersection to get a set of scalar PDEs for that
     # column.
     scalar_pdes_vec = [
         (convert_module_to_matrix(module_intersections[i],
-            gens) * pde_system_mat)[:, i]
+            gens) * pde_system_mat_as_poly)[:, i]
         for i in range(ncols)
     ]
     results = []
     for col in range(ncols):
-        scalar_pdes = scalar_pdes_vec[col]
-
-        minimal = None
-        for scalar_pde in scalar_pdes:
-            p = sympy.Poly(sympy.simplify(scalar_pde), *gens, domain=sympy.EX)
-            if not p.degree() > 0:
-                continue
-            if minimal is None or p.degree() < minimal.degree():
-                minimal = p
-
-        scalar_pde = minimal.monic()
+        scalar_pdes = [pde for pde in scalar_pdes_vec[col] if pde.degree() > 0]
+        scalar_pde = min(scalar_pdes, key=lambda x: x.degree()).monic()
         pde_dict = {}
         for mi, coeff in zip(scalar_pde.monoms(), scalar_pde.coeffs()):
             pde_dict[DerivativeIdentifier(mi, 0)] = coeff
