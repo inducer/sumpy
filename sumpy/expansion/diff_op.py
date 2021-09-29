@@ -231,7 +231,7 @@ def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> LinearPDESystemOperato
         scalar_pdes = [pde for pde in scalar_pde_polys if pde.degree() > 0]
         scalar_pde = min(scalar_pdes, key=lambda x: x.degree()).monic()
         pde_dict = {
-            DerivativeIdentifier(mi, 0): sym.sympify(coeff.as_expr()) for
+            DerivativeIdentifier(mi, 0): sym.sympify(coeff.as_expr().simplify()) for
             (mi, coeff) in zip(scalar_pde.monoms(), scalar_pde.coeffs())
         }
         results.append(LinearPDESystemOperator(pde.dim, pmap(pde_dict)))
