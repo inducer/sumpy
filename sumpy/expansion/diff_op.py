@@ -190,7 +190,8 @@ def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> LinearPDESystemOperato
     # for each column we calculate the intersection of the left modules and the
     # right modules. This requires only $3*(n-2)$ work.
 
-    intersect = lambda a, b: a.intersect(b)
+    def intersect(a, b):
+        return a.intersect(b)
 
     left_intersections = list(accumulate(column_syzygy_modules, func=intersect))
     right_intersections = list(reversed(list(accumulate(reversed(
