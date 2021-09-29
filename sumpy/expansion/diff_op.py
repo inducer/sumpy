@@ -24,6 +24,7 @@ from collections import namedtuple
 from pyrsistent import pmap
 from pytools import memoize
 from sumpy.tools import add_mi
+from itertools import accumulate
 import sumpy.symbolic as sym
 import logging
 
@@ -189,37 +190,24 @@ def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> LinearPDESystemOperato
     # for each column we calculate the intersection of the left modules and the
     # right modules. This requires only $3*(n-2)$ work.
 
-    # None represents the identity of the intersection operation.
-    # FIXME: find the equivalent sympy object to replace None.
-    left_intersections = [None]*ncols
-    right_intersections = [None]*ncols
+    intersect = lambda a, b: a.intersect(b)
 
-    def intersect(a, b):
-        if a is None:
-            return b
-        if b is None:
-            return a
-        return a.intersect(b)
-
-    for i in range(1, ncols):
-        left_intersections[i] = \
-            intersect(left_intersections[i-1], column_syzygy_modules[i-1])
-    for i in reversed(range(0, ncols-1)):
-        right_intersections[i] = \
-            intersect(right_intersections[i+1], column_syzygy_modules[i+1])
+    left_intersections = list(accumulate(column_syzygy_modules, func=intersect))
+    right_intersections = list(reversed(list(accumulate(reversed(
+        column_syzygy_modules), func=intersect))))
 
     # At the end, calculate the intersection of the left modules and right modules
     # and calculate a groebner basis for it.
-    module_intersections = [
-        intersect(left_intersections[i], right_intersections[i])._groebner_vec()
-        for i in range(ncols)
-    ]
+    module_intersections = [right_intersections[1]] + [
+        intersect(left_intersections[i - 1], right_intersections[i + 1])
+        for i in range(1, ncols - 1)
+    ] + [left_intersections[ncols - 2]]
 
     # For each column in the PDE system matrix, we multiply that column by
     # the syzygy module intersection to get a set of scalar PDEs for that
     # column.
     scalar_pdes_vec = [
-        (convert_module_to_matrix(module_intersections[i],
+        (convert_module_to_matrix(module_intersections[i]._groebner_vec(),
             gens) * pde_system_mat)[:, i]
         for i in range(ncols)
     ]
