@@ -17,3 +17,8 @@ Multipole Expansions
 --------------------
 
 .. automodule:: sumpy.expansion.multipole
+
+Estimating Expansion Orders
+---------------------------
+
+.. automodule:: sumpy.expansion.level_to_order

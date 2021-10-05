@@ -30,7 +30,10 @@ import numpy as np
 
 class FMMLibExpansionOrderFinder:
     r"""Return expansion orders that meet the tolerance for a given level
-    using routines wrapped from :mod:`pyfmmlib`.
+    using routines wrapped from ``pyfmmlib``.
+
+    .. automethod:: __init__
+    .. automethod:: __call__
     """
 
     def __init__(self, tol, extra_order=0):
@@ -82,6 +85,8 @@ class SimpleExpansionOrderFinder:
     r"""
     This models the Laplace truncation error as:
 
+    .. math::
+
         C_{\text{lap}} \left(\frac{\sqrt{d}}{3}\right)^{p+1}.
 
     For the Helmholtz kernel, an additional term is added:
@@ -89,10 +94,13 @@ class SimpleExpansionOrderFinder:
     .. math::
 
         C_{\text{helm}} \frac 1{p!}
-        \left(C_{\text{helm\_scale}} \cdot \frac{hk}{2\pi}\right)^{p+1},
+        \left(C_{\text{helmscale}} \cdot \frac{hk}{2\pi}\right)^{p+1},
 
     where :math:`d` is the number of dimensions, :math:`p` is the expansion order,
     :math:`h` is the box size, and :math:`k` is the wave number.
+
+    .. automethod:: __init__
+    .. automethod:: __call__
     """
 
     def __init__(self, tol, err_const_laplace=0.01, err_const_helmholtz=100,
