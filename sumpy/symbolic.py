@@ -70,12 +70,13 @@ _find_symbolic_backend()
 if USE_SYMENGINE:
     import symengine as sym
     from pymbolic.interop.symengine import (
-        PymbolicToSymEngineMapper as PymbolicToSympyMapper,
-        SymEngineToPymbolicMapper as SympyToPymbolicMapper)
+        PymbolicToSymEngineMapper as PymbolicToSympyMapperBase,
+        SymEngineToPymbolicMapper as SympyToPymbolicMapperBase)
 else:
     import sympy as sym
     from pymbolic.interop.sympy import (
-        PymbolicToSympyMapper, SympyToPymbolicMapper)
+        PymbolicToSympyMapper as PymbolicToSympyMapperBase,
+        SympyToPymbolicMapper as SympyToPymbolicMapperBase)
 
 # Symbolic API common to SymEngine and sympy.
 # Before adding a function here, make sure it's present in both modules.
@@ -241,6 +242,30 @@ def find_power_of(base, prod):
     if result is None:
         return 0
     return result[power]
+
+
+class SpatialConstant(prim.Variable):
+    prefix = "_spatial_constant_"
+    mapper_method = "map_spatial_constant"
+
+    def as_sympy(self):
+        return sym.Symbol(f"{self.prefix}{self.name}")
+
+    @classmethod
+    def from_sympy(cls, expr):
+        return cls(expr.name[len(cls.prefix):])
+
+
+class PymbolicToSympyMapper(PymbolicToSympyMapperBase):
+    def map_spatial_constant(self, expr):
+        return expr.as_sympy()
+
+
+class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
+    def map_Symbol(self, expr):  # noqa
+        if expr.name.startswith(SpatialConstant.prefix):
+            return SpatialConstant.from_sympy(expr)
+        return SympyToPymbolicMapperBase.map_Symbol(self, expr)
 
 
 class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):

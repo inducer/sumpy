@@ -24,10 +24,10 @@ THE SOFTWARE.
 import loopy as lp
 import numpy as np
 from pymbolic.mapper import IdentityMapper, CSECachingMapperMixin
-from sumpy.symbolic import pymbolic_real_norm_2
+from sumpy.symbolic import pymbolic_real_norm_2, SpatialConstant
 import sumpy.symbolic as sym
 from pymbolic.primitives import make_sym_vector
-from pymbolic import var, parse
+from pymbolic import var
 from pytools import memoize_method
 from collections import defaultdict
 
@@ -488,7 +488,7 @@ class HelmholtzKernel(ExpressionKernel):
         :arg helmholtz_k_name: The argument name to use for the Helmholtz
             parameter when generating functions to evaluate this kernel.
         """
-        k = var(helmholtz_k_name)
+        k = SpatialConstant(helmholtz_k_name)
 
         # Guard against code using the old positional interface.
         assert isinstance(allow_evanescent, bool)
@@ -566,7 +566,7 @@ class YukawaKernel(ExpressionKernel):
         :arg yukawa_lambda_name: The argument name to use for the Yukawa
             parameter when generating functions to evaluate this kernel.
         """
-        lam = var(yukawa_lambda_name)
+        lam = SpatialConstant(yukawa_lambda_name)
 
         # NOTE: The Yukawa kernel is given by [1]
         #   -1/(2 pi)**(n/2) * (lam/r)**(n/2-1) * K(n/2-1, lam r)
@@ -660,11 +660,11 @@ class ElasticityKernel(ExpressionKernel):
                 evaluate this kernel. Can also be a numeric value.
         """
         if isinstance(viscosity_mu, str):
-            mu = parse(viscosity_mu)
+            mu = SpatialConstant(viscosity_mu)
         else:
             mu = viscosity_mu
         if isinstance(poisson_ratio, str):
-            nu = parse(poisson_ratio)
+            nu = SpatialConstant(poisson_ratio)
         else:
             nu = poisson_ratio
 
@@ -771,7 +771,7 @@ class StressletKernel(ExpressionKernel):
         """
         # mu is unused but kept for consistency with the Stokeslet.
         if isinstance(viscosity_mu, str):
-            mu = parse(viscosity_mu)
+            mu = SpatialConstant(viscosity_mu)
         else:
             mu = viscosity_mu
 
@@ -857,11 +857,11 @@ class LineOfCompressionKernel(ExpressionKernel):
                 evaluate this kernel. Can also be a numeric value.
         """
         if isinstance(viscosity_mu, str):
-            mu = parse(viscosity_mu)
+            mu = SpatialConstant(viscosity_mu)
         else:
             mu = viscosity_mu
         if isinstance(poisson_ratio, str):
-            nu = parse(poisson_ratio)
+            nu = SpatialConstant(poisson_ratio)
         else:
             nu = poisson_ratio
 
