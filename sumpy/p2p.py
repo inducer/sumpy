@@ -187,6 +187,8 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
 
         knl = lp.split_iname(knl, "itgt", 1024, outer_tag="g.0")
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
+        knl = lp.set_options(knl,
+                enforce_variable_access_ordered="no_check")
 
         return knl
 
@@ -395,6 +397,8 @@ class P2PMatrixSubsetGenerator(P2PBase):
 
         knl = lp.split_iname(knl, "imat", 1024, outer_tag="g.0")
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
+        knl = lp.set_options(knl,
+                enforce_variable_access_ordered="no_check")
         return knl
 
     def __call__(self, queue, targets, sources, tgtindices, srcindices, **kwargs):
@@ -534,6 +538,8 @@ class P2PFromCSR(P2PBase):
             knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
 
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
+        knl = lp.set_options(knl,
+                enforce_variable_access_ordered="no_check")
 
         return knl
 

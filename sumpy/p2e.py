@@ -131,6 +131,8 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
             knl = lp.tag_array_axes(knl, "centers", "sep,C")
 
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
+        knl = lp.set_options(knl,
+                enforce_variable_access_ordered="no_check")
         return knl
 
     def __call__(self, queue, **kwargs):

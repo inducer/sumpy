@@ -202,6 +202,8 @@ class E2PFromSingleBox(E2PBase):
         knl = self.get_kernel()
         knl = lp.tag_inames(knl, dict(itgt_box="g.0"))
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
+        knl = lp.set_options(knl,
+                enforce_variable_access_ordered="no_check")
 
         return knl
 
@@ -314,6 +316,8 @@ class E2PFromCSR(E2PBase):
         knl = self.get_kernel()
         knl = lp.tag_inames(knl, dict(itgt_box="g.0"))
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
+        knl = lp.set_options(knl,
+                enforce_variable_access_ordered="no_check")
         return knl
 
     def __call__(self, queue, **kwargs):
