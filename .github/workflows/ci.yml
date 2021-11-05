@@ -98,7 +98,7 @@ jobs:
                 cd "$DOWNSTREAM_PROJECT"
                 echo "*** $DOWNSTREAM_PROJECT version: $(git rev-parse --short HEAD)"
                 transfer_requirements_git_urls ../requirements.txt ./requirements.txt
-                sed -i "/egg=sumpy/ c git+file://$(readlink -f ..)#egg=sumpy" requirements.txt
+                edit_requirements_txt_for_downstream_in_subdir
                 export CONDA_ENVIRONMENT=.test-conda-env-py3.yml
                 # Avoid slow or complicated tests in downstream projects
                 export PYTEST_ADDOPTS="-k 'not (slowtest or octave or mpi)'"

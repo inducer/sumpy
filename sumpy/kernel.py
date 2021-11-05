@@ -1158,7 +1158,8 @@ class DirectionalTargetDerivative(DirectionalDerivative):
                         self.dir_vec_name,
                         None,
                         shape=(self.dim, "ntargets"),
-                        dim_tags="sep,C"),
+                        dim_tags="sep,C",
+                        offset=lp.auto),
                     )
                     ] + self.inner_kernel.get_source_args()
 
@@ -1203,7 +1204,8 @@ class DirectionalSourceDerivative(DirectionalDerivative):
                         self.dir_vec_name,
                         None,
                         shape=(self.dim, "nsources"),
-                        dim_tags="sep,C"),
+                        dim_tags="sep,C",
+                        offset=lp.auto),
                     )
                     ] + self.inner_kernel.get_source_args()
 
