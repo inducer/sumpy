@@ -39,8 +39,6 @@ from sumpy.kernel import (LaplaceKernel, HelmholtzKernel,
 from sumpy.expansion.diff_op import (make_identity_diff_op, gradient,
         divergence, laplacian, concat, as_scalar_pde, curl, diff)
 
-from sumpy.expansion.diff_op import make_identity_diff_op, diff
-
 
 # {{{ pde check for kernels
 
@@ -443,6 +441,7 @@ pdes = [
     diff(w, (1, 1)) + diff(w, (2, 0)),
     diff(w, (1, 1)) + diff(w, (0, 2)),
 ]
+
 
 @pytest.mark.parametrize("pde", pdes)
 def test_weird_kernel(pde):
