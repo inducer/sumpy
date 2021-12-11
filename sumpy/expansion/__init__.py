@@ -283,7 +283,7 @@ class ExpansionTermsWrangler:
             else:
                 # Calculate the multi-index that appears last in in the PDE in
                 # degree lexicographic order.
-                max_mi = self._get_max_index_in_pde(self)
+                max_mi = self._get_max_mi_in_pde(self)
                 hyperplanes.extend(
                     (d, const)
                     for d in range(self.dim)
@@ -438,7 +438,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         stored_identifiers, _ = self.get_stored_ids_and_unscaled_projection_matrix()
         return stored_identifiers
 
-    def _get_max_index_in_pde(self, pde_dict):
+    def _get_max_mi_in_pde(self, pde_dict):
         """Calculate the multi-index that appears last in the PDE given the pde_dict
         A degree lexicographic order with the slowest varying index depending on
         the PDE is used. For two dimensions, this is either deglex or degrevlex.
@@ -461,7 +461,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 key.append(mi[mi_compare_axis[i]])
             return key
 
-        return max((ident for ident in pde_dict.keys()), key=mi_key)
+        return max((ident for ident in pde_dict.keys()), key=mi_key).mi
 
     @memoize_method
     def get_stored_ids_and_unscaled_projection_matrix(self):
@@ -487,7 +487,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                                        from_output_coeffs_by_row, shape)
                 return mis, op
 
-        max_mi = self._get_max_index_in_pde(self).mi
+        max_mi = self._get_max_mi_in_pde(self)
         max_mi_coeff = pde_dict[max_mi]
         max_mi_mult = -1/sym.sympify(max_mi_coeff)
 
