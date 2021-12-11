@@ -444,11 +444,11 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         the PDE is used. For two dimensions, this is either deglex or degrevlex.
         """
         pde_dict, = self.knl.get_pde_as_diff_op().eqs
-        slowest_varying_index = self.dim - 1
+        slowest_varying_index = 0
         for ident in pde_dict.keys():
             if ident.mi.count(0) == self.dim - 1:
                 non_zero_index = next(i for i in range(self.dim) if ident.mi[i] != 0)
-                slowest_varying_index = min(slowest_varying_index, non_zero_index)
+                slowest_varying_index = max(slowest_varying_index, non_zero_index)
 
         mi_compare_axis = list(range(self.dim))
         mi_compare_axis[0], mi_compare_axis[slowest_varying_index] = \
@@ -487,6 +487,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                                        from_output_coeffs_by_row, shape)
                 return mis, op
 
+        max_mi_idx = max(coeff_ident_enumerate_dict[ident] for
+                         ident in pde_dict.keys())
         max_mi = self._get_max_mi_in_pde(self)
         max_mi_coeff = pde_dict[max_mi]
         max_mi_mult = -1/sym.sympify(max_mi_coeff)
