@@ -283,7 +283,10 @@ class ExpansionTermsWrangler:
             else:
                 # Calculate the multi-index that appears last in in the PDE in
                 # degree lexicographic order.
-                max_mi = self._get_max_mi_in_pde(self)
+                ordering_key = self._get_mi_ordering_key()
+                pde_dict, = self.knl.get_pde_as_diff_op().eqs
+                max_mi = max((ident for ident in pde_dict.keys()),
+                        key=ordering_key).mi
                 hyperplanes.extend(
                     (d, const)
                     for d in range(self.dim)
@@ -438,15 +441,17 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         stored_identifiers, _ = self.get_stored_ids_and_unscaled_projection_matrix()
         return stored_identifiers
 
-    def _get_max_mi_in_pde(self, pde_dict):
+    @memoize_method
+    def _get_mi_ordering_key(self):
         """Calculate the multi-index that appears last in the PDE given the pde_dict
         A degree lexicographic order with the slowest varying index depending on
         the PDE is used. For two dimensions, this is either deglex or degrevlex.
         """
+        dim = self.dim
         pde_dict, = self.knl.get_pde_as_diff_op().eqs
         slowest_varying_index = 0
         for ident in pde_dict.keys():
-            if ident.mi.count(0) == self.dim - 1:
+            if ident.mi.count(0) == dim - 1:
                 non_zero_index = next(i for i in range(self.dim) if ident.mi[i] != 0)
                 slowest_varying_index = max(slowest_varying_index, non_zero_index)
 
@@ -454,14 +459,24 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         mi_compare_axis[0], mi_compare_axis[slowest_varying_index] = \
                 slowest_varying_index, 0
 
-        def mi_key(ident):
-            mi = ident.mi
-            key = [sum(mi)]
-            for i in range(self.dim):
-                key.append(mi[mi_compare_axis[i]])
-            return key
+        from sumpy.expansion.diff_op import DerivativeIdentifier
 
-        return max((ident for ident in pde_dict.keys()), key=mi_key).mi
+        def mi_key(ident):
+            if isinstance(ident, DerivativeIdentifier):
+                mi = ident.mi
+            else:
+                mi = ident
+            key = [sum(mi)]
+            for i in range(dim):
+                key.append(mi[mi_compare_axis[i]])
+            return tuple(key)
+
+        return mi_key
+
+    def get_full_coefficient_identifiers(self):
+        identifiers = super().get_full_coefficient_identifiers()
+        key = self._get_mi_ordering_key()
+        return list(sorted(identifiers, key=key))
 
     @memoize_method
     def get_stored_ids_and_unscaled_projection_matrix(self):
@@ -487,9 +502,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                                        from_output_coeffs_by_row, shape)
                 return mis, op
 
-        max_mi_idx = max(coeff_ident_enumerate_dict[ident] for
-                         ident in pde_dict.keys())
-        max_mi = self._get_max_mi_in_pde(self)
+        ordering_key = self._get_mi_ordering_key()
+        max_mi = max((ident for ident in pde_dict.keys()), key=ordering_key)
         max_mi_coeff = pde_dict[max_mi]
         max_mi_mult = -1/sym.sympify(max_mi_coeff)
 
