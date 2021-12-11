@@ -463,7 +463,6 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         return max((ident for ident in pde_dict.keys()), key=mi_key)
 
-
     @memoize_method
     def get_stored_ids_and_unscaled_projection_matrix(self):
         from pytools import ProcessLogger
@@ -487,7 +486,6 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 op = CSEMatVecOperator(from_input_coeffs_by_row,
                                        from_output_coeffs_by_row, shape)
                 return mis, op
-
 
         max_mi = self._get_max_index_in_pde(self).mi
         max_mi_coeff = pde_dict[max_mi]
