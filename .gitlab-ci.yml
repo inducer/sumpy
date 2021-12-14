@@ -132,12 +132,11 @@ Flake8:
 
 Benchmarks:
   stage: test
-  script:
-  - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
-  - PROJECT=sumpy
-  - PYOPENCL_TEST=portable:pthread
-  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-benchmark-py-project.sh
-  - ". ./build-and-benchmark-py-project.sh"
+  script: |
+    PROJECT=sumpy
+    PYOPENCL_TEST=portable:pthread
+    curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-benchmark-py-project.sh
+    . ./build-and-benchmark-py-project.sh
   tags:
   - linux
   - benchmark
