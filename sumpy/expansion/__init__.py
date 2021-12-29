@@ -241,6 +241,21 @@ class ExpansionTermsWrangler:
 
         return type(self)(**new_kwargs)
 
+    def _get_coeff_hyperplanes(self) -> List[Tuple[int, int]]:
+        r"""
+        Returns the hyperplanes that the coefficients are split into.
+        This is a helper method for *_split_coeffs_into_hyperplanes*.
+
+        Returns a list of hyperplane where each hyperplane is represented by
+        a tuple of integers. The first integer `d` is the axis number that the
+        hyperplane is orthogonal to and the second integer is the `d`-th
+        component of the lattice point where the hyperplane intersects the
+        axis `d`.
+        """
+        d = self.dim - 1
+        hyperplanes = [(d, const) for const in range(self.order + 1)]
+        return hyperplanes
+
     @memoize_method
     def _split_coeffs_into_hyperplanes(self) -> List[Tuple[int, List[Tuple[int]]]]:
         r"""
@@ -267,35 +282,7 @@ class ExpansionTermsWrangler:
           (2, [(0, 0, 1), (1, 0, 1), (2, 0, 1), (0, 1, 1), (1, 1, 1), (0, 2, 1)]),
         ]
         """
-        mis = self.get_full_coefficient_identifiers()
-        mi_to_index = {mi: i for i, mi in enumerate(mis)}
-
-        # Each hyperplane stored below is identified by a tuple of the axis
-        # to which it is orthogonal to and the constant `c` described above
-        hyperplanes = []
-        if isinstance(self, LinearPDEBasedExpansionTermsWrangler):
-            pde_dict, = self.knl.get_pde_as_diff_op().eqs
-
-            if not all(ident.mi in mi_to_index for ident in pde_dict):
-                # The order of the expansion is less than the order of the PDE.
-                # Treat as if full expansion.
-                pass
-            else:
-                # Calculate the multi-index that appears last in in the PDE in
-                # degree lexicographic order.
-                ordering_key = self._get_mi_ordering_key()
-                pde_dict, = self.knl.get_pde_as_diff_op().eqs
-                max_mi = max((ident for ident in pde_dict.keys()),
-                        key=ordering_key).mi
-                hyperplanes.extend(
-                    (d, const)
-                    for d in range(self.dim)
-                    for const in range(max_mi[d]))
-
-        if not hyperplanes:
-            d = self.dim - 1
-            hyperplanes.extend((d, const) for const in range(self.order + 1))
-
+        hyperplanes = self._get_coeff_hyperplanes()
         res = []
         seen_mis = set()
         for d, const in hyperplanes:
@@ -449,11 +436,11 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         """
         dim = self.dim
         pde_dict, = self.knl.get_pde_as_diff_op().eqs
-        slowest_varying_index = 0
+        slowest_varying_index = dim - 1
         for ident in pde_dict.keys():
             if ident.mi.count(0) == dim - 1:
                 non_zero_index = next(i for i in range(self.dim) if ident.mi[i] != 0)
-                slowest_varying_index = max(slowest_varying_index, non_zero_index)
+                slowest_varying_index = min(slowest_varying_index, non_zero_index)
 
         mi_compare_axis = list(range(self.dim))
         mi_compare_axis[0], mi_compare_axis[slowest_varying_index] = \
@@ -472,6 +459,30 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             return tuple(key)
 
         return mi_key
+
+    def _get_coeff_hyperplanes(self) -> List[Tuple[int, int]]:
+        mis = self.get_full_coefficient_identifiers()
+        mi_to_index = {mi: i for i, mi in enumerate(mis)}
+
+        hyperplanes = []
+        pde_dict, = self.knl.get_pde_as_diff_op().eqs
+
+        if not all(ident.mi in mi_to_index for ident in pde_dict):
+            # The order of the expansion is less than the order of the PDE.
+            # Treat as if full expansion.
+            hyperplanes = super()._get_coeff_hyperplanes()
+        else:
+            # Calculate the multi-index that appears last in in the PDE in
+            # degree lexicographic order.
+            ordering_key = self._get_mi_ordering_key()
+            pde_dict, = self.knl.get_pde_as_diff_op().eqs
+            max_mi = max((ident for ident in pde_dict.keys()),
+                    key=ordering_key).mi
+            hyperplanes = [(d, const)
+                for d in range(self.dim)
+                for const in range(max_mi[d])]
+
+        return hyperplanes
 
     def get_full_coefficient_identifiers(self):
         identifiers = super().get_full_coefficient_identifiers()
