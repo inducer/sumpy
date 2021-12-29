@@ -442,8 +442,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 non_zero_index = next(i for i in range(self.dim) if ident.mi[i] != 0)
                 slowest_varying_index = min(slowest_varying_index, non_zero_index)
 
-        mi_compare_axis = list(range(self.dim))
-        mi_compare_axis[0], mi_compare_axis[slowest_varying_index] = \
+        axis_permutation = list(range(self.dim))
+        axis_permutation[0], axis_permutation[slowest_varying_index] = \
                 slowest_varying_index, 0
 
         from sumpy.expansion.diff_op import DerivativeIdentifier
@@ -455,7 +455,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 mi = ident
             key = [sum(mi)]
             for i in range(dim):
-                key.append(mi[mi_compare_axis[i]])
+                key.append(mi[axis_permutation[i]])
             return tuple(key)
 
         return mi_key
