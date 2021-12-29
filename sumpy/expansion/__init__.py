@@ -475,8 +475,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             # Calculate the multi-index that appears last in in the PDE in
             # degree lexicographic order.
             ordering_key = self._get_mi_ordering_key()
-            max_mi = max((ident for ident in deriv_id_to_coeff.keys()),
-                    key=ordering_key).mi
+            max_mi = max(deriv_id_to_coeff, key=ordering_key).mi
             hyperplanes = [(d, const)
                 for d in range(self.dim)
                 for const in range(max_mi[d])]
@@ -500,7 +499,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         diff_op = self.knl.get_pde_as_diff_op()
         assert len(diff_op.eqs) == 1
         mi_to_coeff = {k.mi: v for k, v in diff_op.eqs[0].items()}
-        for ident in mi_to_coeff.keys():
+        for ident in mi_to_coeff:
             if ident not in coeff_ident_enumerate_dict:
                 # Order of the expansion is less than the order of the PDE.
                 # In that case, the compression matrix is the identity matrix
