@@ -432,7 +432,10 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     def _get_mi_ordering_key(self):
         """Calculate the multi-index that appears last in the PDE.
         A degree lexicographic order with the slowest varying index depending on
-        the PDE is used. For two dimensions, this is either deglex or degrevlex.
+        the PDE is used. A degree lexicographic ordering is needed for
+        multipole-to-multipole translation to get lower error bounds.
+        The slowest varying index is chosen such that the multipole-to-local
+        translation cost is optimized.
         """
         dim = self.dim
         deriv_id_to_coeff, = self.knl.get_pde_as_diff_op().eqs
