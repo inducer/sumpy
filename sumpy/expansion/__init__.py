@@ -430,14 +430,14 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
     @memoize_method
     def _get_mi_ordering_key(self):
-        """Calculate the multi-index that appears last in the PDE given the pde_dict
+        """Calculate the multi-index that appears last in the PDE.
         A degree lexicographic order with the slowest varying index depending on
         the PDE is used. For two dimensions, this is either deglex or degrevlex.
         """
         dim = self.dim
-        pde_dict, = self.knl.get_pde_as_diff_op().eqs
+        deriv_id_to_coeff, = self.knl.get_pde_as_diff_op().eqs
         slowest_varying_index = dim - 1
-        for ident in pde_dict.keys():
+        for ident in deriv_id_to_coeff:
             if ident.mi.count(0) == dim - 1:
                 non_zero_index = next(i for i in range(self.dim) if ident.mi[i] != 0)
                 slowest_varying_index = min(slowest_varying_index, non_zero_index)
@@ -465,9 +465,9 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         mi_to_index = {mi: i for i, mi in enumerate(mis)}
 
         hyperplanes = []
-        pde_dict, = self.knl.get_pde_as_diff_op().eqs
+        deriv_id_to_coeff, = self.knl.get_pde_as_diff_op().eqs
 
-        if not all(ident.mi in mi_to_index for ident in pde_dict):
+        if not all(ident.mi in mi_to_index for ident in deriv_id_to_coeff):
             # The order of the expansion is less than the order of the PDE.
             # Treat as if full expansion.
             hyperplanes = super()._get_coeff_hyperplanes()
@@ -475,8 +475,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             # Calculate the multi-index that appears last in in the PDE in
             # degree lexicographic order.
             ordering_key = self._get_mi_ordering_key()
-            pde_dict, = self.knl.get_pde_as_diff_op().eqs
-            max_mi = max((ident for ident in pde_dict.keys()),
+            max_mi = max((ident for ident in deriv_id_to_coeff.keys()),
                     key=ordering_key).mi
             hyperplanes = [(d, const)
                 for d in range(self.dim)
@@ -500,8 +499,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         diff_op = self.knl.get_pde_as_diff_op()
         assert len(diff_op.eqs) == 1
-        pde_dict = {k.mi: v for k, v in diff_op.eqs[0].items()}
-        for ident in pde_dict.keys():
+        mi_to_coeff = {k.mi: v for k, v in diff_op.eqs[0].items()}
+        for ident in mi_to_coeff.keys():
             if ident not in coeff_ident_enumerate_dict:
                 # Order of the expansion is less than the order of the PDE.
                 # In that case, the compression matrix is the identity matrix
@@ -514,8 +513,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 return mis, op
 
         ordering_key = self._get_mi_ordering_key()
-        max_mi = max((ident for ident in pde_dict.keys()), key=ordering_key)
-        max_mi_coeff = pde_dict[max_mi]
+        max_mi = max((ident for ident in mi_to_coeff.keys()), key=ordering_key)
+        max_mi_coeff = mi_to_coeff[max_mi]
         max_mi_mult = -1/sym.sympify(max_mi_coeff)
 
         def is_stored(mi):
@@ -542,7 +541,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             # eg: u_xx + u_yy + u_zz is represented as
             # [((2, 0, 0), 1), ((0, 2, 0), 1), ((0, 0, 2), 1)]
             assignment = []
-            for other_mi, coeff in pde_dict.items():
+            for other_mi, coeff in mi_to_coeff.items():
                 j = coeff_ident_enumerate_dict[add_mi(other_mi, diff)]
                 if i == j:
                     # Skip the u_zz part here.
