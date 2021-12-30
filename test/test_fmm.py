@@ -36,7 +36,11 @@ from sumpy.expansion.local import (
     VolumeTaylorLocalExpansion,
     H2DLocalExpansion, Y2DLocalExpansion,
     LinearPDEConformingVolumeTaylorLocalExpansion)
-from sumpy.fmm import SumpyTranslationClassesData
+from sumpy.fmm import (
+        SumpyTreeIndependentDataForWrangler,
+        SumpyExpansionWrangler,
+        SumpyTranslationClassesData,
+        SumpyTranslationClassesDataNotSuppliedWarning)
 
 import pytest
 import warnings
@@ -177,15 +181,12 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
     for order in order_values:
         target_kernels = [knl]
 
-        from sumpy.fmm import (SumpyExpansionWranglerCodeContainer,
-            SumpyTranslationClassesDataNotSuppliedWarning)
-
         if optimized_m2l:
             translation_classes_data = SumpyTranslationClassesData(queue, trav)
         else:
             translation_classes_data = None
 
-        wcc = SumpyExpansionWranglerCodeContainer(
+        tree_indep = SumpyTreeIndependentDataForWrangler(
                 ctx,
                 partial(mpole_expn_class, knl),
                 partial(local_expn_class, knl),
@@ -195,14 +196,14 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
             if not optimized_m2l:
                 warnings.simplefilter("ignore",
                     SumpyTranslationClassesDataNotSuppliedWarning)
-            wrangler = wcc.get_wrangler(queue, tree, dtype,
+            wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,
                 fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
                 kernel_extra_kwargs=extra_kwargs,
                 translation_classes_data=translation_classes_data)
 
         from boxtree.fmm import drive_fmm
 
-        pot, = drive_fmm(trav, wrangler, (weights,))
+        pot, = drive_fmm(wrangler, (weights,))
 
         from sumpy import P2P
         p2p = P2P(ctx, target_kernels, exclude_self=False)
@@ -292,21 +293,20 @@ def test_unified_single_and_double(ctx_factory):
         source_extra_kwargs = {}
         if deriv_knl in source_kernels:
             source_extra_kwargs["dir_vec"] = dir_vec
-        from sumpy.fmm import SumpyExpansionWranglerCodeContainer
-        wcc = SumpyExpansionWranglerCodeContainer(
+        tree_indep = SumpyTreeIndependentDataForWrangler(
                 ctx,
                 partial(mpole_expn_class, knl),
                 partial(local_expn_class, knl),
                 target_kernels=target_kernels, source_kernels=source_kernels,
                 strength_usage=strength_usage)
-        wrangler = wcc.get_wrangler(queue, tree, dtype,
+        wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,
                 fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
                 source_extra_kwargs=source_extra_kwargs,
                 translation_classes_data=SumpyTranslationClassesData(queue, trav))
 
         from boxtree.fmm import drive_fmm
 
-        pot = drive_fmm(trav, wrangler, weights)
+        pot = drive_fmm(wrangler, weights)
         results.append(np.array([pot[0].get(), pot[1].get()]))
 
     ref_pot = results[0] + results[1]
@@ -355,20 +355,19 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory):
 
     from functools import partial
 
-    from sumpy.fmm import SumpyExpansionWranglerCodeContainer
-    wcc = SumpyExpansionWranglerCodeContainer(
+    tree_indep = SumpyTreeIndependentDataForWrangler(
             ctx,
             partial(mpole_expn_class, knl),
             partial(local_expn_class, knl),
             target_kernels)
 
-    wrangler = wcc.get_wrangler(queue, tree, dtype,
+    wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,
             fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
             translation_classes_data=SumpyTranslationClassesData(queue, trav))
     from boxtree.fmm import drive_fmm
 
     timing_data = {}
-    pot, = drive_fmm(trav, wrangler, (weights,), timing_data=timing_data)
+    pot, = drive_fmm(wrangler, (weights,), timing_data=timing_data)
     print(timing_data)
     assert timing_data
 
@@ -413,22 +412,21 @@ def test_sumpy_fmm_exclude_self(ctx_factory):
 
     from functools import partial
 
-    from sumpy.fmm import SumpyExpansionWranglerCodeContainer
-    wcc = SumpyExpansionWranglerCodeContainer(
+    tree_indep = SumpyTreeIndependentDataForWrangler(
             ctx,
             partial(mpole_expn_class, knl),
             partial(local_expn_class, knl),
             target_kernels,
             exclude_self=True)
 
-    wrangler = wcc.get_wrangler(queue, tree, dtype,
+    wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,
             fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
             self_extra_kwargs=self_extra_kwargs,
             translation_classes_data=SumpyTranslationClassesData(queue, trav))
 
     from boxtree.fmm import drive_fmm
 
-    pot, = drive_fmm(trav, wrangler, (weights,))
+    pot, = drive_fmm(wrangler, (weights,))
 
     from sumpy import P2P
     p2p = P2P(ctx, target_kernels, exclude_self=True)
@@ -482,14 +480,13 @@ def test_sumpy_axis_source_derivative(ctx_factory):
 
     from functools import partial
 
-    from sumpy.fmm import SumpyExpansionWranglerCodeContainer
     from sumpy.kernel import AxisTargetDerivative, AxisSourceDerivative
 
     pots = []
     for tgt_knl, src_knl in [(AxisTargetDerivative(0, knl), knl),
             (knl, AxisSourceDerivative(0, knl))]:
 
-        wcc = SumpyExpansionWranglerCodeContainer(
+        tree_indep = SumpyTreeIndependentDataForWrangler(
                 ctx,
                 partial(mpole_expn_class, knl),
                 partial(local_expn_class, knl),
@@ -497,14 +494,14 @@ def test_sumpy_axis_source_derivative(ctx_factory):
                 source_kernels=[src_knl],
                 exclude_self=True)
 
-        wrangler = wcc.get_wrangler(queue, tree, dtype,
+        wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,
                 fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
                 self_extra_kwargs=self_extra_kwargs,
                 translation_classes_data=SumpyTranslationClassesData(queue, trav))
 
         from boxtree.fmm import drive_fmm
 
-        pot, = drive_fmm(trav, wrangler, (weights,))
+        pot, = drive_fmm(wrangler, (weights,))
         pots.append(pot.get())
 
     rel_err = la.norm(pots[0] + pots[1]) / la.norm(pots[0])
@@ -552,7 +549,6 @@ def test_sumpy_target_point_multiplier(ctx_factory, deriv_axes):
 
     from functools import partial
 
-    from sumpy.fmm import SumpyExpansionWranglerCodeContainer
     from sumpy.kernel import TargetPointMultiplier, AxisTargetDerivative
 
     tgt_knls = [TargetPointMultiplier(0, knl), knl, knl]
@@ -560,7 +556,7 @@ def test_sumpy_target_point_multiplier(ctx_factory, deriv_axes):
         tgt_knls[0] = AxisTargetDerivative(axis, tgt_knls[0])
         tgt_knls[1] = AxisTargetDerivative(axis, tgt_knls[1])
 
-    wcc = SumpyExpansionWranglerCodeContainer(
+    tree_indep = SumpyTreeIndependentDataForWrangler(
             ctx,
             partial(mpole_expn_class, knl),
             partial(local_expn_class, knl),
@@ -568,14 +564,14 @@ def test_sumpy_target_point_multiplier(ctx_factory, deriv_axes):
             source_kernels=[knl],
             exclude_self=True)
 
-    wrangler = wcc.get_wrangler(queue, tree, dtype,
+    wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,
             fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
             self_extra_kwargs=self_extra_kwargs,
             translation_classes_data=SumpyTranslationClassesData(queue, trav))
 
     from boxtree.fmm import drive_fmm
 
-    pot0, pot1, pot2 = drive_fmm(trav, wrangler, (weights,))
+    pot0, pot1, pot2 = drive_fmm(wrangler, (weights,))
     pot0, pot1, pot2 = pot0.get(), pot1.get(), pot2.get()
     if deriv_axes == (0,):
         ref_pot = pot1 * sources[0].get() + pot2

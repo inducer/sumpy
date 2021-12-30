@@ -49,7 +49,7 @@
 
     // The list of conda channel names to be searched for benchmark
     // dependency packages in the specified order
-    "conda_channels": ["conda-forge", "defaults"],
+    "conda_channels": ["conda-forge"],
 
     // The matrix of dependencies to test.  Each key is the name of a
     // package (in PyPI) and the values are version numbers.  An empty
@@ -68,15 +68,14 @@
     // },
     "matrix": {
         "numpy" : [""],
-        "sympy" : ["1.4"],
+        "sympy" : [""],
         "pyopencl" : [""],
         "islpy" : [""],
         "pocl" : [""],
         "pip+git+https://github.com/inducer/pymbolic#egg=pymbolic": [""],
         "pip+git+https://gitlab.tiker.net/inducer/boxtree#egg=boxtree": [""],
         "pip+git+https://github.com/inducer/loopy#egg=loopy": [""],
-        // https://github.com/pypa/pip/issues/8667
-        "pip" : ["<20.2"],
+        "pip" : [""],
     },
 
     // Combinations of libraries/python versions can be excluded/included
