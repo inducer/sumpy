@@ -232,7 +232,7 @@ def as_scalar_pde(pde: LinearPDESystemOperator, vec_idx: int) \
         -> LinearPDESystemOperator:
     r"""
     Returns a scalar PDE that is satisfied by the *vec_idx* component
-    of *pde*. 123.
+    of *pde*.
 
     To do this, we first convert a system of PDEs into a matrix where each
     row represents one PDE of the system of PDEs and each column represents
