@@ -90,8 +90,8 @@ jobs:
             run: |
                 curl -L -O https://tiker.net/ci-support-v0
                 . ./ci-support-v0
-                if [[ "$DOWNSTREAM_PROJECT" = "pytential" ]] && [[ "$GITHUB_HEAD_REF" = "remove-block-index-ranges" ]]; then
-                  git clone "https://github.com/alexfikl/$DOWNSTREAM_PROJECT.git" -b "block-index-ranges"
+                if [[ "$DOWNSTREAM_PROJECT" = "pytential" ]] && [[ "$GITHUB_HEAD_REF" = "wrangler-refactor" ]]; then
+                  git clone "https://github.com/inducer/$DOWNSTREAM_PROJECT.git" -b "wrangler-refactor"
                 else
                   git clone "https://github.com/inducer/$DOWNSTREAM_PROJECT.git"
                 fi
