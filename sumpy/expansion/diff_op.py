@@ -27,6 +27,7 @@ from sumpy.tools import add_mi
 from itertools import accumulate
 import sumpy.symbolic as sym
 import logging
+from typing import List
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +158,8 @@ def convert_module_to_matrix(module, generators):
 
 
 @memoize
-def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> List[LinearPDESystemOperator]:
+def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> \
+        List[LinearPDESystemOperator]:
     import sympy
     from sympy.polys.orderings import grevlex
     gens = [sympy.symbols(f"_x{i}") for i in range(pde.dim)]
@@ -260,8 +262,8 @@ def as_scalar_pde(pde: LinearPDESystemOperator, comp_idx: int) \
     :math:`a_1, a_2, \ldots, a_n` such that the vector :math:`\sum_i a_i r_i` has
     zeros except for the i-th component. In other words, we need to find a vector of
     polynomials such that the inner product of it with each of the columns except
-    for the :math:`i`-th column is zero. i.e. :math:`a_1, a_2, \ldots, a_n` is a syzygy
-    of all columns except for the :math:`i`-th column.
+    for the :math:`i`-th column is zero. i.e. :math:`a_1, a_2, \ldots, a_n` is a
+    syzygy of all columns except for the :math:`i`-th column.
 
     To calculate a module that annihilates all but the :math:`i`th column, we first
     calculate the syzygy module of each column. A syzygy of a column vector is a
@@ -292,7 +294,7 @@ def as_scalar_pde(pde: LinearPDESystemOperator, comp_idx: int) \
             indices.add(deriv_ident.vec_idx)
 
     # this is already a scalar pde
-    if len(indices) == 1 and list(indices)[0] == vec_idx:
+    if len(indices) == 1 and list(indices)[0] == comp_idx:
         return pde
 
     return _get_all_scalar_pdes(pde)[comp_idx]
