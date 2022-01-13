@@ -228,10 +228,10 @@ def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> List[LinearPDESystemOp
     return results
 
 
-def as_scalar_pde(pde: LinearPDESystemOperator, vec_idx: int) \
+def as_scalar_pde(pde: LinearPDESystemOperator, comp_idx: int) \
         -> LinearPDESystemOperator:
     r"""
-    Returns a scalar PDE that is satisfied by the *vec_idx* component
+    Returns a scalar PDE that is satisfied by the *comp_idx* component
     of *pde*.
 
     To do this, we first convert a system of PDEs into a matrix where each
@@ -283,8 +283,8 @@ def as_scalar_pde(pde: LinearPDESystemOperator, vec_idx: int) \
     in the Groebner basis. We choose that polynomial as our scalar PDE.
 
     :arg pde: An instance of :class:`LinearPDESystemOperator`
-    :arg vec_idx: the index of the vector-valued function that we
-                  want as a scalar PDE
+    :arg comp_idx: the index of the component of the PDE solution vector
+        for which a scalar PDE is requested.
     """
     indices = set()
     for eq in pde.eqs:
@@ -295,7 +295,7 @@ def as_scalar_pde(pde: LinearPDESystemOperator, vec_idx: int) \
     if len(indices) == 1 and list(indices)[0] == vec_idx:
         return pde
 
-    return _get_all_scalar_pdes(pde)[vec_idx]
+    return _get_all_scalar_pdes(pde)[comp_idx]
 
 
 def laplacian(diff_op):
