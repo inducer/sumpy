@@ -157,7 +157,7 @@ def convert_module_to_matrix(module, generators):
 
 
 @memoize
-def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> LinearPDESystemOperator:
+def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> List[LinearPDESystemOperator]:
     import sympy
     from sympy.polys.orderings import grevlex
     gens = [sympy.symbols(f"_x{i}") for i in range(pde.dim)]
