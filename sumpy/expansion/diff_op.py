@@ -153,6 +153,7 @@ def convert_module_to_matrix(module, generators):
     # poly is a sympy DMP (dense multi-variate polynomial)
     # type and we convert it to a sympy expression because
     # sympy matrices with polynomial entries are not supported.
+    # see https://github.com/sympy/sympy/issues/21497
     return sympy.Matrix([[sympy.Poly(poly.to_dict(), *generators,
             domain=sympy.EX).as_expr() for poly in ideal.data] for ideal in module])
 
