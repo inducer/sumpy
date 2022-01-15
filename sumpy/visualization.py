@@ -172,10 +172,11 @@ class FieldPlotter:
         if do_show:
             mlab.show()
 
-    def write_vtk_file(self, file_name, data, real_only=False):
+    def write_vtk_file(self, file_name, data, real_only=False, overwrite=False):
         from pyvisfile.vtk import write_structured_grid
         write_structured_grid(file_name, self.nd_points,
-                point_data=list(separate_by_real_and_imag(data, real_only)))
+                point_data=list(separate_by_real_and_imag(data, real_only)),
+                overwrite=overwrite)
 
     def show_scalar_in_mayavi(self, fld, max_val=None, **kwargs):
         if max_val is not None:
