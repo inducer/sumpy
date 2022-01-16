@@ -382,7 +382,7 @@ def test_as_scalar_pde_maxwell():
 
     for i in range(6):
         assert as_scalar_pde(pde, i) == \
-            -1/(mu*epsilon)*laplacian(op[0]) + diff(diff(op[0], t), t)
+            laplacian(op[0]) - mu*epsilon*diff(diff(op[0], t), t)
 
 
 def test_as_scalar_pde_elasticity():
@@ -397,7 +397,8 @@ def test_as_scalar_pde_elasticity():
     v = diff_op[4]
 
     # Use numeric values as the expressions grow exponentially large otherwise
-    lam, mu = 2, 3
+    from sumpy.symbolic import symbols
+    lam, mu = symbols("lam, mu")
 
     x = (1, 0)
     y = (0, 1)
