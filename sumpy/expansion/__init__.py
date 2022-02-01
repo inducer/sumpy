@@ -241,7 +241,7 @@ class ExpansionTermsWrangler:
 
         return type(self)(**new_kwargs)
 
-    def _get_coeff_hyperplanes(self) -> List[Tuple[int, int]]:
+    def _get_mi_hyperpplanes(self) -> List[Tuple[int, int]]:
         r"""
         Returns the hyperplanes that the coefficients are split into.
         This is a helper method for *_split_coeffs_into_hyperplanes*.
@@ -282,7 +282,7 @@ class ExpansionTermsWrangler:
           (2, [(0, 0, 1), (1, 0, 1), (2, 0, 1), (0, 1, 1), (1, 1, 1), (0, 2, 1)]),
         ]
         """
-        hyperplanes = self._get_coeff_hyperplanes()
+        hyperplanes = self._get_mi_hyperpplanes()
         res = []
         seen_mis = set()
         for d, const in hyperplanes:
@@ -463,7 +463,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         return mi_key
 
-    def _get_coeff_hyperplanes(self) -> List[Tuple[int, int]]:
+    def _get_mi_hyperpplanes(self) -> List[Tuple[int, int]]:
         mis = self.get_full_coefficient_identifiers()
         mi_to_index = {mi: i for i, mi in enumerate(mis)}
 
@@ -473,7 +473,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         if not all(ident.mi in mi_to_index for ident in deriv_id_to_coeff):
             # The order of the expansion is less than the order of the PDE.
             # Treat as if full expansion.
-            hyperplanes = super()._get_coeff_hyperplanes()
+            hyperplanes = super()._get_mi_hyperpplanes()
         else:
             # Calculate the multi-index that appears last in in the PDE in
             # degree lexicographic order.
