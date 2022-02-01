@@ -432,14 +432,14 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         stored_identifiers, _ = self.get_stored_ids_and_unscaled_projection_matrix()
         return stored_identifiers
 
-    # If there exists an axis-normal hyperplane without a PDE (derivative) multi-index
-    # on it, then the coefficients on that hyperplane *must* be stored (because it
-    # cannot be reached by any PDE identities). To find storage hyperplanes that
-    # reach a maximal (-ish?) number of coefficients, look for on-axis PDE coefficient
-    # multi-indices, and start enumerating hyperplanes normal to that axis.
-    # Practically, this is done by reordering the axes so that the axis with the on-axis
-    # coefficient comes first in the multi-index tuple.
-    
+    # If there exists an axis-normal hyperplane without a PDE (derivative)
+    # multi-index on it, then the coefficients on that hyperplane *must* be
+    # stored (because it cannot be reached by any PDE identities). To find
+    # storage hyperplanes that reach a maximal (-ish?) number of coefficients,
+    # look for on-axis PDE coefficient multi-indices, and start enumerating
+    # hyperplanes normal to that axis.  Practically, this is done by reordering
+    # the axes so that the axis with the on-axis coefficient comes first in the
+    # multi-index tuple.
     @memoize_method
     def _get_mi_ordering_key(self):
         """
@@ -490,7 +490,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             hyperplanes = super()._get_mi_hyperpplanes()
         else:
             # Calculate the multi-index that appears last in in the PDE in
-            # degree lexicographic order.
+            # the degree lexicographic order given by
+            # _get_mi_ordering_key.
             ordering_key = self._get_mi_ordering_key()
             max_mi = max(deriv_id_to_coeff, key=ordering_key).mi
             hyperplanes = [(d, const)
