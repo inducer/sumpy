@@ -243,8 +243,12 @@ class ExpansionTermsWrangler:
 
     def _get_mi_hyperpplanes(self) -> List[Tuple[int, int]]:
         r"""
-        Returns the hyperplanes that the coefficients are split into.
-        This is a helper method for *_split_coeffs_into_hyperplanes*.
+        Coefficient storage is organized into "hyperplanes" in multi-index
+        space. Potentially only a subset of these hyperplanes contain
+        coefficients that need to be stored. This routine returns that
+        subset, which is then used in :meth:`_split_coeffs_into_hyperplanes`
+        to appropriately partition the coefficients into segments corresponding
+        to the hyperplanes, settling any overlap in the process.
 
         Returns a list of hyperplane where each hyperplane is represented by
         a tuple of integers. The first integer `d` is the axis number that the
@@ -428,11 +432,21 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         stored_identifiers, _ = self.get_stored_ids_and_unscaled_projection_matrix()
         return stored_identifiers
 
+    # If there exists an axis-normal hyperplane without a PDE (derivative) multi-index
+    # on it, then the coefficients on that hyperplane *must* be stored (because it
+    # cannot be reached by any PDE identities). To find storage hyperplanes that
+    # reach a maximal (-ish?) number of coefficients, look for on-axis PDE coefficient
+    # multi-indices, and start enumerating hyperplanes normal to that axis.
+    # Practically, this is done by reordering the axes so that the axis with the on-axis
+    # coefficient comes first in the multi-index tuple.
+    
     @memoize_method
     def _get_mi_ordering_key(self):
-        """Calculate the multi-index that appears last in the PDE.
+        """
         A degree lexicographic order with the slowest varying index depending on
-        the PDE is used. A degree lexicographic ordering is needed for
+        the PDE is used, returned as a callable that can be used as a
+        ``sort`` key on multi-indices.
+        A degree lexicographic ordering is needed for
         multipole-to-multipole translation to get lower error bounds.
         The slowest varying index is chosen such that the multipole-to-local
         translation cost is optimized.
