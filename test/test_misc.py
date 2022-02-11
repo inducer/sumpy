@@ -35,7 +35,7 @@ from pytools import Record
 
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel,
         BiharmonicKernel, YukawaKernel, StokesletKernel, StressletKernel,
-        ElasticityKernel, LineOfCompressionKernel)
+        ElasticityKernel, LineOfCompressionKernel, ExpressionKernel)
 from sumpy.expansion.diff_op import (make_identity_diff_op, gradient,
         divergence, laplacian, concat, as_scalar_pde, curl, diff)
 
@@ -433,6 +433,39 @@ def test_elasticity_new():
     for knl in [elasticity_knl, elasticity_helper_knl]:
         assert not isinstance(knl, StokesletKernel)
         assert loads(dumps(knl)) == knl
+
+
+w = make_identity_diff_op(2)
+
+pdes = [
+    diff(w, (1, 1)) + diff(w, (2, 0)),
+    diff(w, (1, 1)) + diff(w, (0, 2)),
+]
+
+
+@pytest.mark.parametrize("pde", pdes)
+def test_weird_kernel(pde):
+    class MyKernel(ExpressionKernel):
+        def __init__(self):
+            super().__init__(dim=2, expression=1, global_scaling_const=1,
+                is_complex_valued=False)
+
+        def get_pde_as_diff_op(self):
+            return pde
+
+    from sumpy.expansion import LinearPDEConformingVolumeTaylorExpansion
+    from operator import mul
+    from functools import reduce
+
+    knl = MyKernel()
+    order = 10
+    expn = LinearPDEConformingVolumeTaylorExpansion(kernel=knl,
+            order=order, use_rscale=False)
+
+    coeffs = expn.get_coefficient_identifiers()
+    fft_size = reduce(mul, map(max, *coeffs), 1)
+
+    assert fft_size == order
 
 
 # You can test individual routines by typing
