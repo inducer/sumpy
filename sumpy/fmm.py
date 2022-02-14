@@ -670,7 +670,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             m2l_translation_classes_dependent_data = \
                     self.m2l_translation_classes_dependent_data_zeros(queue)
             for lev in range(self.tree.nlevels):
-                src_rscale=level_to_rscale(self.tree, lev)
+                src_rscale = level_to_rscale(self.tree, lev)
                 order = self.level_orders[lev]
                 precompute_kernel = \
                     self.tree_indep.m2l_translation_class_dependent_data_kernel(
