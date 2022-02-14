@@ -665,11 +665,12 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         return (pot, SumpyTimingFuture(queue, events))
 
     @memoize_method
-    def multipole_to_local_precompute(self, src_rscale):
+    def multipole_to_local_precompute(self):
         with cl.CommandQueue(self.tree_indep.cl_context) as queue:
             m2l_translation_classes_dependent_data = \
                     self.m2l_translation_classes_dependent_data_zeros(queue)
             for lev in range(self.tree.nlevels):
+                src_rscale = level_to_rscale(self.tree, lev)
                 order = self.level_orders[lev]
                 precompute_kernel = \
                     self.tree_indep.m2l_translation_class_dependent_data_kernel(
@@ -717,9 +718,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         """
         if not self.supports_optimized_m2l:
             return
-        src_rscale = kwargs_for_m2l["src_rscale"]
         m2l_translation_classes_dependent_data = \
-                self.multipole_to_local_precompute(src_rscale)
+                self.multipole_to_local_precompute()
         translation_classes_level_start, \
             m2l_translation_classes_dependent_data_view = \
                 self.m2l_translation_classes_dependent_data_view(
