@@ -354,63 +354,6 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                 complex_dtype=to_complex_dtype(result_dtype),
                 )
 
-    def get_postprocess_loopy_insns(self, result_dtype):
-        """Loopy instructions that happen only once for each target box.
-
-        :arg result_dtype: A numpy dtype for the result. This is important
-            because depending on the input to the M2L being real or not
-            the code needs to be different. If the input was real, the
-            result should be the real part of the complex values from the
-            inverse FFT. In the input was complex, the result matches the
-            values from the inverse FFT.
-        """
-
-        ncoeff_tgt = len(self.tgt_expansion)
-        m2l_translation_classes_dependent_ndata = \
-                self.tgt_expansion.m2l_translation_classes_dependent_ndata(
-                        self.src_expansion)
-
-        if self.use_preprocessing_for_m2l:
-            ncoeff_tgt = m2l_translation_classes_dependent_ndata
-
-        from sumpy.assignment_collection import SymbolicAssignmentCollection
-        sac = SymbolicAssignmentCollection()
-
-        tgt_coeff_exprs = [
-            sym.Symbol("coeff_sum%d" % i) for i in range(ncoeff_tgt)
-        ]
-
-        src_rscale = sym.Symbol("src_rscale")
-        tgt_rscale = sym.Symbol("tgt_rscale")
-
-        if self.use_preprocessing_for_m2l:
-            tgt_coeff_post_exprs = self.tgt_expansion.m2l_postprocess_local_exprs(
-                self.src_expansion, tgt_coeff_exprs, src_rscale, tgt_rscale,
-                sac=sac)
-            if result_dtype in (np.float32, np.float64):
-                real_func = sym.Function("real")
-                tgt_coeff_post_exprs = [real_func(expr) for expr in
-                    tgt_coeff_post_exprs]
-        else:
-            tgt_coeff_post_exprs = tgt_coeff_exprs
-
-        tgt_coeff_post_names = [
-            sac.assign_unique("coeff_post%d" % i, coeff)
-            for i, coeff in enumerate(tgt_coeff_post_exprs)
-        ]
-
-        sac.run_global_cse()
-
-        from sumpy.codegen import to_loopy_insns
-        insns = to_loopy_insns(
-                sac.assignments.items(),
-                vector_names=set(["d"]),
-                pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
-                retain_names=tgt_coeff_post_names,
-                complex_dtype=to_complex_dtype(result_dtype),
-                )
-        return insns
-
     def get_kernel(self, result_dtype):
         m2l_translation_classes_dependent_ndata = \
                 self.tgt_expansion.m2l_translation_classes_dependent_ndata(
@@ -420,15 +363,13 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
             # number of expressions given as input to M2L after preprocessing
             ncoeff_src = self.tgt_expansion.m2l_preprocess_multipole_nexprs(
                     self.src_expansion)
-            # number of expressions given as input to postprocessing
-            ncoeff_tgt_before_postprocess = \
+            ncoeff_tgt = \
                     self.tgt_expansion.m2l_postprocess_local_nexprs(
                         self.src_expansion)
         else:
             ncoeff_src = len(self.src_expansion)
-            ncoeff_tgt_before_postprocess = len(self.tgt_expansion)
+            ncoeff_tgt = len(self.tgt_expansion)
 
-        ncoeff_tgt = len(self.tgt_expansion)
 
         # To clarify terminology:
         #
@@ -475,14 +416,9 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                         ] + self.get_translation_loopy_insns(result_dtype) + ["""
                     end
 
-                    """] + ["""
-                    <> coeff_sum{coeffidx} = \
-                        simul_reduce(sum, isrc_box, coeff{coeffidx})
-                    """.format(coeffidx=i) for i in
-                        range(ncoeff_tgt_before_postprocess)] + [
-                    ] + self.get_postprocess_loopy_insns(result_dtype) + [f"""
+                    """] + [f"""
                     tgt_expansions[tgt_ibox - tgt_base_ibox, {coeffidx}] = \
-                            coeff_post{coeffidx} {{id_prefix=write_expn}}
+                        simul_reduce(sum, isrc_box, coeff{coeffidx}) {{id_prefix=write_expn}}
                     """ for coeffidx in range(ncoeff_tgt)] + ["""
                 end
                 """],
@@ -498,7 +434,8 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                     lp.GlobalArg("src_expansions", None,
                         shape=("nsrc_level_boxes", ncoeff_src), offset=lp.auto),
                     lp.GlobalArg("tgt_expansions", None,
-                        shape=("ntgt_level_boxes", ncoeff_tgt), offset=lp.auto),
+                        shape=("ntgt_level_boxes", ncoeff_tgt),
+                        offset=lp.auto),
                     lp.ValueArg("translation_classes_level_start",
                         np.int32),
                     lp.GlobalArg("m2l_translation_classes_dependent_data", None,
@@ -785,6 +722,114 @@ class M2LPreprocessMultipole(E2EBase):
         knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
         return knl(queue,
             preprocessed_src_expansions=preprocessed_src_expansions, **kwargs)
+# }}}
+
+
+# {{{ M2LPostprocessLocal
+
+class M2LPostprocessLocal(E2EBase):
+    """Postprocesses locals expansions for accelerated M2L"""
+
+    default_name = "m2l_postprocess_local"
+
+    def get_loopy_insns(self, result_dtype):
+        tgt_coeff_exprs_before_postprocessing = [
+            sym.Symbol("tgt_coeff_before_postprocess%d" % i)
+            for i in range(len(self.tgt_expansion))]
+
+        src_rscale = sym.Symbol("src_rscale")
+        src_rscale = sym.Symbol("tgt_rscale")
+
+        from sumpy.assignment_collection import SymbolicAssignmentCollection
+        sac = SymbolicAssignmentCollection()
+
+        tgt_coeff_exprs = self.tgt_expansion.m2l_postprocess_local_exprs(
+            self.tgt_expansion, tgt_coeff_exprs_before_postprocessing,
+            sac=sac, src_rscale=src_rscale, tgt_rscale=tgt_rscale)
+        
+        if result_dtype in (np.float32, np.float64):
+            real_func = sym.Function("real")
+            tgt_coeff_exprs = [real_func(expr) for expr in
+                    tgt_coeff_exprs]
+
+        tgt_coeff_names = [
+            sac.assign_unique("tgt_coeff%d" % i, coeff_i)
+            for i, coeff_i in enumerate(tgt_coeff_exprs)]
+
+        sac.run_global_cse()
+
+        from sumpy.codegen import to_loopy_insns
+        return to_loopy_insns(
+                sac.assignments.items(),
+                vector_names=set(["d"]),
+                pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
+                retain_names=tgt_coeff_names,
+                complex_dtype=to_complex_dtype(result_dtype),
+                )
+
+    def get_kernel(self, result_dtype):
+        ntgt_coeffs = len(self.tgt_expansion)
+        ntgt_coeffs_before_postprocessing = \
+            self.tgt_expansion.m2l_postprocess_local_nexprs(self.tgt_expansion)
+        from sumpy.tools import gather_loopy_arguments
+        loopy_knl = lp.make_kernel(
+                [
+                    "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
+                    ],
+                ["""
+                for itgt_box
+                """] + ["""
+                    <> tgt_coeff_before_preprocessing{idx} = \
+                            tgt_expansions_before_postprocessing[itgt_box, {idx}]
+                """.format(idx=i) for i in range(nsrc_coeffs)] + [
+                ] + self.get_loopy_insns(result_dtype) + ["""
+                    tgt_expansions[itgt_box, {idx}] = \
+                        tgt_coeff{idx}
+                    """.format(idx=i) for i in range(
+                        ntgt_coeffs_before_postprocessing)] + ["""
+                end
+                """],
+                [
+                    lp.ValueArg("ntgt_boxes", np.int32),
+                    lp.ValueArg("src_rscale", None),
+                    lp.ValueArg("tgt_rscale", None),
+                    lp.GlobalArg("tgt_expansions", None,
+                        shape=("ntgt_boxes", ntgt_coeffs), offset=lp.auto),
+                    lp.GlobalArg("tgt_expansions_before_postprocessing", None,
+                        shape=("ntgt_boxes", ntgt_coeffs_before_postprocessing),
+                        offset=lp.auto),
+                    "..."
+                ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
+                name=self.name,
+                assumptions="ntgt_boxes>=1",
+                default_offset=lp.auto,
+                fixed_parameters=dict(dim=self.dim),
+                lang_version=MOST_RECENT_LANGUAGE_VERSION
+                )
+
+        for expn in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
+            loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+
+        loopy_knl = lp.set_options(loopy_knl,
+                enforce_variable_access_ordered="no_check")
+        return loopy_knl
+
+    def get_optimized_kernel(self, result_dtype):
+        # FIXME
+        knl = self.get_kernel(result_dtype)
+        knl = lp.split_iname(knl, "isrc_box", 16, outer_tag="g.0")
+        return knl
+
+    def __call__(self, queue, **kwargs):
+        """
+        :arg tgt_expansions
+        :arg tgt_expansions_before_postprocessing
+        """
+        tgt_expansions = kwargs.pop("tgt_expansions")
+        result_dtype = tgt_expansions.dtype
+        knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
+        return knl(queue,
+            tgt_expansions=tgt_expansions, **kwargs)
 # }}}
 
 

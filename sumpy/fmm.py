@@ -40,7 +40,7 @@ from sumpy import (
         E2EFromCSR, M2LUsingTranslationClassesDependentData,
         E2EFromChildren, E2EFromParent,
         M2LGenerateTranslationClassesDependentData,
-        M2LPreprocessMultipole)
+        M2LPreprocessMultipole, M2LPostprocessLocal)
 from sumpy.tools import to_complex_dtype
 
 
@@ -145,6 +145,12 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
     @memoize_method
     def m2l_preprocess_mpole_kernel(self, src_order, tgt_order):
         return M2LPreprocessMultipole(self.cl_context,
+                self.multipole_expansion(src_order),
+                self.local_expansion(tgt_order))
+
+    @memoize_method
+    def m2l_postprocess_local_kernel(self, src_order, tgt_order):
+        return M2LPostprocessLocal(self.cl_context,
                 self.multipole_expansion(src_order),
                 self.local_expansion(tgt_order))
 
@@ -485,6 +491,11 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         return (box_start,
                 mpole_exps[expn_start:expn_stop].reshape(box_stop-box_start, -1))
 
+    m2l_work_array_view = m2l_preproc_mpole_expansions_view
+    m2l_work_array_zeros = m2l_preproc_mpole_expansion_zeros
+    m2l_work_array_level_starts = \
+            m2l_preproc_mpole_expansions_level_starts
+
     def output_zeros(self, template_ary):
         """Return a potentials array (which must support addition) capable of
         holding a potential value for each target in the tree. Note that
@@ -712,7 +723,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
     def _add_m2l_precompute_kwargs(self, kwargs_for_m2l,
             lev):
-        """This method is used for addin the information needed for a
+        """This method is used for adding the information needed for a
         multipole-to-local translation with precomputation to the keywords
         passed to multipole-to-local translation.
         """
@@ -736,8 +747,9 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             target_boxes, src_box_starts, src_box_lists,
             mpole_exps):
 
-        precompute_evts = []
+        preprocess_evts = []
         queue = mpole_exps.queue
+        local_exps = self.local_expansion_zeros(mpole_exps)
 
         if self.use_preprocessing_for_m2l:
             preprocessed_mpole_exps = \
@@ -747,7 +759,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 preprocess_mpole_kernel = \
                     self.tree_indep.m2l_preprocess_mpole_kernel(order, order)
 
-                source_level_start_ibox, source_mpoles_view = \
+                _, source_mpoles_view = \
                         self.multipole_expansions_view(mpole_exps, lev)
 
                 _, preprocessed_source_mpoles_view = \
@@ -766,14 +778,16 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     src_rscale=level_to_rscale(self.tree, lev),
                     **self.kernel_extra_kwargs
                 )
-                precompute_evts.append(evt)
+                preprocess_evts.append(evt)
             mpole_exps = preprocessed_mpole_exps
+            m2l_work_array = self.m2l_work_array_zeros(local_exps)
             mpole_exps_view_func = self.m2l_preproc_mpole_expansions_view
+            local_exps_view_func = self.m2l_work_array_view
         else:
+            m2l_work_array = local_exps
             mpole_exps_view_func = self.multipole_expansions_view
 
         events = []
-        local_exps = self.local_expansion_zeros(mpole_exps)
 
         for lev in range(self.tree.nlevels):
             start, stop = level_start_target_box_nrs[lev:lev+2]
@@ -785,13 +799,13 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
             source_level_start_ibox, source_mpoles_view = \
                     mpole_exps_view_func(mpole_exps, lev)
-            target_level_start_ibox, target_local_exps_view = \
-                    self.local_expansions_view(local_exps, lev)
+            target_level_start_ibox, target_locals_view = \
+                    local_exps_view_func(m2l_work_array, lev)
 
             kwargs = dict(
                     src_expansions=source_mpoles_view,
                     src_base_ibox=source_level_start_ibox,
-                    tgt_expansions=target_local_exps_view,
+                    tgt_expansions=target_locals_view,
                     tgt_base_ibox=target_level_start_ibox,
 
                     target_boxes=target_boxes[start:stop],
@@ -809,9 +823,41 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     kwargs["m2l_translation_classes_dependent_data"].size == 0:
                 # There is nothing to do for this level
                 continue
-            evt, _ = m2l(queue, **kwargs, wait_for=precompute_evts)
+            evt, _ = m2l(queue, **kwargs, wait_for=preprocess_evts)
 
             events.append(evt)
+
+            cl.wait_for_events([evt])
+            print("m2l", lev, (evt.profile.end - evt.profile.start)*1e-9)
+
+        if self.use_preprocessing_for_m2l:
+            for lev in range(self.tree.nlevels):
+                order = self.level_orders[lev]
+                postprocess_local_kernel = \
+                    self.tree_indep.m2l_postprocess_local_kernel(order, order)
+
+                _, target_locals_view = \
+                        self.local_expansions_view(local_exps, lev)
+
+                _, target_locals_before_postprocessing_view = \
+                        self.m2l_work_array_view(
+                                m2l_work_array, lev)
+
+                tr_classes = self.m2l_translation_class_level_start_box_nrs()
+                if tr_classes[lev] == tr_classes[lev + 1]:
+                    # There is no M2L happening in this level
+                    continue
+
+                evt, _ = postprocess_local_kernel(
+                    queue,
+                    tgt_expansions=target_locals_view,
+                    tgt_expansions_before_postprocessing=(
+                        target_locals_before_postprocessing_view),
+                    src_rscale=level_to_rscale(self.tree, lev),
+                    tgt_rscale=level_to_rscale(self.tree, lev),
+                    **self.kernel_extra_kwargs
+                )
+                events.append(evt)
 
         return (local_exps, SumpyTimingFuture(queue, events))
 
