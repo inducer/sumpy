@@ -725,7 +725,7 @@ class M2LPreprocessMultipole(E2EBase):
 # }}}
 
 
-# {{{ M2LPostprocessLocal
+ # {{{ M2LPostprocessLocal
 
 class M2LPostprocessLocal(E2EBase):
     """Postprocesses locals expansions for accelerated M2L"""
@@ -733,12 +733,15 @@ class M2LPostprocessLocal(E2EBase):
     default_name = "m2l_postprocess_local"
 
     def get_loopy_insns(self, result_dtype):
+        ncoeffs_before_postprocessing = \
+            self.tgt_expansion.m2l_postprocess_local_nexprs(self.tgt_expansion)
+
         tgt_coeff_exprs_before_postprocessing = [
-            sym.Symbol("tgt_coeff_before_postprocess%d" % i)
-            for i in range(len(self.tgt_expansion))]
+            sym.Symbol("tgt_coeff_before_postprocessing%d" % i)
+            for i in range(ncoeffs_before_postprocessing)]
 
         src_rscale = sym.Symbol("src_rscale")
-        src_rscale = sym.Symbol("tgt_rscale")
+        tgt_rscale = sym.Symbol("tgt_rscale")
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
@@ -779,14 +782,13 @@ class M2LPostprocessLocal(E2EBase):
                 ["""
                 for itgt_box
                 """] + ["""
-                    <> tgt_coeff_before_preprocessing{idx} = \
+                    <> tgt_coeff_before_postprocessing{idx} = \
                             tgt_expansions_before_postprocessing[itgt_box, {idx}]
-                """.format(idx=i) for i in range(nsrc_coeffs)] + [
+                """.format(idx=i) for i in range(ntgt_coeffs_before_postprocessing)] + [
                 ] + self.get_loopy_insns(result_dtype) + ["""
                     tgt_expansions[itgt_box, {idx}] = \
                         tgt_coeff{idx}
-                    """.format(idx=i) for i in range(
-                        ntgt_coeffs_before_postprocessing)] + ["""
+                    """.format(idx=i) for i in range(ntgt_coeffs)] + ["""
                 end
                 """],
                 [
@@ -817,7 +819,7 @@ class M2LPostprocessLocal(E2EBase):
     def get_optimized_kernel(self, result_dtype):
         # FIXME
         knl = self.get_kernel(result_dtype)
-        knl = lp.split_iname(knl, "isrc_box", 16, outer_tag="g.0")
+        knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
         return knl
 
     def __call__(self, queue, **kwargs):
