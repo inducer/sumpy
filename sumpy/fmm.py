@@ -718,7 +718,6 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
             m2l_translation_classes_dependent_data = \
                     m2l_translation_classes_dependent_data.with_queue(None)
-
         return m2l_translation_classes_dependent_data
 
     def _add_m2l_precompute_kwargs(self, kwargs_for_m2l,

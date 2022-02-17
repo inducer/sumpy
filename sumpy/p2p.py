@@ -255,6 +255,15 @@ class P2P(P2PBase):
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
 
+        """
+        knl = lp.add_and_infer_dtypes(knl,
+            {"target_to_source": kwargs["target_to_source"].dtype,
+             "targets": targets[0].dtype,
+             "sources": sources[0].dtype,
+             "strength": strength[0].dtype})
+        print(lp.generate_code_v2(knl).device_code())
+        """
+
         return knl(queue, sources=sources, targets=targets, strength=strength,
                 **kwargs)
 

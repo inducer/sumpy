@@ -29,6 +29,7 @@ from sumpy.expansion import (
 from sumpy.tools import mi_increment_axis, matvec_toeplitz_upper_triangular
 from pytools import single_valued
 from typing import Tuple, Any
+import pymbolic
 
 import logging
 logger = logging.getLogger(__name__)
@@ -666,6 +667,29 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         logger.info("building translation operator: done")
         return result
 
+    def translate_from_loopy(self, src_expansion, src_coeff_expr_func,
+            m2l_translation_classes_dependent_data_func, icoeff_tgt):
+
+        from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansionBase
+
+        ncoeff_src = self.m2l_preprocess_multipole_nexprs(src_expansion)
+
+        if isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
+            icoeff_src = pymbolic.var("icoeff_src")
+            if self.use_preprocessing_for_m2l:
+                expr = src_coeff_expr_func(icoeff_tgt) \
+                        * m2l_translation_classes_dependent_data_func(icoeff_tgt)
+                domains = []
+            else:
+                toeplitz_first_row = src_coeff_expr_func(icoeff_src-icoeff_tgt)
+                vector = m2l_translation_classes_dependent_data_func(icoeff_src)
+                expr = toeplitz_first_row * vector
+                domains = [
+                    f"{{[icoeff_src]: {icoeff_tgt}<=icoeff_src<{ncoeff_src} }}"]
+            return expr, domains
+        else:
+            raise NotImplementedError("")
+
 
 class VolumeTaylorLocalExpansion(
         VolumeTaylorExpansion,
@@ -927,6 +951,27 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         raise RuntimeError("do not know how to translate %s to %s"
                            % (type(src_expansion).__name__,
                                type(self).__name__))
+
+    def translate_from_loopy(self, src_expansion, src_coeff_expr_func,
+            m2l_translation_classes_dependent_data_func, icoeff_tgt):
+
+        ncoeff_src = self.m2l_preprocess_multipole_nexprs(src_expansion)
+
+        if isinstance(src_expansion, self.mpole_expn_class):
+            icoeff_src = pymbolic.var("icoeff_src")
+            if self.use_preprocessing_for_m2l:
+                expr = src_coeff_expr_func(icoeff_tgt) \
+                        * m2l_translation_classes_dependent_data_func(icoeff_tgt)
+                domains = []
+            else:
+                expr = src_coeff_expr_func(icoeff_src) \
+                       * m2l_translation_classes_dependent_data_func(
+                               icoeff_tgt + icoeff_src)
+                domains = [
+                    f"{{[icoeff_src]: 0<=icoeff_src<{ncoeff_src} }}"]
+            return expr, domains
+        else:
+            raise NotImplementedError("")
 
 
 class H2DLocalExpansion(_FourierBesselLocalExpansion):
