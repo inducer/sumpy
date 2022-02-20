@@ -788,7 +788,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             mpole_exps_view_func = self.multipole_expansions_view
             local_exps_view_func = self.local_expansions_view
 
-        events = []
+        translate_evts = []
 
         for lev in range(self.tree.nlevels):
             start, stop = level_start_target_box_nrs[lev:lev+2]
@@ -826,7 +826,9 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 continue
             evt, _ = m2l(queue, **kwargs, wait_for=preprocess_evts)
 
-            events.append(evt)
+            translate_evts.append(evt)
+
+        postprocess_evts = []
 
         if self.supports_optimized_m2l:
             for lev in range(self.tree.nlevels):
@@ -853,9 +855,12 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                         target_locals_before_postprocessing_view),
                     src_rscale=level_to_rscale(self.tree, lev),
                     tgt_rscale=level_to_rscale(self.tree, lev),
-                    **self.kernel_extra_kwargs
+                    wait_for=translate_evts,
+                    **self.kernel_extra_kwargs,
                 )
-                events.append(evt)
+                postprocess_evts.append(evt)
+
+        events = preprocess_evts + translate_evts + postprocess_evts
 
         return (local_exps, SumpyTimingFuture(queue, events))
 
