@@ -471,7 +471,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         def order_to_size(order):
             mpole_expn = self.tree_indep.multipole_expansion(order)
             local_expn = self.tree_indep.local_expansion(order)
-            res = local_expn.m2l_translation_classes_dependent_ndata(mpole_expn)
+            res = local_expn.m2l_preprocess_multipole_nexprs(mpole_expn)
             return res
 
         return build_csr_level_starts(self.level_orders, order_to_size,
@@ -751,7 +751,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         queue = mpole_exps.queue
         local_exps = self.local_expansion_zeros(mpole_exps)
 
-        if self.use_preprocessing_for_m2l:
+        if self.supports_optimized_m2l:
             preprocessed_mpole_exps = \
                     self.m2l_preproc_mpole_expansion_zeros(mpole_exps)
             for lev in range(self.tree.nlevels):
@@ -786,6 +786,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         else:
             m2l_work_array = local_exps
             mpole_exps_view_func = self.multipole_expansions_view
+            local_exps_view_func = self.local_expansions_view
 
         events = []
 
@@ -827,10 +828,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
             events.append(evt)
 
-            cl.wait_for_events([evt])
-            print("m2l", lev, (evt.profile.end - evt.profile.start)*1e-9)
-
-        if self.use_preprocessing_for_m2l:
+        if self.supports_optimized_m2l:
             for lev in range(self.tree.nlevels):
                 order = self.level_orders[lev]
                 postprocess_local_kernel = \

@@ -84,8 +84,6 @@ class E2EBase(KernelCacheWrapper):
         self.tgt_expansion = tgt_expansion
         self.name = name or self.default_name
         self.device = device
-        self.use_preprocessing_for_m2l = getattr(self.tgt_expansion,
-            "use_preprocessing_for_m2l", False)
 
         if src_expansion.dim != tgt_expansion.dim:
             raise ValueError("source and target expansions must have "
@@ -323,11 +321,8 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                     [sym.Symbol("m2l_translation_classes_dependent_expr%d" % i)
                 for i in range(m2l_translation_classes_dependent_ndata)]
 
-        if self.use_preprocessing_for_m2l:
-            ncoeff_src = self.tgt_expansion.m2l_preprocess_multipole_nexprs(
+        ncoeff_src = self.tgt_expansion.m2l_preprocess_multipole_nexprs(
                 self.src_expansion)
-        else:
-            ncoeff_src = len(self.src_expansion)
 
         src_coeff_exprs = [sym.Symbol("src_coeff%d" % i)
                 for i in range(ncoeff_src)]
@@ -359,17 +354,10 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                 self.tgt_expansion.m2l_translation_classes_dependent_ndata(
                         self.src_expansion)
 
-        if self.use_preprocessing_for_m2l:
-            # number of expressions given as input to M2L after preprocessing
-            ncoeff_src = self.tgt_expansion.m2l_preprocess_multipole_nexprs(
+        ncoeff_src = self.tgt_expansion.m2l_preprocess_multipole_nexprs(
                     self.src_expansion)
-            ncoeff_tgt = \
-                    self.tgt_expansion.m2l_postprocess_local_nexprs(
-                        self.src_expansion)
-        else:
-            ncoeff_src = len(self.src_expansion)
-            ncoeff_tgt = len(self.tgt_expansion)
-
+        ncoeff_tgt = self.tgt_expansion.m2l_postprocess_local_nexprs(
+                    self.src_expansion)
 
         # To clarify terminology:
         #
@@ -418,7 +406,8 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
 
                     """] + [f"""
                     tgt_expansions[tgt_ibox - tgt_base_ibox, {coeffidx}] = \
-                        simul_reduce(sum, isrc_box, coeff{coeffidx}) {{id_prefix=write_expn}}
+                        simul_reduce(sum, isrc_box, coeff{coeffidx}) \
+                        {{id_prefix=write_expn}}
                     """ for coeffidx in range(ncoeff_tgt)] + ["""
                 end
                 """],
@@ -725,7 +714,7 @@ class M2LPreprocessMultipole(E2EBase):
 # }}}
 
 
- # {{{ M2LPostprocessLocal
+# {{{ M2LPostprocessLocal
 
 class M2LPostprocessLocal(E2EBase):
     """Postprocesses locals expansions for accelerated M2L"""
@@ -749,7 +738,7 @@ class M2LPostprocessLocal(E2EBase):
         tgt_coeff_exprs = self.tgt_expansion.m2l_postprocess_local_exprs(
             self.tgt_expansion, tgt_coeff_exprs_before_postprocessing,
             sac=sac, src_rscale=src_rscale, tgt_rscale=tgt_rscale)
-        
+
         if result_dtype in (np.float32, np.float64):
             real_func = sym.Function("real")
             tgt_coeff_exprs = [real_func(expr) for expr in
@@ -784,8 +773,9 @@ class M2LPostprocessLocal(E2EBase):
                 """] + ["""
                     <> tgt_coeff_before_postprocessing{idx} = \
                             tgt_expansions_before_postprocessing[itgt_box, {idx}]
-                """.format(idx=i) for i in range(ntgt_coeffs_before_postprocessing)] + [
-                ] + self.get_loopy_insns(result_dtype) + ["""
+                """.format(idx=i) for i in range(
+                    ntgt_coeffs_before_postprocessing)]
+                + self.get_loopy_insns(result_dtype) + ["""
                     tgt_expansions[itgt_box, {idx}] = \
                         tgt_coeff{idx}
                     """.format(idx=i) for i in range(ntgt_coeffs)] + ["""
