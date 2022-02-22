@@ -23,7 +23,6 @@ THE SOFTWARE.
 import numpy as np
 import loopy as lp
 import sumpy.symbolic as sym
-import pymbolic
 
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 from sumpy.tools import KernelCacheWrapper, to_complex_dtype
@@ -427,10 +426,6 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
 
         knl = self.get_cached_optimized_kernel()
-        ncoeff_src = self.tgt_expansion.m2l_preprocess_multipole_nexprs(
-                    self.src_expansion)
-        ncoeff_tgt = self.tgt_expansion.m2l_postprocess_local_nexprs(
-                    self.src_expansion)
 
         return knl(queue,
                 centers=centers,

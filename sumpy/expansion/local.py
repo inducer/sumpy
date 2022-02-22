@@ -967,8 +967,6 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                                type(self).__name__))
 
     def loopy_translate_from(self, src_expansion):
-        from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansionBase
-
         if isinstance(src_expansion, self.mpole_expn_class):
             ncoeff_src = self.m2l_preprocess_multipole_nexprs(src_expansion)
             ncoeff_tgt = self.m2l_postprocess_local_nexprs(src_expansion)
