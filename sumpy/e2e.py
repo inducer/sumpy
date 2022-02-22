@@ -301,23 +301,6 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
 
     default_name = "m2l_using_translation_classes_dependent_data"
 
-    def get_translation_loopy_insns(self):
-        translation_class_array \
-            = pymbolic.var("m2l_translation_classes_dependent_data")
-        src_expansions_array = pymbolic.var("src_expansions")
-        translation_class_idx = pymbolic.var("translation_class_rel")
-        src_expansions_idx = pymbolic.var("src_ibox") - pymbolic.var("src_base_ibox")
-        icoeff_tgt = pymbolic.var("icoeff")
-
-        def translation_class_func(iexpr):
-            return translation_class_array[translation_class_idx, iexpr]
-
-        def src_expansions_func(iexpr):
-            return src_expansions_array[src_expansions_idx, iexpr]
-
-        return self.tgt_expansion.translate_from_loopy(self.src_expansion,
-                src_expansions_func, translation_class_func, icoeff_tgt)
-
     def get_kernel(self):
         m2l_translation_classes_dependent_ndata = \
                 self.tgt_expansion.m2l_translation_classes_dependent_ndata(
@@ -335,23 +318,25 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
         #
         # (same for itgt_box, tgt_ibox)
 
-        expr, domains = self.get_translation_loopy_insns()
+        translation_knl = self.tgt_expansion.loopy_translate_from(
+            self.src_expansion)
 
         from sumpy.tools import gather_loopy_arguments
         loopy_knl = lp.make_kernel(
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
                     "{[isrc_box]: isrc_start<=isrc_box<isrc_stop}",
-                    "{[idim]: 0<=idim<dim}",
-                    "{[icoeff]: 0<=icoeff<ncoeff_tgt}",
-                    ] + domains,
+                    "{[icoeff_tgt]: 0<=icoeff_tgt<ncoeff_tgt}",
+                    "{[icoeff_src]: 0<=icoeff_src<ncoeff_src}",
+                    "{[idep]: 0<=idep<m2l_translation_classes_dependent_ndata}",
+                ],
                 ["""
                 for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
                     <> isrc_start = src_box_starts[itgt_box]
                     <> isrc_stop = src_box_starts[itgt_box+1]
-                    for icoeff
-                        <> coeffs[icoeff] = 0 {id=init_coeffs, dup=icoeff}
+                    for icoeff_tgt
+                        <> coeffs[icoeff_tgt] = 0 {id=init_coeffs, dup=icoeff_tgt}
                     end
                     for isrc_box
                         <> src_ibox = src_box_lists[isrc_box] \
@@ -360,11 +345,16 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                                 m2l_translation_classes_lists[isrc_box]
                         <> translation_class_rel = translation_class - \
                                                     translation_classes_level_start
-                        coeffs[icoeff] = coeffs[icoeff] + \
-                """ + str(expr) + """ {dep=init_coeffs,id=update_coeffs}
+                        [icoeff_tgt]: coeffs[icoeff_tgt] = e2e(
+                            [icoeff_tgt]: coeffs[icoeff_tgt],
+                            [icoeff_src]: src_expansions[src_ibox - src_base_ibox,
+                                icoeff_src],
+                            [idep]: m2l_translation_classes_dependent_data[
+                                translation_class_rel, idep]
+                            )  {dep=init_coeffs,id=update_coeffs}
                     end
-                    tgt_expansions[tgt_ibox - tgt_base_ibox, icoeff] = \
-                            coeffs[icoeff]  {dep=update_coeffs, dup=icoeff}
+                    tgt_expansions[tgt_ibox - tgt_base_ibox, icoeff_tgt] = \
+                            coeffs[icoeff_tgt] {dep=update_coeffs, dup=icoeff_tgt}
                 end
                 """],
                 [
@@ -401,16 +391,16 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                 fixed_parameters=dict(dim=self.dim,
                         m2l_translation_classes_dependent_ndata=(
                             m2l_translation_classes_dependent_ndata),
-                        ncoeff_tgt=ncoeff_tgt),
+                        ncoeff_tgt=ncoeff_tgt,
+                        ncoeff_src=ncoeff_src),
                 lang_version=MOST_RECENT_LANGUAGE_VERSION
                 )
 
+        loopy_knl = lp.merge([translation_knl, loopy_knl])
+        loopy_knl = lp.inline_callable_kernel(loopy_knl, "e2e")
+
         for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
-
-        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-        loopy_knl = lp.set_options(loopy_knl,
-                enforce_variable_access_ordered="no_check")
 
         return loopy_knl
 
@@ -437,6 +427,10 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
 
         knl = self.get_cached_optimized_kernel()
+        ncoeff_src = self.tgt_expansion.m2l_preprocess_multipole_nexprs(
+                    self.src_expansion)
+        ncoeff_tgt = self.tgt_expansion.m2l_postprocess_local_nexprs(
+                    self.src_expansion)
 
         return knl(queue,
                 centers=centers,
