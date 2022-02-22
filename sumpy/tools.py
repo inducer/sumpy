@@ -870,16 +870,18 @@ def fft(seq, inverse=False, sac=None):
 
     from pymbolic.algorithm import fft as _fft, ifft as _ifft
 
-    def wrap(expr):
+    def wrap(level, expr):
         if isinstance(expr, np.ndarray):
-            res = [wrap(a) for a in expr]
+            res = [wrap(level, a) for a in expr]
             return np.array(res, dtype=object).reshape(expr.shape)
         return add_to_sac(sac, expr)
 
     if inverse:
-        return _ifft(list(seq), wrap_intermediate=wrap).tolist()
+        return _ifft(np.array(seq), wrap_intermediate_with_level=wrap,
+                complex_dtype=np.complex128).tolist()
     else:
-        return _fft(list(seq), wrap_intermediate=wrap).tolist()
+        return _fft(np.array(seq), wrap_intermediate_with_level=wrap,
+                complex_dtype=np.complex128).tolist()
 
 
 def fft_toeplitz_upper_triangular(first_row, x, sac=None):
