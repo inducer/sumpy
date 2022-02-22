@@ -684,7 +684,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
             if self.use_preprocessing_for_m2l:
                 expr = src_coeffs[icoeff_tgt] \
-                        * m2l_translation_classes_dependent_data(icoeff_tgt)
+                        * m2l_translation_classes_dependent_data[icoeff_tgt]
             else:
                 toeplitz_first_row = src_coeffs[icoeff_src-icoeff_tgt]
                 vector = m2l_translation_classes_dependent_data[icoeff_src]
