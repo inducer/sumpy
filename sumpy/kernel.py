@@ -645,9 +645,9 @@ class ElasticityKernel(ExpressionKernel):
 
     def __new__(cls, dim, icomp, jcomp, viscosity_mu="mu", poisson_ratio="nu"):
         if poisson_ratio == 0.5:
-            instance = super(ElasticityKernel, cls).__new__(StokesletKernel)
+            instance = super().__new__(StokesletKernel)
         else:
-            instance = super(ElasticityKernel, cls).__new__(cls)
+            instance = super().__new__(cls)
         return instance
 
     def __init__(self, dim, icomp, jcomp, viscosity_mu="mu", poisson_ratio="nu"):

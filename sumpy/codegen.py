@@ -692,7 +692,7 @@ def to_loopy_insns(assignments, vector_names=frozenset(), pymbolic_expr_maps=(),
 
     assignments = [(name, convert_expr(name, expr)) for name, expr in assignments]
     from pytools import UniqueNameGenerator
-    name_gen = UniqueNameGenerator(set([name for name, expr in assignments]))
+    name_gen = UniqueNameGenerator({name for name, expr in assignments})
 
     result = []
     bessel_sub = BesselSubstitutor(

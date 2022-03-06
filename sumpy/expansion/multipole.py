@@ -299,8 +299,8 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
         # {{{ simpler, functionally equivalent code
         if not _fast_version:
-            src_mi_to_index = dict((mi, i) for i, mi in enumerate(
-                src_expansion.get_coefficient_identifiers()))
+            src_mi_to_index = {mi: i for i, mi in enumerate(
+                src_expansion.get_coefficient_identifiers())}
             result = [0] * len(self.get_full_coefficient_identifiers())
 
             for i, mi in enumerate(src_expansion.get_coefficient_identifiers()):

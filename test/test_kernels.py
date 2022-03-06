@@ -854,7 +854,7 @@ def test_m2l_toeplitz():
     actual_output = local_expn.translate_from(mpole_expn, src_coeff_exprs,
                                               src_rscale, dvec, tgt_rscale, sac=None)
 
-    replace_dict = dict((d, np.random.rand(1)[0]) for d in dvec)
+    replace_dict = {d: np.random.rand(1)[0] for d in dvec}
     for sym_a, sym_b in zip(expected_output, actual_output):
         num_a = sym_a.xreplace(replace_dict)
         num_b = sym_b.xreplace(replace_dict)

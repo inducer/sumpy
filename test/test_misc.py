@@ -332,7 +332,7 @@ def test_diff_op_stokes():
     actual_output = pde.to_sym()
     x, y, z = syms = symbols("x0, x1, x2")
     funcs = symbols("f0, f1, f2, f3", cls=Function)
-    u, v, w, p = [f(*syms) for f in funcs]
+    u, v, w, p = (f(*syms) for f in funcs)
 
     eq1 = u.diff(x, x) + u.diff(y, y) + u.diff(z, z) - p.diff(x)
     eq2 = v.diff(x, x) + v.diff(y, y) + v.diff(z, z) - p.diff(y)
