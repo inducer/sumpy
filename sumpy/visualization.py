@@ -44,8 +44,8 @@ def separate_by_real_and_imag(data, real_only):
         if real_only or entry_dtype.kind != "c":
             yield (name, obj_array_real_copy(field))
         else:
-            yield (name + "_r", obj_array_real_copy(field))
-            yield (name + "_i", obj_array_imag_copy(field))
+            yield (f"{name}_r", obj_array_real_copy(field))
+            yield (f"{name}_i", obj_array_imag_copy(field))
 
 
 def make_field_plotter_from_bbox(bbox, h, extend_factor=0):

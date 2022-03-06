@@ -33,9 +33,7 @@ def find_git_revision(tree_root):
               cwd=tree_root)
     (git_rev, _) = p.communicate()
 
-    import sys
     git_rev = git_rev.decode()
-
     git_rev = git_rev.rstrip()
 
     retcode = p.returncode
@@ -54,7 +52,7 @@ def write_git_revision(package_name):
     git_rev = find_git_revision(dn)
 
     with open(join(dn, package_name, "_git_rev.py"), "w") as outf:
-        outf.write('GIT_REVISION = "%s"\n' % git_rev)
+        outf.write(f'GIT_REVISION = "{git_rev}"\n')
 
 
 write_git_revision("sumpy")

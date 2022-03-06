@@ -512,8 +512,7 @@ def multipole_expand(psource, center, order=None, rscale=1, **expn_kwargs):
                 MultipoleExpansion, expn_kwargs)
 
     else:
-        raise TypeError("do not know how to expand '%s'"
-                % type(psource).__name__)
+        raise TypeError(f"do not know how to expand '{type(psource).__name__}'")
 
 
 def local_expand(psource, center, order=None, rscale=1, **expn_kwargs):
@@ -541,8 +540,7 @@ def local_expand(psource, center, order=None, rscale=1, **expn_kwargs):
                 LocalExpansion, expn_kwargs)
 
     else:
-        raise TypeError("do not know how to expand '%s'"
-                % type(psource).__name__)
+        raise TypeError(f"do not know how to expand '{type(psource).__name__}'")
 
 
 def logplot(fp, psource, **kwargs):
@@ -691,7 +689,7 @@ class SchematicVisitor:
             elif expn_style == "circle":
                 draw_circle(psource.center, psource.radius, fill=None)
             else:
-                raise ValueError("unknown expn_style: %s" % self.expn_style)
+                raise ValueError(f"unknown expn_style: {self.expn_style}")
 
         if psource.derived_from is None:
             return

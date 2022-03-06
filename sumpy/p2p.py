@@ -275,9 +275,10 @@ class P2PMatrixGenerator(P2PBase):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
         arguments = (
             self.get_default_src_tgt_arguments()
-            + [lp.GlobalArg("result_%d" % i, dtype,
-                shape="ntargets,nsources")
-             for i, dtype in enumerate(self.value_dtypes)])
+            + [
+                lp.GlobalArg(f"result_{i}", dtype, shape="ntargets,nsources")
+                for i, dtype in enumerate(self.value_dtypes)
+            ])
 
         loopy_knl = lp.make_kernel(["""
             {[itgt, isrc, idim]: \
@@ -344,8 +345,10 @@ class P2PMatrixSubsetGenerator(P2PBase):
                 lp.GlobalArg("tgtindices", None, shape="nresult"),
                 lp.ValueArg("nresult", None)
             ]
-            + [lp.GlobalArg("result_%d" % i, dtype, shape="nresult")
-             for i, dtype in enumerate(self.value_dtypes)])
+            + [
+                lp.GlobalArg(f"result_{i}", dtype, shape="nresult")
+                for i, dtype in enumerate(self.value_dtypes)
+            ])
 
         loopy_knl = lp.make_kernel(
             "{[imat, idim]: 0 <= imat < nresult and 0 <= idim < dim}",

@@ -78,7 +78,7 @@ class CalculusPatch:
             weights_1d = weights_1d * (h/2)
 
         else:
-            raise ValueError("invalid node set: %s" % nodes)
+            raise ValueError(f"invalid node set: {nodes}")
 
         self.h = h
         self.npoints = npoints

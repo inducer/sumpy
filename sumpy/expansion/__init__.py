@@ -179,8 +179,8 @@ class ExpansionBase:
             new_kwargs[name] = kwargs.pop(name, getattr(self, name))
 
         if kwargs:
-            raise TypeError("unexpected keyword arguments '%s'"
-                % ", ".join(kwargs))
+            raise TypeError(
+                "unexpected keyword arguments '{}'".format(", ".join(kwargs)))
 
         return type(self)(**new_kwargs)
 
@@ -236,8 +236,8 @@ class ExpansionTermsWrangler:
             new_kwargs[name] = kwargs.pop(name, getattr(self, name))
 
         if kwargs:
-            raise TypeError("unexpected keyword arguments '%s'"
-                % ", ".join(kwargs))
+            raise TypeError(
+                "unexpected keyword arguments '{}'".format(", ".join(kwargs)))
 
         return type(self)(**new_kwargs)
 

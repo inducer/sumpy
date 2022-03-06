@@ -768,7 +768,7 @@ def test_m2m_and_l2l_exprs_simpler(base_knl, local_expn_class, mpole_expn_class,
 
     from sumpy.symbolic import make_sym_vector, Symbol, USE_SYMENGINE
     dvec = make_sym_vector("d", knl.dim)
-    src_coeff_exprs = [Symbol("src_coeff%d" % i) for i in range(len(mpole_expn))]
+    src_coeff_exprs = [Symbol(f"src_coeff{i}") for i in range(len(mpole_expn))]
 
     src_rscale = 3
     tgt_rscale = 2

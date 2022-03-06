@@ -97,8 +97,9 @@ class E2EBase(KernelCacheWrapper):
         from sumpy.symbolic import make_sym_vector
         dvec = make_sym_vector("d", self.dim)
 
-        src_coeff_exprs = [sym.Symbol("src_coeff%d" % i)
-                for i in range(len(self.src_expansion))]
+        src_coeff_exprs = [
+            sym.Symbol(f"src_coeff{i}")
+            for i in range(len(self.src_expansion))]
         src_rscale = sym.Symbol("src_rscale")
 
         tgt_rscale = sym.Symbol("tgt_rscale")
@@ -106,7 +107,7 @@ class E2EBase(KernelCacheWrapper):
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
         tgt_coeff_names = [
-                sac.assign_unique("coeff%d" % i, coeff_i)
+                sac.assign_unique(f"coeff{i}", coeff_i)
                 for i, coeff_i in enumerate(
                     self.tgt_expansion.translate_from(
                         self.src_expansion, src_coeff_exprs, src_rscale,
@@ -158,18 +159,15 @@ class E2EFromCSR(E2EBase):
         dvec = make_sym_vector("d", self.dim)
 
         src_rscale = sym.Symbol("src_rscale")
-
         tgt_rscale = sym.Symbol("tgt_rscale")
 
         ncoeff_src = len(self.src_expansion)
-
-        src_coeff_exprs = [sym.Symbol("src_coeff%d" % i)
-                for i in range(ncoeff_src)]
+        src_coeff_exprs = [sym.Symbol(f"src_coeff{i}") for i in range(ncoeff_src)]
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
         tgt_coeff_names = [
-                sac.assign_unique("coeff%d" % i, coeff_i)
+                sac.assign_unique(f"coeff{i}", coeff_i)
                 for i, coeff_i in enumerate(
                     self.tgt_expansion.translate_from(
                         self.src_expansion, src_coeff_exprs, src_rscale,
@@ -308,22 +306,21 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
         src_rscale = sym.Symbol("src_rscale")
         tgt_rscale = sym.Symbol("tgt_rscale")
 
-        m2l_translation_classes_dependent_ndata = \
+        m2l_translation_classes_dependent_ndata = (
                 self.tgt_expansion.m2l_translation_classes_dependent_ndata(
-                        self.src_expansion)
+                        self.src_expansion))
         m2l_translation_classes_dependent_data = \
-                    [sym.Symbol("data%d" % i)
+                    [sym.Symbol(f"data{i}")
                 for i in range(m2l_translation_classes_dependent_ndata)]
 
         ncoeff_src = len(self.src_expansion)
 
-        src_coeff_exprs = [sym.Symbol("src_coeffs%d" % i)
-                for i in range(ncoeff_src)]
+        src_coeff_exprs = [sym.Symbol(f"src_coeffs{i}") for i in range(ncoeff_src)]
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
         tgt_coeff_names = [
-                sac.assign_unique("tgt_coeff%d" % i, coeff_i)
+                sac.assign_unique(f"tgt_coeff{i}", coeff_i)
                 for i, coeff_i in enumerate(
                     self.tgt_expansion.translate_from(
                         self.src_expansion, src_coeff_exprs, src_rscale,
@@ -538,8 +535,8 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
         tgt_coeff_names = [
-                sac.assign_unique("m2l_translation_classes_dependent_expr%d" % i,
-                    coeff_i)
+                sac.assign_unique(
+                    f"m2l_translation_classes_dependent_expr{i}", coeff_i)
                 for i, coeff_i in enumerate(
                     self.tgt_expansion.m2l_translation_classes_dependent_data(
                         self.src_expansion, src_rscale,
@@ -651,8 +648,9 @@ class M2LPreprocessMultipole(E2EBase):
     default_name = "m2l_preprocess_multipole"
 
     def get_loopy_insns(self, result_dtype):
-        src_coeff_exprs = [sym.Symbol("src_coeff%d" % i)
-                for i in range(len(self.src_expansion))]
+        src_coeff_exprs = [
+            sym.Symbol(f"src_coeff{i}")
+            for i in range(len(self.src_expansion))]
 
         src_rscale = sym.Symbol("src_rscale")
 
@@ -660,7 +658,7 @@ class M2LPreprocessMultipole(E2EBase):
         sac = SymbolicAssignmentCollection()
 
         preprocessed_src_coeff_names = [
-                sac.assign_unique("preprocessed_src_coeff%d" % i, coeff_i)
+                sac.assign_unique(f"preprocessed_src_coeff{i}", coeff_i)
                 for i, coeff_i in enumerate(
                     self.tgt_expansion.m2l_preprocess_multipole_exprs(
                         self.src_expansion, src_coeff_exprs,
@@ -753,7 +751,7 @@ class M2LPostprocessLocal(E2EBase):
             self.tgt_expansion.m2l_postprocess_local_nexprs(self.tgt_expansion)
 
         tgt_coeff_exprs_before_postprocessing = [
-            sym.Symbol("tgt_coeff_before_postprocessing%d" % i)
+            sym.Symbol(f"tgt_coeff_before_postprocessing{i}")
             for i in range(ncoeffs_before_postprocessing)]
 
         src_rscale = sym.Symbol("src_rscale")
@@ -772,7 +770,7 @@ class M2LPostprocessLocal(E2EBase):
                     tgt_coeff_exprs]
 
         tgt_coeff_names = [
-            sac.assign_unique("tgt_coeff%d" % i, coeff_i)
+            sac.assign_unique(f"tgt_coeff{i}", coeff_i)
             for i, coeff_i in enumerate(tgt_coeff_exprs)]
 
         sac.run_global_cse()
@@ -860,9 +858,9 @@ class E2EFromChildren(E2EBase):
 
     def get_kernel(self):
         if self.src_expansion is not self.tgt_expansion:
-            raise RuntimeError("%s requires that the source "
-                   "and target expansion are the same object"
-                   % type(self).__name__)
+            raise RuntimeError(
+                f"{type(self).__name__} requires that the source "
+                "and target expansion are the same object")
 
         ncoeffs_src = len(self.src_expansion)
         ncoeffs_tgt = len(self.tgt_expansion)
@@ -982,9 +980,9 @@ class E2EFromParent(E2EBase):
 
     def get_kernel(self):
         if self.src_expansion is not self.tgt_expansion:
-            raise RuntimeError("%s requires that the source "
-                    "and target expansion are the same object"
-                    % self.default_name)
+            raise RuntimeError(
+                f"{self.default_name} requires that the source "
+                "and target expansion are the same object")
 
         ncoeffs = len(self.src_expansion)
 

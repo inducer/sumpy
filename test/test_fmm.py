@@ -214,7 +214,7 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
         ref_pot = ref_pot.get()
 
         rel_err = la.norm(pot - ref_pot, np.inf) / la.norm(ref_pot, np.inf)
-        logger.info("order %d -> relative l2 error: %g" % (order, rel_err))
+        logger.info("order %d -> relative l2 error: %g", order, rel_err)
 
         pconv_verifier.add_data_point(order, rel_err)
 
@@ -437,7 +437,7 @@ def test_sumpy_fmm_exclude_self(ctx_factory):
     ref_pot = ref_pot.get()
 
     rel_err = la.norm(pot - ref_pot) / la.norm(ref_pot)
-    logger.info("order %d -> relative l2 error: %g" % (order, rel_err))
+    logger.info("order %d -> relative l2 error: %g", order, rel_err)
 
     assert np.isclose(rel_err, 0, atol=1e-7)
 
@@ -505,7 +505,7 @@ def test_sumpy_axis_source_derivative(ctx_factory):
         pots.append(pot.get())
 
     rel_err = la.norm(pots[0] + pots[1]) / la.norm(pots[0])
-    logger.info("order %d -> relative l2 error: %g" % (order, rel_err))
+    logger.info("order %d -> relative l2 error: %g", order, rel_err)
 
     assert np.isclose(rel_err, 0, atol=1e-5)
 
@@ -579,7 +579,7 @@ def test_sumpy_target_point_multiplier(ctx_factory, deriv_axes):
         ref_pot = pot1 * sources[0].get()
 
     rel_err = la.norm(pot0 - ref_pot) / la.norm(ref_pot)
-    logger.info("order %d -> relative l2 error: %g" % (order, rel_err))
+    logger.info("order %d -> relative l2 error: %g", order, rel_err)
 
     assert np.isclose(rel_err, 0, atol=1e-5)
 
