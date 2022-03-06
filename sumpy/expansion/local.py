@@ -208,7 +208,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
             deriv_taker = ExprDerivativeTaker(line_kernel, (tau,), sac=sac, rscale=1)
 
             return [kernel.postprocess_at_source(
-                        deriv_taker.diff(i), avec).subs("tau", 0)
+                        deriv_taker.diff(i), avec).subs(tau, 0)
                     for i in self.get_coefficient_identifiers()]
         else:
             # Workaround for sympy. The automatic distribution after
@@ -219,8 +219,8 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
             # See also https://gitlab.tiker.net/inducer/pytential/merge_requests/12
 
             return [kernel.postprocess_at_source(
-                            line_kernel.diff("tau", i), avec)
-                    .subs("tau", 0)
+                            line_kernel.diff(tau, i), avec)
+                    .subs(tau, 0)
                     for i in self.get_coefficient_identifiers()]
 
     def evaluate(self, tgt_kernel, coeffs, bvec, rscale, sac=None):
