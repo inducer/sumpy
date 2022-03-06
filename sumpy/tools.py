@@ -629,7 +629,7 @@ class KernelComputation:
         import loopy as lp
         return [
                 lp.Assignment(id=None,
-                    assignee="knl_%d_scaling" % i,
+                    assignee=f"knl_{i}_scaling",
                     expression=sympy_conv(kernel.get_global_scaling_const()),
                     temp_var_type=lp.Optional(dtype),
                     tags=frozenset([ScalingAssignmentTag()]))
@@ -735,7 +735,7 @@ class KernelCacheWrapper:
             except KeyError:
                 pass
 
-        logger.info("%s: kernel cache miss" % self.name)
+        logger.info("%s: kernel cache miss", self.name)
         if CACHING_ENABLED:
             logger.info("{}: kernel cache miss [key={}]".format(
                 self.name, cache_key))

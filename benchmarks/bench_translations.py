@@ -57,8 +57,9 @@ class TranslationBenchmarkSuite:
         m_expn = self.mpole_expn_class(knl, order=param.order)
         l_expn = self.local_expn_class(knl, order=param.order)
 
-        src_coeff_exprs = [sym.Symbol("src_coeff%d" % i)
-                for i in range(len(m_expn))]
+        src_coeff_exprs = [
+            sym.Symbol(f"src_coeff{i}")
+            for i in range(len(m_expn))]
         dvec = sym.make_sym_vector("d", knl.dim)
         src_rscale = sym.Symbol("src_rscale")
         tgt_rscale = sym.Symbol("tgt_rscale")
@@ -72,7 +73,7 @@ class TranslationBenchmarkSuite:
             result = l_expn.translate_from(m_expn, src_coeff_exprs, src_rscale,
                                        dvec, tgt_rscale)
         for i, expr in enumerate(result):
-            sac.assign_unique("coeff%d" % i, expr)
+            sac.assign_unique(f"coeff{i}", expr)
         sac.run_global_cse()
         insns = to_loopy_insns(sac.assignments.items())
         counter = pymbolic.mapper.flop_counter.CSEAwareFlopCounter()

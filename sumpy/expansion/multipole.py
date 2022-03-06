@@ -109,20 +109,20 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, _fast_version=True):
         if not isinstance(src_expansion, type(self)):
-            raise RuntimeError("do not know how to translate %s to "
-                    "Taylor multipole expansion"
-                               % type(src_expansion).__name__)
+            raise RuntimeError(
+                f"do not know how to translate {type(src_expansion).__name__} to "
+                "a Taylor multipole expansion")
 
         if not self.use_rscale:
             src_rscale = 1
             tgt_rscale = 1
 
-        logger.info("building translation operator for %s: %s(%d) -> %s(%d): start"
-                % (src_expansion.kernel,
+        logger.info("building translation operator for %s: %s(%d) -> %s(%d): start",
+                    src_expansion.kernel,
                     type(src_expansion).__name__,
                     src_expansion.order,
                     type(self).__name__,
-                    self.order))
+                    self.order)
 
         from sumpy.tools import mi_factorial
 
@@ -447,9 +447,9 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None):
         if not isinstance(src_expansion, type(self)):
-            raise RuntimeError("do not know how to translate %s to %s"
-                               % (type(src_expansion).__name__,
-                                   type(self).__name__))
+            raise RuntimeError(
+                "do not know how to translate "
+                f"{type(src_expansion).__name__} to {type(self).__name__}")
 
         if not self.use_rscale:
             src_rscale = 1

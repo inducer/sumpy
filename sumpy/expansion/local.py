@@ -997,9 +997,9 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
             return translated_coeffs
 
-        raise RuntimeError("do not know how to translate %s to %s"
-                           % (type(src_expansion).__name__,
-                               type(self).__name__))
+        raise RuntimeError(
+            "do not know how to translate "
+            f"{type(src_expansion).__name__} to {type(self).__name__}")
 
     def loopy_translate_from(self, src_expansion):
         if isinstance(src_expansion, self.mpole_expn_class):

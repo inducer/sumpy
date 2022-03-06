@@ -57,12 +57,12 @@ class FMMLibExpansionOrderFinder:
             if tree.dimensions == 2:
                 nterms, ier = pyfmmlib.l2dterms(self.tol)
                 if ier:
-                    raise RuntimeError("l2dterms returned error code '%d'" % ier)
+                    raise RuntimeError(f"l2dterms returned error code '{ier}'")
 
             elif tree.dimensions == 3:
                 nterms, ier = pyfmmlib.l3dterms(self.tol)
                 if ier:
-                    raise RuntimeError("l3dterms returned error code '%d'" % ier)
+                    raise RuntimeError(f"l3dterms returned error code '{ier}'")
 
         elif isinstance(kernel, HelmholtzKernel):
             helmholtz_k = dict(kernel_args)[kernel.helmholtz_k_name]
@@ -71,12 +71,12 @@ class FMMLibExpansionOrderFinder:
             if tree.dimensions == 2:
                 nterms, ier = pyfmmlib.h2dterms(size, helmholtz_k, self.tol)
                 if ier:
-                    raise RuntimeError("h2dterms returned error code '%d'" % ier)
+                    raise RuntimeError(f"h2dterms returned error code '{ier}'")
 
             elif tree.dimensions == 3:
                 nterms, ier = pyfmmlib.h3dterms(size, helmholtz_k, self.tol)
                 if ier:
-                    raise RuntimeError("h3dterms returned error code '%d'" % ier)
+                    raise RuntimeError(f"h3dterms returned error code '{ier}'")
 
         return nterms + self.extra_order
 

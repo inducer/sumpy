@@ -57,7 +57,7 @@ def stringify_expn_index(i):
     else:
         assert isinstance(i, int)
         if i < 0:
-            return "m%d" % (-i)
+            return f"m{-i}"
         else:
             return str(i)
 
@@ -110,12 +110,13 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
 
         assigned_coeffs = [
             sym.Symbol(
-                sac.assign_unique("expn%dcoeff%s" % (
-                    expansion_nr, stringify_expn_index(i)),
-                        coefficients[self.expansion.get_storage_index(i)]))
+                sac.assign_unique(
+                    f"expn{expansion_nr}coeff{stringify_expn_index(i)}",
+                    coefficients[self.expansion.get_storage_index(i)])
+                )
             for i in self.expansion.get_coefficient_identifiers()]
 
-        return sac.assign_unique("expn%d_result" % expansion_nr,
+        return sac.assign_unique(f"expn{expansion_nr}_result",
             self.expansion.evaluate(tgt_knl, assigned_coeffs, bvec, rscale))
 
     def get_loopy_insns_and_result_names(self):
@@ -154,13 +155,14 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
         return loopy_insns, result_names
 
     def get_strength_or_not(self, isrc, kernel_idx):
-        return var("strength_%d_isrc" % self.strength_usage[kernel_idx])
+        return var(f"strength_{self.strength_usage[kernel_idx]}_isrc")
 
     def get_kernel_exprs(self, result_names):
         exprs = [var(name) for i, name in enumerate(result_names)]
 
         return [lp.Assignment(id=None,
-                    assignee="pair_result_%d" % i, expression=expr,
+                    assignee=f"pair_result_{i}",
+                    expression=expr,
                     temp_var_type=lp.Optional(None))
                 for i, expr in enumerate(exprs)]
 
@@ -208,7 +210,7 @@ class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
                     ["isrc_outer", f"{itgt_name}_inner"])
         else:
             from warnings import warn
-            warn("don't know how to tune layer potential computation for '%s'" % dev)
+            warn(f"don't know how to tune layer potential computation for '{dev}'")
             loopy_knl = lp.split_iname(loopy_knl, itgt_name, 128, outer_tag="g.0")
         loopy_knl = self._allow_redundant_execution_of_knl_scaling(loopy_knl)
 
@@ -233,12 +235,14 @@ class LayerPotential(LayerPotentialBase):
         kernel_exprs = self.get_kernel_exprs(result_names)
         arguments = (
             self.get_default_src_tgt_arguments()
-            + [lp.GlobalArg("strength_%d" % i,
-                None, shape="nsources", order="C")
-            for i in range(self.strength_count)]
-            + [lp.GlobalArg("result_%d" % i,
-                None, shape="ntargets", order="C")
-            for i in range(len(self.target_kernels))])
+            + [
+                lp.GlobalArg(f"strength_{i}", None, shape="nsources", order="C")
+                for i in range(self.strength_count)
+            ]
+            + [
+                lp.GlobalArg(f"result_{i}", None, shape="ntargets", order="C")
+                for i in range(len(self.target_kernels))
+            ])
 
         loopy_knl = lp.make_kernel(["""
             {[itgt, isrc, idim]: \
@@ -288,7 +292,7 @@ class LayerPotential(LayerPotentialBase):
                 centers_is_obj_array=is_obj_array_like(centers))
 
         for i, dens in enumerate(strengths):
-            kwargs["strength_%d" % i] = dens
+            kwargs[f"strength_{i}"] = dens
 
         return knl(queue, sources=sources, targets=targets, center=centers,
                 expansion_radii=expansion_radii, **kwargs)
@@ -312,9 +316,11 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
         kernel_exprs = self.get_kernel_exprs(result_names)
         arguments = (
             self.get_default_src_tgt_arguments()
-            + [lp.GlobalArg("result_%d" % i,
-                dtype, shape="ntargets, nsources", order="C")
-             for i, dtype in enumerate(self.value_dtypes)])
+            + [
+                lp.GlobalArg(f"result_{i}",
+                             dtype, shape="ntargets, nsources", order="C")
+                for i, dtype in enumerate(self.value_dtypes)
+            ])
 
         loopy_knl = lp.make_kernel(["""
             {[itgt, isrc, idim]: \
@@ -384,8 +390,10 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
                 lp.GlobalArg("tgtindices", None, shape="nresult"),
                 lp.ValueArg("nresult", None)
             ]
-            + [lp.GlobalArg("result_%d" % i, dtype, shape="nresult")
-             for i, dtype in enumerate(self.value_dtypes)])
+            + [
+                lp.GlobalArg(f"result_{i}", dtype, shape="nresult")
+                for i, dtype in enumerate(self.value_dtypes)
+            ])
 
         loopy_knl = lp.make_kernel([
             "{[imat, idim]: 0 <= imat < nresult and 0 <= idim < dim}"
@@ -510,8 +518,8 @@ def find_jump_term(kernel, arg_provider):
             src_derivatives.append(kernel.dir_vec_name)
             kernel = kernel.kernel
         else:
-            raise RuntimeError("derivative type '%s' not understood"
-                    % type(kernel))
+            raise RuntimeError(
+                f"derivative type '{type(kernel).__name__}' not understood")
 
     tgt_count = len(tgt_derivatives)
     src_count = len(src_derivatives)
@@ -568,8 +576,9 @@ def find_jump_term(kernel, arg_provider):
                     * info.tangent[i]
                     * info.density_prime)
 
-    raise ValueError("don't know jump term for %d "
-            "target and %d source derivatives" % (tgt_count, src_count))
+    raise ValueError(
+        f"Do not know jump term for {tgt_count} target "
+        f"and {src_count} source derivatives")
 
 
 # {{{ symbolic argument provider
@@ -596,77 +605,77 @@ class _JumpTermSymbolicArgumentProvider:
         self.arguments[self.density_var_name] = \
                 lp.GlobalArg(self.density_var_name, self.density_dtype,
                         shape="ntargets", order="C")
-        return parse("%s[itgt]" % self.density_var_name)
+        return parse(f"{self.density_var_name}[itgt]")
 
     @property
     @memoize_method
     def density_prime(self):
-        prime_var_name = self.density_var_name+"_prime"
-        self.arguments[prime_var_name] = \
+        prime_var_name = f"{self.density_var_name}_prime"
+        self.arguments[prime_var_name] = (
                 lp.GlobalArg(prime_var_name, self.density_dtype,
-                        shape="ntargets", order="C")
-        return parse("%s[itgt]" % prime_var_name)
+                             shape="ntargets", order="C"))
+        return parse(f"{prime_var_name}[itgt]")
 
     @property
     @memoize_method
     def side(self):
-        self.arguments["side"] = \
-                lp.GlobalArg("side", self.geometry_dtype, shape="ntargets")
+        self.arguments["side"] = (
+                lp.GlobalArg("side", self.geometry_dtype, shape="ntargets"))
         return parse("side[itgt]")
 
     @property
     @memoize_method
     def normal(self):
-        self.arguments["normal"] = \
+        self.arguments["normal"] = (
                 lp.GlobalArg("normal", self.geometry_dtype,
-                        shape=("ntargets", self.dim), order="C")
+                             shape=("ntargets", self.dim), order="C"))
         from pytools.obj_array import make_obj_array
         return make_obj_array([
-            parse("normal[itgt, %d]" % i)
+            parse(f"normal[itgt, {i}]")
             for i in range(self.dim)])
 
     @property
     @memoize_method
     def tangent(self):
-        self.arguments["tangent"] = \
+        self.arguments["tangent"] = (
                 lp.GlobalArg("tangent", self.geometry_dtype,
-                        shape=("ntargets", self.dim), order="C")
+                             shape=("ntargets", self.dim), order="C"))
         from pytools.obj_array import make_obj_array
         return make_obj_array([
-            parse("tangent[itgt, %d]" % i)
+            parse(f"tangent[itgt, {i}]")
             for i in range(self.dim)])
 
     @property
     @memoize_method
     def mean_curvature(self):
-        self.arguments["mean_curvature"] = \
+        self.arguments["mean_curvature"] = (
                 lp.GlobalArg("mean_curvature",
-                        self.geometry_dtype, shape="ntargets",
-                        order="C")
+                             self.geometry_dtype, shape="ntargets",
+                             order="C"))
         return parse("mean_curvature[itgt]")
 
     @property
     @memoize_method
     def src_derivative_dir(self):
-        self.arguments["src_derivative_dir"] = \
+        self.arguments["src_derivative_dir"] = (
                 lp.GlobalArg("src_derivative_dir",
-                        self.geometry_dtype, shape=("ntargets", self.dim),
-                        order="C")
+                             self.geometry_dtype, shape=("ntargets", self.dim),
+                             order="C"))
         from pytools.obj_array import make_obj_array
         return make_obj_array([
-            parse("src_derivative_dir[itgt, %d]" % i)
+            parse(f"src_derivative_dir[itgt, {i}]")
             for i in range(self.dim)])
 
     @property
     @memoize_method
     def tgt_derivative_dir(self):
-        self.arguments["tgt_derivative_dir"] = \
+        self.arguments["tgt_derivative_dir"] = (
                 lp.GlobalArg("tgt_derivative_dir",
-                        self.geometry_dtype, shape=("ntargets", self.dim),
-                        order="C")
+                             self.geometry_dtype, shape=("ntargets", self.dim),
+                             order="C"))
         from pytools.obj_array import make_obj_array
         return make_obj_array([
-            parse("tgt_derivative_dir[itgt, %d]" % i)
+            parse(f"tgt_derivative_dir[itgt, {i}]")
             for i in range(self.dim)])
 
 # }}}
