@@ -414,8 +414,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                     order=self.order + src_expansion.order, max_mi=tuple(max_mi))
         srcplusderiv_full_coeff_ids = \
             srcplusderiv_terms_wrangler.get_full_coefficient_identifiers()
-        srcplusderiv_ident_to_index = dict((ident, i) for i, ident in
-                            enumerate(srcplusderiv_full_coeff_ids))
+        srcplusderiv_ident_to_index = {ident: i for i, ident in
+                            enumerate(srcplusderiv_full_coeff_ids)}
 
         # The vector has the kernel derivatives and depends only on the distance
         # between the two centers
@@ -458,8 +458,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             src_rscale):
         circulant_matrix_mis, needed_vector_terms, max_mi = \
                 self._m2l_translation_classes_dependent_data_mis(src_expansion)
-        circulant_matrix_ident_to_index = dict((ident, i) for i, ident in
-                            enumerate(circulant_matrix_mis))
+        circulant_matrix_ident_to_index = {ident: i for i, ident in
+                            enumerate(circulant_matrix_mis)}
 
         # Calculate the input vector for the circulant matrix
         input_vector = [0] * len(circulant_matrix_mis)
@@ -483,8 +483,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             tgt_rscale, sac):
         circulant_matrix_mis, needed_vector_terms, max_mi = \
                 self._m2l_translation_classes_dependent_data_mis(src_expansion)
-        circulant_matrix_ident_to_index = dict((ident, i) for i, ident in
-                            enumerate(circulant_matrix_mis))
+        circulant_matrix_ident_to_index = {ident: i for i, ident in
+                            enumerate(circulant_matrix_mis)}
 
         if self.use_fft_for_m2l:
             n = len(circulant_matrix_mis)

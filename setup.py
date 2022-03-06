@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 
 import os
 from setuptools import setup
@@ -35,8 +34,7 @@ def find_git_revision(tree_root):
     (git_rev, _) = p.communicate()
 
     import sys
-    if sys.version_info >= (3,):
-        git_rev = git_rev.decode()
+    git_rev = git_rev.decode()
 
     git_rev = git_rev.rstrip()
 

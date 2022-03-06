@@ -102,7 +102,7 @@ def add_to_sac(sac, expr):
     return sym.Symbol(name)
 
 
-class ExprDerivativeTaker(object):
+class ExprDerivativeTaker:
     """Facilitates the efficient computation of (potentially) high-order
     derivatives of a given :mod:`sympy` expression *expr* while attempting
     to maximize the number of common subexpressions generated.
@@ -233,7 +233,7 @@ class LaplaceDerivativeTaker(ExprDerivativeTaker):
     """
 
     def __init__(self, expr, var_list, rscale=1, sac=None):
-        super(LaplaceDerivativeTaker, self).__init__(expr, var_list, rscale, sac)
+        super().__init__(expr, var_list, rscale, sac)
         self.scaled_var_list = [add_to_sac(self.sac, v/rscale) for v in var_list]
         self.scaled_r = add_to_sac(self.sac,
                 sym.sqrt(sum(v**2 for v in self.scaled_var_list)))
@@ -302,7 +302,7 @@ class RadialDerivativeTaker(ExprDerivativeTaker):
         Takes the derivatives of a radial function.
         """
         import sumpy.symbolic as sym
-        super(RadialDerivativeTaker, self).__init__(expr, var_list, rscale, sac)
+        super().__init__(expr, var_list, rscale, sac)
         empty_mi = (0,) * len(var_list)
         self.cache_by_mi_q = {(empty_mi, 0): expr}
         self.r = sym.sqrt(sum(v**2 for v in var_list))
@@ -702,7 +702,7 @@ class OrderedSet(MutableSet):
     def __repr__(self):
         if not self:
             return f"{self.__class__.__name__}()"
-        return "{}({!r})".format(self.__class__.__name__, list(self))
+        return f"{self.__class__.__name__}({list(self)!r})"
 
     def __eq__(self, other):
         if isinstance(other, OrderedSet):

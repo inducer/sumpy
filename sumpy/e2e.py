@@ -180,7 +180,7 @@ class E2EFromCSR(E2EBase):
         from sumpy.codegen import to_loopy_insns
         return to_loopy_insns(
                 sac.assignments.items(),
-                vector_names=set(["d"]),
+                vector_names={"d"},
                 pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
                 retain_names=tgt_coeff_names,
                 )
@@ -336,7 +336,7 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
         from sumpy.codegen import to_loopy_insns
         return to_loopy_insns(
                 sac.assignments.items(),
-                vector_names=set(["d", "src_coeffs", "data"]),
+                vector_names={"d", "src_coeffs", "data"},
                 pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
                 retain_names=tgt_coeff_names,
                 complex_dtype=to_complex_dtype(result_dtype),
@@ -550,7 +550,7 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
         from sumpy.codegen import to_loopy_insns
         return to_loopy_insns(
                 sac.assignments.items(),
-                vector_names=set(["d"]),
+                vector_names={"d"},
                 pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
                 retain_names=tgt_coeff_names,
                 complex_dtype=to_complex_dtype(result_dtype),
@@ -671,7 +671,7 @@ class M2LPreprocessMultipole(E2EBase):
         from sumpy.codegen import to_loopy_insns
         return to_loopy_insns(
                 sac.assignments.items(),
-                vector_names=set(["d"]),
+                vector_names={"d"},
                 pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
                 retain_names=preprocessed_src_coeff_names,
                 complex_dtype=to_complex_dtype(result_dtype),
@@ -780,7 +780,7 @@ class M2LPostprocessLocal(E2EBase):
         from sumpy.codegen import to_loopy_insns
         return to_loopy_insns(
                 sac.assignments.items(),
-                vector_names=set(["d"]),
+                vector_names={"d"},
                 pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
                 retain_names=tgt_coeff_names,
                 complex_dtype=to_complex_dtype(result_dtype),
