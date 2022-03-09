@@ -66,8 +66,12 @@ DAMAGE.
 
 from sumpy.symbolic import (
     Basic, Mul, Add, Pow, Symbol, _coeff_isneg, Derivative, Subs)
-from sympy.core.compatibility import iterable
 from sympy.utilities.iterables import numbered_symbols
+try:
+    from sympy.utilities.iterables import iterable
+except ImportError:
+    # NOTE: deprecated and moved in sympy 1.10
+    from sympy.core.compatibility import iterable
 
 
 __doc__ = """
