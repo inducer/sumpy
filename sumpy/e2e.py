@@ -776,7 +776,7 @@ class E2EFromChildren(E2EBase):
                    % type(self).__name__)
 
         ncoeffs_src = len(self.src_expansion)
-        ncoeffs_tgt = len(self.src_expansion)
+        ncoeffs_tgt = len(self.tgt_expansion)
 
         # To clarify terminology:
         #
