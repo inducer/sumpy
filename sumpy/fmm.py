@@ -364,11 +364,11 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                          "to the wrangler for optimized List 2.",
                          SumpyTranslationClassesDataNotSuppliedWarning,
                          stacklevel=2)
-                self.supports_optimized_m2l = False
+                self.supports_translation_classes = False
             else:
-                self.supports_optimized_m2l = True
+                self.supports_translation_classes = True
         else:
-            self.supports_optimized_m2l = False
+            self.supports_translation_classes = False
 
         self.translation_classes_data = translation_classes_data
         self.use_fft_for_m2l = self.tree_indep.use_fft_for_m2l
@@ -726,7 +726,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         multipole-to-local translation with precomputation to the keywords
         passed to multipole-to-local translation.
         """
-        if not self.supports_optimized_m2l:
+        if not self.supports_translation_classes:
             return
         m2l_translation_classes_dependent_data = \
                 self.multipole_to_local_precompute()
@@ -795,7 +795,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 continue
 
             order = self.level_orders[lev]
-            m2l = self.tree_indep.m2l(order, order, self.supports_optimized_m2l)
+            m2l = self.tree_indep.m2l(order, order, self.supports_translation_classes)
 
             source_level_start_ibox, source_mpoles_view = \
                     mpole_exps_view_func(mpole_exps, lev)
