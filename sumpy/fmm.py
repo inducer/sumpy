@@ -67,7 +67,7 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
             local_expansion_factory,
             target_kernels, exclude_self=False, use_rscale=None,
             strength_usage=None, source_kernels=None,
-            use_preprocessing_for_m2l=False):
+            use_fft_for_m2l=False):
         """
         :arg multipole_expansion_factory: a callable of a single argument (order)
             that returns a multipole expansion.
@@ -85,7 +85,7 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
         self.exclude_self = exclude_self
         self.use_rscale = use_rscale
         self.strength_usage = strength_usage
-        self.use_preprocessing_for_m2l = use_preprocessing_for_m2l
+        self.use_fft_for_m2l = use_fft_for_m2l
 
         super().__init__()
 
@@ -103,7 +103,7 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
     @memoize_method
     def local_expansion(self, order):
         return self.local_expansion_factory(order, self.use_rscale,
-                use_preprocessing_for_m2l=self.use_preprocessing_for_m2l)
+                use_fft_for_m2l=self.use_fft_for_m2l)
 
     @memoize_method
     def p2m(self, tgt_order):
@@ -316,7 +316,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
         self.dtype = dtype
 
-        if not self.tree_indep.use_preprocessing_for_m2l:
+        if not self.tree_indep.use_fft_for_m2l:
             # If not FFT, we don't need complex dtypes
             self.preprocessed_mpole_dtype = dtype
         elif preprocessed_mpole_dtype is not None:
@@ -351,7 +351,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         if base_kernel.is_translation_invariant:
             if translation_classes_data is None:
                 from warnings import warn
-                if self.tree_indep.use_preprocessing_for_m2l:
+                if self.tree_indep.use_fft_for_m2l:
                     raise NotImplementedError(
                          "FFT based List 2 (multipole-to-local) translations "
                          "without translation_classes_data argument is not "
@@ -371,7 +371,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             self.supports_optimized_m2l = False
 
         self.translation_classes_data = translation_classes_data
-        self.use_preprocessing_for_m2l = self.tree_indep.use_preprocessing_for_m2l
+        self.use_fft_for_m2l = self.tree_indep.use_fft_for_m2l
 
     # {{{ data vector utilities
 

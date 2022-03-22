@@ -52,7 +52,7 @@ class LocalExpansionBase(ExpansionBase):
     .. attribute:: kernel
     .. attribute:: order
     .. attribute:: use_rscale
-    .. attribute:: use_preprocessing_for_m2l
+    .. attribute:: use_fft_for_m2l
 
     .. automethod:: m2l_translation_classes_dependent_data
     .. automethod:: m2l_translation_classes_dependent_ndata
@@ -62,20 +62,20 @@ class LocalExpansionBase(ExpansionBase):
     .. automethod:: m2l_postprocess_local_nexprs
     .. automethod:: translate_from
     """
-    init_arg_names = ("kernel", "order", "use_rscale", "use_preprocessing_for_m2l")
+    init_arg_names = ("kernel", "order", "use_rscale", "use_fft_for_m2l")
 
     def __init__(self, kernel, order, use_rscale=None,
-            use_preprocessing_for_m2l=False):
+            use_fft_for_m2l=False):
         super().__init__(kernel, order, use_rscale)
-        self.use_preprocessing_for_m2l = use_preprocessing_for_m2l
+        self.use_fft_for_m2l = use_fft_for_m2l
 
     def with_kernel(self, kernel):
         return type(self)(kernel, self.order, self.use_rscale,
-                use_preprocessing_for_m2l=self.use_preprocessing_for_m2l)
+                use_fft_for_m2l=self.use_fft_for_m2l)
 
     def update_persistent_hash(self, key_hash, key_builder):
         super().update_persistent_hash(key_hash, key_builder)
-        key_builder.rec(key_hash, self.use_preprocessing_for_m2l)
+        key_builder.rec(key_hash, self.use_fft_for_m2l)
 
     def __eq__(self, other):
         return (
@@ -83,7 +83,7 @@ class LocalExpansionBase(ExpansionBase):
             and self.kernel == other.kernel
             and self.order == other.order
             and self.use_rscale == other.use_rscale
-            and self.use_preprocessing_for_m2l == other.use_preprocessing_for_m2l
+            and self.use_fft_for_m2l == other.use_fft_for_m2l
         )
 
     def m2l_translation_classes_dependent_data(self, src_expansion, src_rscale,
@@ -435,7 +435,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         for expr, mi in zip(vector, needed_vector_terms):
             derivatives_full[circulant_matrix_ident_to_index[mi]] = expr
 
-        if self.use_preprocessing_for_m2l:
+        if self.use_fft_for_m2l:
             # Note that the matrix we have now is a mirror image of a
             # circulant matrix. We reverse the first column to get the
             # first column for the circulant matrix and then finally
@@ -460,7 +460,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             input_vector[circulant_matrix_ident_to_index[term]] = \
                     add_to_sac(sac, coeff)
 
-        if self.use_preprocessing_for_m2l:
+        if self.use_fft_for_m2l:
             return fft(input_vector, sac=sac)
         else:
             return input_vector
@@ -472,7 +472,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         circulant_matrix_ident_to_index = dict((ident, i) for i, ident in
                             enumerate(circulant_matrix_mis))
 
-        if self.use_preprocessing_for_m2l:
+        if self.use_fft_for_m2l:
             n = len(circulant_matrix_mis)
             m2l_result = fft(m2l_result, inverse=True, sac=sac)
             # since we reversed the M2L matrix, we reverse the result
@@ -520,7 +520,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
             assert len(src_coeff_exprs) == len(derivatives)
 
-            if self.use_preprocessing_for_m2l:
+            if self.use_fft_for_m2l:
                 result = [a*b for a, b in zip(derivatives, src_coeff_exprs)]
             else:
                 result = matvec_toeplitz_upper_triangular(src_coeff_exprs,
@@ -682,7 +682,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             src_coeffs = pymbolic.var("src_coeffs")
             m2l_translation_classes_dependent_data = pymbolic.var("data")
 
-            if self.use_preprocessing_for_m2l:
+            if self.use_fft_for_m2l:
                 expr = src_coeffs[icoeff_tgt] \
                         * m2l_translation_classes_dependent_data[icoeff_tgt]
             else:
@@ -710,9 +710,9 @@ class VolumeTaylorLocalExpansion(
         VolumeTaylorLocalExpansionBase):
 
     def __init__(self, kernel, order, use_rscale=None,
-            use_preprocessing_for_m2l=False):
+            use_fft_for_m2l=False):
         VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale,
-                use_preprocessing_for_m2l)
+                use_fft_for_m2l)
         VolumeTaylorExpansion.__init__(self, kernel, order, use_rscale)
 
 
@@ -721,9 +721,9 @@ class LinearPDEConformingVolumeTaylorLocalExpansion(
         VolumeTaylorLocalExpansionBase):
 
     def __init__(self, kernel, order, use_rscale=None,
-            use_preprocessing_for_m2l=False):
+            use_fft_for_m2l=False):
         VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale,
-                use_preprocessing_for_m2l)
+                use_fft_for_m2l)
         LinearPDEConformingVolumeTaylorExpansion.__init__(
                 self, kernel, order, use_rscale)
 
@@ -767,9 +767,9 @@ class BiharmonicConformingVolumeTaylorLocalExpansion(
 
 class _FourierBesselLocalExpansion(LocalExpansionBase):
     def __init__(self, kernel, order, use_rscale=None,
-            use_preprocessing_for_m2l=False):
+            use_fft_for_m2l=False):
 
-        if use_preprocessing_for_m2l:
+        if use_fft_for_m2l:
             # FIXME: expansion with FFT is correct symbolically and can be verified
             # with sympy. However there are numerical issues that we have to deal
             # with. Greengard and Rokhlin 1988 attributes this to numerical
@@ -780,7 +780,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                              "supported yet.")
 
         super().__init__(kernel, order, use_rscale,
-                use_preprocessing_for_m2l=use_preprocessing_for_m2l)
+                use_fft_for_m2l=use_fft_for_m2l)
 
     def get_storage_index(self, k):
         return self.order+k
@@ -851,7 +851,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                     Hankel1(m + j, arg_scale * dvec_len, 0)
                     * sym.exp(sym.I * (m + j) * new_center_angle_rel_old_center))
 
-        if self.use_preprocessing_for_m2l:
+        if self.use_fft_for_m2l:
             order = src_expansion.order
             # For this expansion, we have a mirror image of a Toeplitz matrix.
             # First, we have to take the mirror image of the M2L matrix.
@@ -882,7 +882,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         for m in src_expansion.get_coefficient_identifiers():
             src_coeff_exprs[src_expansion.get_storage_index(m)] *= src_rscale**abs(m)
 
-        if self.use_preprocessing_for_m2l:
+        if self.use_fft_for_m2l:
             src_coeff_exprs = list(reversed(src_coeff_exprs))
             src_coeff_exprs += [0] * (len(src_coeff_exprs) - 1)
             return fft(src_coeff_exprs, sac=sac)
@@ -895,7 +895,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
     def m2l_postprocess_local_exprs(self, src_expansion, m2l_result, src_rscale,
             tgt_rscale, sac):
 
-        if self.use_preprocessing_for_m2l:
+        if self.use_fft_for_m2l:
             m2l_result = fft(m2l_result, inverse=True, sac=sac)
             m2l_result = m2l_result[:2*self.order+1]
 
@@ -944,7 +944,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             else:
                 derivatives = m2l_translation_classes_dependent_data
 
-            if self.use_preprocessing_for_m2l:
+            if self.use_fft_for_m2l:
                 assert m2l_translation_classes_dependent_data is not None
                 assert len(derivatives) == len(src_coeff_exprs)
                 translated_coeffs = [a * b for a, b in zip(derivatives,
@@ -978,7 +978,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             src_coeffs = pymbolic.var("src_coeffs")
             m2l_translation_classes_dependent_data = pymbolic.var("data")
 
-            if self.use_preprocessing_for_m2l:
+            if self.use_fft_for_m2l:
                 expr = src_coeffs[icoeff_tgt] \
                         * m2l_translation_classes_dependent_data[icoeff_tgt]
             else:
@@ -1003,13 +1003,13 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
 class H2DLocalExpansion(_FourierBesselLocalExpansion):
     def __init__(self, kernel, order, use_rscale=None,
-            use_preprocessing_for_m2l=False):
+            use_fft_for_m2l=False):
         from sumpy.kernel import HelmholtzKernel
         assert (isinstance(kernel.get_base_kernel(), HelmholtzKernel)
                 and kernel.dim == 2)
 
         super().__init__(kernel, order, use_rscale,
-                use_preprocessing_for_m2l=use_preprocessing_for_m2l)
+                use_fft_for_m2l=use_fft_for_m2l)
 
         from sumpy.expansion.multipole import H2DMultipoleExpansion
         self.mpole_expn_class = H2DMultipoleExpansion
@@ -1020,13 +1020,13 @@ class H2DLocalExpansion(_FourierBesselLocalExpansion):
 
 class Y2DLocalExpansion(_FourierBesselLocalExpansion):
     def __init__(self, kernel, order, use_rscale=None,
-            use_preprocessing_for_m2l=False):
+            use_fft_for_m2l=False):
         from sumpy.kernel import YukawaKernel
         assert (isinstance(kernel.get_base_kernel(), YukawaKernel)
                 and kernel.dim == 2)
 
         super().__init__(kernel, order, use_rscale,
-                use_preprocessing_for_m2l=use_preprocessing_for_m2l)
+                use_fft_for_m2l=use_fft_for_m2l)
 
         from sumpy.expansion.multipole import Y2DMultipoleExpansion
         self.mpole_expn_class = Y2DMultipoleExpansion
