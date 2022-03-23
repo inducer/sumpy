@@ -690,7 +690,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 icoeff_tgt = pymbolic.var("icoeff_tgt")
                 domains = [f"{{[icoeff_tgt]: 0<=icoeff_tgt<{ncoeff_tgt} }}"]
 
-                coeff = pymbolic.var("src_coeffs")
+                coeff = pymbolic.var("coeff")
                 src_coeffs = pymbolic.var("src_coeffs")
                 m2l_translation_classes_dependent_data = pymbolic.var("data")
 
