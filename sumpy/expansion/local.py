@@ -690,15 +690,18 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 icoeff_tgt = pymbolic.var("icoeff_tgt")
                 domains = [f"{{[icoeff_tgt]: 0<=icoeff_tgt<{ncoeff_tgt} }}"]
 
+                coeff = pymbolic.var("src_coeffs")
                 src_coeffs = pymbolic.var("src_coeffs")
                 m2l_translation_classes_dependent_data = pymbolic.var("data")
 
                 expr = src_coeffs[icoeff_tgt] \
                     * m2l_translation_classes_dependent_data[icoeff_tgt]
 
-                insns = f"""
-                coeff[icoeff_tgt] = coeff[icoeff_tgt] + {expr}
-                """
+                insns = [
+                    lp.Assignment(
+                        assignee=coeff[icoeff_tgt],
+                        expression=coeff[icoeff_tgt] + expr),
+                ]
                 return lp.make_function(domains, insns,
                         kernel_data=[
                             lp.GlobalArg("coeff, src_coeffs, data",
@@ -988,15 +991,18 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                 icoeff_tgt = pymbolic.var("icoeff_tgt")
                 domains = [f"{{[icoeff_tgt]: 0<=icoeff_tgt<{ncoeff_tgt} }}"]
 
+                coeff = pymbolic.var("coeff")
                 src_coeffs = pymbolic.var("src_coeffs")
                 m2l_translation_classes_dependent_data = pymbolic.var("data")
 
                 expr = src_coeffs[icoeff_tgt] \
                             * m2l_translation_classes_dependent_data[icoeff_tgt]
 
-                insns = f"""
-                coeff[icoeff_tgt] = coeff[icoeff_tgt] + {expr}
-                """
+                insns = [
+                    lp.Assignment(
+                        assignee=coeff[icoeff_tgt],
+                        expression=coeff[icoeff_tgt] + expr),
+                ]
                 return lp.make_function(domains, insns,
                         kernel_data=[
                             lp.GlobalArg("coeff, src_coeffs, data",
