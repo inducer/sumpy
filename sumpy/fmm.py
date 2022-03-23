@@ -749,10 +749,13 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         preprocess_evts = []
         queue = mpole_exps.queue
         local_exps = self.local_expansion_zeros(mpole_exps)
+        preprocessed_mpole_exps = \
+            self.m2l_preproc_mpole_expansion_zeros(mpole_exps)
 
-        if self.supports_optimized_m2l:
-            preprocessed_mpole_exps = \
-                    self.m2l_preproc_mpole_expansion_zeros(mpole_exps)
+        use_preprocessing = self.supports_translation_classes and \
+            preprocessed_mpole_exps.size > 0
+
+        if use_preprocessing:
             for lev in range(self.tree.nlevels):
                 order = self.level_orders[lev]
                 preprocess_mpole_kernel = \
@@ -795,7 +798,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 continue
 
             order = self.level_orders[lev]
-            m2l = self.tree_indep.m2l(order, order, self.supports_translation_classes)
+            m2l = self.tree_indep.m2l(order, order,
+                    self.supports_translation_classes)
 
             source_level_start_ibox, source_mpoles_view = \
                     mpole_exps_view_func(mpole_exps, lev)
@@ -829,7 +833,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
         postprocess_evts = []
 
-        if self.supports_optimized_m2l:
+        if use_preprocessing:
             for lev in range(self.tree.nlevels):
                 order = self.level_orders[lev]
                 postprocess_local_kernel = \

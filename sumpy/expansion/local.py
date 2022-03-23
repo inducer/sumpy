@@ -465,6 +465,15 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         else:
             return input_vector
 
+    def m2l_preprocess_multipole_nexprs(self, src_expansion):
+        if self.use_fft_for_m2l:
+            circulant_matrix_mis, _, _ = \
+                self._m2l_translation_classes_dependent_data_mis(src_expansion)
+            return len(circulant_matrix_mis)
+        else:
+            # Don't use preprocessing
+            return 0
+
     def m2l_postprocess_local_exprs(self, src_expansion, m2l_result, src_rscale,
             tgt_rscale, sac):
         circulant_matrix_mis, needed_vector_terms, max_mi = \
@@ -487,6 +496,13 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             for term in self.get_coefficient_identifiers()]
 
         return result
+
+    def m2l_postprocess_local_nexprs(self, src_expansion):
+        if self.use_fft_for_m2l:
+            return self.m2l_translation_classes_dependent_ndata(src_expansion)
+        else:
+            # Don't use preprocessing
+            return 0
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, _fast_version=True,
@@ -513,20 +529,17 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             if not m2l_translation_classes_dependent_data:
                 derivatives = self.m2l_translation_classes_dependent_data(
                         src_expansion, src_rscale, dvec, tgt_rscale, sac)
-                src_coeff_exprs = self.m2l_preprocess_multipole_exprs(src_expansion,
-                        src_coeff_exprs, sac, src_rscale)
             else:
                 derivatives = m2l_translation_classes_dependent_data
 
-            assert len(src_coeff_exprs) == len(derivatives)
-
             if self.use_fft_for_m2l:
+                assert len(src_coeff_exprs) == len(derivatives)
                 result = [a*b for a, b in zip(derivatives, src_coeff_exprs)]
             else:
+                src_coeff_exprs = self.m2l_preprocess_multipole_exprs(src_expansion,
+                        src_coeff_exprs, sac, src_rscale)
                 result = matvec_toeplitz_upper_triangular(src_coeff_exprs,
                     derivatives)
-
-            if not m2l_translation_classes_dependent_data:
                 result = self.m2l_postprocess_local_exprs(src_expansion,
                         result, src_rscale, tgt_rscale, sac)
 
@@ -672,37 +685,30 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansionBase
 
         if isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
-            ncoeff_src = self.m2l_preprocess_multipole_nexprs(src_expansion)
-            ncoeff_tgt = self.m2l_postprocess_local_nexprs(src_expansion)
-
-            icoeff_src = pymbolic.var("icoeff_src")
-            icoeff_tgt = pymbolic.var("icoeff_tgt")
-            domains = [f"{{[icoeff_tgt]: 0<=icoeff_tgt<{ncoeff_tgt} }}"]
-
-            src_coeffs = pymbolic.var("src_coeffs")
-            m2l_translation_classes_dependent_data = pymbolic.var("data")
-
             if self.use_fft_for_m2l:
-                expr = src_coeffs[icoeff_tgt] \
-                        * m2l_translation_classes_dependent_data[icoeff_tgt]
-            else:
-                toeplitz_first_row = src_coeffs[icoeff_src-icoeff_tgt]
-                vector = m2l_translation_classes_dependent_data[icoeff_src]
-                expr = toeplitz_first_row * vector
-                domains += [
-                        f"{{[icoeff_src]: icoeff_tgt<=icoeff_src<{ncoeff_src} }}"]
+                ncoeff_tgt = self.m2l_postprocess_local_nexprs(src_expansion)
+                icoeff_tgt = pymbolic.var("icoeff_tgt")
+                domains = [f"{{[icoeff_tgt]: 0<=icoeff_tgt<{ncoeff_tgt} }}"]
 
-            insns = f"""
-            coeff[icoeff_tgt] = coeff[icoeff_tgt] + {expr}
-            """
-            return lp.make_function(domains, insns,
-                    kernel_data=[lp.GlobalArg("coeff, src_coeffs, data",
-                        shape=lp.auto), ...],
-                    name="e2e",
-                    lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
-                    )
-        else:
-            raise NotImplementedError("")
+                src_coeffs = pymbolic.var("src_coeffs")
+                m2l_translation_classes_dependent_data = pymbolic.var("data")
+
+                expr = src_coeffs[icoeff_tgt] \
+                    * m2l_translation_classes_dependent_data[icoeff_tgt]
+
+                insns = f"""
+                coeff[icoeff_tgt] = coeff[icoeff_tgt] + {expr}
+                """
+                return lp.make_function(domains, insns,
+                        kernel_data=[
+                            lp.GlobalArg("coeff, src_coeffs, data",
+                                shape=lp.auto),
+                            lp.ValueArg("src_rscale, tgt_rscale"),
+                            ...],
+                        name="e2e",
+                        lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
+                        )
+        raise NotImplementedError("")
 
 
 class VolumeTaylorLocalExpansion(
@@ -890,7 +896,11 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             return src_coeff_exprs
 
     def m2l_preprocess_multipole_nexprs(self, src_expansion):
-        return 2*src_expansion.order + 1
+        if self.use_fft_for_m2l:
+            return 2*src_expansion.order + 1
+        else:
+            # Don't use preprocessing
+            return 0
 
     def m2l_postprocess_local_exprs(self, src_expansion, m2l_result, src_rscale,
             tgt_rscale, sac):
@@ -908,7 +918,11 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         return result
 
     def m2l_postprocess_local_nexprs(self, src_expansion):
-        return 2*self.order + 1
+        if self.use_fft_for_m2l:
+            return 2*self.order + 1
+        else:
+            # Don't use postprocessing
+            return 0
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, m2l_translation_classes_dependent_data=None):
@@ -939,8 +953,6 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             if m2l_translation_classes_dependent_data is None:
                 derivatives = self.m2l_translation_classes_dependent_data(
                     src_expansion, src_rscale, dvec, tgt_rscale, sac=sac)
-                src_coeff_exprs = self.m2l_preprocess_multipole_exprs(src_expansion,
-                        src_coeff_exprs, sac, src_rscale)
             else:
                 derivatives = m2l_translation_classes_dependent_data
 
@@ -950,13 +962,15 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                 translated_coeffs = [a * b for a, b in zip(derivatives,
                     src_coeff_exprs)]
             else:
+                src_coeff_exprs = self.m2l_preprocess_multipole_exprs(src_expansion,
+                        src_coeff_exprs, sac, src_rscale)
+
                 translated_coeffs = [
                     sum(derivatives[m + j + self.order + src_expansion.order]
                             * src_coeff_exprs[src_expansion.get_storage_index(m)]
                         for m in src_expansion.get_coefficient_identifiers())
                     for j in self.get_coefficient_identifiers()]
 
-            if m2l_translation_classes_dependent_data is None:
                 translated_coeffs = self.m2l_postprocess_local_exprs(src_expansion,
                         translated_coeffs, src_rscale, tgt_rscale, sac)
 
@@ -968,37 +982,31 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
     def loopy_translate_from(self, src_expansion):
         if isinstance(src_expansion, self.mpole_expn_class):
-            ncoeff_src = self.m2l_preprocess_multipole_nexprs(src_expansion)
-            ncoeff_tgt = self.m2l_postprocess_local_nexprs(src_expansion)
-
-            icoeff_src = pymbolic.var("icoeff_src")
-            icoeff_tgt = pymbolic.var("icoeff_tgt")
-            domains = [f"{{[icoeff_tgt]: 0<=icoeff_tgt<{ncoeff_tgt} }}"]
-
-            src_coeffs = pymbolic.var("src_coeffs")
-            m2l_translation_classes_dependent_data = pymbolic.var("data")
-
             if self.use_fft_for_m2l:
-                expr = src_coeffs[icoeff_tgt] \
-                        * m2l_translation_classes_dependent_data[icoeff_tgt]
-            else:
-                expr = src_coeffs[icoeff_src] \
-                       * m2l_translation_classes_dependent_data[
-                               icoeff_tgt + icoeff_src]
-                domains += [
-                        f"{{[icoeff_src]: 0<=icoeff_src<{ncoeff_src} }}"]
+                ncoeff_tgt = self.m2l_postprocess_local_nexprs(src_expansion)
 
-            insns = f"""
-            coeff[icoeff_tgt] = coeff[icoeff_tgt] + {expr}
-            """
-            return lp.make_function(domains, insns,
-                    kernel_data=[lp.GlobalArg("coeff, src_coeffs, data",
-                        shape=lp.auto), ...],
-                    name="e2e",
-                    lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
-                    )
-        else:
-            raise NotImplementedError("")
+                icoeff_tgt = pymbolic.var("icoeff_tgt")
+                domains = [f"{{[icoeff_tgt]: 0<=icoeff_tgt<{ncoeff_tgt} }}"]
+
+                src_coeffs = pymbolic.var("src_coeffs")
+                m2l_translation_classes_dependent_data = pymbolic.var("data")
+
+                expr = src_coeffs[icoeff_tgt] \
+                            * m2l_translation_classes_dependent_data[icoeff_tgt]
+
+                insns = f"""
+                coeff[icoeff_tgt] = coeff[icoeff_tgt] + {expr}
+                """
+                return lp.make_function(domains, insns,
+                        kernel_data=[
+                            lp.GlobalArg("coeff, src_coeffs, data",
+                                shape=lp.auto),
+                            lp.ValueArg("src_rscale, tgt_rscale"),
+                            ...],
+                        name="e2e",
+                        lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
+                        )
+        raise NotImplementedError("")
 
 
 class H2DLocalExpansion(_FourierBesselLocalExpansion):
