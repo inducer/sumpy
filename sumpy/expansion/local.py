@@ -539,7 +539,8 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 src_coeff_exprs = self.m2l_preprocess_multipole_exprs(src_expansion,
                         src_coeff_exprs, sac, src_rscale)
                 # Returns a big symbolic sum of matrix entries
-                # (FIXME? Though this is just the correctness-checking fallback for the FFT anyhow)
+                # (FIXME? Though this is just the correctness-checking
+                # fallback for the FFT anyhow)
                 result = matvec_toeplitz_upper_triangular(src_coeff_exprs,
                     derivatives)
                 result = self.m2l_postprocess_local_exprs(src_expansion,
