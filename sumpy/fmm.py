@@ -863,9 +863,9 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 )
                 postprocess_evts.append(evt)
 
-        events = preprocess_evts + translate_evts + postprocess_evts
+        timing_events = preprocess_evts + translate_evts + postprocess_evts
 
-        return (local_exps, SumpyTimingFuture(queue, events))
+        return (local_exps, SumpyTimingFuture(queue, timing_events))
 
     def eval_multipoles(self,
             target_boxes_by_source_level, source_boxes_by_level, mpole_exps):
