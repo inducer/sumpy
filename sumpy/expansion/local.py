@@ -1006,7 +1006,9 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                         name="e2e",
                         lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
                         )
-        raise NotImplementedError("")
+        raise NotImplementedError(
+            f"A direct loopy kernel for translation from "
+            f"{self.src_expansion} to {self.tgt_expansion} is not implemented.")
 
 
 class H2DLocalExpansion(_FourierBesselLocalExpansion):
