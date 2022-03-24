@@ -63,7 +63,6 @@ Pytest Conda:
   - export SUMPY_NO_CACHE=1
   - export SUMPY_FORCE_SYMBOLIC_BACKEND=symengine
   - export PYOPENCL_TEST=portable:pthread
-  - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
   - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project-within-miniconda.sh
   - ". ./build-and-test-py-project-within-miniconda.sh"
   tags:
@@ -81,7 +80,6 @@ Pytest POCL Titan V:
   - export SUMPY_NO_CACHE=1
   - export SUMPY_FORCE_SYMBOLIC_BACKEND=symengine
   - export PYOPENCL_TEST=portable:titan
-  - CONDA_ENVIRONMENT=.test-conda-env-py3.yml
   - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project-within-miniconda.sh
   - ". ./build-and-test-py-project-within-miniconda.sh"
   tags:
@@ -97,8 +95,8 @@ Examples Conda:
   script: |
     grep -v symengine .test-conda-env-py3.yml > .test-conda-env.yml
     CONDA_ENVIRONMENT=.test-conda-env.yml
-    curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/ci-support.sh
-    . ci-support.sh
+    curl -L -O https://tiker.net/ci-support-v0
+    . ci-support-v0
     EXTRA_INSTALL="pyvisfile scipy"
     build_py_project_in_conda_env
     run_examples
