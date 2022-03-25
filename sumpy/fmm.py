@@ -67,7 +67,7 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
             local_expansion_factory,
             target_kernels, exclude_self=False, use_rscale=None,
             strength_usage=None, source_kernels=None,
-            use_fft_for_m2l=False):
+            use_fft_for_m2l=False, use_preprocessing_for_m2l=None):
         """
         :arg multipole_expansion_factory: a callable of a single argument (order)
             that returns a multipole expansion.
@@ -86,6 +86,10 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
         self.use_rscale = use_rscale
         self.strength_usage = strength_usage
         self.use_fft_for_m2l = use_fft_for_m2l
+        if self.use_preprocessing_for_m2l is None:
+            self.use_preprocessing_for_m2l = use_fft_for_m2l
+        else
+            self.use_preprocessing_for_m2l = use_preprocessing_for_m2l
 
         super().__init__()
 
@@ -103,7 +107,8 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
     @memoize_method
     def local_expansion(self, order):
         return self.local_expansion_factory(order, self.use_rscale,
-                use_fft_for_m2l=self.use_fft_for_m2l)
+                use_fft_for_m2l=self.use_fft_for_m2l,
+                use_preprocessing_for_m2l=self.use_preprocessing_for_m2l)
 
     @memoize_method
     def p2m(self, tgt_order):
@@ -749,13 +754,10 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         preprocess_evts = []
         queue = mpole_exps.queue
         local_exps = self.local_expansion_zeros(mpole_exps)
-        preprocessed_mpole_exps = \
-            self.m2l_preproc_mpole_expansion_zeros(mpole_exps)
 
-        use_preprocessing = self.supports_translation_classes and \
-            preprocessed_mpole_exps.size > 0
-
-        if use_preprocessing:
+        if self.use_preprocessing_for_m2l:
+            preprocessed_mpole_exps = \
+                self.m2l_preproc_mpole_expansion_zeros(mpole_exps)
             for lev in range(self.tree.nlevels):
                 order = self.level_orders[lev]
                 preprocess_mpole_kernel = \
@@ -833,7 +835,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
         postprocess_evts = []
 
-        if use_preprocessing:
+        if self.use_preprocessing_for_m2l:
             for lev in range(self.tree.nlevels):
                 order = self.level_orders[lev]
                 postprocess_local_kernel = \
