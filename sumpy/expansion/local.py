@@ -475,13 +475,9 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             return input_vector
 
     def m2l_preprocess_multipole_nexprs(self, src_expansion):
-        if self.use_fft_for_m2l:
-            circulant_matrix_mis, _, _ = \
-                self._m2l_translation_classes_dependent_data_mis(src_expansion)
-            return len(circulant_matrix_mis)
-        else:
-            # Don't use preprocessing
-            return 0
+        circulant_matrix_mis, _, _ = \
+            self._m2l_translation_classes_dependent_data_mis(src_expansion)
+        return len(circulant_matrix_mis)
 
     def m2l_postprocess_local_exprs(self, src_expansion, m2l_result, src_rscale,
             tgt_rscale, sac):
@@ -507,11 +503,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         return result
 
     def m2l_postprocess_local_nexprs(self, src_expansion):
-        if self.use_fft_for_m2l or self.use_preprocessing_for_m2l:
-            return self.m2l_translation_classes_dependent_ndata(src_expansion)
-        else:
-            # Don't use preprocessing
-            return 0
+        return self.m2l_translation_classes_dependent_ndata(src_expansion)
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, _fast_version=True,
@@ -924,11 +916,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             return src_coeff_exprs
 
     def m2l_preprocess_multipole_nexprs(self, src_expansion):
-        if self.use_fft_for_m2l or self.use_preprocessing_for_m2l:
-            return 2*src_expansion.order + 1
-        else:
-            # Don't use preprocessing
-            return 0
+        return 2*src_expansion.order + 1
 
     def m2l_postprocess_local_exprs(self, src_expansion, m2l_result, src_rscale,
             tgt_rscale, sac):
@@ -946,11 +934,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         return result
 
     def m2l_postprocess_local_nexprs(self, src_expansion):
-        if self.use_fft_for_m2l or self.use_preprocessing_for_m2l:
-            return 2*self.order + 1
-        else:
-            # Don't use postprocessing
-            return 0
+        return 2*self.order + 1
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, m2l_translation_classes_dependent_data=None):
