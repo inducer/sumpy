@@ -82,8 +82,8 @@ class LocalExpansionBase(ExpansionBase):
 
     def update_persistent_hash(self, key_hash, key_builder):
         super().update_persistent_hash(key_hash, key_builder)
-        key_builder.rec(key_hash, self.use_fft_for_m2l,
-                self.use_preprocessing_for_m2l)
+        key_builder.rec(key_hash, self.use_fft_for_m2l)
+        key_builder.rec(key_hash, self.use_preprocessing_for_m2l)
 
     def __eq__(self, other):
         return (
