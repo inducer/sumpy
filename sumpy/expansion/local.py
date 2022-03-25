@@ -753,7 +753,7 @@ class LinearPDEConformingVolumeTaylorLocalExpansion(
         VolumeTaylorLocalExpansionBase):
 
     def __init__(self, kernel, order, use_rscale=None,
-            use_fft_for_m2l=False, use_preprocessing_for_m2l):
+            use_fft_for_m2l=False, use_preprocessing_for_m2l=None):
         VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale,
                 use_fft_for_m2l, use_preprocessing_for_m2l)
         LinearPDEConformingVolumeTaylorExpansion.__init__(
@@ -1051,7 +1051,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
 class H2DLocalExpansion(_FourierBesselLocalExpansion):
     def __init__(self, kernel, order, use_rscale=None,
-            use_fft_for_m2l=False, use_preprocessing_for_m2l):
+            use_fft_for_m2l=False, use_preprocessing_for_m2l=None):
         from sumpy.kernel import HelmholtzKernel
         assert (isinstance(kernel.get_base_kernel(), HelmholtzKernel)
                 and kernel.dim == 2)
@@ -1069,7 +1069,7 @@ class H2DLocalExpansion(_FourierBesselLocalExpansion):
 
 class Y2DLocalExpansion(_FourierBesselLocalExpansion):
     def __init__(self, kernel, order, use_rscale=None,
-            use_fft_for_m2l=False, use_preprocessing_for_m2l):
+            use_fft_for_m2l=False, use_preprocessing_for_m2l=None):
         from sumpy.kernel import YukawaKernel
         assert (isinstance(kernel.get_base_kernel(), YukawaKernel)
                 and kernel.dim == 2)

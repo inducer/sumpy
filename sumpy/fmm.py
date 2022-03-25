@@ -90,9 +90,9 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
         self.use_rscale = use_rscale
         self.strength_usage = strength_usage
         self.use_fft_for_m2l = use_fft_for_m2l
-        if self.use_preprocessing_for_m2l is None:
+        if use_preprocessing_for_m2l is None:
             self.use_preprocessing_for_m2l = use_fft_for_m2l
-        else
+        else:
             self.use_preprocessing_for_m2l = use_preprocessing_for_m2l
 
         super().__init__()
@@ -759,7 +759,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         queue = mpole_exps.queue
         local_exps = self.local_expansion_zeros(mpole_exps)
 
-        if self.use_preprocessing_for_m2l:
+        if self.tree_indep.use_preprocessing_for_m2l:
             preprocessed_mpole_exps = \
                 self.m2l_preproc_mpole_expansion_zeros(mpole_exps)
             for lev in range(self.tree.nlevels):
@@ -839,7 +839,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
         postprocess_evts = []
 
-        if self.use_preprocessing_for_m2l:
+        if self.tree_indep.use_preprocessing_for_m2l:
             for lev in range(self.tree.nlevels):
                 order = self.level_orders[lev]
                 postprocess_local_kernel = \
