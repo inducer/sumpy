@@ -77,6 +77,10 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
         :arg exclude_self: whether the self contribution should be excluded
         :arg strength_usage: passed unchanged to p2l, p2m and p2p.
         :arg source_kernels: passed unchanged to p2l, p2m and p2p.
+        :arg use_fft_for_m2l: Use an FFT based multipole-to-local expansion.
+        :arg use_preprocessing_for_m2l: do preprocessing of the source multipole
+            expansion and postprocessing of the target local expansion for
+            multipole-to-local expansion.
         """
         self.multipole_expansion_factory = multipole_expansion_factory
         self.local_expansion_factory = local_expansion_factory
