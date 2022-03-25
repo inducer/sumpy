@@ -698,6 +698,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
 
         if isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
             if self.use_preprocessing_for_m2l:
+                ncoeff_src = self.m2l_preprocess_multipole_nexprs(src_expansion)
                 ncoeff_tgt = self.m2l_postprocess_local_nexprs(src_expansion)
                 icoeff_src = pymbolic.var("icoeff_src")
                 icoeff_tgt = pymbolic.var("icoeff_tgt")
@@ -1010,6 +1011,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
     def loopy_translate_from(self, src_expansion):
         if isinstance(src_expansion, self.mpole_expn_class):
             if self.use_preprocessing_for_m2l:
+                ncoeff_src = self.m2l_preprocess_multipole_nexprs(src_expansion)
                 ncoeff_tgt = self.m2l_postprocess_local_nexprs(src_expansion)
 
                 icoeff_src = pymbolic.var("icoeff_src")
