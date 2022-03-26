@@ -731,7 +731,9 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                         name="e2e",
                         lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
                         )
-        raise NotImplementedError("")
+        raise NotImplementedError(
+            f"A direct loopy kernel for translation from "
+            f"{src_expansion} to {self} is not implemented.")
 
 
 class VolumeTaylorLocalExpansion(
@@ -978,8 +980,9 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                 translated_coeffs = [a * b for a, b in zip(derivatives,
                     src_coeff_exprs)]
             else:
-                src_coeff_exprs = self.m2l_preprocess_multipole_exprs(src_expansion,
-                        src_coeff_exprs, sac, src_rscale)
+                if self.use_preprocessing_for_m2l:
+                    src_coeff_exprs = self.m2l_preprocess_multipole_exprs(
+                        src_expansion, src_coeff_exprs, sac, src_rscale)
 
                 translated_coeffs = [
                     sum(derivatives[m + j + self.order + src_expansion.order]
@@ -987,8 +990,10 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                         for m in src_expansion.get_coefficient_identifiers())
                     for j in self.get_coefficient_identifiers()]
 
-                translated_coeffs = self.m2l_postprocess_local_exprs(src_expansion,
-                        translated_coeffs, src_rscale, tgt_rscale, sac)
+                if self.use_preprocessing_for_m2l:
+                    translated_coeffs = self.m2l_postprocess_local_exprs(
+                        src_expansion, translated_coeffs, src_rscale, tgt_rscale,
+                        sac)
 
             return translated_coeffs
 
