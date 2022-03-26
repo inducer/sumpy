@@ -537,14 +537,18 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                 assert len(src_coeff_exprs) == len(derivatives)
                 result = [a*b for a, b in zip(derivatives, src_coeff_exprs)]
             else:
-                src_coeff_exprs = self.m2l_preprocess_multipole_exprs(src_expansion,
-                        src_coeff_exprs, sac, src_rscale)
+                if not self.use_preprocessing_for_m2l:
+                    src_coeff_exprs = self.m2l_preprocess_multipole_exprs(
+                        src_expansion, src_coeff_exprs, sac, src_rscale)
+
                 # Returns a big symbolic sum of matrix entries
                 # (FIXME? Though this is just the correctness-checking
                 # fallback for the FFT anyhow)
                 result = matvec_toeplitz_upper_triangular(src_coeff_exprs,
                     derivatives)
-                result = self.m2l_postprocess_local_exprs(src_expansion,
+
+                if not self.use_preprocessing_for_m2l:
+                    result = self.m2l_postprocess_local_exprs(src_expansion,
                         result, src_rscale, tgt_rscale, sac)
 
             logger.info("building translation operator: done")
