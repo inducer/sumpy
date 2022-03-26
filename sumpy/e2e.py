@@ -351,8 +351,14 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
 
         ndata = self.tgt_expansion.m2l_translation_classes_dependent_ndata(
                         self.src_expansion)
-        ncoeff_src = len(self.src_expansion)
-        ncoeff_tgt = len(self.src_expansion)
+        if self.tgt_expansion.use_preprocessing_for_m2l:
+            ncoeff_src = self.tgt_expansion.m2l_preprocess_multipole_nexprs(
+                    self.src_expansion)
+            ncoeff_tgt = self.tgt_expansion.m2l_postprocess_local_nexprs(
+                    self.src_expansion)
+        else:
+            ncoeff_src = len(self.src_expansion)
+            ncoeff_tgt = len(self.tgt_expansion)
 
         domains = []
         insns = self.get_translation_loopy_insns(result_dtype)
