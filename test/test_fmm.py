@@ -190,7 +190,7 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
                 ctx,
                 partial(mpole_expn_class, knl),
                 partial(local_expn_class, knl),
-                target_kernels, use_preprocessing_for_m2l=use_fft)
+                target_kernels, use_fft_for_m2l=use_fft)
 
         with warnings.catch_warnings():
             if not optimized_m2l:

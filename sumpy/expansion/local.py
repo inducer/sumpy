@@ -29,6 +29,8 @@ from sumpy.expansion import (
 from sumpy.tools import mi_increment_axis, matvec_toeplitz_upper_triangular
 from pytools import single_valued
 from typing import Tuple, Any
+import pymbolic
+import loopy as lp
 
 import logging
 logger = logging.getLogger(__name__)
@@ -50,6 +52,7 @@ class LocalExpansionBase(ExpansionBase):
     .. attribute:: kernel
     .. attribute:: order
     .. attribute:: use_rscale
+    .. attribute:: use_fft_for_m2l
     .. attribute:: use_preprocessing_for_m2l
 
     .. automethod:: m2l_translation_classes_dependent_data
@@ -60,19 +63,26 @@ class LocalExpansionBase(ExpansionBase):
     .. automethod:: m2l_postprocess_local_nexprs
     .. automethod:: translate_from
     """
-    init_arg_names = ("kernel", "order", "use_rscale", "use_preprocessing_for_m2l")
+    init_arg_names = ("kernel", "order", "use_rscale", "use_fft_for_m2l",
+            "use_preprocessing_for_m2l")
 
     def __init__(self, kernel, order, use_rscale=None,
-            use_preprocessing_for_m2l=False):
+            use_fft_for_m2l=False, use_preprocessing_for_m2l=None):
         super().__init__(kernel, order, use_rscale)
-        self.use_preprocessing_for_m2l = use_preprocessing_for_m2l
+        self.use_fft_for_m2l = use_fft_for_m2l
+        if use_preprocessing_for_m2l is None:
+            self.use_preprocessing_for_m2l = use_fft_for_m2l
+        else:
+            self.use_preprocessing_for_m2l = use_preprocessing_for_m2l
 
     def with_kernel(self, kernel):
         return type(self)(kernel, self.order, self.use_rscale,
+                use_fft_for_m2l=self.use_fft_for_m2l,
                 use_preprocessing_for_m2l=self.use_preprocessing_for_m2l)
 
     def update_persistent_hash(self, key_hash, key_builder):
         super().update_persistent_hash(key_hash, key_builder)
+        key_builder.rec(key_hash, self.use_fft_for_m2l)
         key_builder.rec(key_hash, self.use_preprocessing_for_m2l)
 
     def __eq__(self, other):
@@ -81,6 +91,7 @@ class LocalExpansionBase(ExpansionBase):
             and self.kernel == other.kernel
             and self.order == other.order
             and self.use_rscale == other.use_rscale
+            and self.use_fft_for_m2l == other.use_fft_for_m2l
             and self.use_preprocessing_for_m2l == other.use_preprocessing_for_m2l
         )
 
@@ -308,13 +319,10 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
     def m2l_translation_classes_dependent_ndata(self, src_expansion):
         """Returns number of expressions in M2L global precomputation step.
         """
-        mis_with_dummy_rows, mis_without_dummy_rows, _ = \
+        mis_with_dummy_rows, _, _ = \
             self._m2l_translation_classes_dependent_data_mis(src_expansion)
 
-        if self.use_preprocessing_for_m2l:
-            return len(mis_with_dummy_rows)
-        else:
-            return len(mis_without_dummy_rows)
+        return len(mis_with_dummy_rows)
 
     def _m2l_translation_classes_dependent_data_mis(self, src_expansion):
         """We would like to compute the M2L by way of a circulant matrix below.
@@ -431,12 +439,12 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             vector[i] = add_to_sac(sac,
                         vector_full[srcplusderiv_ident_to_index[term]])
 
-        if self.use_preprocessing_for_m2l:
-            # Add zero values needed to make the translation matrix circulant
-            derivatives_full = [0]*len(circulant_matrix_mis)
-            for expr, mi in zip(vector, needed_vector_terms):
-                derivatives_full[circulant_matrix_ident_to_index[mi]] = expr
+        # Add zero values needed to make the translation matrix circulant
+        derivatives_full = [0]*len(circulant_matrix_mis)
+        for expr, mi in zip(vector, needed_vector_terms):
+            derivatives_full[circulant_matrix_ident_to_index[mi]] = expr
 
+        if self.use_fft_for_m2l:
             # Note that the matrix we have now is a mirror image of a
             # circulant matrix. We reverse the first column to get the
             # first column for the circulant matrix and then finally
@@ -444,7 +452,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # matrix.
             return fft(list(reversed(derivatives_full)), sac=sac)
 
-        return vector
+        return derivatives_full
 
     def m2l_preprocess_multipole_exprs(self, src_expansion, src_coeff_exprs, sac,
             src_rscale):
@@ -461,14 +469,15 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             input_vector[circulant_matrix_ident_to_index[term]] = \
                     add_to_sac(sac, coeff)
 
-        if self.use_preprocessing_for_m2l:
+        if self.use_fft_for_m2l:
             return fft(input_vector, sac=sac)
         else:
-            # When FFT is turned off, there is no preprocessing needed
-            # Therefore no copying is done and the multipole expansion is sent to
-            # the main M2L routine as it is. This method is used internally in the
-            # the main M2l routine to avoid code duplication.
             return input_vector
+
+    def m2l_preprocess_multipole_nexprs(self, src_expansion):
+        circulant_matrix_mis, _, _ = \
+            self._m2l_translation_classes_dependent_data_mis(src_expansion)
+        return len(circulant_matrix_mis)
 
     def m2l_postprocess_local_exprs(self, src_expansion, m2l_result, src_rscale,
             tgt_rscale, sac):
@@ -477,7 +486,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         circulant_matrix_ident_to_index = dict((ident, i) for i, ident in
                             enumerate(circulant_matrix_mis))
 
-        if self.use_preprocessing_for_m2l:
+        if self.use_fft_for_m2l:
             n = len(circulant_matrix_mis)
             m2l_result = fft(m2l_result, inverse=True, sac=sac)
             # since we reversed the M2L matrix, we reverse the result
@@ -492,6 +501,9 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             for term in self.get_coefficient_identifiers()]
 
         return result
+
+    def m2l_postprocess_local_nexprs(self, src_expansion):
+        return self.m2l_translation_classes_dependent_ndata(src_expansion)
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, _fast_version=True,
@@ -514,8 +526,6 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         if isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
             circulant_matrix_mis, needed_vector_terms, max_mi = \
                 self._m2l_translation_classes_dependent_data_mis(src_expansion)
-            circulant_matrix_ident_to_index = {ident: i for i, ident in
-                                enumerate(circulant_matrix_mis)}
 
             if not m2l_translation_classes_dependent_data:
                 derivatives = self.m2l_translation_classes_dependent_data(
@@ -523,26 +533,23 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             else:
                 derivatives = m2l_translation_classes_dependent_data
 
-            if self.use_preprocessing_for_m2l:
-                assert m2l_translation_classes_dependent_data is not None
-                assert len(src_coeff_exprs) == len(
-                        m2l_translation_classes_dependent_data)
-                result = [a*b for a, b in zip(m2l_translation_classes_dependent_data,
-                    src_coeff_exprs)]
+            if self.use_fft_for_m2l:
+                assert len(src_coeff_exprs) == len(derivatives)
+                result = [a*b for a, b in zip(derivatives, src_coeff_exprs)]
             else:
-                derivatives_full = [0]*len(circulant_matrix_mis)
-                for expr, mi in zip(derivatives, needed_vector_terms):
-                    derivatives_full[circulant_matrix_ident_to_index[mi]] = expr
+                if not self.use_preprocessing_for_m2l:
+                    src_coeff_exprs = self.m2l_preprocess_multipole_exprs(
+                        src_expansion, src_coeff_exprs, sac, src_rscale)
 
-                input_vector = self.m2l_preprocess_multipole_exprs(src_expansion,
-                    src_coeff_exprs, sac, src_rscale)
+                # Returns a big symbolic sum of matrix entries
+                # (FIXME? Though this is just the correctness-checking
+                # fallback for the FFT anyhow)
+                result = matvec_toeplitz_upper_triangular(src_coeff_exprs,
+                    derivatives)
 
-                # Do the matvec
-                output = matvec_toeplitz_upper_triangular(input_vector,
-                    derivatives_full)
-
-                result = self.m2l_postprocess_local_exprs(src_expansion, output,
-                    src_rscale, tgt_rscale, sac)
+                if not self.use_preprocessing_for_m2l:
+                    result = self.m2l_postprocess_local_exprs(src_expansion,
+                        result, src_rscale, tgt_rscale, sac)
 
             logger.info("building translation operator: done")
             return result
@@ -682,15 +689,61 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         logger.info("building translation operator: done")
         return result
 
+    def loopy_translate_from(self, src_expansion):
+        from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansionBase
+
+        if isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase):
+            if self.use_preprocessing_for_m2l:
+                ncoeff_src = self.m2l_preprocess_multipole_nexprs(src_expansion)
+                ncoeff_tgt = self.m2l_postprocess_local_nexprs(src_expansion)
+                icoeff_src = pymbolic.var("icoeff_src")
+                icoeff_tgt = pymbolic.var("icoeff_tgt")
+                domains = [f"{{[icoeff_tgt]: 0<=icoeff_tgt<{ncoeff_tgt} }}"]
+
+                coeff = pymbolic.var("coeff")
+                src_coeffs = pymbolic.var("src_coeffs")
+                m2l_translation_classes_dependent_data = pymbolic.var("data")
+
+                if self.use_fft_for_m2l:
+                    expr = src_coeffs[icoeff_tgt] \
+                            * m2l_translation_classes_dependent_data[icoeff_tgt]
+                else:
+                    toeplitz_first_row = src_coeffs[icoeff_src-icoeff_tgt]
+                    vector = m2l_translation_classes_dependent_data[icoeff_src]
+                    expr = toeplitz_first_row * vector
+                    domains.append(
+                        f"{{[icoeff_src]: icoeff_tgt<=icoeff_src<{ncoeff_src} }}")
+
+                expr = src_coeffs[icoeff_tgt] \
+                    * m2l_translation_classes_dependent_data[icoeff_tgt]
+
+                insns = [
+                    lp.Assignment(
+                        assignee=coeff[icoeff_tgt],
+                        expression=coeff[icoeff_tgt] + expr),
+                ]
+                return lp.make_function(domains, insns,
+                        kernel_data=[
+                            lp.GlobalArg("coeff, src_coeffs, data",
+                                shape=lp.auto),
+                            lp.ValueArg("src_rscale, tgt_rscale"),
+                            ...],
+                        name="e2e",
+                        lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
+                        )
+        raise NotImplementedError(
+            f"A direct loopy kernel for translation from "
+            f"{src_expansion} to {self} is not implemented.")
+
 
 class VolumeTaylorLocalExpansion(
         VolumeTaylorExpansion,
         VolumeTaylorLocalExpansionBase):
 
     def __init__(self, kernel, order, use_rscale=None,
-            use_preprocessing_for_m2l=False):
+            use_fft_for_m2l=False, use_preprocessing_for_m2l=None):
         VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale,
-                use_preprocessing_for_m2l)
+                use_fft_for_m2l, use_preprocessing_for_m2l=None)
         VolumeTaylorExpansion.__init__(self, kernel, order, use_rscale)
 
 
@@ -699,9 +752,9 @@ class LinearPDEConformingVolumeTaylorLocalExpansion(
         VolumeTaylorLocalExpansionBase):
 
     def __init__(self, kernel, order, use_rscale=None,
-            use_preprocessing_for_m2l=False):
+            use_fft_for_m2l=False, use_preprocessing_for_m2l=None):
         VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale,
-                use_preprocessing_for_m2l)
+                use_fft_for_m2l, use_preprocessing_for_m2l)
         LinearPDEConformingVolumeTaylorExpansion.__init__(
                 self, kernel, order, use_rscale)
 
@@ -745,9 +798,9 @@ class BiharmonicConformingVolumeTaylorLocalExpansion(
 
 class _FourierBesselLocalExpansion(LocalExpansionBase):
     def __init__(self, kernel, order, use_rscale=None,
-            use_preprocessing_for_m2l=False):
+            use_fft_for_m2l=False, use_preprocessing_for_m2l=None):
 
-        if use_preprocessing_for_m2l:
+        if use_fft_for_m2l:
             # FIXME: expansion with FFT is correct symbolically and can be verified
             # with sympy. However there are numerical issues that we have to deal
             # with. Greengard and Rokhlin 1988 attributes this to numerical
@@ -758,6 +811,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                              "supported yet.")
 
         super().__init__(kernel, order, use_rscale,
+                use_fft_for_m2l=use_fft_for_m2l,
                 use_preprocessing_for_m2l=use_preprocessing_for_m2l)
 
     def get_storage_index(self, k):
@@ -829,7 +883,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                     Hankel1(m + j, arg_scale * dvec_len, 0)
                     * sym.exp(sym.I * (m + j) * new_center_angle_rel_old_center))
 
-        if self.use_preprocessing_for_m2l:
+        if self.use_fft_for_m2l:
             order = src_expansion.order
             # For this expansion, we have a mirror image of a Toeplitz matrix.
             # First, we have to take the mirror image of the M2L matrix.
@@ -860,18 +914,20 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         for m in src_expansion.get_coefficient_identifiers():
             src_coeff_exprs[src_expansion.get_storage_index(m)] *= src_rscale**abs(m)
 
-        if self.use_preprocessing_for_m2l:
+        if self.use_fft_for_m2l:
             src_coeff_exprs = list(reversed(src_coeff_exprs))
             src_coeff_exprs += [0] * (len(src_coeff_exprs) - 1)
-            res = fft(src_coeff_exprs, sac=sac)
-            return res
+            return fft(src_coeff_exprs, sac=sac)
         else:
             return src_coeff_exprs
+
+    def m2l_preprocess_multipole_nexprs(self, src_expansion):
+        return 2*src_expansion.order + 1
 
     def m2l_postprocess_local_exprs(self, src_expansion, m2l_result, src_rscale,
             tgt_rscale, sac):
 
-        if self.use_preprocessing_for_m2l:
+        if self.use_fft_for_m2l:
             m2l_result = fft(m2l_result, inverse=True, sac=sac)
             m2l_result = m2l_result[:2*self.order+1]
 
@@ -882,6 +938,9 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                     * tgt_rscale**(abs(j)) * sym.Integer(-1)**j)
 
         return result
+
+    def m2l_postprocess_local_nexprs(self, src_expansion):
+        return 2*self.order + 1
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, m2l_translation_classes_dependent_data=None):
@@ -915,40 +974,85 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             else:
                 derivatives = m2l_translation_classes_dependent_data
 
-            translated_coeffs = []
-            if self.use_preprocessing_for_m2l:
+            if self.use_fft_for_m2l:
                 assert m2l_translation_classes_dependent_data is not None
                 assert len(derivatives) == len(src_coeff_exprs)
-                for a, b in zip(derivatives, src_coeff_exprs):
-                    translated_coeffs.append(a * b)
-                return translated_coeffs
+                translated_coeffs = [a * b for a, b in zip(derivatives,
+                    src_coeff_exprs)]
+            else:
+                if not self.use_preprocessing_for_m2l:
+                    src_coeff_exprs = self.m2l_preprocess_multipole_exprs(
+                        src_expansion, src_coeff_exprs, sac, src_rscale)
 
-            src_coeff_exprs = self.m2l_preprocess_multipole_exprs(src_expansion,
-                    src_coeff_exprs, sac, src_rscale)
-
-            for j in self.get_coefficient_identifiers():
-                translated_coeffs.append(
+                translated_coeffs = [
                     sum(derivatives[m + j + self.order + src_expansion.order]
-                        * src_coeff_exprs[src_expansion.get_storage_index(m)]
-                        for m in src_expansion.get_coefficient_identifiers()))
+                            * src_coeff_exprs[src_expansion.get_storage_index(m)]
+                        for m in src_expansion.get_coefficient_identifiers())
+                    for j in self.get_coefficient_identifiers()]
 
-            translated_coeffs = self.m2l_postprocess_local_exprs(src_expansion,
-                translated_coeffs, src_rscale, tgt_rscale, sac)
+                if not self.use_preprocessing_for_m2l:
+                    translated_coeffs = self.m2l_postprocess_local_exprs(
+                        src_expansion, translated_coeffs, src_rscale, tgt_rscale,
+                        sac)
+
             return translated_coeffs
 
         raise RuntimeError("do not know how to translate %s to %s"
                            % (type(src_expansion).__name__,
                                type(self).__name__))
 
+    def loopy_translate_from(self, src_expansion):
+        if isinstance(src_expansion, self.mpole_expn_class):
+            if self.use_preprocessing_for_m2l:
+                ncoeff_src = self.m2l_preprocess_multipole_nexprs(src_expansion)
+                ncoeff_tgt = self.m2l_postprocess_local_nexprs(src_expansion)
+
+                icoeff_src = pymbolic.var("icoeff_src")
+                icoeff_tgt = pymbolic.var("icoeff_tgt")
+                domains = [f"{{[icoeff_tgt]: 0<=icoeff_tgt<{ncoeff_tgt} }}"]
+
+                coeff = pymbolic.var("coeff")
+                src_coeffs = pymbolic.var("src_coeffs")
+                m2l_translation_classes_dependent_data = pymbolic.var("data")
+
+                if self.use_fft_for_m2l:
+                    expr = src_coeffs[icoeff_tgt] \
+                            * m2l_translation_classes_dependent_data[icoeff_tgt]
+                else:
+                    expr = src_coeffs[icoeff_src] \
+                           * m2l_translation_classes_dependent_data[
+                                   icoeff_tgt + icoeff_src]
+                    domains.append(
+                            f"{{[icoeff_src]: 0<=icoeff_src<{ncoeff_src} }}")
+
+                insns = [
+                    lp.Assignment(
+                        assignee=coeff[icoeff_tgt],
+                        expression=coeff[icoeff_tgt] + expr),
+                ]
+                return lp.make_function(domains, insns,
+                        kernel_data=[
+                            lp.GlobalArg("coeff, src_coeffs, data",
+                                shape=lp.auto),
+                            lp.ValueArg("src_rscale, tgt_rscale"),
+                            ...],
+                        name="e2e",
+                        lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
+                        )
+        raise NotImplementedError(
+            f"A direct loopy kernel for translation from "
+            f"{src_expansion} to {self} is not implemented.")
+
 
 class H2DLocalExpansion(_FourierBesselLocalExpansion):
     def __init__(self, kernel, order, use_rscale=None,
-            use_preprocessing_for_m2l=False):
+            use_fft_for_m2l=False, use_preprocessing_for_m2l=None):
         from sumpy.kernel import HelmholtzKernel
         assert (isinstance(kernel.get_base_kernel(), HelmholtzKernel)
                 and kernel.dim == 2)
 
         super().__init__(kernel, order, use_rscale,
+                use_fft_for_m2l=use_fft_for_m2l,
                 use_preprocessing_for_m2l=use_preprocessing_for_m2l)
 
         from sumpy.expansion.multipole import H2DMultipoleExpansion
@@ -960,12 +1064,13 @@ class H2DLocalExpansion(_FourierBesselLocalExpansion):
 
 class Y2DLocalExpansion(_FourierBesselLocalExpansion):
     def __init__(self, kernel, order, use_rscale=None,
-            use_preprocessing_for_m2l=False):
+            use_fft_for_m2l=False, use_preprocessing_for_m2l=None):
         from sumpy.kernel import YukawaKernel
         assert (isinstance(kernel.get_base_kernel(), YukawaKernel)
                 and kernel.dim == 2)
 
         super().__init__(kernel, order, use_rscale,
+                use_fft_for_m2l=use_fft_for_m2l,
                 use_preprocessing_for_m2l=use_preprocessing_for_m2l)
 
         from sumpy.expansion.multipole import Y2DMultipoleExpansion
