@@ -550,6 +550,7 @@ class P2PFromCSR(P2PBase):
             dict(nsources=np.int32, ntargets=np.int32))
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+        loopy_knl = lp.tag_inames(loopy_knl, "istrength*:unr")
         loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
         loopy_knl = lp.tag_array_axes(loopy_knl, "sources", "sep,C")
         for knl in self.target_kernels + self.source_kernels:
