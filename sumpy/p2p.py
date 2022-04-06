@@ -518,7 +518,7 @@ class P2PFromCSR(P2PBase):
             + [f"""
                         acc[{iknl}] = acc[{iknl}] + \
                           pair_result_{iknl} \
-                          {{id=update_acc, dep=init_acc}}
+                          {{id=update_acc_{iknl}, dep=init_acc}}
                 """ for iknl in range(len(self.target_kernels))]
             + ["""
                       end
@@ -528,7 +528,7 @@ class P2PFromCSR(P2PBase):
             + [f"""
                   if cond_itgt
                     result[{iknl}, itgt] = knl_{iknl}_scaling * acc[{iknl}] \
-                            {{dep=update_acc}}
+                            {{dep=update_acc_{iknl}}}
                   end
                 """ for iknl in range(len(self.target_kernels))]
             + ["""
