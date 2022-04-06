@@ -438,7 +438,7 @@ class P2PMatrixSubsetGenerator(P2PBase):
 class P2PFromCSR(P2PBase):
     default_name = "p2p_from_csr"
 
-    def get_kernel(self):
+    def get_kernel(self, max_npoints_in_one_box):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
         arguments = (
             self.get_default_src_tgt_arguments()
@@ -459,17 +459,24 @@ class P2PFromCSR(P2PBase):
                     shape="nstrengths, nsources", dim_tags="sep,C"),
                 lp.GlobalArg("result", None,
                     shape="noutputs, ntargets", dim_tags="sep,C"),
+                lp.TemporaryVariable("local_isrc_strength",
+                    shape="nstrengths, max_npoints_in_one_box",
+                    address_space=lp.AddressSpace.LOCAL),
+                lp.TemporaryVariable("local_isrc",
+                    shape=(self.dim, max_npoints_in_one_box),
+                    address_space=lp.AddressSpace.LOCAL),
+                lp.TemporaryVariable("tgt_center", shape=(self.dim,)),
                 "..."
             ])
 
         loopy_knl = lp.make_kernel([
             "{[itgt_box]: 0 <= itgt_box < ntgt_boxes}",
+            "{[ipoint]: 0 <= ipoint < max_npoints_in_one_box}",
+            "{[iknl]: 0 <= iknl < noutputs}",
             "{[isrc_box]: isrc_box_start <= isrc_box < isrc_box_end}",
-            "{[itgt, isrc, idim]: \
-                itgt_start <= itgt < itgt_end and \
-                isrc_start <= isrc < isrc_end and \
-                0 <= idim < dim}",
-            ],
+            "{[idim]: 0 <= idim < dim}",
+            "{[istrength]: 0 <= istrength < nstrengths}",
+            "{[isrc]: isrc_start <= isrc < isrc_end}"],
             self.get_kernel_scaling_assignments()
             + ["""
                 for itgt_box
@@ -480,30 +487,51 @@ class P2PFromCSR(P2PBase):
                 <> isrc_box_start = source_box_starts[itgt_box]
                 <> isrc_box_end = source_box_starts[itgt_box+1]
 
-                for isrc_box
+                for ipoint
+                  <> itgt = ipoint + itgt_start
+                  <> cond_itgt = itgt < itgt_end
+                  <> acc[iknl] = 0 {id=init_acc, dup=iknl}
+                  if cond_itgt
+                    tgt_center[idim] = targets[idim, itgt] {id=load_tgt, dup=idim}
+                  end
+                  for isrc_box
                     <> src_ibox = source_box_lists[isrc_box]
                     <> isrc_start = box_source_starts[src_ibox]
                     <> isrc_end = isrc_start + box_source_counts_nonchild[src_ibox]
-
-                    for itgt
-                    for isrc
-                        <> d[idim] = \
-                            targets[idim, itgt] - sources[idim, isrc]
+                    <> cond_isrc = ipoint < isrc_end - isrc_start
+                    if cond_isrc
+                      local_isrc[idim, ipoint] = sources[idim,
+                          ipoint + isrc_start]  {id=load_src, dup=idim}
+                      local_isrc_strength[istrength, ipoint] = strength[istrength,
+                          ipoint + isrc_start]  {id=load_charge}
+                    end
+                    if cond_itgt
+                      for isrc
+                        <> d[idim] = (tgt_center[idim] - local_isrc[idim,
+                          isrc - isrc_start]) {dep=load_src:load_tgt}
             """] + ["""
                         <> is_self = (isrc == target_to_source[itgt])
                     """ if self.exclude_self else ""]
-            + [f"<> strength_{i} = strength[{i}, isrc]" for
+            + [f"<> strength_{i} = local_isrc_strength[{i}, isrc - isrc_start]" for
                 i in set(self.strength_usage)]
             + loopy_insns
-            + ["    end"]
             + [f"""
-                    result[{iknl}, itgt] = result[{iknl}, itgt] + \
-                        knl_{iknl}_scaling * \
-                        simul_reduce(sum, isrc, pair_result_{iknl}) \
-                        {{id_prefix=write_csr}}
+                        acc[{iknl}] = acc[{iknl}] + \
+                          pair_result_{iknl} \
+                          {{id=update_acc, dep=init_acc}}
                 """ for iknl in range(len(self.target_kernels))]
             + ["""
+                      end
                     end
+                  end
+               """]
+            + [f"""
+                  if cond_itgt
+                    result[{iknl}, itgt] = knl_{iknl}_scaling * acc[{iknl}] \
+                            {{dep=update_acc}}
+                  end
+                """ for iknl in range(len(self.target_kernels))]
+            + ["""
                 end
                 end
             """],
@@ -514,6 +542,7 @@ class P2PFromCSR(P2PBase):
             fixed_parameters=dict(
                 dim=self.dim,
                 nstrengths=self.strength_count,
+                max_npoints_in_one_box=max_npoints_in_one_box,
                 noutputs=len(self.target_kernels)),
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
@@ -523,22 +552,24 @@ class P2PFromCSR(P2PBase):
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
         loopy_knl = lp.tag_array_axes(loopy_knl, "sources", "sep,C")
-
         for knl in self.target_kernels + self.source_kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
 
-    def get_optimized_kernel(self):
+    def get_optimized_kernel(self, max_npoints_in_one_box):
         # FIXME
-        knl = self.get_kernel()
+        knl = self.get_kernel(max_npoints_in_one_box)
 
         import pyopencl as cl
         dev = self.context.devices[0]
         if dev.type & cl.device_type.CPU:
             knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
         else:
-            knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
+            knl = lp.tag_inames(knl, {"itgt_box": "g.0"})
+        knl = lp.split_iname(knl, "ipoint", max_npoints_in_one_box,
+                inner_tag="l.0")
+        knl = lp.add_inames_for_unused_hw_axes(knl)
 
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
         knl = lp.set_options(knl,
@@ -547,7 +578,9 @@ class P2PFromCSR(P2PBase):
         return knl
 
     def __call__(self, queue, **kwargs):
-        knl = self.get_cached_optimized_kernel()
+        max_npoints_in_one_box = kwargs.pop("max_npoints_in_one_box")
+        knl = self.get_cached_optimized_kernel(
+                max_npoints_in_one_box=max_npoints_in_one_box)
 
         return knl(queue, **kwargs)
 
