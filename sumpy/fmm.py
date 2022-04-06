@@ -539,6 +539,14 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
         return obj_array_vectorize(reorder, potentials)
 
+    def get_max_nsources_in_one_box(self, queue):
+        return int(pyopencl.array.max(self.tree.box_source_counts_nonchild,
+                queue).get())
+
+    def get_max_ntargets_in_one_box(self, queue):
+        return int(pyopencl.array.max(self.tree.box_target_counts_nonchild,
+                queue).get())
+
     # }}}
 
     # {{{ source/target dispatch
@@ -674,7 +682,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 source_box_lists=source_box_lists,
                 strength=src_weight_vecs,
                 result=pot,
-
+                max_npoints_in_one_box=max(self.get_max_nsources_in_one_box(queue),
+                    self.get_max_ntargets_in_one_box(queue)),
                 **kwargs)
         events.append(evt)
 
