@@ -487,7 +487,7 @@ class P2PFromCSR(P2PBase):
                   <> cond_itgt = itgt < itgt_end
                   <> acc[iknl] = 0 {id=init_acc, dup=iknl}
                   if cond_itgt
-                    tgt_center[idim] = targets[idim, itgt] {id=load_tgt, dup=idim}
+                    tgt_center[idim] = targets[idim, itgt] {id=prefetch_tgt,dup=idim}
                   end
                   for isrc_box
                     <> src_ibox = source_box_lists[isrc_box]
@@ -497,15 +497,15 @@ class P2PFromCSR(P2PBase):
                       <> cond_isrc = isrc_rel < isrc_end - isrc_start
                       if cond_isrc
                         <> local_isrc[idim, isrc_rel] = sources[idim,
-                          isrc_rel + isrc_start]  {id=load_src, dup=idim}
+                          isrc_rel + isrc_start]  {id=prefetch_src, dup=idim}
                         <> local_isrc_strength[istrength, isrc_rel] = strength[
-                          istrength, isrc_rel + isrc_start]  {id=load_charge}
+                          istrength, isrc_rel + isrc_start]  {id=prefetch_charge}
                       end
                     end
                     if cond_itgt
                       for isrc
                         <> d[idim] = (tgt_center[idim] - local_isrc[idim,
-                          isrc - isrc_start]) {dep=load_src:load_tgt}
+                          isrc - isrc_start]) {dep=prefetch_src:prefetch_tgt}
             """] + ["""
                         <> is_self = (isrc == target_to_source[itgt])
                     """ if self.exclude_self else ""]
