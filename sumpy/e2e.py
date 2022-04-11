@@ -424,8 +424,9 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                                 {id=read_src_ibox}
                         <> translation_class = \
                                 m2l_translation_classes_lists[isrc_box]
-                        <> translation_class_rel = translation_class - \
-                                                    translation_classes_level_start
+                        <> translation_class_rel = \
+                                translation_class - translation_classes_level_start \
+                                {id=translation_offset}
                         [icoeff_tgt]: coeffs[icoeff_tgt] = e2e(
                             [icoeff_tgt]: coeffs[icoeff_tgt],
                             [icoeff_src]: src_expansions[src_ibox - src_base_ibox,
@@ -465,7 +466,7 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                         offset=lp.auto),
                     lp.ValueArg("ntranslation_classes, ntranslation_classes_lists",
                         np.int32),
-                    "..."
+                    ...
                 ] + gather_loopy_arguments([self.src_expansion,
                                             self.tgt_expansion]),
                 name=self.name,
@@ -481,6 +482,10 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
 
         loopy_knl = lp.merge([translation_knl, loopy_knl])
         loopy_knl = lp.inline_callable_kernel(loopy_knl, "e2e")
+        loopy_knl = lp.add_dependency(
+                loopy_knl, "id:e2e_insn*", "read_src_ibox")
+        loopy_knl = lp.add_dependency(
+                loopy_knl, "id:e2e_insn*", "translation_offset")
 
         for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
