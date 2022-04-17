@@ -384,17 +384,15 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
             # See https://dlmf.nist.gov/10.6.E6
             # and https://dlmf.nist.gov/10.6#E1
             k = self.orig_expr.args[1] / self.r
-            expr = -  2 * (q - 1) * self.diff(mi, q - 1)
-            expr += - k**2 * self.diff(mi, q - 2)
-            expr /= self.r**2
+            expr = (-2*(q - 1) * self.diff(mi, q - 1)
+                    - k**2 * self.diff(mi, q - 2)) / self.r**2
         else:
             # See reference [Tausch2003] in RadialDerivativeTaker.diff
             # Note that there is a typo in the paper where
             # -k**2/r is given instead of -k**2/r**2.
             k = (self.orig_expr * self.r).args[-1] / sym.I / self.r
-            expr = -(2*q - 1) * self.diff(mi, q - 1)
-            expr += -k**2 * self.diff(mi, q - 2)
-            expr /= self.r**2
+            expr = (-(2*q - 1) * self.diff(mi, q - 1)
+                    - k**2 * self.diff(mi, q - 2)) / self.r**2
         self.cache_by_mi_q[(mi, q)] = expr
         return expr
 
