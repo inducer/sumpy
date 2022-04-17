@@ -455,8 +455,14 @@ def test_p2e2p(ctx_factory, base_knl, expn_class, order, with_source_derivative)
     (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
     (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
      LinearPDEConformingVolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
+     LinearPDEConformingVolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+     LinearPDEConformingVolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
      LinearPDEConformingVolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion),
     (StokesletKernel(2, 0, 0), VolumeTaylorLocalExpansion,
@@ -519,14 +525,8 @@ def test_translations(ctx_factory, knl, local_expn_class, mpole_expn_class):
 
     del eval_offset
 
-    from sumpy.expansion import VolumeTaylorExpansionBase
+    orders = [3, 4, 5]
 
-    if isinstance(knl, HelmholtzKernel) and \
-           issubclass(local_expn_class, VolumeTaylorExpansionBase):
-        # FIXME: Embarrassing--but we run out of memory for higher orders.
-        orders = [2, 3]
-    else:
-        orders = [2, 3, 4]
     nboxes = centers.shape[-1]
 
     def eval_at(e2p, source_box_nr, rscale):
