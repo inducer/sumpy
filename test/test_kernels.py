@@ -525,7 +525,10 @@ def test_translations(ctx_factory, knl, local_expn_class, mpole_expn_class):
 
     del eval_offset
 
-    orders = [3, 4, 5]
+    if knl.dim == 2:
+        orders = [2, 3, 4]
+    else:
+        orders = [3, 4, 5]
 
     nboxes = centers.shape[-1]
 
