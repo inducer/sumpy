@@ -866,6 +866,81 @@ def test_m2l_toeplitz():
 # }}}
 
 
+# {{{ test_m2m_compressed
+
+@pytest.mark.parametrize("dim", [2, 3])
+@pytest.mark.parametrize("order", [2, 4, 6])
+def test_m2m_compressed_error_helmholtz(ctx_factory, dim, order):
+    import sumpy.toys as t
+
+    ctx = ctx_factory()
+    knl = HelmholtzKernel(dim)
+    extra_kernel_kwargs = {"k": 5}
+
+    mpole_expn_classes = [LinearPDEConformingVolumeTaylorMultipoleExpansion,
+                                VolumeTaylorMultipoleExpansion]
+    local_expn_classes = [LinearPDEConformingVolumeTaylorLocalExpansion,
+                                VolumeTaylorLocalExpansion]
+
+    eval_center = np.array([0.1, 0.0, 0.0][:dim]).reshape(dim, 1)
+    mpole_center = np.array([0.0, 0.0, 0.0][:dim]).reshape(dim, 1)
+
+    ntargets_per_dim = 10
+    nsources_per_dim = 10
+
+    sources_grid = np.meshgrid(*[np.linspace(0, 1, nsources_per_dim)
+            for _ in range(dim)])
+    sources_grid = np.ndarray.flatten(np.array(sources_grid)).reshape(dim, -1)
+
+    targets_grid = np.meshgrid(*[np.linspace(0, 1, ntargets_per_dim)
+            for _ in range(dim)])
+    targets_grid = np.ndarray.flatten(np.array(targets_grid)).reshape(dim, -1)
+
+    targets = eval_center - 0.1*(targets_grid - 0.5)
+
+    from pytools.convergence import EOCRecorder
+    eoc_rec = EOCRecorder()
+    h_values = 2.0**np.arange(-7, -3)
+    for h in h_values:
+        sources = (h*(-0.5+sources_grid.astype(np.float64)) + mpole_center)
+        second_center = mpole_center + h/2
+        furthest_source = np.max(np.abs(sources - mpole_center))
+        m2m_vals = [0, 0]
+        for i, (mpole_expn_class, local_expn_class) in \
+                enumerate(zip(mpole_expn_classes, local_expn_classes)):
+            tctx = t.ToyContext(
+                ctx,
+                knl,
+                extra_kernel_kwargs=extra_kernel_kwargs,
+                local_expn_class=local_expn_class,
+                mpole_expn_class=mpole_expn_class,
+            )
+            pt_src = t.PointSources(
+                tctx,
+                sources,
+                np.ones(sources.shape[-1])
+            )
+
+            mexp = t.multipole_expand(pt_src,
+                center=mpole_center.reshape(dim),
+                order=order,
+                rscale=h)
+            mexp2 = t.multipole_expand(mexp,
+                center=second_center.reshape(dim),
+                order=order,
+                rscale=h)
+            m2m_vals[i] = mexp2.eval(targets)
+
+        err = np.linalg.norm(m2m_vals[1] - m2m_vals[0]) \
+                / np.linalg.norm(m2m_vals[1])
+        eoc_rec.add_data_point(furthest_source, err)
+
+    print(eoc_rec)
+    assert eoc_rec.order_estimate() >= order + 1
+
+# }}}
+
+
 # You can test individual routines by typing
 # $ python test_kernels.py 'test_p2p(cl.create_some_context)'
 
