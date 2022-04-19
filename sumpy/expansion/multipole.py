@@ -20,12 +20,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import sumpy.symbolic as sym  # noqa
+import math
 
+import sumpy.symbolic as sym
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LinearPDEConformingVolumeTaylorExpansion)
-from pytools import factorial
-from sumpy.tools import mi_set_axis, add_to_sac
+from sumpy.tools import mi_set_axis, add_to_sac, mi_power, mi_factorial
 
 import logging
 logger = logging.getLogger(__name__)
@@ -58,7 +58,6 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         coefficients, compressing and then summing.
         """
         from sumpy.kernel import KernelWrapper
-        from sumpy.tools import mi_power, mi_factorial
 
         if not self.use_rscale:
             rscale = 1
@@ -123,8 +122,6 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                     src_expansion.order,
                     type(self).__name__,
                     self.order)
-
-        from sumpy.tools import mi_factorial
 
         src_mi_to_index = {mi: i for i, mi in enumerate(
             src_expansion.get_coefficient_identifiers())}
@@ -284,7 +281,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                         contrib = cur_dim_input_coeffs[tgt_mi_to_index[input_mi]]
                         for n, k, dist in zip(tgt_mi, input_mi, dvec):
                             assert n >= k
-                            contrib /= factorial(n-k)
+                            contrib /= math.factorial(n-k)
                             contrib *= \
                                 sym.UnevaluatedExpr(dist/tgt_rscale)**(n-k)
 
