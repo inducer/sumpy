@@ -862,11 +862,6 @@ class E2EFromChildren(E2EBase):
     default_name = "e2e_from_children"
 
     def get_kernel(self):
-        if self.src_expansion is not self.tgt_expansion:
-            raise RuntimeError(
-                f"{type(self).__name__} requires that the source "
-                "and target expansion are the same object")
-
         ncoeffs_src = len(self.src_expansion)
         ncoeffs_tgt = len(self.tgt_expansion)
 
@@ -984,12 +979,8 @@ class E2EFromParent(E2EBase):
     default_name = "e2e_from_parent"
 
     def get_kernel(self):
-        if self.src_expansion is not self.tgt_expansion:
-            raise RuntimeError(
-                f"{self.default_name} requires that the source "
-                "and target expansion are the same object")
-
-        ncoeffs = len(self.src_expansion)
+        ncoeffs_src = len(self.src_expansion)
+        ncoeffs_tgt = len(self.tgt_expansion)
 
         # To clarify terminology:
         #
@@ -1020,14 +1011,14 @@ class E2EFromParent(E2EBase):
                     <> src_coeff{i} = \
                         src_expansions[src_ibox - src_base_ibox, {i}] \
                         {{id_prefix=read_expn,dep=read_src_ibox}}
-                    """.format(i=i) for i in range(ncoeffs)] + [
+                    """.format(i=i) for i in range(ncoeffs_src)] + [
 
                     ] + self.get_translation_loopy_insns() + ["""
 
                     tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] = \
                         tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] + coeff{i} \
                         {{id_prefix=write_expn,nosync=read_expn*}}
-                    """.format(i=i) for i in range(ncoeffs)] + ["""
+                    """.format(i=i) for i in range(ncoeffs_tgt)] + ["""
                 end
                 """],
                 [
@@ -1040,9 +1031,9 @@ class E2EFromParent(E2EBase):
                     lp.ValueArg("ntgt_level_boxes,nsrc_level_boxes", np.int32),
                     lp.GlobalArg("box_parent_ids", None, shape="nboxes"),
                     lp.GlobalArg("tgt_expansions", None,
-                        shape=("ntgt_level_boxes", ncoeffs), offset=lp.auto),
+                        shape=("ntgt_level_boxes", ncoeffs_tgt), offset=lp.auto),
                     lp.GlobalArg("src_expansions", None,
-                        shape=("nsrc_level_boxes", ncoeffs), offset=lp.auto),
+                        shape=("nsrc_level_boxes", ncoeffs_src), offset=lp.auto),
                     "..."
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name, assumptions="ntgt_boxes>=1",
