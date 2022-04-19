@@ -59,10 +59,10 @@ def add_mi(mi1, mi2):
 
 
 def mi_factorial(mi):
-    from pytools import factorial
+    import math
     result = 1
     for mi_i in mi:
-        result *= factorial(mi_i)
+        result *= math.factorial(mi_i)
     return result
 
 

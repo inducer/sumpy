@@ -20,17 +20,21 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import sumpy.symbolic as sym
-from sumpy.tools import add_to_sac, fft
-
-from sumpy.expansion import (
-    ExpansionBase, VolumeTaylorExpansion, LinearPDEConformingVolumeTaylorExpansion)
-
-from sumpy.tools import mi_increment_axis, matvec_toeplitz_upper_triangular
-from pytools import single_valued
+import math
 from typing import Tuple, Any
+
 import pymbolic
 import loopy as lp
+from pytools import single_valued
+
+import sumpy.symbolic as sym
+from sumpy.expansion import (
+        ExpansionBase,
+        VolumeTaylorExpansion,
+        LinearPDEConformingVolumeTaylorExpansion)
+from sumpy.tools import (
+        add_to_sac, fft,
+        mi_increment_axis, matvec_toeplitz_upper_triangular)
 
 import logging
 logger = logging.getLogger(__name__)
@@ -236,9 +240,8 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
 
     def evaluate(self, tgt_kernel, coeffs, bvec, rscale, sac=None):
         # no point in heeding rscale here--just ignore it
-        from pytools import factorial
         return sym.Add(*(
-                coeffs[self.get_storage_index(i)] / factorial(i)
+                coeffs[self.get_storage_index(i)] / math.factorial(i)
                 for i in self.get_coefficient_identifiers()))
 
 # }}}
@@ -561,7 +564,6 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
         # not coming from a Taylor multipole: expand via derivatives
         rscale_ratio = add_to_sac(sac, tgt_rscale/src_rscale)
 
-        from math import factorial
         src_wrangler = src_expansion.expansion_terms_wrangler
         src_coeffs = (
             src_wrangler.get_full_kernel_derivatives_from_stored(
@@ -649,7 +651,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
                         if src_mi in src_mi_to_index:
                             cur_dim_output_coeffs[out_i] += (dvec[d]/src_rscale)**q \
                                 * cur_dim_input_coeffs[src_mi_to_index[src_mi]] \
-                                / factorial(q)
+                                / math.factorial(q)
                 # Y at the end of the iteration becomes the source coefficients
                 # for the next iteration
                 cur_dim_input_coeffs = cur_dim_output_coeffs
