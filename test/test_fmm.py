@@ -59,25 +59,32 @@ else:
 
 @pytest.mark.parametrize("optimized_m2l, use_fft",
     [(False, False), (True, False), (True, True)])
-@pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class",
-[
-    (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
-    (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
-        LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (LaplaceKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
-    (LaplaceKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
-        LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
-        LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion),
-    (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
-        LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (YukawaKernel(2), Y2DLocalExpansion, Y2DMultipoleExpansion),
-])
+@pytest.mark.parametrize(
+        ("knl", "local_expn_class", "mpole_expn_class",
+        "order_varies_with_level"), [
+            (LaplaceKernel(2), VolumeTaylorLocalExpansion,
+                VolumeTaylorMultipoleExpansion, False),
+            (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+                LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+            (LaplaceKernel(3), VolumeTaylorLocalExpansion,
+                VolumeTaylorMultipoleExpansion, False),
+            (LaplaceKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
+                LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+            (HelmholtzKernel(2), VolumeTaylorLocalExpansion,
+                VolumeTaylorMultipoleExpansion, False),
+            (HelmholtzKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+                LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+            (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion, False),
+            (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion, True),
+            (HelmholtzKernel(3), VolumeTaylorLocalExpansion,
+                VolumeTaylorMultipoleExpansion, False),
+            (HelmholtzKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
+                LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+            (YukawaKernel(2), Y2DLocalExpansion, Y2DMultipoleExpansion,
+                False),
+            ])
 def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
-        optimized_m2l, use_fft):
+        order_varies_with_level, optimized_m2l, use_fft):
     logging.basicConfig(level=logging.INFO)
 
     if local_expn_class == VolumeTaylorLocalExpansion and use_fft:
@@ -192,12 +199,19 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
                 partial(local_expn_class, knl),
                 target_kernels, use_fft_for_m2l=use_fft)
 
+        if order_varies_with_level:
+            def fmm_level_to_order(kernel, kernel_args, tree, lev):
+                return order + lev % 2
+        else:
+            def fmm_level_to_order(kernel, kernel_args, tree, lev):
+                return order
+
         with warnings.catch_warnings():
             if not optimized_m2l:
                 warnings.simplefilter("ignore",
                     SumpyTranslationClassesDataNotSuppliedWarning)
             wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,
-                fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
+                fmm_level_to_order=fmm_level_to_order,
                 kernel_extra_kwargs=extra_kwargs,
                 translation_classes_data=translation_classes_data)
 
