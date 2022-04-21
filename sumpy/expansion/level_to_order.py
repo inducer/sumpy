@@ -25,6 +25,8 @@ __doc__ = """
 .. autoclass:: SimpleExpansionOrderFinder
 """
 
+import math
+
 import numpy as np
 
 
@@ -143,7 +145,6 @@ class SimpleExpansionOrderFinder:
                     * helmholtz_k
                     / (2*float(np.pi)))
 
-            from math import factorial
             helm_order = 1
             helm_rec_error = self.err_const_helmholtz * factor
             while True:
@@ -152,7 +153,7 @@ class SimpleExpansionOrderFinder:
                 if helm_order < 4:
                     # this may overflow for large orders
                     helm_error_direct = (
-                            1/factorial(helm_order+1)
+                            1/math.factorial(helm_order+1)
                             * self.err_const_helmholtz
                             * factor**(helm_order+1))
                     assert (abs(helm_rec_error - helm_error_direct)
