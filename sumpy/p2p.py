@@ -581,7 +581,7 @@ class P2PFromCSR(P2PBase):
               """] + ["""
                         <> is_self = (isrc == target_to_source[itgt])
                     """ if self.exclude_self else ""]
-              + [f"<> strength_{i} = strengths[{i}, isrc]" for
+              + [f"<> strength_{i} = strength[{i}, isrc]" for
                 i in set(self.strength_usage)]
               + loopy_insns
               + [f"""
