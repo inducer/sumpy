@@ -438,7 +438,7 @@ class P2PMatrixSubsetGenerator(P2PBase):
 class P2PFromCSR(P2PBase):
     default_name = "p2p_from_csr"
 
-    def get_kernel(self, max_npoints_in_one_box):
+    def get_kernel(self, max_npoints_in_one_box, gpu=False, nsplit=32):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
         arguments = (
             self.get_default_src_tgt_arguments()
@@ -467,15 +467,95 @@ class P2PFromCSR(P2PBase):
                 "..."
             ])
 
-        loopy_knl = lp.make_kernel([
+        domains = [
             "{[itgt_box]: 0 <= itgt_box < ntgt_boxes}",
-            "{[itgt]: itgt_start <= itgt < itgt_end}",
-            "{[isrc]: isrc_start <= isrc < isrc_end}",
             "{[iknl]: 0 <= iknl < noutputs}",
             "{[isrc_box]: isrc_box_start <= isrc_box < isrc_box_end}",
             "{[idim]: 0 <= idim < dim}",
-            "{[istrength]: 0 <= istrength < nstrengths}"],
-            self.get_kernel_scaling_assignments()
+            "{[istrength]: 0 <= istrength < nstrengths}",
+            "{[isrc]: isrc_start <= isrc < isrc_end}"
+        ]
+
+        outer_limit = (max_npoints_in_one_box - 1) // nsplit
+
+        if gpu:
+            domains += [
+                "{[inner]: 0 <= inner < nsplit}",
+                "{[itgt_offset_outer]: 0 <= itgt_offset_outer <= outer_limit}",
+                "{[isrc_offset_outer]: 0 <= isrc_offset_outer <= outer_limit}",
+            ]
+        else:
+            domains += [
+                "{[itgt]: itgt_start <= itgt < itgt_end}",
+                "{[isrc]: isrc_start <= isrc < isrc_end}",
+            ]
+
+        if gpu:
+            instructions = (self.get_kernel_scaling_assignments()
+            + ["""
+                for itgt_box
+                <> tgt_ibox = target_boxes[itgt_box]
+                <> itgt_start = box_target_starts[tgt_ibox]
+                <> itgt_end = itgt_start + box_target_counts_nonchild[tgt_ibox]
+
+                <> isrc_box_start = source_box_starts[itgt_box]
+                <> isrc_box_end = source_box_starts[itgt_box+1]
+
+                for itgt_offset_outer
+                  <> itgt_offset = itgt_offset_outer * nsplit + inner
+                  <> itgt = itgt_offset + itgt_start
+                  <> cond_itgt = itgt < itgt_end
+                  <> acc[iknl] = 0 {id=init_acc, dup=iknl}
+                  if cond_itgt
+                    tgt_center[idim] = targets[idim, itgt] {id=prefetch_tgt,dup=idim}
+                  end
+                  for isrc_box
+                    <> src_ibox = source_box_lists[isrc_box]  {id=src_box_insn_0}
+                    <> isrc_start = box_source_starts[src_ibox]  {id=src_box_insn_1}
+                    <> isrc_end = isrc_start + box_source_counts_nonchild[src_ibox] \
+                        {id=src_box_insn_2}
+                    for isrc_offset_outer
+                      <> isrc_offset = isrc_offset_outer * nsplit + inner
+                      <> cond_isrc = isrc_offset < isrc_end - isrc_start
+                      if cond_isrc
+                        local_isrc[idim, isrc_offset] = sources[idim,
+                          isrc_offset + isrc_start]  {id=prefetch_src, dup=idim}
+                        local_isrc_strength[istrength, isrc_offset] = strength[
+                          istrength, isrc_offset + isrc_start]  {id=prefetch_charge}
+                      end
+                    end
+                    if cond_itgt
+                      for isrc
+                        <> d[idim] = (tgt_center[idim] - local_isrc[idim,
+                          isrc - isrc_start]) {dep=prefetch_src:prefetch_tgt}
+            """] + ["""
+                        <> is_self = (isrc == target_to_source[itgt])
+                    """ if self.exclude_self else ""]
+            + [f"<> strength_{i} = local_isrc_strength[{i}, isrc - isrc_start]" for
+                i in set(self.strength_usage)]
+            + loopy_insns
+            + [f"""
+                        acc[{iknl}] = acc[{iknl}] + \
+                          pair_result_{iknl} \
+                          {{id=update_acc_{iknl}, dep=init_acc}}
+                """ for iknl in range(len(self.target_kernels))]
+            + ["""
+                      end
+                    end
+                  end
+               """]
+            + [f"""
+                  if cond_itgt
+                    result[{iknl}, itgt] = knl_{iknl}_scaling * acc[{iknl}] \
+                            {{dep=update_acc_{iknl}}}
+                  end
+                """ for iknl in range(len(self.target_kernels))]
+            + ["""
+                end
+                end
+            """])
+        else:
+            instructions = (self.get_kernel_scaling_assignments()
             + ["""
                 for itgt_box
                 <> tgt_ibox = target_boxes[itgt_box]
@@ -489,28 +569,23 @@ class P2PFromCSR(P2PBase):
                   <> acc[iknl] = 0 {id=init_acc, dup=iknl}
                   tgt_center[idim] = targets[idim, itgt] {id=prefetch_tgt,dup=idim}
                   for isrc_box
-                    <> src_ibox = source_box_lists[isrc_box]
-                    <> isrc_start = box_source_starts[src_ibox]
-                    <> isrc_end = isrc_start + box_source_counts_nonchild[src_ibox]
+                    <> src_ibox = source_box_lists[isrc_box]  {id=src_box_insn_0}
+                    <> isrc_start = box_source_starts[src_ibox]  {id=src_box_insn_1}
+                    <> isrc_end = isrc_start + box_source_counts_nonchild[src_ibox] \
+                            {id=src_box_insn_2}
                     for isrc
-                      local_isrc[idim, isrc - isrc_start] = sources[idim,
-                        isrc]  {id=prefetch_src, dup=idim}
-                      local_isrc_strength[istrength, isrc - isrc_start] = strength[
-                        istrength, isrc]  {id=prefetch_charge}
-                    end
-                    for isrc
-                      <> d[idim] = (tgt_center[idim] - local_isrc[idim,
-                        isrc - isrc_start]) {dep=prefetch_src:prefetch_tgt}
+                        <> d[idim] = (tgt_center[idim] - sources[idim,
+                          isrc]) {dep=prefetch_tgt}
             """] + ["""
-                      <> is_self = (isrc == target_to_source[itgt])
+                        <> is_self = (isrc == target_to_source[itgt])
                     """ if self.exclude_self else ""]
-            + [f"<> strength_{i} = local_isrc_strength[{i}, isrc - isrc_start]" for
+            + [f"<> strength_{i} = strengths[{i}, isrc]" for
                 i in set(self.strength_usage)]
             + loopy_insns
             + [f"""
-                      acc[{iknl}] = acc[{iknl}] + \
-                        pair_result_{iknl} \
-                        {{id=update_acc_{iknl}, dep=init_acc}}
+                        acc[{iknl}] = acc[{iknl}] + \
+                          pair_result_{iknl} \
+                          {{id=update_acc_{iknl}, dep=init_acc}}
                 """ for iknl in range(len(self.target_kernels))]
             + ["""
                     end
@@ -518,12 +593,16 @@ class P2PFromCSR(P2PBase):
                """]
             + [f"""
                   result[{iknl}, itgt] = knl_{iknl}_scaling * acc[{iknl}] \
-                               {{dep=update_acc_{iknl}}}
+                          {{dep=update_acc_{iknl}}}
                 """ for iknl in range(len(self.target_kernels))]
             + ["""
                 end
                 end
-            """],
+            """])
+
+        loopy_knl = lp.make_kernel(
+            domains,
+            instructions,
             arguments,
             assumptions="ntgt_boxes>=1",
             name=self.name,
@@ -532,6 +611,8 @@ class P2PFromCSR(P2PBase):
                 dim=self.dim,
                 nstrengths=self.strength_count,
                 max_npoints_in_one_box=max_npoints_in_one_box,
+                nsplit=nsplit,
+                outer_limit=outer_limit,
                 noutputs=len(self.target_kernels)),
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
@@ -549,16 +630,13 @@ class P2PFromCSR(P2PBase):
         return loopy_knl
 
     def get_optimized_kernel(self, max_npoints_in_one_box):
-        from sumpy.tools import split_iname
-        knl = self.get_kernel(max_npoints_in_one_box)
-
         import pyopencl as cl
         dev = self.context.devices[0]
         if dev.type & cl.device_type.CPU:
+            knl = self.get_kernel(max_npoints_in_one_box, gpu=False)
             knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
         else:
-            knl = split_iname(knl, "itgt", 32, inner_iname="inner")
-            knl = split_iname(knl, "isrc", 32, inner_iname="inner")
+            knl = self.get_kernel(max_npoints_in_one_box, gpu=True, nsplit=32)
             knl = lp.tag_inames(knl, {"itgt_box": "g.0", "inner": "l.0"})
             knl = lp.set_temporary_address_space(knl,
                 ["local_isrc", "local_isrc_strength"], lp.AddressSpace.LOCAL)
