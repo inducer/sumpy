@@ -487,12 +487,11 @@ class P2PFromCSR(P2PBase):
         else:
             domains += [
                 "{[itgt]: itgt_start <= itgt < itgt_end}",
-                "{[isrc]: isrc_start <= isrc < isrc_end}",
             ]
 
         if gpu:
             instructions = (self.get_kernel_scaling_assignments()
-            + ["""
+              + ["""
                 for itgt_box
                 <> tgt_ibox = target_boxes[itgt_box]
                 <> itgt_start = box_target_starts[tgt_ibox]
@@ -528,38 +527,38 @@ class P2PFromCSR(P2PBase):
                       for isrc
                         <> d[idim] = (tgt_center[idim] - local_isrc[idim,
                           isrc - isrc_start]) {dep=prefetch_src:prefetch_tgt}
-            """] + ["""
+              """] + ["""
                         <> is_self = (isrc == target_to_source[itgt])
                     """ if self.exclude_self else ""]
-            + [f"""
+              + [f"""
                 <> strength_{i} = local_isrc_strength[{i}, isrc - isrc_start] \
                    {{dep=prefetch_charge}}
                 """ for
                 i in set(self.strength_usage)]
-            + loopy_insns
-            + [f"""
+              + loopy_insns
+              + [f"""
                         acc[{iknl}] = acc[{iknl}] + \
                           pair_result_{iknl} \
                           {{id=update_acc_{iknl}, dep=init_acc}}
                 """ for iknl in range(len(self.target_kernels))]
-            + ["""
+              + ["""
                       end
                     end
                   end
-               """]
-            + [f"""
+                 """]
+              + [f"""
                   if cond_itgt
                     result[{iknl}, itgt] = knl_{iknl}_scaling * acc[{iknl}] \
-                            {{id=write_csr,dep=update_acc_{iknl}}}
+                            {{id_prefix=write_csr,dep=update_acc_{iknl}}}
                   end
                 """ for iknl in range(len(self.target_kernels))]
-            + ["""
+              + ["""
                 end
                 end
-            """])
+              """])
         else:
             instructions = (self.get_kernel_scaling_assignments()
-            + ["""
+              + ["""
                 for itgt_box
                 <> tgt_ibox = target_boxes[itgt_box]
                 <> itgt_start = box_target_starts[tgt_ibox]
@@ -579,29 +578,29 @@ class P2PFromCSR(P2PBase):
                     for isrc
                         <> d[idim] = (tgt_center[idim] - sources[idim,
                           isrc]) {dep=prefetch_tgt}
-            """] + ["""
+              """] + ["""
                         <> is_self = (isrc == target_to_source[itgt])
                     """ if self.exclude_self else ""]
-            + [f"<> strength_{i} = strengths[{i}, isrc]" for
+              + [f"<> strength_{i} = strengths[{i}, isrc]" for
                 i in set(self.strength_usage)]
-            + loopy_insns
-            + [f"""
+              + loopy_insns
+              + [f"""
                         acc[{iknl}] = acc[{iknl}] + \
                           pair_result_{iknl} \
                           {{id=update_acc_{iknl}, dep=init_acc}}
                 """ for iknl in range(len(self.target_kernels))]
-            + ["""
+              + ["""
                     end
                   end
                """]
-            + [f"""
+              + [f"""
                   result[{iknl}, itgt] = knl_{iknl}_scaling * acc[{iknl}] \
                           {{id_prefix=write_csr,dep=update_acc_{iknl}}}
                 """ for iknl in range(len(self.target_kernels))]
-            + ["""
+              + ["""
                 end
                 end
-            """])
+              """])
 
         loopy_knl = lp.make_kernel(
             domains,
