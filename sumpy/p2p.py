@@ -438,7 +438,8 @@ class P2PMatrixSubsetGenerator(P2PBase):
 class P2PFromCSR(P2PBase):
     default_name = "p2p_from_csr"
 
-    def get_kernel(self, max_npoints_in_one_box, gpu=False, nsplit=32):
+    def get_kernel(self, max_nsources_in_one_box, max_ntargets_in_one_box,
+            gpu=False, nsplit=32):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
         arguments = self.get_default_src_tgt_arguments() \
             + [
@@ -471,19 +472,20 @@ class P2PFromCSR(P2PBase):
             "{[isrc]: isrc_start <= isrc < isrc_end}"
         ]
 
-        outer_limit = (max_npoints_in_one_box - 1) // nsplit
+        src_outer_limit = (max_nsources_in_one_box - 1) // nsplit
+        tgt_outer_limit = (max_ntargets_in_one_box - 1) // nsplit
 
         if gpu:
             arguments += [
                 lp.TemporaryVariable("local_isrc",
-                    shape=(self.dim, max_npoints_in_one_box)),
+                    shape=(self.dim, max_nsources_in_one_box)),
                 lp.TemporaryVariable("local_isrc_strength",
-                    shape=(self.strength_count, max_npoints_in_one_box)),
+                    shape=(self.strength_count, max_nsources_in_one_box)),
             ]
             domains += [
                 "{[inner]: 0 <= inner < nsplit}",
-                "{[itgt_offset_outer]: 0 <= itgt_offset_outer <= outer_limit}",
-                "{[isrc_offset_outer]: 0 <= isrc_offset_outer <= outer_limit}",
+                "{[itgt_offset_outer]: 0 <= itgt_offset_outer <= tgt_outer_limit}",
+                "{[isrc_offset_outer]: 0 <= isrc_offset_outer <= src_outer_limit}",
             ]
         else:
             domains += [
@@ -614,9 +616,9 @@ class P2PFromCSR(P2PBase):
             fixed_parameters=dict(
                 dim=self.dim,
                 nstrengths=self.strength_count,
-                max_npoints_in_one_box=max_npoints_in_one_box,
                 nsplit=nsplit,
-                outer_limit=outer_limit,
+                src_outer_limit=src_outer_limit,
+                tgt_outer_limit=tgt_outer_limit,
                 noutputs=len(self.target_kernels)),
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
@@ -633,14 +635,17 @@ class P2PFromCSR(P2PBase):
 
         return loopy_knl
 
-    def get_optimized_kernel(self, max_npoints_in_one_box):
+    def get_optimized_kernel(self, max_nsources_in_one_box,
+            max_ntargets_in_one_box):
         import pyopencl as cl
         dev = self.context.devices[0]
         if dev.type & cl.device_type.CPU:
-            knl = self.get_kernel(max_npoints_in_one_box, gpu=False)
+            knl = self.get_kernel(max_nsources_in_one_box,
+                    max_ntargets_in_one_box, gpu=False)
             knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
         else:
-            knl = self.get_kernel(max_npoints_in_one_box, gpu=True, nsplit=32)
+            knl = self.get_kernel(max_nsources_in_one_box,
+                    max_ntargets_in_one_box, gpu=True, nsplit=32)
             knl = lp.tag_inames(knl, {"itgt_box": "g.0", "inner": "l.0"})
             knl = lp.set_temporary_address_space(knl,
                 ["local_isrc", "local_isrc_strength"], lp.AddressSpace.LOCAL)
@@ -654,9 +659,11 @@ class P2PFromCSR(P2PBase):
         return knl
 
     def __call__(self, queue, **kwargs):
-        max_npoints_in_one_box = kwargs.pop("max_npoints_in_one_box")
+        max_nsources_in_one_box = kwargs.pop("max_nsources_in_one_box")
+        max_ntargets_in_one_box = kwargs.pop("max_ntargets_in_one_box")
         knl = self.get_cached_optimized_kernel(
-                max_npoints_in_one_box=max_npoints_in_one_box)
+                max_nsources_in_one_box=max_nsources_in_one_box,
+                max_ntargets_in_one_box=max_ntargets_in_one_box)
 
         return knl(queue, **kwargs)
 

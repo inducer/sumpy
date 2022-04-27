@@ -688,8 +688,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 source_box_lists=source_box_lists,
                 strength=src_weight_vecs,
                 result=pot,
-                max_npoints_in_one_box=max(self.max_nsources_in_one_box,
-                    self.max_ntargets_in_one_box),
+                max_nsources_in_one_box=self.max_nsources_in_one_box,
+                max_ntargets_in_one_box=self.max_ntargets_in_one_box,
                 **kwargs)
         events.append(evt)
 
