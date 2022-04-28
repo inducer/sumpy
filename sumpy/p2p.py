@@ -492,6 +492,8 @@ class P2PFromCSR(P2PBase):
                 "{[itgt]: itgt_start <= itgt < itgt_end}",
             ]
 
+        # There are two algorithms here because pocl-pthread 1.9 miscompiles
+        # the "gpu" kernel with prefetching.
         if gpu:
             instructions = (self.get_kernel_scaling_assignments()
               + ["""
