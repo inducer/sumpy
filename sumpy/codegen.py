@@ -390,10 +390,12 @@ class PowerRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
         if isinstance(exp, int):
             new_base = prim.wrap_in_cse(expr.base)
 
-            if exp > 1 and exp % 2 == 0:
+            if exp > 2 and exp % 2 == 0:
                 square = prim.wrap_in_cse(new_base*new_base)
                 return self.rec(prim.wrap_in_cse(square**(exp//2)),
                         rec_self, *args)
+            elif exp == 2:
+                return new_base * new_base
             elif exp > 1 and exp % 2 == 1:
                 square = prim.wrap_in_cse(new_base*new_base)
                 return self.rec(prim.wrap_in_cse(square**((exp-1)//2))*new_base,
