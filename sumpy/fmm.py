@@ -66,8 +66,7 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
             multipole_expansion_factory,
             local_expansion_factory,
             target_kernels, exclude_self=False, use_rscale=None,
-            strength_usage=None, source_kernels=None,
-            use_fft_for_m2l=False, use_preprocessing_for_m2l=None):
+            strength_usage=None, source_kernels=None):
         """
         :arg multipole_expansion_factory: a callable of a single argument (order)
             that returns a multipole expansion.
@@ -77,10 +76,6 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
         :arg exclude_self: whether the self contribution should be excluded
         :arg strength_usage: passed unchanged to p2l, p2m and p2p.
         :arg source_kernels: passed unchanged to p2l, p2m and p2p.
-        :arg use_fft_for_m2l: Use an FFT based multipole-to-local expansion.
-        :arg use_preprocessing_for_m2l: do preprocessing of the source multipole
-            expansion and postprocessing of the target local expansion for
-            multipole-to-local expansion.
         """
         self.multipole_expansion_factory = multipole_expansion_factory
         self.local_expansion_factory = local_expansion_factory
@@ -89,11 +84,6 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
         self.exclude_self = exclude_self
         self.use_rscale = use_rscale
         self.strength_usage = strength_usage
-        self.use_fft_for_m2l = use_fft_for_m2l
-        if use_preprocessing_for_m2l is None:
-            self.use_preprocessing_for_m2l = use_fft_for_m2l
-        else:
-            self.use_preprocessing_for_m2l = use_preprocessing_for_m2l
 
         super().__init__()
 
@@ -110,9 +100,11 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
 
     @memoize_method
     def local_expansion(self, order):
-        return self.local_expansion_factory(order, self.use_rscale,
-                use_fft_for_m2l=self.use_fft_for_m2l,
-                use_preprocessing_for_m2l=self.use_preprocessing_for_m2l)
+        return self.local_expansion_factory(order, self.use_rscale)
+
+    @property
+    def m2l_translation(self):
+        return self.local_expansion(0).m2l_translation
 
     @memoize_method
     def p2m(self, tgt_order):
@@ -325,7 +317,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
         self.dtype = dtype
 
-        if not self.tree_indep.use_fft_for_m2l:
+        if not self.tree_indep.m2l_translation.use_fft:
             # If not FFT, we don't need complex dtypes
             self.preprocessed_mpole_dtype = dtype
         elif preprocessed_mpole_dtype is not None:
@@ -360,7 +352,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         if base_kernel.is_translation_invariant:
             if translation_classes_data is None:
                 from warnings import warn
-                if self.tree_indep.use_fft_for_m2l:
+                if self.tree_indep.m2l_translation.use_fft:
                     raise NotImplementedError(
                          "FFT based List 2 (multipole-to-local) translations "
                          "without translation_classes_data argument is not "
@@ -380,7 +372,6 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             self.supports_translation_classes = False
 
         self.translation_classes_data = translation_classes_data
-        self.use_fft_for_m2l = self.tree_indep.use_fft_for_m2l
 
     # {{{ data vector utilities
 
@@ -409,7 +400,9 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         def order_to_size(order):
             mpole_expn = self.tree_indep.multipole_expansion(order)
             local_expn = self.tree_indep.local_expansion(order)
-            return local_expn.m2l_translation_classes_dependent_ndata(mpole_expn)
+            m2l_translation = local_expn.m2l_translation
+            return m2l_translation.translation_classes_dependent_ndata(
+                    local_expn, mpole_expn)
 
         return build_csr_level_starts(self.level_orders, order_to_size,
                 level_starts=self.m2l_translation_class_level_start_box_nrs())
@@ -480,7 +473,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         def order_to_size(order):
             mpole_expn = self.tree_indep.multipole_expansion(order)
             local_expn = self.tree_indep.local_expansion(order)
-            res = local_expn.m2l_preprocess_multipole_nexprs(mpole_expn)
+            res = local_expn.m2l_translation.preprocess_multipole_nexprs(
+                local_expn, mpole_expn)
             return res
 
         return build_csr_level_starts(self.level_orders, order_to_size,
@@ -774,7 +768,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         queue = mpole_exps.queue
         local_exps = self.local_expansion_zeros(mpole_exps)
 
-        if self.tree_indep.use_preprocessing_for_m2l:
+        if self.tree_indep.m2l_translation.use_preprocessing:
             preprocessed_mpole_exps = \
                 self.m2l_preproc_mpole_expansion_zeros(mpole_exps)
             for lev in range(self.tree.nlevels):
@@ -854,7 +848,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
         postprocess_evts = []
 
-        if self.tree_indep.use_preprocessing_for_m2l:
+        if self.tree_indep.m2l_translation.use_preprocessing:
             for lev in range(self.tree.nlevels):
                 order = self.level_orders[lev]
                 postprocess_local_kernel = \

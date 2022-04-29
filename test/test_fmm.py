@@ -193,11 +193,17 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
         else:
             translation_classes_data = None
 
+        if use_fft:
+            from sumpy.expansion.m2l import VolumeTaylorM2LWithFFT
+            m2l_translation = VolumeTaylorM2LWithFFT()
+        else:
+            m2l_translation = None
+
         tree_indep = SumpyTreeIndependentDataForWrangler(
                 ctx,
                 partial(mpole_expn_class, knl),
-                partial(local_expn_class, knl),
-                target_kernels, use_fft_for_m2l=use_fft)
+                partial(local_expn_class, knl, m2l_translation=m2l_translation),
+                target_kernels)
 
         if order_varies_with_level:
             def fmm_level_to_order(kernel, kernel_args, tree, lev):
