@@ -94,7 +94,7 @@ class LocalExpansionBase(ExpansionBase):
                 to collect common subexpressions or None.
         :arg m2l_translation_classes_dependent_data: An iterable of symbolic
                 expressions representing the expressions returned by
-                :func:`~sumpy.expansion.local.LocalExpansionBase.m2l_translation_classes_dependent_data`.
+                :func:`~sumpy.expansion.m2l.M2LTranslationBase.translation_classes_dependent_data`.
         """
         raise NotImplementedError
 

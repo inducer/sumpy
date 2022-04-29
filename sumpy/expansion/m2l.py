@@ -84,10 +84,10 @@ class M2LTranslationBase:
 
     def translation_classes_dependent_ndata(self, tgt_expansion, src_expansion):
         """Return the number of expressions returned by
-        :func:`~sumpy.expansion.local.LocalExpansionBase.translation_classes_dependent_data`.
+        :func:`~sumpy.expansion.m2l.M2LTranslationBase.translation_classes_dependent_data`.
         This method exists because calculating the number of expressions using
         the above method might be costly and
-        :func:`~sumpy.expansion.local.LocalExpansionBase.translation_classes_dependent_data`
+        :func:`~sumpy.expansion.m2l.M2LTranslationBase.translation_classes_dependent_data`
         cannot be memoized due to it having side effects through the argument
         *sac*.
         """
@@ -109,7 +109,7 @@ class M2LTranslationBase:
 
     def preprocess_multipole_nexprs(self, tgt_expansion, src_expansion):
         """Return the number of expressions returned by
-        :func:`~sumpy.expansion.local.LocalExpansionBase.preprocess_multipole_exprs`.
+        :func:`~sumpy.expansion.m2l.M2LTranslationBase.preprocess_multipole_exprs`.
         This method exists because calculating the number of expressions using
         the above method might be costly and it cannot be memoized due to it having
         side effects through the argument *sac*.
@@ -133,7 +133,7 @@ class M2LTranslationBase:
 
     def postprocess_local_nexprs(self, tgt_expansion, src_expansion):
         """Return the number of expressions given as input to
-        :func:`~sumpy.expansion.local.LocalExpansionBase.postprocess_local_exprs`.
+        :func:`~sumpy.expansion.m2l.M2LTranslationBase.postprocess_local_exprs`.
         This method exists because calculating the number of expressions using
         the above method might be costly and it cannot be memoized due to it
         having side effects through the argument *sac*.
@@ -142,6 +142,9 @@ class M2LTranslationBase:
         # translation classes dependent exprs. Use that as a default.
         return self.translation_classes_dependent_ndata(tgt_expansion,
                                                             src_expansion)
+
+    def update_persistent_hash(self, key_hash, key_builder):
+        key_hash.update(type(self).__name__.encode("utf8"))
 
 
 class VolumeTaylorM2LTranslation(M2LTranslationBase):
