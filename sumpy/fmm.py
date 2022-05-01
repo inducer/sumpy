@@ -198,6 +198,16 @@ class SumpyTimingFuture:
         self.queue = queue
         self.events = events
 
+    @property
+    def native_events(self):
+        native_events = []
+        for event in self.events:
+            if isinstance(event, cl.Event):
+                native_events.append(event)
+            else:
+                native_events.append(event.native_event)
+        return native_events
+
     @memoize_method
     def result(self):
         from boxtree.timing import TimingResult
@@ -212,7 +222,7 @@ class SumpyTimingFuture:
             return TimingResult(wall_elapsed=None)
 
         if self.events:
-            pyopencl.wait_for_events(self.events)
+            pyopencl.wait_for_events(self.native_events)
 
         result = 0
         for event in self.events:
@@ -226,7 +236,7 @@ class SumpyTimingFuture:
         return all(
                 event.get_info(cl.event_info.COMMAND_EXECUTION_STATUS)
                 == cl.command_execution_status.COMPLETE
-                for event in self.events)
+                for event in self.native_events)
 
 # }}}
 
@@ -739,7 +749,6 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     ntranslation_vectors=m2l_translation_vectors.shape[1],
                     **self.kernel_extra_kwargs
                 )
-                m2l_translation_classes_dependent_data_view.add_event(evt)
 
             for lev in range(self.tree.nlevels):
                 m2l_translation_classes_dependent_data_view = \

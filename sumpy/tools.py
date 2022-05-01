@@ -39,7 +39,7 @@ __doc__ = """
 from pytools import memoize_method, memoize
 from pytools.tag import Tag, tag_dataclass
 import numbers
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from pymbolic.mapper import WalkMapper
 
 import numpy as np
@@ -943,17 +943,18 @@ def get_real_part_kernel(context, dtype):
         preamble="#include <pyopencl-complex.h>")
 
 
-class EvtProfileGetterHack:
-    def __init__(self, end_evt, start_evt):
-        self.end_evt = end_evt
-        self.start_evt = start_evt
+ProfileGetter = namedtuple("ProfileGetter", 'start, end')
+
+
+class MarkerBasedProfilingEvent:
+    def __init__(self, end_event, start_event):
+        self.native_event = end_event
+        self.start_event = start_event
 
     @property
-    def end(self):
-        return self.end_evt.profile.end
-
-    def start(self):
-        return self.start_evt.profile.start
+    def profile(self):
+        return ProfileGetter(start=self.start_event.profile.start,
+                             end=self.native_event.profile.end)
 
 
 @memoize(use_kwargs=True)
@@ -1008,11 +1009,9 @@ def run_opencl_fft(queue, input_vec, output_vec=None, inverse=False, wait_for=No
             app.fft(input_vec, output_vec)
 
     end_evt = cl.enqueue_marker(queue, wait_for=[start_evt])
-    # end_evt.profile = EvtProfileGetterHack(end_evt, start_evt)
-    # cl.wait_for_events([end_evt])
-    # queue.finish()
+    output_vec.add_event(end_evt)
 
-    return end_evt, output_vec
+    return MarkerBasedProfilingEvent(end_evt, start_evt), output_vec
 
 # }}}
 
