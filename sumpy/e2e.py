@@ -26,7 +26,7 @@ import sumpy.symbolic as sym
 import pymbolic
 
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
-from sumpy.tools import KernelCacheWrapper, to_complex_dtype
+from sumpy.tools import KernelCacheWrapper, to_complex_dtype, run_opencl_fft
 from pytools import memoize_method
 
 import logging
@@ -533,55 +533,37 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
     """
     default_name = "m2l_generate_translation_classes_dependent_data"
 
-    def get_translation_loopy_insns(self, result_dtype):
-        from sumpy.symbolic import make_sym_vector
-        dvec = make_sym_vector("d", self.dim)
-
-        src_rscale = sym.Symbol("src_rscale")
-
-        m2l_translation = self.tgt_expansion.m2l_translation
-
-        from sumpy.assignment_collection import SymbolicAssignmentCollection
-        sac = SymbolicAssignmentCollection()
-        tgt_coeff_names = [
-            sac.assign_unique(
-                f"m2l_translation_classes_dependent_expr{i}", coeff_i)
-            for i, coeff_i in enumerate(
-                m2l_translation.translation_classes_dependent_data(
-                    self.tgt_expansion, self.src_expansion, src_rscale,
-                    dvec, sac=sac))]
-
-        sac.run_global_cse()
-
-        from sumpy.codegen import to_loopy_insns
-        return to_loopy_insns(
-                sac.assignments.items(),
-                vector_names={"d"},
-                pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
-                retain_names=tgt_coeff_names,
-                complex_dtype=to_complex_dtype(result_dtype),
-                )
-
     def get_kernel(self, result_dtype):
+        m2l_translation = self.tgt_expansion.m2l_translation
         m2l_translation_classes_dependent_ndata = \
-            self.tgt_expansion.m2l_translation.translation_classes_dependent_ndata(
+            m2l_translation.translation_classes_dependent_ndata(
                 self.tgt_expansion, self.src_expansion)
+
+        child_knl = \
+            m2l_translation.translation_classes_dependent_data_loopy_knl(
+                self.tgt_expansion, self.src_expansion, result_dtype)
+
         from sumpy.tools import gather_loopy_arguments
         loopy_knl = lp.make_kernel(
                 [
                     "{[itr_class]: 0<=itr_class<ntranslation_classes}",
                     "{[idim]: 0<=idim<dim}",
+                    "{[idata]: 0<=idata<m2l_translation_classes_dependent_ndata}",
                     ],
                 ["""
                 for itr_class
                     <> d[idim] = m2l_translation_vectors[idim, \
-                            itr_class + translation_classes_level_start]
-
-                    """] + self.get_translation_loopy_insns(result_dtype) + ["""
-                    m2l_translation_classes_dependent_data[itr_class, {idx}] = \
-                            m2l_translation_classes_dependent_expr{idx}
-                    """.format(idx=i) for i in range(
-                        m2l_translation_classes_dependent_ndata)] + ["""
+                            itr_class + translation_classes_level_start] \
+                            {id=set_d,dup=idim}
+                    <> coeff[idata] = 0  {id=init,dup=idata}
+                    [idata]: coeff[idata] = \
+                        m2l_data_inner(
+                            src_rscale,
+                            [idim]: d[idim],
+                            [idata]: coeff[idata]
+                        ) {id=update,dep=init:set_d}
+                    m2l_translation_classes_dependent_data[itr_class, idata] = \
+                        coeff[idata]  {dep=update,dup=idata}
                 end
                 """],
                 [
@@ -600,17 +582,22 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                 name=self.name,
                 assumptions="ntranslation_classes>=1",
                 default_offset=lp.auto,
-                fixed_parameters=dict(dim=self.dim),
+                fixed_parameters=dict(
+                    dim=self.dim,
+                    m2l_translation_classes_dependent_ndata=(
+                        m2l_translation_classes_dependent_ndata)),
                 lang_version=MOST_RECENT_LANGUAGE_VERSION
                 )
 
         for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
-        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+        loopy_knl = lp.merge([loopy_knl, child_knl])
+        loopy_knl = lp.inline_callable_kernel(loopy_knl, "m2l_data_inner")
         loopy_knl = lp.set_options(loopy_knl,
                 enforce_variable_access_ordered="no_check")
 
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         return loopy_knl
 
     def get_optimized_kernel(self, result_dtype):
@@ -639,13 +626,20 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
 
         knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
 
-        return knl(queue,
+        evt, result = knl(queue,
                 src_rscale=src_rscale,
                 m2l_translation_vectors=m2l_translation_vectors,
                 m2l_translation_classes_dependent_data=(
                     m2l_translation_classes_dependent_data),
                 **kwargs)
 
+        if self.tgt_expansion.m2l_translation.use_fft:
+            evt, result = run_opencl_fft(queue,
+                m2l_translation_classes_dependent_data,
+                inverse=False, wait_for=[evt])
+            return evt, (result,)
+        else:
+            return evt, result
 # }}}
 
 

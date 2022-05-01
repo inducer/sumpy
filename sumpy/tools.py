@@ -36,7 +36,7 @@ __doc__ = """
  .. autoclass:: DifferentiatedExprDerivativeTaker
 """
 
-from pytools import memoize_method
+from pytools import memoize_method, memoize
 from pytools.tag import Tag, tag_dataclass
 import numbers
 from collections import defaultdict
@@ -930,6 +930,89 @@ def to_complex_dtype(dtype):
         return to_complex_type_dict[np_type]
     except KeyError:
         raise RuntimeError(f"Unknown dtype: {dtype}")
+
+
+@memoize
+def get_real_part_kernel(context, dtype):
+    from pyopencl.elementwise import ElementwiseKernel
+    pyopencl_name = "float" if dtype == np.float32 else "double"
+    return ElementwiseKernel(context,
+        f"c{pyopencl_name}_t *x, {pyopencl_name} *z",
+        f"z[i] = c{pyopencl_name}_real(x[i])",
+        "real_part",
+        preamble="#include <pyopencl-complex.h>")
+
+
+class EvtProfileGetterHack:
+    def __init__(self, end_evt, start_evt):
+        self.end_evt = end_evt
+        self.start_evt = start_evt
+
+    @property
+    def end(self):
+        return self.end_evt.profile.end
+
+    def start(self):
+        return self.start_evt.profile.start
+
+
+@memoize(use_kwargs=True)
+def cached_vkfft_app(*args, **kwargs):
+    from pyvkfft.opencl import VkFFTApp
+    return VkFFTApp(*args, **kwargs)
+
+
+def run_opencl_fft(queue, input_vec, output_vec=None, inverse=False, wait_for=None):
+    """Runs a FFT on input_vec and returns two opencl markers that indicate the
+    end and start of the operations carried out. Only supports in-order queues.
+    If output_vec is given, the FFT is run out-of-place and the input_vec
+    is overwritten iff it is an inverse FFT with the output_vec type is real.
+    If output_vec is not given, an in-place FFT on input_vec is run.
+    """
+    import pyopencl as cl
+
+    if queue.properties & cl.command_queue_properties.OUT_OF_ORDER_EXEC_MODE_ENABLE:
+        raise RuntimeError("VkFFT does not support out of order queues yet.")
+
+    if wait_for is None:
+        wait_for = []
+
+    start_evt = cl.enqueue_marker(queue, wait_for=wait_for[:])
+
+    input_dtype = input_vec.dtype.type
+    assert input_dtype in (np.float32, np.float64, np.complex64,
+                           np.complex128)
+
+    if output_vec is None:
+        app = cached_vkfft_app(input_vec.shape, input_vec.dtype, queue, ndim=1,
+                   inplace=True)
+        if inverse:
+            app.ifft(input_vec)
+        else:
+            app.fft(input_vec)
+        output_vec = input_vec
+    elif inverse and input_vec.dtype != output_vec.dtype:
+        app = cached_vkfft_app(input_vec.shape, input_vec.dtype, queue, ndim=1,
+                   inplace=True)
+        app.ifft(input_vec)
+        assert output_vec.dtype.type in (np.float32, np.float64)
+        # Take the real part from the result
+        knl = get_real_part_kernel(queue.context, output_vec.dtype)
+        knl(input_vec, output_vec)
+    else:
+        app = cached_vkfft_app(input_vec.shape, input_vec.dtype, queue, ndim=1,
+                   inplace=False)
+        if inverse:
+            app.ifft(input_vec, output_vec)
+        else:
+            app.fft(input_vec, output_vec)
+
+    end_evt = cl.enqueue_marker(queue, wait_for=[start_evt])
+    # end_evt.profile = EvtProfileGetterHack(end_evt, start_evt)
+    # cl.wait_for_events([end_evt])
+    # queue.finish()
+
+    return end_evt, output_vec
 
 # }}}
 

@@ -436,10 +436,20 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 dtype=self.dtype)
 
     def m2l_translation_classes_dependent_data_zeros(self, queue):
-        return cl.array.zeros(
+        def order_to_size(order):
+            mpole_expn = self.tree_indep.multipole_expansion(order)
+            local_expn = self.tree_indep.local_expansion(order)
+            m2l_translation = local_expn.m2l_translation
+            return m2l_translation.translation_classes_dependent_ndata(
+                    local_expn, mpole_expn)
+
+        return [cl.array.zeros(
                 queue,
-                self.m2l_translation_classes_dependent_data_level_starts()[-1],
+                (self.m2l_translation_class_level_start_box_nrs()[level + 1]
+                  - self.m2l_translation_class_level_start_box_nrs()[level],
+                  order_to_size(self.level_orders[level])),
                 dtype=self.preprocessed_mpole_dtype)
+            for level in range(self.tree.nlevels)]
 
     def multipole_expansions_view(self, mpole_exps, level):
         expn_start, expn_stop = \
@@ -464,9 +474,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         translation_class_start, translation_class_stop = \
             self.m2l_translation_class_level_start_box_nrs()[level:level+2]
 
-        exprs_level = m2l_translation_classes_dependent_data[expn_start:expn_stop]
-        return (translation_class_start, exprs_level.reshape(
-                            translation_class_stop - translation_class_start, -1))
+        exprs_level = m2l_translation_classes_dependent_data[level]
+        return (translation_class_start, exprs_level)
 
     @memoize_method
     def m2l_preproc_mpole_expansions_level_starts(self):
@@ -730,12 +739,15 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     ntranslation_vectors=m2l_translation_vectors.shape[1],
                     **self.kernel_extra_kwargs
                 )
-                m2l_translation_classes_dependent_data.add_event(evt)
+                m2l_translation_classes_dependent_data_view.add_event(evt)
 
-            m2l_translation_classes_dependent_data.finish()
+            for lev in range(self.tree.nlevels):
+                m2l_translation_classes_dependent_data_view = \
+                    m2l_translation_classes_dependent_data[lev]
+                m2l_translation_classes_dependent_data_view.finish()
+                m2l_translation_classes_dependent_data[lev] = \
+                    m2l_translation_classes_dependent_data_view.with_queue(None)
 
-            m2l_translation_classes_dependent_data = \
-                    m2l_translation_classes_dependent_data.with_queue(None)
         return m2l_translation_classes_dependent_data
 
     def _add_m2l_precompute_kwargs(self, kwargs_for_m2l,

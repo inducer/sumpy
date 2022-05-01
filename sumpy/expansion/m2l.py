@@ -93,6 +93,15 @@ class M2LTranslationBase:
         """
         return 0
 
+    def translation_classes_dependent_data_loopy_knl(self, tgt_expansion,
+            src_expansion, result_dtype):
+        """Return a :mod:`loopy` kernel that calculates the data described by
+        :func:`~sumpy.expansion.m2l.M2LTranslationBase.translation_classes_dependent_data`.
+        :arg result_dtype: The :mod:`numpy` type of the result.
+        """
+        return translation_classes_dependent_data_loopy_knl(tgt_expansion,
+            src_expansion, result_dtype)
+
     def preprocess_multipole_exprs(self, tgt_expansion, src_expansion,
             src_coeff_exprs, sac, src_rscale):
         """Return the preprocessed multipole expansion for an optimized M2L.
@@ -431,7 +440,8 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
         # first column for the circulant matrix and then finally
         # use the FFT for convolution represented by the circulant
         # matrix.
-        return fft(list(reversed(derivatives_full)), sac=sac)
+        # return fft(list(reversed(derivatives_full)), sac=sac)
+        return list(reversed(derivatives_full))
 
     def preprocess_multipole_exprs(self, tgt_expansion, src_expansion,
             src_coeff_exprs, sac, src_rscale):
@@ -442,11 +452,11 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
 
     def postprocess_local_exprs(self, tgt_expansion, src_expansion, m2l_result,
             src_rscale, tgt_rscale, sac):
+        m2l_result = fft(m2l_result, inverse=True, sac=sac)
         circulant_matrix_mis, _, _ = \
                 self._translation_classes_dependent_data_mis(tgt_expansion,
                                                                  src_expansion)
         n = len(circulant_matrix_mis)
-        m2l_result = fft(m2l_result, inverse=True, sac=sac)
         # since we reversed the M2L matrix, we reverse the result
         # to get the correct result
         m2l_result = list(reversed(m2l_result[:n]))
@@ -660,5 +670,67 @@ class FourierBesselM2LWithFFT(FourierBesselM2LWithPreprocessedMultipoles):
         m2l_result = m2l_result[:2*tgt_expansion.order+1]
         return super().postprocess_local_exprs(tgt_expansion,
             src_expansion, m2l_result, src_rscale, tgt_rscale, sac)
+
+
+# {{{ helper
+
+def translation_classes_dependent_data_loopy_knl(tgt_expansion, src_expansion,
+            result_dtype):
+    src_rscale = sym.Symbol("src_rscale")
+    dvec = sym.make_sym_vector("d", tgt_expansion.dim)
+    from sumpy.assignment_collection import SymbolicAssignmentCollection
+    sac = SymbolicAssignmentCollection()
+    derivatives = tgt_expansion.m2l_translation.translation_classes_dependent_data(
+        tgt_expansion, src_expansion, src_rscale, dvec, sac)
+
+    vec_name = "m2l_translation_classes_dependent_data"
+
+    tgt_coeff_names = [
+            sac.assign_unique("m2l_translation_classes_dependent_data%d" % i,
+                coeff_i)
+            for i, coeff_i in enumerate(derivatives)]
+    sac.run_global_cse()
+
+    from sumpy.codegen import to_loopy_insns
+    from sumpy.tools import to_complex_dtype
+    insns = to_loopy_insns(
+            sac.assignments.items(),
+            vector_names=set(["d"]),
+            pymbolic_expr_maps=[tgt_expansion.get_code_transformer()],
+            retain_names=tgt_coeff_names,
+            complex_dtype=to_complex_dtype(result_dtype),
+            )
+
+    data = pymbolic.var("m2l_translation_classes_dependent_data")
+    depends_on = None
+    for i in range(len(insns)):
+        insn = insns[i]
+        if isinstance(insn, lp.Assignment) and \
+                insn.assignee.name.startswith(vec_name):
+            idx = int(insn.assignee.name[len(vec_name):])
+            insns[i] = lp.Assignment(
+                assignee=data[idx],
+                expression=insn.expression,
+                id=f"data_{idx}",
+                depends_on=depends_on,
+            )
+            depends_on = frozenset([f"data_{idx}"])
+
+    knl = lp.make_function([], insns,
+        kernel_data=[
+            lp.ValueArg("src_rscale", None),
+            lp.GlobalArg("d", None, shape=tgt_expansion.dim),
+            lp.GlobalArg(data.name, None,
+                shape=len(derivatives), is_input=True,
+                is_output=True),
+        ],
+        name="m2l_data_inner",
+        lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
+    )
+
+    return knl
+
+
+# }}}
 
 # vim: fdm=marker
