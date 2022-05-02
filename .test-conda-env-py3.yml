@@ -15,3 +15,4 @@ dependencies:
 - python-symengine=0.6.0
 - pyfmmlib
 - pyrsistent
+- pyvkfft
