@@ -44,6 +44,7 @@ from pymbolic.mapper import WalkMapper
 
 import numpy as np
 import sumpy.symbolic as sym
+import pyopencl as cl
 
 import loopy as lp
 from typing import Dict, Tuple, Any
@@ -947,9 +948,16 @@ ProfileGetter = namedtuple("ProfileGetter", "start, end")
 
 
 class AggregateProfilingEvent:
+    """An object to hold a list of events and provides compatibility
+    with some of the functionality of :class:`pyopencl.Event`.
+    Assumes that the last event waits on all of the previous events.
+    """
     def __init__(self, events):
-        self.native_event = events[-1]
         self.events = events[:]
+        if isinstance(events[-1], cl.Event):
+            self.native_event = events[-1]
+        else:
+            self.native_event = events[-1].native_event
 
     @property
     def profile(self):
@@ -957,8 +965,14 @@ class AggregateProfilingEvent:
         end = self.native_event.profile.end
         return ProfileGetter(start=end - total, end=end)
 
+    def wait(self):
+        return self.native_event.wait()
+
 
 class MarkerBasedProfilingEvent:
+    """An object to hold two marker events and provides compatibility
+    with some of the functionality of :class:`pyopencl.Event`.
+    """
     def __init__(self, *, end_event, start_event):
         self.native_event = end_event
         self.start_event = start_event
@@ -967,6 +981,9 @@ class MarkerBasedProfilingEvent:
     def profile(self):
         return ProfileGetter(start=self.start_event.profile.start,
                              end=self.native_event.profile.end)
+
+    def wait(self):
+        return self.native_event.wait()
 
 
 @memoize(use_kwargs=True)
@@ -982,8 +999,6 @@ def run_opencl_fft(queue, input_vec, output_vec=None, inverse=False, wait_for=No
     is overwritten iff it is an inverse FFT with the output_vec type is real.
     If output_vec is not given, an in-place FFT on input_vec is run.
     """
-    import pyopencl as cl
-
     if queue.properties & cl.command_queue_properties.OUT_OF_ORDER_EXEC_MODE_ENABLE:
         raise RuntimeError("VkFFT does not support out of order queues yet.")
 
