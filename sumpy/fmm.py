@@ -479,7 +479,6 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 m2l_translation_classes_dependent_data, level):
         translation_class_start, _ = \
             self.m2l_translation_class_level_start_box_nrs()[level:level+2]
-
         exprs_level = m2l_translation_classes_dependent_data[level]
         return (translation_class_start, exprs_level)
 
@@ -496,18 +495,19 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 level_starts=self.tree.level_start_box_nrs)
 
     def m2l_preproc_mpole_expansion_zeros(self, template_ary):
-        return cl.array.zeros(
-                template_ary.queue,
-                self.m2l_preproc_mpole_expansions_level_starts()[-1],
-                dtype=self.preprocessed_mpole_dtype)
+        result = []
+        for level in range(self.tree.nlevels):
+            expn_start, expn_stop = \
+                self.m2l_preproc_mpole_expansions_level_starts()[level:level+2]
+            box_start, box_stop = self.tree.level_start_box_nrs[level:level+2]
+            exprs_level = cl.array.zeros(template_ary.queue, expn_stop - expn_start,
+                                 dtype=self.preprocessed_mpole_dtype)
+            result.append(exprs_level.reshape(box_stop - box_start, -1))
+        return result
 
     def m2l_preproc_mpole_expansions_view(self, mpole_exps, level):
-        expn_start, expn_stop = \
-                self.m2l_preproc_mpole_expansions_level_starts()[level:level+2]
-        box_start, box_stop = self.tree.level_start_box_nrs[level:level+2]
-
-        return (box_start,
-                mpole_exps[expn_start:expn_stop].reshape(box_stop-box_start, -1))
+        box_start, _ = self.tree.level_start_box_nrs[level:level+2]
+        return (box_start, mpole_exps[level])
 
     m2l_work_array_view = m2l_preproc_mpole_expansions_view
     m2l_work_array_zeros = m2l_preproc_mpole_expansion_zeros
@@ -781,9 +781,10 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             target_boxes, src_box_starts, src_box_lists,
             mpole_exps):
 
-        preprocess_evts = []
         queue = mpole_exps.queue
         local_exps = self.local_expansion_zeros(mpole_exps)
+        wait_for = []
+        preprocess_evts = []
 
         if self.tree_indep.m2l_translation.use_preprocessing:
             preprocessed_mpole_exps = \
@@ -810,6 +811,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     src_expansions=source_mpoles_view,
                     preprocessed_src_expansions=preprocessed_source_mpoles_view,
                     src_rscale=level_to_rscale(self.tree, lev),
+                    wait_for=wait_for,
                     **self.kernel_extra_kwargs
                 )
                 preprocess_evts.append(evt)
@@ -859,7 +861,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     kwargs["m2l_translation_classes_dependent_data"].size == 0:
                 # There is nothing to do for this level
                 continue
-            evt, _ = m2l(queue, **kwargs, wait_for=preprocess_evts)
+            evt, _ = m2l(queue, **kwargs, wait_for=wait_for)
 
             translate_evts.append(evt)
 
@@ -890,7 +892,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                         target_locals_before_postprocessing_view),
                     src_rscale=level_to_rscale(self.tree, lev),
                     tgt_rscale=level_to_rscale(self.tree, lev),
-                    wait_for=translate_evts,
+                    wait_for=wait_for,
                     **self.kernel_extra_kwargs,
                 )
                 postprocess_evts.append(evt)

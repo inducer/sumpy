@@ -317,9 +317,9 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
 
     def preprocess_multipole_exprs(self, tgt_expansion, src_expansion,
             src_coeff_exprs, sac, src_rscale):
-        circulant_matrix_mis, needed_vector_terms, max_mi = \
-                self._translation_classes_dependent_data_mis(tgt_expansion,
-                                                                 src_expansion)
+        circulant_matrix_mis, _, _ = \
+            self._translation_classes_dependent_data_mis(tgt_expansion,
+                src_expansion)
         circulant_matrix_ident_to_index = {ident: i for i, ident in
                             enumerate(circulant_matrix_mis)}
 
@@ -336,12 +336,50 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
     def preprocess_multipole_nexprs(self, tgt_expansion, src_expansion):
         circulant_matrix_mis, _, _ = \
             self._translation_classes_dependent_data_mis(tgt_expansion,
-                                                             src_expansion)
+                src_expansion)
         return len(circulant_matrix_mis)
+
+    def preprocess_multipole_loopy_knl(self, tgt_expansion, src_expansion,
+            result_dtype):
+
+        circulant_matrix_mis, _, _ = \
+            self._translation_classes_dependent_data_mis(tgt_expansion,
+                src_expansion)
+        circulant_matrix_ident_to_index = dict((ident, i) for i, ident in
+            enumerate(circulant_matrix_mis))
+
+        ncoeff_src = len(src_expansion.get_coefficient_identifiers())
+        ncoeff_preprocessed = self.preprocess_multipole_nexprs(tgt_expansion,
+            src_expansion)
+
+        domains = []
+        insns = []
+        for icoeff_src, term in enumerate(
+                src_expansion.get_coefficient_identifiers()):
+            new_icoeff_src = circulant_matrix_ident_to_index[term]
+            if icoeff_src == 0:
+                insns += [
+                    f"coeff[{new_icoeff_src}] = src_coeffs[{icoeff_src}] "
+                    f"{{id=coeff_insn_{icoeff_src}}}"]
+            else:
+                insns += [
+                    f"coeff[{new_icoeff_src}] = src_coeffs[{icoeff_src}] "
+                    f"{{id=coeff_insn_{icoeff_src},dep=coeff_insn_{icoeff_src-1}}}"]
+
+        return lp.make_function(domains, insns,
+            kernel_data=[
+                lp.ValueArg("src_rscale", None),
+                lp.GlobalArg("coeff", None, shape=ncoeff_preprocessed,
+                    is_input=True),
+                lp.GlobalArg("src_coeffs", None, shape=ncoeff_src),
+                ...],
+            name="m2l_preprocess_inner",
+            lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
+        )
 
     def postprocess_local_exprs(self, tgt_expansion, src_expansion, m2l_result,
             src_rscale, tgt_rscale, sac):
-        circulant_matrix_mis, needed_vector_terms, max_mi = \
+        circulant_matrix_mis, _, _ = \
                 self._translation_classes_dependent_data_mis(tgt_expansion,
                                                                  src_expansion)
         circulant_matrix_ident_to_index = {ident: i for i, ident in
@@ -359,6 +397,91 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
     def postprocess_local_nexprs(self, tgt_expansion, src_expansion):
         return self.translation_classes_dependent_ndata(
             tgt_expansion, src_expansion)
+
+    def postprocess_local_loopy_knl(self, tgt_expansion, src_expansion,
+            result_dtype):
+        circulant_matrix_mis, needed_vector_terms, _ = \
+            self._translation_classes_dependent_data_mis(tgt_expansion,
+                src_expansion)
+        circulant_matrix_ident_to_index = dict((ident, i) for i, ident in
+                            enumerate(circulant_matrix_mis))
+
+        ncoeff_tgt = len(self.tgt_expansion.get_coefficient_identifiers())
+        ncoeff_before_postprocessed = self.postprocess_local_nexprs(tgt_expansion,
+                src_expansion)
+        order = self.tgt_expansion.order
+
+        fixed_parameters = {
+            "ncoeff_tgt": ncoeff_tgt,
+            "ncoeff_before_postprocessed": ncoeff_before_postprocessed,
+            "order": order,
+        }
+
+        domains = [
+            "{[iorder]: 0<iorder<=order}"
+        ]
+
+        insns = ["<> rscale_ratio = tgt_rscale / src_rscale {id=rscale_ratio}"]
+
+        rscale_arr = pymbolic.var("rscale_arr")
+        rscale_ratio = pymbolic.var("rscale_ratio")
+        iorder = pymbolic.var("iorder")
+
+        insns += [
+            lp.Assignment(
+                assignee=rscale_arr[0],
+                expression=1,
+                id="rscale_arr0",
+                depends_on="rscale_ratio",
+            ),
+            lp.Assignment(
+                assignee=rscale_arr[iorder],
+                expression=rscale_arr[iorder - 1]*rscale_ratio,
+                id="rscale_arr",
+                depends_on="rscale_arr0",
+            ),
+        ]
+
+        tgt_coeffs = pymbolic.var("tgt_coeffs")
+        coeffs = pymbolic.var("coeffs")
+
+        for new_icoeff_tgt, term in enumerate(
+                self.get_coefficient_identifiers()):
+            if self.use_fft_for_m2l:
+                # since we reversed the M2L matrix, we reverse the result
+                # to get the correct result
+                n = len(circulant_matrix_mis)
+                icoeff_tgt = n - 1 - circulant_matrix_ident_to_index[term]
+            else:
+                icoeff_tgt = circulant_matrix_ident_to_index[term]
+
+            insns += [
+                lp.Assignment(
+                    assignee=tgt_coeffs[new_icoeff_tgt],
+                    expression=coeffs[icoeff_tgt] * rscale_arr[sum(term)],
+                    id=f"coeff_insn_{new_icoeff_tgt}",
+                    depends_on="rscale_arr",
+                )
+            ]
+
+        return lp.make_function(domains, insns,
+            kernel_data=[
+                lp.ValueArg("src_rscale", None),
+                lp.ValueArg("tgt_rscale", None),
+                lp.GlobalArg("tgt_coeffs", None,
+                    shape=ncoeff_tgt, is_input=True,
+                    is_output=True),
+                lp.GlobalArg("coeffs", None,
+                    shape=ncoeff_before_postprocessed,
+                    is_output=False),
+                lp.TemporaryVariable("rscale_arr",
+                    None,
+                    shape=(order + 1,)),
+                ...],
+            name="m2l_postprocess_inner",
+            lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
+            fixed_parameters=fixed_parameters,
+        )
 
 
 class VolumeTaylorM2LWithPreprocessedMultipoles(VolumeTaylorM2LTranslation):

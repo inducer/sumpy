@@ -650,54 +650,33 @@ class M2LPreprocessMultipole(E2EBase):
 
     default_name = "m2l_preprocess_multipole"
 
-    def get_loopy_insns(self, result_dtype):
-        src_coeff_exprs = [
-            sym.Symbol(f"src_coeff{i}")
-            for i in range(len(self.src_expansion))]
-
-        src_rscale = sym.Symbol("src_rscale")
-
-        from sumpy.assignment_collection import SymbolicAssignmentCollection
-        sac = SymbolicAssignmentCollection()
-
-        preprocessed_src_coeff_names = [
-                sac.assign_unique(f"preprocessed_src_coeff{i}", coeff_i)
-                for i, coeff_i in enumerate(
-                    self.tgt_expansion.m2l_translation.preprocess_multipole_exprs(
-                        self.tgt_expansion, self.src_expansion, src_coeff_exprs,
-                        sac=sac, src_rscale=src_rscale))]
-
-        sac.run_global_cse()
-
-        from sumpy.codegen import to_loopy_insns
-        return to_loopy_insns(
-                sac.assignments.items(),
-                vector_names={"d"},
-                pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
-                retain_names=preprocessed_src_coeff_names,
-                complex_dtype=to_complex_dtype(result_dtype),
-                )
-
     def get_kernel(self, result_dtype):
+        m2l_translation = self.tgt_expansion.m2l_translation
         nsrc_coeffs = len(self.src_expansion)
         npreprocessed_src_coeffs = \
-            self.tgt_expansion.m2l_translation.preprocess_multipole_nexprs(
-                self.tgt_expansion, self.src_expansion)
+            m2l_translation.preprocess_multipole_nexprs(self.tgt_expansion,
+                self.src_expansion)
+        child_knl = m2l_translation.preprocess_multipole_loopy_knl(
+            self.tgt_expansion, self.src_expansion, result_dtype)
+
         from sumpy.tools import gather_loopy_arguments
         loopy_knl = lp.make_kernel(
                 [
                     "{[isrc_box]: 0<=isrc_box<nsrc_boxes}",
-                    ],
+                    "{[isrc_coeff]: 0<=isrc_coeff<nsrc_coeffs}",
+                    "{[itgt_coeff]: 0<=itgt_coeff<npreprocessed_src_coeffs}",
+                ],
                 ["""
                 for isrc_box
-                """] + ["""
-                    <> src_coeff{idx} = src_expansions[isrc_box, {idx}]
-                """.format(idx=i) for i in range(nsrc_coeffs)] + [
-                ] + self.get_loopy_insns(result_dtype) + ["""
-                    preprocessed_src_expansions[isrc_box, {idx}] = \
-                        preprocessed_src_coeff{idx}
-                    """.format(idx=i) for i in range(
-                        npreprocessed_src_coeffs)] + ["""
+                    <> coeffs[itgt_coeff] = 0 {id=init, dup=itgt_coeff}
+                    [itgt_coeff]: coeffs[itgt_coeff] = \
+                      m2l_preprocess_inner(
+                        src_rscale,
+                        [itgt_coeff]: coeffs[itgt_coeff],
+                        [isrc_coeff]: src_expansions[isrc_box, isrc_coeff],
+                      ) {id=update,dep=init}
+                    preprocessed_src_expansions[isrc_box, itgt_coeff] = \
+                        coeffs[itgt_coeff] {dep=update, dup=itgt_coeff}
                 end
                 """],
                 [
@@ -712,22 +691,27 @@ class M2LPreprocessMultipole(E2EBase):
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
                 assumptions="nsrc_boxes>=1",
+                fixed_parameters=dict(
+                    nsrc_coeffs=nsrc_coeffs,
+                    npreprocessed_src_coeffs=npreprocessed_src_coeffs),
                 default_offset=lp.auto,
-                fixed_parameters=dict(dim=self.dim),
-                lang_version=MOST_RECENT_LANGUAGE_VERSION
+                lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
                 )
 
         for expn in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
-        loopy_knl = lp.set_options(loopy_knl,
-                enforce_variable_access_ordered="no_check")
+        loopy_knl = lp.merge([loopy_knl, child_knl])
+        loopy_knl = lp.inline_callable_kernel(loopy_knl, "m2l_preprocess_inner")
+
         return loopy_knl
 
     def get_optimized_kernel(self, result_dtype):
         # FIXME
         knl = self.get_kernel(result_dtype)
-        knl = lp.split_iname(knl, "isrc_box", 16, outer_tag="g.0")
+        knl = lp.split_iname(knl, "isrc_box", 64, outer_tag="g.0",
+                             within=f"in_kernel:{self.name}")
+        knl = lp.add_inames_for_unused_hw_axes(knl)
         return knl
 
     def __call__(self, queue, **kwargs):
@@ -738,8 +722,16 @@ class M2LPreprocessMultipole(E2EBase):
         preprocessed_src_expansions = kwargs.pop("preprocessed_src_expansions")
         result_dtype = preprocessed_src_expansions.dtype
         knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
-        return knl(queue,
-            preprocessed_src_expansions=preprocessed_src_expansions, **kwargs)
+
+        evt, result = knl(queue,
+                preprocessed_src_expansions=preprocessed_src_expansions, **kwargs)
+
+        if self.tgt_expansion.m2l_translation.use_fft:
+            evt, result = run_opencl_fft(queue, preprocessed_src_expansions,
+                inverse=False, wait_for=[evt])
+            return evt, (result,)
+        else:
+            return evt, result
 # }}}
 
 
