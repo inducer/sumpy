@@ -24,6 +24,7 @@ from typing import Tuple, Any
 
 import pymbolic
 import loopy as lp
+import numpy as np
 import sumpy.symbolic as sym
 from sumpy.tools import (
         add_to_sac, fft,
@@ -406,10 +407,10 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         circulant_matrix_ident_to_index = dict((ident, i) for i, ident in
                             enumerate(circulant_matrix_mis))
 
-        ncoeff_tgt = len(self.tgt_expansion.get_coefficient_identifiers())
+        ncoeff_tgt = len(tgt_expansion.get_coefficient_identifiers())
         ncoeff_before_postprocessed = self.postprocess_local_nexprs(tgt_expansion,
                 src_expansion)
-        order = self.tgt_expansion.order
+        order = tgt_expansion.order
 
         fixed_parameters = {
             "ncoeff_tgt": ncoeff_tgt,
@@ -445,9 +446,16 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         tgt_coeffs = pymbolic.var("tgt_coeffs")
         coeffs = pymbolic.var("coeffs")
 
+        if self.use_fft and result_dtype in \
+                (np.float64, np.float32):
+            result_func = pymbolic.var("real")
+        else:
+            def result_func(x):
+                return x
+
         for new_icoeff_tgt, term in enumerate(
-                self.get_coefficient_identifiers()):
-            if self.use_fft_for_m2l:
+                tgt_expansion.get_coefficient_identifiers()):
+            if self.use_fft:
                 # since we reversed the M2L matrix, we reverse the result
                 # to get the correct result
                 n = len(circulant_matrix_mis)
@@ -458,7 +466,8 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
             insns += [
                 lp.Assignment(
                     assignee=tgt_coeffs[new_icoeff_tgt],
-                    expression=coeffs[icoeff_tgt] * rscale_arr[sum(term)],
+                    expression=result_func(
+                        coeffs[icoeff_tgt]) * rscale_arr[sum(term)],
                     id=f"coeff_insn_{new_icoeff_tgt}",
                     depends_on="rscale_arr",
                 )
@@ -566,16 +575,9 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
         # return fft(list(reversed(derivatives_full)), sac=sac)
         return list(reversed(derivatives_full))
 
-    def preprocess_multipole_exprs(self, tgt_expansion, src_expansion,
-            src_coeff_exprs, sac, src_rscale):
-        input_vector = super().preprocess_multipole_exprs(
-            tgt_expansion, src_expansion, src_coeff_exprs, sac, src_rscale)
-
-        return fft(input_vector, sac=sac)
-
     def postprocess_local_exprs(self, tgt_expansion, src_expansion, m2l_result,
             src_rscale, tgt_rscale, sac):
-        m2l_result = fft(m2l_result, inverse=True, sac=sac)
+        # m2l_result = fft(m2l_result, inverse=True, sac=sac)
         circulant_matrix_mis, _, _ = \
                 self._translation_classes_dependent_data_mis(tgt_expansion,
                                                                  src_expansion)

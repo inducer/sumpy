@@ -946,8 +946,20 @@ def get_real_part_kernel(context, dtype):
 ProfileGetter = namedtuple("ProfileGetter", "start, end")
 
 
+class AggregateProfilingEvent:
+    def __init__(self, events):
+        self.native_event = events[-1]
+        self.events = events[:]
+
+    @property
+    def profile(self):
+        total = sum(evt.end - evt.start for evt in self.events)
+        end = self.native_event.profile.end
+        return ProfileGetter(start=end - total, end=end)
+
+
 class MarkerBasedProfilingEvent:
-    def __init__(self, end_event, start_event):
+    def __init__(self, *, end_event, start_event):
         self.native_event = end_event
         self.start_event = start_event
 
@@ -984,34 +996,20 @@ def run_opencl_fft(queue, input_vec, output_vec=None, inverse=False, wait_for=No
     assert input_dtype in (np.float32, np.float64, np.complex64,
                            np.complex128)
 
-    if output_vec is None:
-        app = cached_vkfft_app(input_vec.shape, input_vec.dtype, queue, ndim=1,
-                   inplace=True)
-        if inverse:
-            app.ifft(input_vec)
-        else:
-            app.fft(input_vec)
-        output_vec = input_vec
-    elif inverse and input_vec.dtype != output_vec.dtype:
-        app = cached_vkfft_app(input_vec.shape, input_vec.dtype, queue, ndim=1,
-                   inplace=True)
-        app.ifft(input_vec)
-        assert output_vec.dtype.type in (np.float32, np.float64)
-        # Take the real part from the result
-        knl = get_real_part_kernel(queue.context, output_vec.dtype)
-        knl(input_vec, output_vec)
+    inplace = output_vec is None
+    app = cached_vkfft_app(input_vec.shape, input_vec.dtype, queue, ndim=1,
+               inplace=inplace)
+    if inverse:
+        app.ifft(input_vec, output_vec)
     else:
-        app = cached_vkfft_app(input_vec.shape, input_vec.dtype, queue, ndim=1,
-                   inplace=False)
-        if inverse:
-            app.ifft(input_vec, output_vec)
-        else:
-            app.fft(input_vec, output_vec)
+        app.fft(input_vec, output_vec)
 
     end_evt = cl.enqueue_marker(queue, wait_for=[start_evt])
+    output_vec = input_vec if inplace else output_vec
     output_vec.add_event(end_evt)
 
-    return MarkerBasedProfilingEvent(end_evt, start_evt), output_vec
+    return MarkerBasedProfilingEvent(end_event=end_evt,
+            start_event=start_evt), output_vec
 
 # }}}
 

@@ -26,7 +26,8 @@ import sumpy.symbolic as sym
 import pymbolic
 
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
-from sumpy.tools import KernelCacheWrapper, to_complex_dtype, run_opencl_fft
+from sumpy.tools import (KernelCacheWrapper, to_complex_dtype, run_opencl_fft,
+    AggregateProfilingEvent)
 from pytools import memoize_method
 
 import logging
@@ -634,10 +635,10 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                 **kwargs)
 
         if self.tgt_expansion.m2l_translation.use_fft:
-            evt, result = run_opencl_fft(queue,
+            evt2, result = run_opencl_fft(queue,
                 m2l_translation_classes_dependent_data,
                 inverse=False, wait_for=[evt])
-            return evt, (result,)
+            return AggregateProfilingEvent([evt, evt2]), (result,)
         else:
             return evt, result
 # }}}
@@ -727,9 +728,9 @@ class M2LPreprocessMultipole(E2EBase):
                 preprocessed_src_expansions=preprocessed_src_expansions, **kwargs)
 
         if self.tgt_expansion.m2l_translation.use_fft:
-            evt, result = run_opencl_fft(queue, preprocessed_src_expansions,
+            evt2, result = run_opencl_fft(queue, preprocessed_src_expansions,
                 inverse=False, wait_for=[evt])
-            return evt, (result,)
+            return AggregateProfilingEvent([evt, evt2]), (result,)
         else:
             return evt, result
 # }}}
@@ -742,68 +743,36 @@ class M2LPostprocessLocal(E2EBase):
 
     default_name = "m2l_postprocess_local"
 
-    def get_loopy_insns(self, result_dtype):
-        m2l_translation = self.tgt_expansion.m2l_translation
-        ncoeffs_before_postprocessing = \
-            m2l_translation.postprocess_local_nexprs(self.tgt_expansion,
-                                                     self.src_expansion)
-
-        tgt_coeff_exprs_before_postprocessing = [
-            sym.Symbol(f"tgt_coeff_before_postprocessing{i}")
-            for i in range(ncoeffs_before_postprocessing)]
-
-        src_rscale = sym.Symbol("src_rscale")
-        tgt_rscale = sym.Symbol("tgt_rscale")
-
-        from sumpy.assignment_collection import SymbolicAssignmentCollection
-        sac = SymbolicAssignmentCollection()
-
-        tgt_coeff_exprs = m2l_translation.postprocess_local_exprs(
-            self.tgt_expansion, self.src_expansion,
-            tgt_coeff_exprs_before_postprocessing,
-            sac=sac, src_rscale=src_rscale, tgt_rscale=tgt_rscale)
-
-        if result_dtype in (np.float32, np.float64):
-            real_func = sym.Function("real")
-            tgt_coeff_exprs = [real_func(expr) for expr in
-                    tgt_coeff_exprs]
-
-        tgt_coeff_names = [
-            sac.assign_unique(f"tgt_coeff{i}", coeff_i)
-            for i, coeff_i in enumerate(tgt_coeff_exprs)]
-
-        sac.run_global_cse()
-
-        from sumpy.codegen import to_loopy_insns
-        return to_loopy_insns(
-                sac.assignments.items(),
-                vector_names={"d"},
-                pymbolic_expr_maps=[self.tgt_expansion.get_code_transformer()],
-                retain_names=tgt_coeff_names,
-                complex_dtype=to_complex_dtype(result_dtype),
-                )
-
     def get_kernel(self, result_dtype):
+        m2l_translation = self.tgt_expansion.m2l_translation
         ntgt_coeffs = len(self.tgt_expansion)
         ntgt_coeffs_before_postprocessing = \
-            self.tgt_expansion.m2l_translation.postprocess_local_nexprs(
-                self.tgt_expansion, self.src_expansion)
+            m2l_translation.postprocess_local_nexprs(self.tgt_expansion,
+                self.src_expansion)
+
+        child_knl = m2l_translation.postprocess_local_loopy_knl(
+            self.tgt_expansion, self.src_expansion, result_dtype)
+
         from sumpy.tools import gather_loopy_arguments
         loopy_knl = lp.make_kernel(
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
-                    ],
+                    "{[isrc_coeff]: 0<=isrc_coeff<nsrc_coeffs}",
+                    "{[itgt_coeff]: 0<=itgt_coeff<ntgt_coeffs}",
+                ],
                 ["""
                 for itgt_box
-                """] + ["""
-                    <> tgt_coeff_before_postprocessing{idx} = \
-                            tgt_expansions_before_postprocessing[itgt_box, {idx}]
-                """.format(idx=i) for i in range(
-                    ntgt_coeffs_before_postprocessing)]
-                + self.get_loopy_insns(result_dtype) + ["""
-                    tgt_expansions[itgt_box, {idx}] = \
-                        tgt_coeff{idx}
-                    """.format(idx=i) for i in range(ntgt_coeffs)] + ["""
+                    <> coeffs[itgt_coeff] = 0 {id=init, dup=itgt_coeff}
+                    [itgt_coeff]: coeffs[itgt_coeff] = \
+                      m2l_postprocess_inner(
+                        tgt_rscale,
+                        src_rscale,
+                        [itgt_coeff]: coeffs[itgt_coeff],
+                        [isrc_coeff]: tgt_expansions_before_postprocessing[ \
+                          itgt_box, isrc_coeff],
+                      ) {id=update,dep=init}
+                    tgt_expansions[itgt_box, itgt_coeff] = \
+                        coeffs[itgt_coeff] {dep=update, dup=itgt_coeff}
                 end
                 """],
                 [
@@ -820,12 +789,19 @@ class M2LPostprocessLocal(E2EBase):
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 default_offset=lp.auto,
-                fixed_parameters=dict(dim=self.dim),
+                fixed_parameters=dict(
+                    dim=self.dim,
+                    nsrc_coeffs=ntgt_coeffs_before_postprocessing,
+                    ntgt_coeffs=ntgt_coeffs,
+                ),
                 lang_version=MOST_RECENT_LANGUAGE_VERSION
                 )
 
         for expn in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
+
+        loopy_knl = lp.merge([loopy_knl, child_knl])
+        loopy_knl = lp.inline_callable_kernel(loopy_knl, "m2l_postprocess_inner")
 
         loopy_knl = lp.set_options(loopy_knl,
                 enforce_variable_access_ordered="no_check")
@@ -843,10 +819,27 @@ class M2LPostprocessLocal(E2EBase):
         :arg tgt_expansions_before_postprocessing
         """
         tgt_expansions = kwargs.pop("tgt_expansions")
+        tgt_expansions_before_postprocessing = kwargs.pop(
+            "tgt_expansions_before_postprocessing")
         result_dtype = tgt_expansions.dtype
         knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
-        return knl(queue,
-            tgt_expansions=tgt_expansions, **kwargs)
+
+        if self.tgt_expansion.m2l_translation.use_fft:
+            wait_for = kwargs.pop("wait_for", [])
+            evt, _ = run_opencl_fft(queue, tgt_expansions_before_postprocessing,
+                inverse=True, wait_for=wait_for)
+            evt2, result = knl(queue,
+                tgt_expansions=tgt_expansions,
+                tgt_expansions_before_postprocessing=(
+                    tgt_expansions_before_postprocessing),
+                **kwargs)
+            return AggregateProfilingEvent([evt, evt2]), result
+        else:
+            return knl(queue,
+                tgt_expansions=tgt_expansions,
+                tgt_expansions_before_postprocessing=(
+                    tgt_expansions_before_postprocessing),
+                **kwargs)
 
 # }}}
 
