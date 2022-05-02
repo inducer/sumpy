@@ -961,7 +961,7 @@ class AggregateProfilingEvent:
 
     @property
     def profile(self):
-        total = sum(evt.end - evt.start for evt in self.events)
+        total = sum(evt.profile.end - evt.profile.start for evt in self.events)
         end = self.native_event.profile.end
         return ProfileGetter(start=end - total, end=end)
 
