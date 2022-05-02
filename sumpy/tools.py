@@ -943,7 +943,7 @@ def get_real_part_kernel(context, dtype):
         preamble="#include <pyopencl-complex.h>")
 
 
-ProfileGetter = namedtuple("ProfileGetter", 'start, end')
+ProfileGetter = namedtuple("ProfileGetter", "start, end")
 
 
 class MarkerBasedProfilingEvent:
