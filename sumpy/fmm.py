@@ -447,7 +447,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
     def m2l_translation_classes_dependent_data_zeros(self, queue):
         result = []
-        for level in range(self.range.nlevels):
+        for level in range(self.tree.nlevels):
             expn_start, expn_stop = \
                 self.m2l_translation_classes_dependent_data_level_starts()[
                     level:level+2]
