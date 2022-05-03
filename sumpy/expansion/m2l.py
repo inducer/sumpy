@@ -120,6 +120,8 @@ class DefaultM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
 
 # }}}
 
+# {{{ M2LTranslationBase
+
 class M2LTranslationBase:
     """Base class for Multipole to Local Translation
 
@@ -225,6 +227,10 @@ class M2LTranslationBase:
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode("utf8"))
 
+
+# }}} M2LTranslationBase
+
+# {{{ VolumeTaylorM2LTranslation
 
 class VolumeTaylorM2LTranslation(M2LTranslationBase):
     def translate(self, tgt_expansion, src_expansion, src_coeff_exprs, src_rscale,
@@ -431,6 +437,10 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
             tgt_expansion, src_expansion)
 
 
+# }}} VolumeTaylorM2LTranslation
+
+# {{{ VolumeTaylorM2LWithPreprocessedMultipoles
+
 class VolumeTaylorM2LWithPreprocessedMultipoles(VolumeTaylorM2LTranslation):
     use_preprocessing = True
 
@@ -487,6 +497,10 @@ class VolumeTaylorM2LWithPreprocessedMultipoles(VolumeTaylorM2LTranslation):
                 )
 
 
+# }}} VolumeTaylorM2LWithPreprocessedMultipoles
+
+# {{{ VolumeTaylorM2LWithFFT
+
 class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
     use_fft = True
 
@@ -533,6 +547,10 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
         return super().postprocess_local_exprs(tgt_expansion,
             src_expansion, m2l_result, src_rscale, tgt_rscale, sac)
 
+
+# }}} VolumeTaylorM2LWithFFT
+
+# {{{ FourierBesselM2LTranslation
 
 class FourierBesselM2LTranslation(M2LTranslationBase):
     def translate(self, tgt_expansion, src_expansion, src_coeff_exprs, src_rscale,
@@ -615,6 +633,10 @@ class FourierBesselM2LTranslation(M2LTranslationBase):
         return 2*tgt_expansion.order + 1
 
 
+# }}} FourierBesselM2LTranslation
+
+# {{{ FourierBesselM2LWithPreprocessedMultipoles
+
 class FourierBesselM2LWithPreprocessedMultipoles(FourierBesselM2LTranslation):
     use_preprocessing = True
 
@@ -669,6 +691,10 @@ class FourierBesselM2LWithPreprocessedMultipoles(FourierBesselM2LTranslation):
                 lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
                 )
 
+
+# }}} FourierBesselM2LWithPreprocessedMultipoles
+
+# {{{ FourierBesselM2LWithFFT
 
 class FourierBesselM2LWithFFT(FourierBesselM2LWithPreprocessedMultipoles):
     use_fft = True
@@ -740,4 +766,5 @@ class FourierBesselM2LWithFFT(FourierBesselM2LWithPreprocessedMultipoles):
         return super().postprocess_local_exprs(tgt_expansion,
             src_expansion, m2l_result, src_rscale, tgt_rscale, sac)
 
+# }}} FourierBesselM2LWithFFT
 # vim: fdm=marker
