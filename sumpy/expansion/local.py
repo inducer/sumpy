@@ -163,8 +163,10 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
     def __init__(self, kernel, order, use_rscale=None,
             m2l_translation=None):
         if not m2l_translation:
-            from sumpy.expansion.m2l import VolumeTaylorM2LTranslation
-            m2l_translation = VolumeTaylorM2LTranslation()
+            from sumpy.expansion.m2l import DefaultM2LTranslationClassFactory
+            factory = DefaultM2LTranslationClassFactory()
+            m2l_translation = factory.get_m2l_translation_class(kernel,
+                self.__class__)()
         super().__init__(kernel, order, use_rscale, m2l_translation)
 
     def coefficients_from_source_vec(self, kernels, avec, bvec, rscale, weights,
@@ -464,8 +466,10 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
     def __init__(self, kernel, order, use_rscale=None,
             m2l_translation=None):
         if not m2l_translation:
-            from sumpy.expansion.m2l import FourierBesselM2LTranslation
-            m2l_translation = FourierBesselM2LTranslation()
+            from sumpy.expansion.m2l import DefaultM2LTranslationClassFactory
+            factory = DefaultM2LTranslationClassFactory()
+            m2l_translation = factory.get_m2l_translation_class(kernel,
+                self.__class__)()
         super().__init__(kernel, order, use_rscale, m2l_translation)
 
     def get_storage_index(self, k):

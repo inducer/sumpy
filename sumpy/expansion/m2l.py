@@ -33,6 +33,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 __doc__ = """
+.. autoclass:: M2LTranslationClassFactoryBase
+.. autoclass:: NonFFTM2LTranslationClassFactory
+.. autoclass:: FFTM2LTranslationClassFactory
+.. autoclass:: DefaultM2LTranslationClassFactory
 
 .. autoclass:: M2LTranslationBase
 .. autoclass:: VolumeTaylorM2LTranslation
@@ -40,6 +44,81 @@ __doc__ = """
 .. autoclass:: FourierBesselM2LTranslation
 """
 
+
+# {{{ M2L translation factory
+
+class M2LTranslationClassFactoryBase:
+    """An interface
+    .. automethod:: get_m2l_translation_class
+    """
+
+    def get_m2l_translation_class(self, base_kernel, local_expansion_class):
+        """Returns a subclass of :class:`M2LTranslationBase` suitable for
+        *base_kernel* and *local_expansion_class*.
+        """
+        raise NotImplementedError()
+
+
+class NonFFTM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
+    """An implementation of :class:`M2LTranslationClassFactoryBase` that uses
+    non FFT M2L translation class.
+    """
+
+    def get_m2l_translation_class(self, base_kernel, local_expansion_class):
+        """Returns a subclass of :class:`M2LTranslationBase` suitable for
+        *base_kernel* and *local_expansion_class*.
+        """
+        from sumpy.expansion.local import (VolumeTaylorLocalExpansionBase,
+            _FourierBesselLocalExpansion)
+        if issubclass(local_expansion_class, VolumeTaylorLocalExpansionBase):
+            return VolumeTaylorM2LTranslation
+        elif issubclass(local_expansion_class, _FourierBesselLocalExpansion):
+            return FourierBesselM2LTranslation
+        else:
+            raise RuntimeError(
+                f"Unknown local_expansion_class: {local_expansion_class}")
+
+
+class FFTM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
+    """An implementation of :class:`M2LTranslationClassFactoryBase` that uses
+    FFT M2L translation class.
+    """
+
+    def get_m2l_translation_class(self, base_kernel, local_expansion_class):
+        """Returns a subclass of :class:`M2LTranslationBase` suitable for
+        *base_kernel* and *local_expansion_class*.
+        """
+        from sumpy.expansion.local import (VolumeTaylorLocalExpansionBase,
+            _FourierBesselLocalExpansion)
+        if issubclass(local_expansion_class, VolumeTaylorLocalExpansionBase):
+            return VolumeTaylorM2LWithFFT
+        elif issubclass(local_expansion_class, _FourierBesselLocalExpansion):
+            return FourierBesselM2LWithFFT
+        else:
+            raise RuntimeError(
+                f"Unknown local_expansion_class: {local_expansion_class}")
+
+
+class DefaultM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
+    """An implementation of :class:`M2LTranslationClassFactoryBase` that gives the
+    'best known' translation type for each kernel and local expansion class"""
+    def get_m2l_translation_class(self, base_kernel, local_expansion_class):
+        from sumpy.expansion.local import (VolumeTaylorLocalExpansionBase,
+            _FourierBesselLocalExpansion)
+        from sumpy.kernel import LaplaceKernel
+        if issubclass(local_expansion_class, VolumeTaylorLocalExpansionBase):
+            if isinstance(base_kernel, LaplaceKernel):
+                return VolumeTaylorM2LWithFFT
+            else:
+                return VolumeTaylorM2LTranslation
+        elif issubclass(local_expansion_class, _FourierBesselLocalExpansion):
+            return FourierBesselM2LTranslation
+        else:
+            raise RuntimeError(
+                f"Unknown local_expansion_class: {local_expansion_class}")
+
+
+# }}}
 
 class M2LTranslationBase:
     """Base class for Multipole to Local Translation
