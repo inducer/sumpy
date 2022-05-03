@@ -25,6 +25,7 @@ THE SOFTWARE.
 
 from pytools import memoize_method
 from numbers import Number
+from functools import partial
 from sumpy.kernel import TargetTransformationRemover
 
 import numpy as np  # noqa: F401
@@ -103,8 +104,14 @@ class ToyContext:
             mpole_expn_class = \
                     expansion_factory.get_multipole_expansion_class(kernel)
         if local_expn_class is None:
+            from sumpy.expansion.m2l import DefaultM2LTranslationClassFactory
+            m2l_translation_class_factory = DefaultM2LTranslationClassFactory()
             local_expn_class = \
                     expansion_factory.get_local_expansion_class(kernel)
+            local_expn_class = partial(local_expn_class,
+                m2l_translation=(
+                    m2l_translation_class_factory.get_m2l_translation_class(
+                        kernel, local_expn_class)))
 
         self.mpole_expn_class = mpole_expn_class
         self.local_expn_class = local_expn_class

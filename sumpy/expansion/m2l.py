@@ -34,6 +34,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 __doc__ = """
+.. autoclass:: M2LTranslationClassFactoryBase
+.. autoclass:: NonFFTM2LTranslationClassFactory
+.. autoclass:: FFTM2LTranslationClassFactory
+.. autoclass:: DefaultM2LTranslationClassFactory
 
 .. autoclass:: M2LTranslationBase
 .. autoclass:: VolumeTaylorM2LTranslation
@@ -41,6 +45,83 @@ __doc__ = """
 .. autoclass:: FourierBesselM2LTranslation
 """
 
+
+# {{{ M2L translation factory
+
+class M2LTranslationClassFactoryBase:
+    """An interface
+    .. automethod:: get_m2l_translation_class
+    """
+
+    def get_m2l_translation_class(self, base_kernel, local_expansion_class):
+        """Returns a subclass of :class:`M2LTranslationBase` suitable for
+        *base_kernel* and *local_expansion_class*.
+        """
+        raise NotImplementedError()
+
+
+class NonFFTM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
+    """An implementation of :class:`M2LTranslationClassFactoryBase` that uses
+    non FFT M2L translation class.
+    """
+
+    def get_m2l_translation_class(self, base_kernel, local_expansion_class):
+        """Returns a subclass of :class:`M2LTranslationBase` suitable for
+        *base_kernel* and *local_expansion_class*.
+        """
+        from sumpy.expansion.local import (VolumeTaylorLocalExpansionBase,
+            _FourierBesselLocalExpansion)
+        if issubclass(local_expansion_class, VolumeTaylorLocalExpansionBase):
+            return VolumeTaylorM2LTranslation
+        elif issubclass(local_expansion_class, _FourierBesselLocalExpansion):
+            return FourierBesselM2LTranslation
+        else:
+            raise RuntimeError(
+                f"Unknown local_expansion_class: {local_expansion_class}")
+
+
+class FFTM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
+    """An implementation of :class:`M2LTranslationClassFactoryBase` that uses
+    FFT M2L translation class.
+    """
+
+    def get_m2l_translation_class(self, base_kernel, local_expansion_class):
+        """Returns a subclass of :class:`M2LTranslationBase` suitable for
+        *base_kernel* and *local_expansion_class*.
+        """
+        from sumpy.expansion.local import (VolumeTaylorLocalExpansionBase,
+            _FourierBesselLocalExpansion)
+        if issubclass(local_expansion_class, VolumeTaylorLocalExpansionBase):
+            return VolumeTaylorM2LWithFFT
+        elif issubclass(local_expansion_class, _FourierBesselLocalExpansion):
+            return FourierBesselM2LWithFFT
+        else:
+            raise RuntimeError(
+                f"Unknown local_expansion_class: {local_expansion_class}")
+
+
+class DefaultM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
+    """An implementation of :class:`M2LTranslationClassFactoryBase` that gives the
+    'best known' translation type for each kernel and local expansion class"""
+    def get_m2l_translation_class(self, base_kernel, local_expansion_class):
+        from sumpy.expansion.local import (VolumeTaylorLocalExpansionBase,
+            _FourierBesselLocalExpansion)
+        from sumpy.kernel import LaplaceKernel
+        if issubclass(local_expansion_class, VolumeTaylorLocalExpansionBase):
+            if isinstance(base_kernel, LaplaceKernel):
+                return VolumeTaylorM2LWithFFT
+            else:
+                return VolumeTaylorM2LTranslation
+        elif issubclass(local_expansion_class, _FourierBesselLocalExpansion):
+            return FourierBesselM2LTranslation
+        else:
+            raise RuntimeError(
+                f"Unknown local_expansion_class: {local_expansion_class}")
+
+
+# }}}
+
+# {{{ M2LTranslationBase
 
 class M2LTranslationBase:
     """Base class for Multipole to Local Translation
@@ -156,6 +237,10 @@ class M2LTranslationBase:
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode("utf8"))
 
+
+# }}} M2LTranslationBase
+
+# {{{ VolumeTaylorM2LTranslation
 
 class VolumeTaylorM2LTranslation(M2LTranslationBase):
     def translate(self, tgt_expansion, src_expansion, src_coeff_exprs, src_rscale,
@@ -493,6 +578,10 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         )
 
 
+# }}} VolumeTaylorM2LTranslation
+
+# {{{ VolumeTaylorM2LWithPreprocessedMultipoles
+
 class VolumeTaylorM2LWithPreprocessedMultipoles(VolumeTaylorM2LTranslation):
     use_preprocessing = True
 
@@ -549,6 +638,10 @@ class VolumeTaylorM2LWithPreprocessedMultipoles(VolumeTaylorM2LTranslation):
                 )
 
 
+# }}} VolumeTaylorM2LWithPreprocessedMultipoles
+
+# {{{ VolumeTaylorM2LWithFFT
+
 class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
     use_fft = True
 
@@ -589,6 +682,10 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
         return super().postprocess_local_exprs(tgt_expansion,
             src_expansion, m2l_result, src_rscale, tgt_rscale, sac)
 
+
+# }}} VolumeTaylorM2LWithFFT
+
+# {{{ FourierBesselM2LTranslation
 
 class FourierBesselM2LTranslation(M2LTranslationBase):
     def translate(self, tgt_expansion, src_expansion, src_coeff_exprs, src_rscale,
@@ -671,6 +768,10 @@ class FourierBesselM2LTranslation(M2LTranslationBase):
         return 2*tgt_expansion.order + 1
 
 
+# }}} FourierBesselM2LTranslation
+
+# {{{ FourierBesselM2LWithPreprocessedMultipoles
+
 class FourierBesselM2LWithPreprocessedMultipoles(FourierBesselM2LTranslation):
     use_preprocessing = True
 
@@ -725,6 +826,10 @@ class FourierBesselM2LWithPreprocessedMultipoles(FourierBesselM2LTranslation):
                 lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
                 )
 
+
+# }}} FourierBesselM2LWithPreprocessedMultipoles
+
+# {{{ FourierBesselM2LWithFFT
 
 class FourierBesselM2LWithFFT(FourierBesselM2LWithPreprocessedMultipoles):
     use_fft = True
@@ -796,6 +901,8 @@ class FourierBesselM2LWithFFT(FourierBesselM2LWithPreprocessedMultipoles):
         return super().postprocess_local_exprs(tgt_expansion,
             src_expansion, m2l_result, src_rscale, tgt_rscale, sac)
 
+      
+# }}} FourierBesselM2LWithFFT
 
 # {{{ helper
 

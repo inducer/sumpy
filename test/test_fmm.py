@@ -194,10 +194,14 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
             translation_classes_data = None
 
         if use_fft:
-            from sumpy.expansion.m2l import VolumeTaylorM2LWithFFT
-            m2l_translation = VolumeTaylorM2LWithFFT()
+            from sumpy.expansion.m2l import FFTM2LTranslationClassFactory
+            m2l_translation_factory = FFTM2LTranslationClassFactory()
         else:
-            m2l_translation = None
+            from sumpy.expansion.m2l import NonFFTM2LTranslationClassFactory
+            m2l_translation_factory = NonFFTM2LTranslationClassFactory()
+
+        m2l_translation = m2l_translation_factory.get_m2l_translation_class(
+                knl, local_expn_class)
 
         tree_indep = SumpyTreeIndependentDataForWrangler(
                 ctx,
