@@ -847,8 +847,10 @@ def test_m2l_toeplitz():
     knl = LaplaceKernel(dim)
     local_expn_class = LinearPDEConformingVolumeTaylorLocalExpansion
     mpole_expn_class = LinearPDEConformingVolumeTaylorMultipoleExpansion
+    m2l_factory = NonFFTM2LTranslationClassFactory()
+    m2l_translation = m2l_factory.get_m2l_translation_class(knl, local_expn_class)()
 
-    local_expn = local_expn_class(knl, order=5)
+    local_expn = local_expn_class(knl, order=5, m2l_translation=m2l_translation)
     mpole_expn = mpole_expn_class(knl, order=5)
 
     dvec = sym.make_sym_vector("d", dim)
