@@ -88,6 +88,9 @@ jobs:
             run: |
                 curl -L -O https://tiker.net/ci-support-v0
                 . ./ci-support-v0
+                if [[ "$DOWNSTREAM_PROJECT" == "pytential" ]]; then
+                   DOWNSTREAM_PROJECT=https://github.com/isuruf/pytential.git@level_to_rscale
+                fi
                 test_downstream "$DOWNSTREAM_PROJECT"
 
 # vim: sw=4
