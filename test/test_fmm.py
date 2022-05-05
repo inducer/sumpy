@@ -201,7 +201,7 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
             m2l_translation_factory = NonFFTM2LTranslationClassFactory()
 
         m2l_translation = m2l_translation_factory.get_m2l_translation_class(
-                knl, local_expn_class)
+                knl, local_expn_class)()
 
         tree_indep = SumpyTreeIndependentDataForWrangler(
                 ctx,
