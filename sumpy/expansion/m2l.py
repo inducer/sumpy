@@ -901,7 +901,7 @@ class FourierBesselM2LWithFFT(FourierBesselM2LWithPreprocessedMultipoles):
         return super().postprocess_local_exprs(tgt_expansion,
             src_expansion, m2l_result, src_rscale, tgt_rscale, sac)
 
-      
+
 # }}} FourierBesselM2LWithFFT
 
 # {{{ helper
