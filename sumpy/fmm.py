@@ -44,10 +44,6 @@ from sumpy import (
 from sumpy.tools import to_complex_dtype
 
 
-def level_to_rscale(tree, level):
-    return tree.root_extent * (2**-level)
-
-
 # {{{ tree-independent data for wrangler
 
 class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
@@ -382,6 +378,15 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         self.translation_classes_data = translation_classes_data
         self.use_fft_for_m2l = self.tree_indep.use_fft_for_m2l
 
+    def level_to_rscale(self, level):
+        tree = self.tree
+        order = self.level_orders[level]
+
+        # See L. Greengard and V. Rokhlin. On the efficient implementation of the
+        # fast multipole algorithm. Technical report,
+        # YALE UNIV NEW HAVEN CT DEPT OF COMPUTER SCIENCE, 1988.
+        return tree.root_extent * (2**-level) / order
+
     # {{{ data vector utilities
 
     def _expansions_level_starts(self, order_to_size):
@@ -602,8 +607,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     strengths=src_weight_vecs,
                     tgt_expansions=mpoles_view,
                     tgt_base_ibox=level_start_ibox,
-
-                    rscale=level_to_rscale(self.tree, lev),
+                    rscale=self.level_to_rscale(lev),
 
                     **kwargs)
             events.append(evt)
@@ -657,8 +661,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     box_child_ids=self.tree.box_child_ids,
                     centers=self.tree.box_centers,
 
-                    src_rscale=level_to_rscale(self.tree, source_level),
-                    tgt_rscale=level_to_rscale(self.tree, target_level),
+                    src_rscale=self.level_to_rscale(source_level),
+                    tgt_rscale=self.level_to_rscale(target_level),
 
                     **self.kernel_extra_kwargs)
             events.append(evt)
@@ -705,7 +709,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             m2l_translation_classes_dependent_data = \
                     self.m2l_translation_classes_dependent_data_zeros(queue)
             for lev in range(self.tree.nlevels):
-                src_rscale = level_to_rscale(self.tree, lev)
+                src_rscale = self.level_to_rscale(lev)
                 order = self.level_orders[lev]
                 precompute_kernel = \
                     self.tree_indep.m2l_translation_class_dependent_data_kernel(
@@ -798,7 +802,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     queue,
                     src_expansions=source_mpoles_view,
                     preprocessed_src_expansions=preprocessed_source_mpoles_view,
-                    src_rscale=level_to_rscale(self.tree, lev),
+                    src_rscale=self.level_to_rscale(lev),
                     **self.kernel_extra_kwargs
                 )
                 preprocess_evts.append(evt)
@@ -838,8 +842,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     src_box_lists=src_box_lists,
                     centers=self.tree.box_centers,
 
-                    src_rscale=level_to_rscale(self.tree, lev),
-                    tgt_rscale=level_to_rscale(self.tree, lev),
+                    src_rscale=self.level_to_rscale(lev),
+                    tgt_rscale=self.level_to_rscale(lev),
 
                     **self.kernel_extra_kwargs)
 
@@ -877,8 +881,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     tgt_expansions=target_locals_view,
                     tgt_expansions_before_postprocessing=(
                         target_locals_before_postprocessing_view),
-                    src_rscale=level_to_rscale(self.tree, lev),
-                    tgt_rscale=level_to_rscale(self.tree, lev),
+                    src_rscale=self.level_to_rscale(lev),
+                    tgt_rscale=self.level_to_rscale(lev),
                     wait_for=translate_evts,
                     **self.kernel_extra_kwargs,
                 )
@@ -921,7 +925,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     centers=self.tree.box_centers,
                     result=pot,
 
-                    rscale=level_to_rscale(self.tree, isrc_level),
+                    rscale=self.level_to_rscale(isrc_level),
 
                     wait_for=wait_for,
 
@@ -972,7 +976,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     tgt_expansions=target_local_exps_view,
                     tgt_base_ibox=target_level_start_ibox,
 
-                    rscale=level_to_rscale(self.tree, lev),
+                    rscale=self.level_to_rscale(lev),
 
                     **kwargs)
             events.append(evt)
@@ -1015,8 +1019,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     box_parent_ids=self.tree.box_parent_ids,
                     centers=self.tree.box_centers,
 
-                    src_rscale=level_to_rscale(self.tree, source_lev),
-                    tgt_rscale=level_to_rscale(self.tree, target_lev),
+                    src_rscale=self.level_to_rscale(source_lev),
+                    tgt_rscale=self.level_to_rscale(target_lev),
 
                     **self.kernel_extra_kwargs)
             events.append(evt)
@@ -1056,7 +1060,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     centers=self.tree.box_centers,
                     result=pot,
 
-                    rscale=level_to_rscale(self.tree, lev),
+                    rscale=self.level_to_rscale(lev),
 
                     **kwargs)
             events.append(evt)
