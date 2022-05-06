@@ -29,7 +29,6 @@ __doc__ = """Integrates :mod:`boxtree` with :mod:`sumpy`.
 
 import pyopencl as cl
 import pyopencl.array  # noqa
-from warnings import warn
 
 from pytools import memoize_method
 from boxtree.fmm import TreeIndependentDataForWrangler, ExpansionWranglerInterface
@@ -43,18 +42,6 @@ from sumpy import (
         M2LGenerateTranslationClassesDependentData,
         M2LPreprocessMultipole, M2LPostprocessLocal)
 from sumpy.tools import to_complex_dtype
-
-
-def level_to_rscale(tree, level, order=None, kernel=None):
-    if not kernel:
-        warn("Not passing kernel is deprecated and will stop working in 2023.",
-           DeprecationWarning, stacklevel=2)
-    if not order:
-        warn("Not passing order is deprecated and will stop working in 2023.",
-           DeprecationWarning, stacklevel=2)
-        order = 1
-
-    return tree.root_extent * (2**-level) / order
 
 
 # {{{ tree-independent data for wrangler
@@ -382,9 +369,14 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
         self.translation_classes_data = translation_classes_data
 
-    def level_to_rscale(self, lev):
-        return level_to_rscale(self.tree, lev, self.level_orders[lev],
-            kernel=self.tree_indep.get_base_kernel())
+    def level_to_rscale(self, level):
+        tree = self.tree
+        order = self.level_orders[level]
+
+        # See L. Greengard and V. Rokhlin. On the efficient implementation of the
+        # fast multipole algorithm. Technical report,
+        # YALE UNIV NEW HAVEN CT DEPT OF COMPUTER SCIENCE, 1988.
+        return tree.root_extent * (2**-level) / order
 
     # {{{ data vector utilities
 
