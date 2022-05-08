@@ -382,11 +382,15 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     def level_to_rscale(self, level):
         tree = self.tree
         order = self.level_orders[level]
+        r = tree.root_extent * (2**-level)
 
         # See L. Greengard and V. Rokhlin. On the efficient implementation of the
         # fast multipole algorithm. Technical report,
         # YALE UNIV NEW HAVEN CT DEPT OF COMPUTER SCIENCE, 1988.
-        return tree.root_extent * (2**-level) / order
+        # rscale that we use in sumpy is the inverse of the scaling used in the
+        # paper and therefore we should use r / order. However empirically
+        # we have observed that 2r / order is better for numerical stability.
+        return r * 2 / order
 
     # {{{ data vector utilities
 
