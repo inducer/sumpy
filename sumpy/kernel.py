@@ -1091,8 +1091,10 @@ class DirectionalDerivative(DerivativeBase):
             dir_vec_name=self.dir_vec_name)
 
     def __str__(self):
-        return r"{} . \/_{} {}".format(
-                self.dir_vec_name, self.directional_kind[0], self.inner_kernel)
+        return r"{}·∇_{} {}".format(
+                self.dir_vec_name,
+                "y" if self.directional_kind == "src" else "x",
+                self.inner_kernel)
 
     def __repr__(self):
         return "{}({!r}, {})".format(
