@@ -315,7 +315,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             kernel_extra_kwargs=None,
             self_extra_kwargs=None,
             translation_classes_data=None,
-            preprocessed_mpole_dtype=None):
+            preprocessed_mpole_dtype=None,
+            *, _disable_translation_classes=False):
         super().__init__(tree_indep, traversal)
         self.issued_timing_data_warning = False
 
@@ -353,27 +354,14 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         self.extra_kwargs = source_extra_kwargs.copy()
         self.extra_kwargs.update(self.kernel_extra_kwargs)
 
-        if base_kernel.is_translation_invariant:
-            if translation_classes_data is None:
-                from warnings import warn
-                if self.tree_indep.use_fft_for_m2l:
-                    raise NotImplementedError(
-                         "FFT based List 2 (multipole-to-local) translations "
-                         "without translation_classes_data argument is not "
-                         "implemented. Supply a translation_classes_data argument "
-                         "to the wrangler for optimized List 2.")
-                else:
-                    warn(
-                         "List 2 (multipole-to-local) translations will be "
-                         "unoptimized. Supply a translation_classes_data argument "
-                         "to the wrangler for optimized List 2.",
-                         SumpyTranslationClassesDataNotSuppliedWarning,
-                         stacklevel=2)
-                self.supports_translation_classes = False
-            else:
-                self.supports_translation_classes = True
-        else:
+        if _disable_translation_classes or not base_kernel.is_translation_invariant:
             self.supports_translation_classes = False
+        else:
+            if translation_classes_data is None:
+                with cl.CommandQueue(self.tree_indep.cl_context) as queue:
+                    translation_classes_data = SumpyTranslationClassesData(queue,
+                        self.traversal)
+            self.supports_translation_classes = True
 
         self.translation_classes_data = translation_classes_data
         self.use_fft_for_m2l = self.tree_indep.use_fft_for_m2l
