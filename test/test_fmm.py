@@ -38,8 +38,7 @@ from sumpy.expansion.local import (
     LinearPDEConformingVolumeTaylorLocalExpansion)
 from sumpy.fmm import (
         SumpyTreeIndependentDataForWrangler,
-        SumpyExpansionWrangler,
-        SumpyTranslationClassesData)
+        SumpyExpansionWrangler)
 
 import pytest
 
