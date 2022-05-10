@@ -314,9 +314,9 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     from boxtree.translation_classes import TranslationClassesBuilder
                     translation_classes_builder = TranslationClassesBuilder(
                         queue.context)
-                    translation_classes_data = translation_classes_builder(
+                    translation_classes_data, _ = translation_classes_builder(
                         queue, traversal, self.tree,
-                        is_translation_per_level=True)[0]
+                        is_translation_per_level=True)
             self.supports_translation_classes = True
 
         self.translation_classes_data = translation_classes_data
