@@ -38,12 +38,9 @@ from sumpy.expansion.local import (
     LinearPDEConformingVolumeTaylorLocalExpansion)
 from sumpy.fmm import (
         SumpyTreeIndependentDataForWrangler,
-        SumpyExpansionWrangler,
-        SumpyTranslationClassesData,
-        SumpyTranslationClassesDataNotSuppliedWarning)
+        SumpyExpansionWrangler)
 
 import pytest
-import warnings
 
 import logging
 logger = logging.getLogger(__name__)
@@ -57,7 +54,7 @@ else:
     faulthandler.enable()
 
 
-@pytest.mark.parametrize("optimized_m2l, use_fft",
+@pytest.mark.parametrize("use_translation_classes, use_fft",
     [(False, False), (True, False), (True, True)])
 @pytest.mark.parametrize(
         ("knl", "local_expn_class", "mpole_expn_class",
@@ -84,7 +81,7 @@ else:
                 False),
             ])
 def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
-        order_varies_with_level, optimized_m2l, use_fft):
+        order_varies_with_level, use_translation_classes, use_fft):
     logging.basicConfig(level=logging.INFO)
 
     if local_expn_class == VolumeTaylorLocalExpansion and use_fft:
@@ -188,11 +185,6 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
     for order in order_values:
         target_kernels = [knl]
 
-        if optimized_m2l:
-            translation_classes_data = SumpyTranslationClassesData(queue, trav)
-        else:
-            translation_classes_data = None
-
         tree_indep = SumpyTreeIndependentDataForWrangler(
                 ctx,
                 partial(mpole_expn_class, knl),
@@ -206,14 +198,10 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
             def fmm_level_to_order(kernel, kernel_args, tree, lev):
                 return order
 
-        with warnings.catch_warnings():
-            if not optimized_m2l:
-                warnings.simplefilter("ignore",
-                    SumpyTranslationClassesDataNotSuppliedWarning)
-            wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,
-                fmm_level_to_order=fmm_level_to_order,
-                kernel_extra_kwargs=extra_kwargs,
-                translation_classes_data=translation_classes_data)
+        wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,
+            fmm_level_to_order=fmm_level_to_order,
+            kernel_extra_kwargs=extra_kwargs,
+            _disable_translation_classes=not use_translation_classes)
 
         from boxtree.fmm import drive_fmm
 
@@ -315,8 +303,7 @@ def test_unified_single_and_double(ctx_factory):
                 strength_usage=strength_usage)
         wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,
                 fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
-                source_extra_kwargs=source_extra_kwargs,
-                translation_classes_data=SumpyTranslationClassesData(queue, trav))
+                source_extra_kwargs=source_extra_kwargs)
 
         from boxtree.fmm import drive_fmm
 
@@ -376,8 +363,7 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory):
             target_kernels)
 
     wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,
-            fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
-            translation_classes_data=SumpyTranslationClassesData(queue, trav))
+            fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order)
     from boxtree.fmm import drive_fmm
 
     timing_data = {}
@@ -435,8 +421,7 @@ def test_sumpy_fmm_exclude_self(ctx_factory):
 
     wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,
             fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
-            self_extra_kwargs=self_extra_kwargs,
-            translation_classes_data=SumpyTranslationClassesData(queue, trav))
+            self_extra_kwargs=self_extra_kwargs)
 
     from boxtree.fmm import drive_fmm
 
@@ -510,8 +495,7 @@ def test_sumpy_axis_source_derivative(ctx_factory):
 
         wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,
                 fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
-                self_extra_kwargs=self_extra_kwargs,
-                translation_classes_data=SumpyTranslationClassesData(queue, trav))
+                self_extra_kwargs=self_extra_kwargs)
 
         from boxtree.fmm import drive_fmm
 
@@ -580,8 +564,7 @@ def test_sumpy_target_point_multiplier(ctx_factory, deriv_axes):
 
     wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,
             fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order,
-            self_extra_kwargs=self_extra_kwargs,
-            translation_classes_data=SumpyTranslationClassesData(queue, trav))
+            self_extra_kwargs=self_extra_kwargs)
 
     from boxtree.fmm import drive_fmm
 
