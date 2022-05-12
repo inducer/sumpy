@@ -36,6 +36,7 @@ from sumpy.expansion.multipole import (
 from sumpy.expansion.local import (
         VolumeTaylorLocalExpansion, H2DLocalExpansion,
         LinearPDEConformingVolumeTaylorLocalExpansion)
+from sumpy.expansion.m2l import NonFFTM2LTranslationClassFactory
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, AxisTargetDerivative,
         DirectionalSourceDerivative, BiharmonicKernel, StokesletKernel)
 import sumpy.symbolic as sym
@@ -560,9 +561,12 @@ def test_translations(ctx_factory, knl, local_expn_class, mpole_expn_class):
 
         return pot
 
+    m2l_factory = NonFFTM2LTranslationClassFactory()
+    m2l_translation = m2l_factory.get_m2l_translation_class(knl, local_expn_class)()
+
     for order in orders:
         m_expn = mpole_expn_class(knl, order=order)
-        l_expn = local_expn_class(knl, order=order)
+        l_expn = local_expn_class(knl, order=order, m2l_translation=m2l_translation)
 
         from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P, E2EFromCSR
         p2m = P2EFromSingleBox(ctx, m_expn)
@@ -843,8 +847,10 @@ def test_m2l_toeplitz():
     knl = LaplaceKernel(dim)
     local_expn_class = LinearPDEConformingVolumeTaylorLocalExpansion
     mpole_expn_class = LinearPDEConformingVolumeTaylorMultipoleExpansion
+    m2l_factory = NonFFTM2LTranslationClassFactory()
+    m2l_translation = m2l_factory.get_m2l_translation_class(knl, local_expn_class)()
 
-    local_expn = local_expn_class(knl, order=5)
+    local_expn = local_expn_class(knl, order=5, m2l_translation=m2l_translation)
     mpole_expn = mpole_expn_class(knl, order=5)
 
     dvec = sym.make_sym_vector("d", dim)

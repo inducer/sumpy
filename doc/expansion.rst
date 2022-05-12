@@ -18,6 +18,11 @@ Multipole Expansions
 
 .. automodule:: sumpy.expansion.multipole
 
+Multipole to Local Translations
+-------------------------------
+
+.. automodule:: sumpy.expansion.m2l
+
 Estimating Expansion Orders
 ---------------------------
 
