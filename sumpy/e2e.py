@@ -306,12 +306,13 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
         src_rscale = sym.Symbol("src_rscale")
         tgt_rscale = sym.Symbol("tgt_rscale")
 
+        m2l_translation = self.tgt_expansion.m2l_translation
         m2l_translation_classes_dependent_ndata = (
-                self.tgt_expansion.m2l_translation_classes_dependent_ndata(
-                        self.src_expansion))
+            m2l_translation.translation_classes_dependent_ndata(self.tgt_expansion,
+                self.src_expansion))
         m2l_translation_classes_dependent_data = \
-                    [sym.Symbol(f"data{i}")
-                for i in range(m2l_translation_classes_dependent_ndata)]
+                [sym.Symbol(f"data{i}")
+            for i in range(m2l_translation_classes_dependent_ndata)]
 
         ncoeff_src = len(self.src_expansion)
 
@@ -346,13 +347,14 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
         except NotImplementedError:
             pass
 
-        ndata = self.tgt_expansion.m2l_translation_classes_dependent_ndata(
-                        self.src_expansion)
-        if self.tgt_expansion.use_preprocessing_for_m2l:
-            ncoeff_src = self.tgt_expansion.m2l_preprocess_multipole_nexprs(
-                    self.src_expansion)
-            ncoeff_tgt = self.tgt_expansion.m2l_postprocess_local_nexprs(
-                    self.src_expansion)
+        m2l_translation = self.tgt_expansion.m2l_translation
+        ndata = m2l_translation.translation_classes_dependent_ndata(
+            self.tgt_expansion, self.src_expansion)
+        if m2l_translation.use_preprocessing:
+            ncoeff_src = m2l_translation.preprocess_multipole_nexprs(
+                self.tgt_expansion, self.src_expansion)
+            ncoeff_tgt = m2l_translation.postprocess_local_nexprs(
+                self.tgt_expansion, self.src_expansion)
         else:
             ncoeff_src = len(self.src_expansion)
             ncoeff_tgt = len(self.tgt_expansion)
@@ -380,15 +382,16 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                         )
 
     def get_kernel(self, result_dtype):
+        m2l_translation = self.tgt_expansion.m2l_translation
         m2l_translation_classes_dependent_ndata = \
-                self.tgt_expansion.m2l_translation_classes_dependent_ndata(
-                        self.src_expansion)
+            m2l_translation.translation_classes_dependent_ndata(
+                self.tgt_expansion, self.src_expansion)
 
-        if self.tgt_expansion.use_preprocessing_for_m2l:
-            ncoeff_src = self.tgt_expansion.m2l_preprocess_multipole_nexprs(
-                    self.src_expansion)
-            ncoeff_tgt = self.tgt_expansion.m2l_postprocess_local_nexprs(
-                    self.src_expansion)
+        if m2l_translation.use_preprocessing:
+            ncoeff_src = m2l_translation.preprocess_multipole_nexprs(
+                self.tgt_expansion, self.src_expansion)
+            ncoeff_tgt = m2l_translation.postprocess_local_nexprs(
+                self.tgt_expansion, self.src_expansion)
         else:
             ncoeff_src = len(self.src_expansion)
             ncoeff_tgt = len(self.tgt_expansion)
@@ -535,17 +538,18 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
         dvec = make_sym_vector("d", self.dim)
 
         src_rscale = sym.Symbol("src_rscale")
-        tgt_rscale = sym.Symbol("tgt_rscale")
+
+        m2l_translation = self.tgt_expansion.m2l_translation
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
         tgt_coeff_names = [
-                sac.assign_unique(
-                    f"m2l_translation_classes_dependent_expr{i}", coeff_i)
-                for i, coeff_i in enumerate(
-                    self.tgt_expansion.m2l_translation_classes_dependent_data(
-                        self.src_expansion, src_rscale,
-                        dvec, tgt_rscale, sac))]
+            sac.assign_unique(
+                f"m2l_translation_classes_dependent_expr{i}", coeff_i)
+            for i, coeff_i in enumerate(
+                m2l_translation.translation_classes_dependent_data(
+                    self.tgt_expansion, self.src_expansion, src_rscale,
+                    dvec, sac=sac))]
 
         sac.run_global_cse()
 
@@ -560,8 +564,8 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
 
     def get_kernel(self, result_dtype):
         m2l_translation_classes_dependent_ndata = \
-            self.tgt_expansion.m2l_translation_classes_dependent_ndata(
-                    self.src_expansion)
+            self.tgt_expansion.m2l_translation.translation_classes_dependent_ndata(
+                self.tgt_expansion, self.src_expansion)
         from sumpy.tools import gather_loopy_arguments
         loopy_knl = lp.make_kernel(
                 [
@@ -665,8 +669,8 @@ class M2LPreprocessMultipole(E2EBase):
         preprocessed_src_coeff_names = [
                 sac.assign_unique(f"preprocessed_src_coeff{i}", coeff_i)
                 for i, coeff_i in enumerate(
-                    self.tgt_expansion.m2l_preprocess_multipole_exprs(
-                        self.src_expansion, src_coeff_exprs,
+                    self.tgt_expansion.m2l_translation.preprocess_multipole_exprs(
+                        self.tgt_expansion, self.src_expansion, src_coeff_exprs,
                         sac=sac, src_rscale=src_rscale))]
 
         sac.run_global_cse()
@@ -683,7 +687,8 @@ class M2LPreprocessMultipole(E2EBase):
     def get_kernel(self, result_dtype):
         nsrc_coeffs = len(self.src_expansion)
         npreprocessed_src_coeffs = \
-            self.tgt_expansion.m2l_preprocess_multipole_nexprs(self.src_expansion)
+            self.tgt_expansion.m2l_translation.preprocess_multipole_nexprs(
+                self.tgt_expansion, self.src_expansion)
         from sumpy.tools import gather_loopy_arguments
         loopy_knl = lp.make_kernel(
                 [
@@ -752,8 +757,10 @@ class M2LPostprocessLocal(E2EBase):
     default_name = "m2l_postprocess_local"
 
     def get_loopy_insns(self, result_dtype):
+        m2l_translation = self.tgt_expansion.m2l_translation
         ncoeffs_before_postprocessing = \
-            self.tgt_expansion.m2l_postprocess_local_nexprs(self.tgt_expansion)
+            m2l_translation.postprocess_local_nexprs(self.tgt_expansion,
+                                                     self.src_expansion)
 
         tgt_coeff_exprs_before_postprocessing = [
             sym.Symbol(f"tgt_coeff_before_postprocessing{i}")
@@ -765,8 +772,9 @@ class M2LPostprocessLocal(E2EBase):
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
 
-        tgt_coeff_exprs = self.tgt_expansion.m2l_postprocess_local_exprs(
-            self.tgt_expansion, tgt_coeff_exprs_before_postprocessing,
+        tgt_coeff_exprs = m2l_translation.postprocess_local_exprs(
+            self.tgt_expansion, self.src_expansion,
+            tgt_coeff_exprs_before_postprocessing,
             sac=sac, src_rscale=src_rscale, tgt_rscale=tgt_rscale)
 
         if result_dtype in (np.float32, np.float64):
@@ -792,7 +800,8 @@ class M2LPostprocessLocal(E2EBase):
     def get_kernel(self, result_dtype):
         ntgt_coeffs = len(self.tgt_expansion)
         ntgt_coeffs_before_postprocessing = \
-            self.tgt_expansion.m2l_postprocess_local_nexprs(self.tgt_expansion)
+            self.tgt_expansion.m2l_translation.postprocess_local_nexprs(
+                self.tgt_expansion, self.src_expansion)
         from sumpy.tools import gather_loopy_arguments
         loopy_knl = lp.make_kernel(
                 [
