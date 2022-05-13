@@ -962,7 +962,4 @@ def translation_classes_dependent_data_loopy_knl(tgt_expansion, src_expansion,
 
     return knl
 
-
-# }}}
-
 # vim: fdm=marker
