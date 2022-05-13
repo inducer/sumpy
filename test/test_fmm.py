@@ -25,8 +25,13 @@ import sys
 import numpy as np
 import numpy.linalg as la
 import pyopencl as cl
-from pyopencl.tools import (  # noqa
-        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
+
+from arraycontext.pytest import PytestPyOpenCLArrayContextFactory
+from arraycontext import (  # noqa: F401
+        pytest_generate_tests_for_array_contexts,
+        _acf
+        )
+
 from sumpy.kernel import LaplaceKernel, HelmholtzKernel, YukawaKernel
 from sumpy.expansion.multipole import (
     VolumeTaylorMultipoleExpansion,
@@ -46,12 +51,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-try:
-    import faulthandler
-except ImportError:
-    pass
-else:
-    faulthandler.enable()
+pytest_generate_tests = pytest_generate_tests_for_array_contexts([
+    PytestPyOpenCLArrayContextFactory
+    ])
 
 
 @pytest.mark.parametrize("use_translation_classes, use_fft",
@@ -80,7 +82,7 @@ else:
             (YukawaKernel(2), Y2DLocalExpansion, Y2DMultipoleExpansion,
                 False),
             ])
-def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
+def test_sumpy_fmm(actx_factory, knl, local_expn_class, mpole_expn_class,
         order_varies_with_level, use_translation_classes, use_fft):
     logging.basicConfig(level=logging.INFO)
 
@@ -90,8 +92,9 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
     if local_expn_class in [H2DLocalExpansion, Y2DLocalExpansion] and use_fft:
         pytest.skip("Fourier/Bessel based expansions with FFT is not supported yet.")
 
-    ctx = ctx_factory()
-    queue = cl.CommandQueue(ctx)
+    actx = actx_factory()
+    queue = actx.queue
+    cl_ctx = queue.context
 
     nsources = 1000
     ntargets = 300
@@ -118,13 +121,13 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
                 [fp.points[i] for i in range(knl.dim)])
 
     from boxtree import TreeBuilder
-    tb = TreeBuilder(ctx)
+    tb = TreeBuilder(cl_ctx)
 
     tree, _ = tb(queue, sources, targets=targets,
             max_particles_in_box=30, debug=True)
 
     from boxtree.traversal import FMMTraversalBuilder
-    tbuild = FMMTraversalBuilder(ctx)
+    tbuild = FMMTraversalBuilder(cl_ctx)
     trav, _ = tbuild(queue, tree, debug=True)
 
     # {{{ plot tree
@@ -151,7 +154,7 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
     # }}}
 
     from pyopencl.clrandom import PhiloxGenerator
-    rng = PhiloxGenerator(ctx, seed=44)
+    rng = PhiloxGenerator(cl_ctx, seed=44)
     weights = rng.uniform(queue, nsources, dtype=np.float64)
 
     logger.info("computing direct (reference) result")
@@ -186,7 +189,7 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
         target_kernels = [knl]
 
         tree_indep = SumpyTreeIndependentDataForWrangler(
-                ctx,
+                actx,
                 partial(mpole_expn_class, knl),
                 partial(local_expn_class, knl),
                 target_kernels, use_fft_for_m2l=use_fft)
@@ -205,10 +208,10 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
 
         from boxtree.fmm import drive_fmm
 
-        pot, = drive_fmm(wrangler, (weights,))
+        pot, = drive_fmm(actx, wrangler, (weights,))
 
         from sumpy import P2P
-        p2p = P2P(ctx, target_kernels, exclude_self=False)
+        p2p = P2P(target_kernels, exclude_self=False)
         evt, (ref_pot,) = p2p(queue, targets, sources, (weights,),
                 **extra_kwargs)
 

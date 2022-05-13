@@ -27,11 +27,14 @@ __doc__ = """Integrates :mod:`boxtree` with :mod:`sumpy`.
 """
 
 
+import numpy as np
 import pyopencl as cl
 import pyopencl.array  # noqa
 
 from pytools import memoize_method
 from boxtree.fmm import TreeIndependentDataForWrangler, ExpansionWranglerInterface
+
+from arraycontext import ArrayContext, Array
 
 from sumpy import (
         P2EFromSingleBox, P2EFromCSR,
@@ -58,7 +61,7 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
     profiling enabled.
     """
 
-    def __init__(self, cl_context,
+    def __init__(self, setup_actx: ArrayContext,
             multipole_expansion_factory,
             local_expansion_factory,
             target_kernels, exclude_self=False, use_rscale=None,
@@ -78,6 +81,8 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
             expansion and postprocessing of the target local expansion for
             multipole-to-local expansion.
         """
+        self._setup_actx = setup_actx.clone()
+
         self.multipole_expansion_factory = multipole_expansion_factory
         self.local_expansion_factory = local_expansion_factory
         self.source_kernels = source_kernels
@@ -92,8 +97,6 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
             self.use_preprocessing_for_m2l = use_preprocessing_for_m2l
 
         super().__init__()
-
-        self.cl_context = cl_context
 
     @memoize_method
     def get_base_kernel(self):
@@ -112,21 +115,21 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
 
     @memoize_method
     def p2m(self, tgt_order):
-        return P2EFromSingleBox(self.cl_context,
+        return P2EFromSingleBox(
                 kernels=self.source_kernels,
                 expansion=self.multipole_expansion(tgt_order),
                 strength_usage=self.strength_usage)
 
     @memoize_method
     def p2l(self, tgt_order):
-        return P2EFromCSR(self.cl_context,
+        return P2EFromCSR(
                 kernels=self.source_kernels,
                 expansion=self.local_expansion(tgt_order),
                 strength_usage=self.strength_usage)
 
     @memoize_method
     def m2m(self, src_order, tgt_order):
-        return E2EFromChildren(self.cl_context,
+        return E2EFromChildren(
                 self.multipole_expansion(src_order),
                 self.multipole_expansion(tgt_order))
 
@@ -137,49 +140,49 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
             m2l_class = M2LUsingTranslationClassesDependentData
         else:
             m2l_class = E2EFromCSR
-        return m2l_class(self.cl_context,
+        return m2l_class(
                 self.multipole_expansion(src_order),
                 self.local_expansion(tgt_order))
 
     @memoize_method
     def m2l_translation_class_dependent_data_kernel(self, src_order, tgt_order):
-        return M2LGenerateTranslationClassesDependentData(self.cl_context,
+        return M2LGenerateTranslationClassesDependentData(
                 self.multipole_expansion(src_order),
                 self.local_expansion(tgt_order))
 
     @memoize_method
     def m2l_preprocess_mpole_kernel(self, src_order, tgt_order):
-        return M2LPreprocessMultipole(self.cl_context,
+        return M2LPreprocessMultipole(
                 self.multipole_expansion(src_order),
                 self.local_expansion(tgt_order))
 
     @memoize_method
     def m2l_postprocess_local_kernel(self, src_order, tgt_order):
-        return M2LPostprocessLocal(self.cl_context,
+        return M2LPostprocessLocal(
                 self.multipole_expansion(src_order),
                 self.local_expansion(tgt_order))
 
     @memoize_method
     def l2l(self, src_order, tgt_order):
-        return E2EFromParent(self.cl_context,
+        return E2EFromParent(
                 self.local_expansion(src_order),
                 self.local_expansion(tgt_order))
 
     @memoize_method
     def m2p(self, src_order):
-        return E2PFromCSR(self.cl_context,
+        return E2PFromCSR(
                 self.multipole_expansion(src_order),
                 self.target_kernels)
 
     @memoize_method
     def l2p(self, src_order):
-        return E2PFromSingleBox(self.cl_context,
+        return E2PFromSingleBox(
                 self.local_expansion(src_order),
                 self.target_kernels)
 
     @memoize_method
     def p2p(self):
-        return P2PFromCSR(self.cl_context, target_kernels=self.target_kernels,
+        return P2PFromCSR(target_kernels=self.target_kernels,
                           source_kernels=self.source_kernels,
                           exclude_self=self.exclude_self,
                           strength_usage=self.strength_usage)
@@ -363,37 +366,26 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         return build_csr_level_starts(self.level_orders, order_to_size,
                 level_starts=self.m2l_translation_class_level_start_box_nrs())
 
-    def multipole_expansion_zeros(self, template_ary):
+    def multipole_expansion_zeros(self, actx: ArrayContext) -> Array:
         """Return an expansions array (which must support addition)
         capable of holding one multipole or local expansion for every
         box in the tree.
-        :arg template_ary: an array (not necessarily of the same shape or dtype as
-            the one to be created) whose run-time environment
-            (e.g. :class:`pyopencl.CommandQueue`) the returned array should
-            reuse.
         """
-        return cl.array.zeros(
-                template_ary.queue,
+        return actx.zeros(
                 self.multipole_expansions_level_starts()[-1],
                 dtype=self.dtype)
 
-    def local_expansion_zeros(self, template_ary):
+    def local_expansion_zeros(self, actx) -> Array:
         """Return an expansions array (which must support addition)
         capable of holding one multipole or local expansion for every
         box in the tree.
-        :arg template_ary: an array (not necessarily of the same shape or dtype as
-            the one to be created) whose run-time environment
-            (e.g. :class:`pyopencl.CommandQueue`) the returned array should
-            reuse.
         """
-        return cl.array.zeros(
-                template_ary.queue,
+        return actx.zeros(
                 self.local_expansions_level_starts()[-1],
                 dtype=self.dtype)
 
-    def m2l_translation_classes_dependent_data_zeros(self, queue):
-        return cl.array.zeros(
-                queue,
+    def m2l_translation_classes_dependent_data_zeros(self, actx):
+        return actx.zeros(
                 self.m2l_translation_classes_dependent_data_level_starts()[-1],
                 dtype=self.preprocessed_mpole_dtype)
 
@@ -435,9 +427,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         return build_csr_level_starts(self.level_orders, order_to_size,
                 level_starts=self.tree.level_start_box_nrs)
 
-    def m2l_preproc_mpole_expansion_zeros(self, template_ary):
-        return cl.array.zeros(
-                template_ary.queue,
+    def m2l_preproc_mpole_expansion_zeros(self, actx: ArrayContext):
+        return actx.zeros(
                 self.m2l_preproc_mpole_expansions_level_starts()[-1],
                 dtype=self.preprocessed_mpole_dtype)
 
@@ -454,27 +445,22 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     m2l_work_array_level_starts = \
             m2l_preproc_mpole_expansions_level_starts
 
-    def output_zeros(self, template_ary):
+    def output_zeros(self, actx: ArrayContext) -> np.ndarray:
         """Return a potentials array (which must support addition) capable of
         holding a potential value for each target in the tree. Note that
         :func:`drive_fmm` makes no assumptions about *potential* other than
         that it supports addition--it may consist of potentials, gradients of
         the potential, or arbitrary other per-target output data.
-        :arg template_ary: an array (not necessarily of the same shape or dtype as
-            the one to be created) whose run-time environment
-            (e.g. :class:`pyopencl.CommandQueue`) the returned array should
-            reuse.
         """
         from pytools.obj_array import make_obj_array
         return make_obj_array([
-                cl.array.zeros(
-                    template_ary.queue,
+                actx.zeros(
                     self.tree.ntargets,
                     dtype=self.dtype)
                 for k in self.tree_indep.target_kernels])
 
     def reorder_sources(self, source_array):
-        return source_array.with_queue(source_array.queue)[self.tree.user_source_ids]
+        return source_array[self.tree.user_source_ids]
 
     def reorder_potentials(self, potentials):
         from pytools.obj_array import obj_array_vectorize
@@ -525,15 +511,13 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     # }}}
 
     def form_multipoles(self,
+            actx: ArrayContext,
             level_start_source_box_nrs, source_boxes,
             src_weight_vecs):
-        mpoles = self.multipole_expansion_zeros(src_weight_vecs[0])
+        mpoles = self.multipole_expansion_zeros(actx)
 
         kwargs = self.extra_kwargs.copy()
         kwargs.update(self.box_source_list_kwargs())
-
-        events = []
-        queue = src_weight_vecs[0].queue
 
         for lev in range(self.tree.nlevels):
             p2m = self.tree_indep.p2m(self.level_orders[lev])
@@ -545,7 +529,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     mpoles, lev)
 
             evt, (mpoles_res,) = p2m(
-                    queue,
+                    actx,
                     source_boxes=source_boxes[start:stop],
                     centers=self.tree.box_centers,
                     strengths=src_weight_vecs,
@@ -554,13 +538,13 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     rscale=self.level_to_rscale(lev),
 
                     **kwargs)
-            events.append(evt)
 
             assert mpoles_res is mpoles_view
 
-        return (mpoles, SumpyTimingFuture(queue, events))
+        return mpoles
 
     def coarsen_multipoles(self,
+            actx: ArrayContext,
             level_start_source_parent_box_nrs,
             source_parent_boxes,
             mpoles):
@@ -618,9 +602,11 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
         return (mpoles, SumpyTimingFuture(queue, events))
 
-    def eval_direct(self, target_boxes, source_box_starts,
+    def eval_direct(self,
+            actx: ArrayContext,
+            target_boxes, source_box_starts,
             source_box_lists, src_weight_vecs):
-        pot = self.output_zeros(src_weight_vecs[0])
+        pot = self.output_zeros(actx)
 
         kwargs = self.extra_kwargs.copy()
         kwargs.update(self.self_extra_kwargs)
@@ -715,13 +701,14 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             self.translation_classes_data.from_sep_siblings_translation_classes
 
     def multipole_to_local(self,
+            actx: ArrayContext,
             level_start_target_box_nrs,
             target_boxes, src_box_starts, src_box_lists,
             mpole_exps):
 
         preprocess_evts = []
         queue = mpole_exps.queue
-        local_exps = self.local_expansion_zeros(mpole_exps)
+        local_exps = self.local_expansion_zeros(actx)
 
         if self.tree_indep.use_preprocessing_for_m2l:
             preprocessed_mpole_exps = \
@@ -838,8 +825,9 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         return (local_exps, SumpyTimingFuture(queue, timing_events))
 
     def eval_multipoles(self,
+            actx: ArrayContext,
             target_boxes_by_source_level, source_boxes_by_level, mpole_exps):
-        pot = self.output_zeros(mpole_exps)
+        pot = self.output_zeros(actx)
 
         kwargs = self.kernel_extra_kwargs.copy()
         kwargs.update(self.box_target_list_kwargs())
@@ -889,9 +877,10 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         return (pot, SumpyTimingFuture(queue, events))
 
     def form_locals(self,
+            actx: ArrayContext,
             level_start_target_or_target_parent_box_nrs,
             target_or_target_parent_boxes, starts, lists, src_weight_vecs):
-        local_exps = self.local_expansion_zeros(src_weight_vecs[0])
+        local_exps = self.local_expansion_zeros(actx)
 
         kwargs = self.extra_kwargs.copy()
         kwargs.update(self.box_source_list_kwargs())
@@ -931,6 +920,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         return (local_exps, SumpyTimingFuture(queue, events))
 
     def refine_locals(self,
+            actx: ArrayContext,
             level_start_target_or_target_parent_box_nrs,
             target_or_target_parent_boxes,
             local_exps):
@@ -976,8 +966,10 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
         return (local_exps, SumpyTimingFuture(queue, [evt]))
 
-    def eval_locals(self, level_start_target_box_nrs, target_boxes, local_exps):
-        pot = self.output_zeros(local_exps)
+    def eval_locals(self,
+            actx: ArrayContext,
+            level_start_target_box_nrs, target_boxes, local_exps):
+        pot = self.output_zeros(actx)
 
         kwargs = self.kernel_extra_kwargs.copy()
         kwargs.update(self.box_target_list_kwargs())
@@ -1015,7 +1007,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
         return (pot, SumpyTimingFuture(queue, events))
 
-    def finalize_potentials(self, potentials, template_ary):
+    def finalize_potentials(self, actx: ArrayContext, potentials):
         return potentials
 
 # }}}
