@@ -579,8 +579,8 @@ class ScalingAssignmentTag(Tag):
 class KernelComputation:
     """Common input processing for kernel computations."""
 
-    def __init__(self, ctx, target_kernels, source_kernels, strength_usage,
-            value_dtypes, name, device=None):
+    def __init__(self, target_kernels, source_kernels, strength_usage,
+            value_dtypes, name):
         """
         :arg kernels: list of :class:`sumpy.kernel.Kernel` instances
             :class:`sumpy.kernel.TargetDerivative` wrappers should be
@@ -617,12 +617,6 @@ class KernelComputation:
         strength_count = max(strength_usage)+1
 
         # }}}
-
-        if device is None:
-            device = ctx.devices[0]
-
-        self.context = ctx
-        self.device = device
 
         self.source_kernels = tuple(source_kernels)
         self.target_kernels = tuple(target_kernels)

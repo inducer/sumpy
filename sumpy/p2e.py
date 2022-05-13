@@ -49,8 +49,8 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
     .. automethod:: __init__
     """
 
-    def __init__(self, ctx, expansion, kernels=None,
-            name=None, device=None, strength_usage=None):
+    def __init__(self, expansion, kernels=None,
+            name=None, strength_usage=None):
         """
         :arg expansion: a subclass of :class:`sumpy.expansion.ExpansionBase`
         :arg kernels: if not provided, the kernel of the *expansion* is used.
@@ -78,10 +78,10 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
             assert txr(knl) == knl
             assert sxr(knl) == expansion.kernel
 
-        KernelComputation.__init__(self, ctx=ctx, target_kernels=[],
+        KernelComputation.__init__(self, target_kernels=[],
             source_kernels=kernels,
             strength_usage=strength_usage, value_dtypes=None,
-            name=name, device=device)
+            name=name)
 
         self.expansion = expansion
         self.dim = expansion.dim
@@ -135,11 +135,11 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
                 enforce_variable_access_ordered="no_check")
         return knl
 
-    def __call__(self, queue, **kwargs):
+    def __call__(self, actx: ArrayContext, **kwargs):
         from sumpy.tools import is_obj_array_like
         sources = kwargs.pop("sources")
         centers = kwargs.pop("centers")
-        knl = self.get_cached_optimized_kernel(
+        knl = self.get_kernel(
                 sources_is_obj_array=is_obj_array_like(sources),
                 centers_is_obj_array=is_obj_array_like(centers))
 
@@ -148,7 +148,7 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
         dtype = centers[0].dtype if is_obj_array_like(centers) else centers.dtype
         rscale = dtype.type(kwargs.pop("rscale"))
 
-        return knl(queue, sources=sources, centers=centers, rscale=rscale, **kwargs)
+        return actx.call_loopy(knl, sources=sources, centers=centers, rscale=rscale, **kwargs)
 
 # }}}
 
