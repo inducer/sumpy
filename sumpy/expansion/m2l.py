@@ -161,6 +161,9 @@ class M2LTranslationBase:
         distance between per level, these can be precomputed for the tree.
         In :mod:`boxtree`, these distances are referred to as translation
         classes.
+
+        When FFT is turned on, the output expressions are assumed to be
+        transformed into Fourier space at the end by the caller.
         """
         return tuple()
 
@@ -189,12 +192,13 @@ class M2LTranslationBase:
         """Return the preprocessed multipole expansion for an optimized M2L.
         Preprocessing happens once per source box before M2L translation is done.
 
-        When FFT is turned on, the input expressions are transformed into Fourier
-        space. These expressions are used in a separate :mod:`loopy` kernel
-        to avoid having to transform for each target and source box pair.
-        When FFT is turned off, the expressions are equal to the multipole
-        expansion coefficients with zeros added
-        to make the M2L computation a circulant matvec.
+        These expressions are used in a separate :mod:`loopy` kernel
+        to avoid having to process for each target and source box pair.
+        When FFT is turned on, the output expressions are assumed to be
+        transformed into Fourier space at the end by the caller.
+        When FFT is turned off, the output expressions are equal to the multipole
+        expansion coefficients with zeros added to make the M2L computation a
+        circulant matvec.
         """
         raise NotImplementedError
 
@@ -217,8 +221,8 @@ class M2LTranslationBase:
         is done and before storing the expansion coefficients for the local
         expansion.
 
-        When FFT is turned on, the output expressions are transformed from Fourier
-        space back to the original space.
+        When FFT is turned on, the output expressions are assumed to have been
+        transformed from Fourier space back to the original space by the caller.
         """
         raise NotImplementedError
 
@@ -657,7 +661,13 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
 
     def translation_classes_dependent_data(self, tgt_expansion, src_expansion,
             src_rscale, dvec, sac):
+        """Return an iterable of expressions that needs to be precomputed
+        for multipole-to-local translations that depend only on the
+        distance between the multipole center and the local center which
+        is given as *dvec*.
 
+        The final result should be transformed using an FFT.
+        """
         derivatives_full = super().translation_classes_dependent_data(
             tgt_expansion, src_expansion, src_rscale, dvec, sac)
         # Note that the matrix we have now is a mirror image of a
