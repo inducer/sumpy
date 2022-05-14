@@ -27,8 +27,7 @@ import loopy as lp
 import numpy as np
 import sumpy.symbolic as sym
 from sumpy.tools import (
-        add_to_sac, fft,
-        matvec_toeplitz_upper_triangular)
+        add_to_sac, matvec_toeplitz_upper_triangular)
 
 import logging
 logger = logging.getLogger(__name__)
@@ -675,12 +674,10 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
         # first column for the circulant matrix and then finally
         # use the FFT for convolution represented by the circulant
         # matrix.
-        # return fft(list(reversed(derivatives_full)), sac=sac)
         return list(reversed(derivatives_full))
 
     def postprocess_local_exprs(self, tgt_expansion, src_expansion, m2l_result,
             src_rscale, tgt_rscale, sac):
-        # m2l_result = fft(m2l_result, inverse=True, sac=sac)
         circulant_matrix_mis, _, _ = \
                 self._translation_classes_dependent_data_mis(tgt_expansion,
                                                                  src_expansion)
@@ -868,7 +865,6 @@ class FourierBesselM2LWithFFT(FourierBesselM2LWithPreprocessedMultipoles):
     def translation_classes_dependent_data(self, tgt_expansion, src_expansion,
             src_rscale, dvec, sac):
 
-        from sumpy.tools import fft
         translation_classes_dependent_data = \
             super().translation_classes_dependent_data(tgt_expansion,
                 src_expansion, src_rscale, dvec, sac)
@@ -890,23 +886,21 @@ class FourierBesselM2LWithFFT(FourierBesselM2LWithPreprocessedMultipoles):
 
         first_column_circulant = list(first_column_toeplitz) + \
                 list(reversed(first_row_toeplitz))
-        return fft(first_column_circulant, sac)
+        return first_column_circulant
 
     def preprocess_multipole_exprs(self, tgt_expansion, src_expansion,
             src_coeff_exprs, sac, src_rscale):
 
-        from sumpy.tools import fft
         result = super().preprocess_multipole_exprs(tgt_expansion,
             src_expansion, src_coeff_exprs, sac, src_rscale)
 
         result = list(reversed(result))
         result += [0] * (len(result) - 1)
-        return fft(result, sac=sac)
+        return result
 
     def postprocess_local_exprs(self, tgt_expansion, src_expansion,
             m2l_result, src_rscale, tgt_rscale, sac):
 
-        m2l_result = fft(m2l_result, inverse=True, sac=sac)
         m2l_result = m2l_result[:2*tgt_expansion.order+1]
         return super().postprocess_local_exprs(tgt_expansion,
             src_expansion, m2l_result, src_rscale, tgt_rscale, sac)
