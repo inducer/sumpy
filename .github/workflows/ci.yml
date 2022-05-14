@@ -89,7 +89,7 @@ jobs:
                 curl -L -O https://tiker.net/ci-support-v0
                 . ./ci-support-v0
                 if [[ "$DOWNSTREAM_PROJECT" == "pytential" && "$GITHUB_HEAD_REF" == "fft" ]]; then
-                   DOWNSTREAM_PROJECT=https://github.com/isuruf/pytential.git@m2l_translation
+                   DOWNSTREAM_PROJECT=https://github.com/isuruf/pytential.git@pyvkfft
                 fi
                 test_downstream "$DOWNSTREAM_PROJECT"
 
