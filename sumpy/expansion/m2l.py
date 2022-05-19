@@ -140,6 +140,14 @@ class M2LTranslationBase:
     use_fft = False
     use_preprocessing = False
 
+    def __setattr__(self):
+        # These are intended to be stateless.
+        raise AttributeError(f"{type(self)} is stateless and does not permit "
+                "attribute modification.")
+
+    def __eq__(self, other):
+        return type(self) is type(other)
+
     def translate(self, tgt_expansion, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, translation_classes_dependent_data=None):
         raise NotImplementedError
