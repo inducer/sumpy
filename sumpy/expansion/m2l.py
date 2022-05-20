@@ -107,10 +107,7 @@ class DefaultM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
             _FourierBesselLocalExpansion)
         from sumpy.kernel import LaplaceKernel
         if issubclass(local_expansion_class, VolumeTaylorLocalExpansionBase):
-            if isinstance(base_kernel, LaplaceKernel):
-                return VolumeTaylorM2LWithFFT
-            else:
-                return VolumeTaylorM2LTranslation
+            return VolumeTaylorM2LWithFFT
         elif issubclass(local_expansion_class, _FourierBesselLocalExpansion):
             return FourierBesselM2LTranslation
         else:
