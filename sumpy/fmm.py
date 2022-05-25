@@ -196,13 +196,8 @@ class SumpyTimingFuture:
 
     @property
     def native_events(self):
-        native_events = []
-        for event in self.events:
-            if isinstance(event, cl.Event):
-                native_events.append(event)
-            else:
-                native_events.append(event.native_event)
-        return native_events
+        return [evt if isinstance(evt, cl.Event) else evt.native_event
+                for evt in self.events]
 
     @memoize_method
     def result(self):
