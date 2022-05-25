@@ -920,6 +920,14 @@ class FourierBesselM2LWithFFT(FourierBesselM2LWithPreprocessedMultipoles):
 
 def translation_classes_dependent_data_loopy_knl(tgt_expansion, src_expansion,
             result_dtype):
+    """
+    This is a helper function to create a loopy kernel to generate translation
+    classes dependent data. This function uses symbolic expressions given by the
+    M2L translation, converts them to pymbolic expressions and generates a loopy
+    kernel. Note that the loopy kernel returned has lots of expressions in it and
+    takes a long time. Therefore, this function should be used only as a fallback
+    when there is no "loop-y" kernel to calculate the data.
+    """
     src_rscale = sym.Symbol("src_rscale")
     dvec = sym.make_sym_vector("d", tgt_expansion.dim)
     from sumpy.assignment_collection import SymbolicAssignmentCollection
