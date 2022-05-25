@@ -43,6 +43,8 @@ from sumpy import (
         M2LPreprocessMultipole, M2LPostprocessLocal)
 from sumpy.tools import to_complex_dtype
 
+from typing import TypeVar, List, Union
+
 
 # {{{ tree-independent data for wrangler
 
@@ -184,18 +186,25 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
 _SECONDS_PER_NANOSECOND = 1e-9
 
 
+"""
+EventLike objects have an attribute native_event that returns
+a cl.Event that indicates the end of the event.
+"""
+EventLike = TypeVar('CLEventLike')
+
+
 class UnableToCollectTimingData(UserWarning):
     pass
 
 
 class SumpyTimingFuture:
 
-    def __init__(self, queue, events):
+    def __init__(self, queue, events: List[Union[cl.Event, EventLike]]):
         self.queue = queue
         self.events = events
 
     @property
-    def native_events(self):
+    def native_events(self) -> List[cl.Event]:
         return [evt if isinstance(evt, cl.Event) else evt.native_event
                 for evt in self.events]
 
