@@ -916,7 +916,7 @@ class FourierBesselM2LWithFFT(FourierBesselM2LWithPreprocessedMultipoles):
 
 # }}} FourierBesselM2LWithFFT
 
-# {{{ helper
+# {{{ translation_classes_dependent_data_loopy_knl
 
 def translation_classes_dependent_data_loopy_knl(tgt_expansion, src_expansion,
             result_dtype):
@@ -973,5 +973,7 @@ def translation_classes_dependent_data_loopy_knl(tgt_expansion, src_expansion,
     )
 
     return knl
+
+# }}} translation_classes_dependent_data_loopy_knl
 
 # vim: fdm=marker
