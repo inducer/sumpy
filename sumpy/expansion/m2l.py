@@ -449,26 +449,38 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         ncoeff_preprocessed = self.preprocess_multipole_nexprs(tgt_expansion,
             src_expansion)
 
+        output_coeffs = pymbolic.var("output_coeffs")
+        input_coeffs = pymbolic.var("input_coeffs")
+        ioutput_coeff = pymbolic.var("ioutput_coeff")
+
         domains = []
-        insns = []
+        insns = [
+            lp.Assignment(
+                assignee=output_coeffs[ioutput_coeff],
+                expression=0,
+                id="init",
+            )
+        ]
+        prev_insn = "init"
         for icoeff_src, term in enumerate(
                 src_expansion.get_coefficient_identifiers()):
             new_icoeff_src = circulant_matrix_ident_to_index[term]
-            if icoeff_src == 0:
-                insns += [
-                    f"coeff[{new_icoeff_src}] = src_coeffs[{icoeff_src}] "
-                    f"{{id=coeff_insn_{icoeff_src}}}"]
-            else:
-                insns += [
-                    f"coeff[{new_icoeff_src}] = src_coeffs[{icoeff_src}] "
-                    f"{{id=coeff_insn_{icoeff_src},dep=coeff_insn_{icoeff_src-1}}}"]
+            insns += [
+                lp.Assignment(
+                    assignee=output_coeffs[new_icoeff_src],
+                    expression=input_coeffs[icoeff_src],
+                    id=f"coeff_insn_{icoeff_src}",
+                    depends_on=frozenset([prev_insn])
+                ),
+            ]
+            prev_insn = f"coeff_insn_{icoeff_src}"
 
         return lp.make_function(domains, insns,
             kernel_data=[
                 lp.ValueArg("src_rscale", None),
-                lp.GlobalArg("coeff", None, shape=ncoeff_preprocessed,
-                    is_input=True),
-                lp.GlobalArg("src_coeffs", None, shape=ncoeff_src),
+                lp.GlobalArg("output_coeffs", None, shape=ncoeff_preprocessed,
+                    is_input=False, is_output=True),
+                lp.GlobalArg("input_coeffs", None, shape=ncoeff_src),
                 ...],
             name="m2l_preprocess_inner",
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
@@ -539,8 +551,8 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
             ),
         ]
 
-        tgt_coeffs = pymbolic.var("tgt_coeffs")
-        coeffs = pymbolic.var("coeffs")
+        output_coeffs = pymbolic.var("output_coeffs")
+        input_coeffs = pymbolic.var("input_coeffs")
 
         if self.use_fft and result_dtype in \
                 (np.float64, np.float32):
@@ -561,9 +573,9 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
 
             insns += [
                 lp.Assignment(
-                    assignee=tgt_coeffs[new_icoeff_tgt],
+                    assignee=output_coeffs[new_icoeff_tgt],
                     expression=result_func(
-                        coeffs[icoeff_tgt]) * rscale_arr[sum(term)],
+                        input_coeffs[icoeff_tgt]) * rscale_arr[sum(term)],
                     id=f"coeff_insn_{new_icoeff_tgt}",
                     depends_on="rscale_arr",
                 )
@@ -573,12 +585,12 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
             kernel_data=[
                 lp.ValueArg("src_rscale", None),
                 lp.ValueArg("tgt_rscale", None),
-                lp.GlobalArg("tgt_coeffs", None,
-                    shape=ncoeff_tgt, is_input=True,
+                lp.GlobalArg("output_coeffs", None,
+                    shape=ncoeff_tgt, is_input=False,
                     is_output=True),
-                lp.GlobalArg("coeffs", None,
+                lp.GlobalArg("input_coeffs", None,
                     shape=ncoeff_before_postprocessed,
-                    is_output=False),
+                    is_output=False, is_input=True),
                 lp.TemporaryVariable("rscale_arr",
                     None,
                     shape=(order + 1,)),
@@ -616,7 +628,7 @@ class VolumeTaylorM2LWithPreprocessedMultipoles(VolumeTaylorM2LTranslation):
         icoeff_tgt = pymbolic.var("icoeff_tgt")
         domains = [f"{{[icoeff_tgt]: 0<=icoeff_tgt<{ncoeff_tgt} }}"]
 
-        coeff = pymbolic.var("coeff")
+        tgt_coeffs = pymbolic.var("tgt_coeffs")
         src_coeffs = pymbolic.var("src_coeffs")
         translation_classes_dependent_data = pymbolic.var("data")
 
@@ -635,13 +647,20 @@ class VolumeTaylorM2LWithPreprocessedMultipoles(VolumeTaylorM2LTranslation):
 
         insns = [
             lp.Assignment(
-                assignee=coeff[icoeff_tgt],
-                expression=coeff[icoeff_tgt] + expr),
+                assignee=tgt_coeffs[icoeff_tgt],
+                expression=0,
+                id="init"),
+            lp.Assignment(
+                assignee=tgt_coeffs[icoeff_tgt],
+                expression=tgt_coeffs[icoeff_tgt] + expr,
+                depends_on=frozenset(["init"])),
         ]
         return lp.make_function(domains, insns,
                 kernel_data=[
-                    lp.GlobalArg("coeff, src_coeffs, data",
-                        shape=lp.auto),
+                    lp.GlobalArg("tgt_coeffs", shape=lp.auto, is_input=False,
+                        is_output=True),
+                    lp.GlobalArg("src_coeffs, data",
+                        shape=lp.auto, is_input=False),
                     lp.ValueArg("src_rscale, tgt_rscale"),
                     ...],
                 name="e2e",
@@ -812,7 +831,7 @@ class FourierBesselM2LWithPreprocessedMultipoles(FourierBesselM2LTranslation):
         icoeff_tgt = pymbolic.var("icoeff_tgt")
         domains = [f"{{[icoeff_tgt]: 0<=icoeff_tgt<{ncoeff_tgt} }}"]
 
-        coeff = pymbolic.var("coeff")
+        tgt_coeffs = pymbolic.var("tgt_coeffs")
         src_coeffs = pymbolic.var("src_coeffs")
         translation_classes_dependent_data = pymbolic.var("data")
 
@@ -828,13 +847,20 @@ class FourierBesselM2LWithPreprocessedMultipoles(FourierBesselM2LTranslation):
 
         insns = [
             lp.Assignment(
-                assignee=coeff[icoeff_tgt],
-                expression=coeff[icoeff_tgt] + expr),
+                assignee=tgt_coeffs[icoeff_tgt],
+                expression=0,
+                id="init"),
+            lp.Assignment(
+                assignee=tgt_coeffs[icoeff_tgt],
+                expression=tgt_coeffs[icoeff_tgt] + expr,
+                depends_on=frozenset(["init"])),
         ]
         return lp.make_function(domains, insns,
                 kernel_data=[
-                    lp.GlobalArg("coeff, src_coeffs, data",
-                        shape=lp.auto),
+                    lp.GlobalArg("tgt_coeffs", shape=lp.auto, is_input=False,
+                        is_output=True),
+                    lp.GlobalArg("src_coeffs, data",
+                        shape=lp.auto, is_input=True, is_output=False),
                     lp.ValueArg("src_rscale, tgt_rscale"),
                     ...],
                 name="e2e",

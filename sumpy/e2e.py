@@ -421,7 +421,8 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                     <> isrc_start = src_box_starts[itgt_box]
                     <> isrc_stop = src_box_starts[itgt_box+1]
                     for icoeff_tgt
-                        <> coeffs[icoeff_tgt] = 0 {id=init_coeffs, dup=icoeff_tgt}
+                        <> tgt_expansion[icoeff_tgt] = 0 \
+                            {id=init_coeffs, dup=icoeff_tgt}
                     end
                     for isrc_box
                         <> src_ibox = src_box_lists[isrc_box] \
@@ -431,8 +432,8 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                         <> translation_class_rel = \
                                 translation_class - translation_classes_level_start \
                                 {id=translation_offset}
-                        [icoeff_tgt]: coeffs[icoeff_tgt] = e2e(
-                            [icoeff_tgt]: coeffs[icoeff_tgt],
+                        [icoeff_tgt]: tgt_expansion[icoeff_tgt] = e2e(
+                            [icoeff_tgt]: tgt_expansion[icoeff_tgt],
                             [icoeff_src]: src_expansions[src_ibox - src_base_ibox,
                                 icoeff_src],
                             [idep]: m2l_translation_classes_dependent_data[
@@ -442,7 +443,8 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                             )  {dep=init_coeffs,id=update_coeffs}
                     end
                     tgt_expansions[tgt_ibox - tgt_base_ibox, icoeff_tgt] = \
-                            coeffs[icoeff_tgt] {dep=update_coeffs, dup=icoeff_tgt}
+                            tgt_expansion[icoeff_tgt] \
+                            {dep=update_coeffs, dup=icoeff_tgt}
                 end
                 """],
                 [
@@ -556,15 +558,12 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                     <> d[idim] = m2l_translation_vectors[idim, \
                             itr_class + translation_classes_level_start] \
                             {id=set_d,dup=idim}
-                    <> coeff[idata] = 0  {id=init,dup=idata}
-                    [idata]: coeff[idata] = \
+                    [idata]: m2l_translation_classes_dependent_data[
+                            itr_class, idata] = \
                         m2l_data(
                             src_rscale,
                             [idim]: d[idim],
-                            [idata]: coeff[idata]
-                        ) {id=update,dep=init:set_d}
-                    m2l_translation_classes_dependent_data[itr_class, idata] = \
-                        coeff[idata]  {dep=update,dup=idata}
+                        ) {id=update,dep=set_d}
                 end
                 """],
                 [
@@ -669,15 +668,11 @@ class M2LPreprocessMultipole(E2EBase):
                 ],
                 ["""
                 for isrc_box
-                    <> coeffs[itgt_coeff] = 0 {id=init, dup=itgt_coeff}
-                    [itgt_coeff]: coeffs[itgt_coeff] = \
-                      m2l_preprocess_inner(
-                        src_rscale,
-                        [itgt_coeff]: coeffs[itgt_coeff],
-                        [isrc_coeff]: src_expansions[isrc_box, isrc_coeff],
-                      ) {id=update,dep=init}
-                    preprocessed_src_expansions[isrc_box, itgt_coeff] = \
-                        coeffs[itgt_coeff] {dep=update, dup=itgt_coeff}
+                    [itgt_coeff]: preprocessed_src_expansions[isrc_box, itgt_coeff] \
+                        = m2l_preprocess_inner(
+                            src_rscale,
+                            [isrc_coeff]: src_expansions[isrc_box, isrc_coeff],
+                        )
                 end
                 """],
                 [
@@ -762,17 +757,13 @@ class M2LPostprocessLocal(E2EBase):
                 ],
                 ["""
                 for itgt_box
-                    <> coeffs[itgt_coeff] = 0 {id=init, dup=itgt_coeff}
-                    [itgt_coeff]: coeffs[itgt_coeff] = \
-                      m2l_postprocess_inner(
-                        tgt_rscale,
-                        src_rscale,
-                        [itgt_coeff]: coeffs[itgt_coeff],
-                        [isrc_coeff]: tgt_expansions_before_postprocessing[ \
-                          itgt_box, isrc_coeff],
-                      ) {id=update,dep=init}
-                    tgt_expansions[itgt_box, itgt_coeff] = \
-                        coeffs[itgt_coeff] {dep=update, dup=itgt_coeff}
+                    [itgt_coeff]: tgt_expansions[itgt_box, itgt_coeff] = \
+                        m2l_postprocess_inner(
+                            tgt_rscale,
+                            src_rscale,
+                            [isrc_coeff]: tgt_expansions_before_postprocessing[ \
+                            itgt_box, isrc_coeff],
+                       )
                 end
                 """],
                 [
