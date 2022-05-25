@@ -598,12 +598,12 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
         loopy_knl = lp.set_options(loopy_knl,
                 enforce_variable_access_ordered="no_check")
 
-        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         return loopy_knl
 
     def get_optimized_kernel(self, result_dtype):
         # FIXME
         knl = self.get_kernel(result_dtype)
+        knl = lp.tag_inames(knl, "idim*:unr")
         knl = lp.tag_inames(knl, {"itr_class": "g.0"})
 
         return knl
