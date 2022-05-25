@@ -976,9 +976,10 @@ class MarkerBasedProfilingEvent:
 
 
 @memoize(use_kwargs=True)
-def cached_vkfft_app(*args, **kwargs):
+def cached_vkfft_app(shape, dtype, queue, ndim, inplace):
     from pyvkfft.opencl import VkFFTApp
-    return VkFFTApp(*args, **kwargs)
+    return VkFFTApp(shape=shape, dtype=dtype, queue=queue, ndim=ndim,
+        inplace=inplace)
 
 
 def run_opencl_fft(queue, input_vec, output_vec=None, inverse=False, wait_for=None):
