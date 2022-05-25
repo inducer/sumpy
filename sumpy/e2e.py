@@ -26,8 +26,7 @@ import sumpy.symbolic as sym
 import pymbolic
 
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
-from sumpy.tools import (KernelCacheWrapper, to_complex_dtype, run_opencl_fft,
-    AggregateProfilingEvent)
+from sumpy.tools import KernelCacheWrapper, to_complex_dtype
 from pytools import memoize_method
 
 import logging
@@ -362,16 +361,16 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
 
         domains = []
         insns = self.get_translation_loopy_insns(result_dtype)
-        coeff = pymbolic.var("coeff")
+        tgt_coeffs = pymbolic.var("tgt_coeffs")
         for i in range(ncoeff_tgt):
             expr = pymbolic.var(f"tgt_coeff{i}")
-            insn = lp.Assignment(assignee=coeff[i],
-                    expression=coeff[i] + expr)
+            insn = lp.Assignment(assignee=tgt_coeffs[i],
+                    expression=tgt_coeffs[i] + expr)
             insns.append(insn)
 
         return lp.make_function(domains, insns,
                         kernel_data=[
-                            lp.GlobalArg("coeff", shape=(ncoeff_tgt,),
+                            lp.GlobalArg("tgt_coeffs", shape=(ncoeff_tgt,),
                                 is_output=True, is_input=True),
                             lp.GlobalArg("src_coeffs", shape=(ncoeff_src,)),
                             lp.GlobalArg("data", shape=(ndata,)),
@@ -626,20 +625,13 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
 
         knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
 
-        evt, result = knl(queue,
+        return knl(queue,
                 src_rscale=src_rscale,
                 m2l_translation_vectors=m2l_translation_vectors,
                 m2l_translation_classes_dependent_data=(
                     m2l_translation_classes_dependent_data),
                 **kwargs)
 
-        if self.tgt_expansion.m2l_translation.use_fft:
-            evt2, result = run_opencl_fft(queue,
-                m2l_translation_classes_dependent_data,
-                inverse=False, wait_for=[evt])
-            return AggregateProfilingEvent([evt, evt2]), (result,)
-        else:
-            return evt, result
 # }}}
 
 
@@ -719,15 +711,9 @@ class M2LPreprocessMultipole(E2EBase):
         result_dtype = preprocessed_src_expansions.dtype
         knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
 
-        evt, result = knl(queue,
+        return knl(queue,
                 preprocessed_src_expansions=preprocessed_src_expansions, **kwargs)
 
-        if self.tgt_expansion.m2l_translation.use_fft:
-            evt2, result = run_opencl_fft(queue, preprocessed_src_expansions,
-                inverse=False, wait_for=[evt])
-            return AggregateProfilingEvent([evt, evt2]), (result,)
-        else:
-            return evt, result
 # }}}
 
 
@@ -810,27 +796,10 @@ class M2LPostprocessLocal(E2EBase):
         :arg tgt_expansions_before_postprocessing
         """
         tgt_expansions = kwargs.pop("tgt_expansions")
-        tgt_expansions_before_postprocessing = kwargs.pop(
-            "tgt_expansions_before_postprocessing")
         result_dtype = tgt_expansions.dtype
         knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
 
-        if self.tgt_expansion.m2l_translation.use_fft:
-            wait_for = kwargs.pop("wait_for", [])
-            evt, _ = run_opencl_fft(queue, tgt_expansions_before_postprocessing,
-                inverse=True, wait_for=wait_for)
-            evt2, result = knl(queue,
-                tgt_expansions=tgt_expansions,
-                tgt_expansions_before_postprocessing=(
-                    tgt_expansions_before_postprocessing),
-                **kwargs)
-            return AggregateProfilingEvent([evt, evt2]), result
-        else:
-            return knl(queue,
-                tgt_expansions=tgt_expansions,
-                tgt_expansions_before_postprocessing=(
-                    tgt_expansions_before_postprocessing),
-                **kwargs)
+        return knl(queue, tgt_expansions=tgt_expansions, **kwargs)
 
 # }}}
 

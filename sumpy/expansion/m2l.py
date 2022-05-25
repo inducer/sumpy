@@ -453,7 +453,9 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         input_coeffs = pymbolic.var("input_coeffs")
         ioutput_coeff = pymbolic.var("ioutput_coeff")
 
-        domains = []
+        domains = [
+            "{[ioutput_coeff]: 0<=ioutput_coeff<noutput_coeffs}",
+        ]
         insns = [
             lp.Assignment(
                 assignee=output_coeffs[ioutput_coeff],
@@ -484,6 +486,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
                 ...],
             name="m2l_preprocess_inner",
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
+            fixed_parameters=dict(noutput_coeffs=ncoeff_preprocessed),
         )
 
     def postprocess_local_exprs(self, tgt_expansion, src_expansion, m2l_result,
@@ -648,20 +651,16 @@ class VolumeTaylorM2LWithPreprocessedMultipoles(VolumeTaylorM2LTranslation):
         insns = [
             lp.Assignment(
                 assignee=tgt_coeffs[icoeff_tgt],
-                expression=0,
-                id="init"),
-            lp.Assignment(
-                assignee=tgt_coeffs[icoeff_tgt],
-                expression=tgt_coeffs[icoeff_tgt] + expr,
-                depends_on=frozenset(["init"])),
+                expression=tgt_coeffs[icoeff_tgt] + expr
+            ),
         ]
         return lp.make_function(domains, insns,
                 kernel_data=[
-                    lp.GlobalArg("tgt_coeffs", shape=lp.auto, is_input=False,
+                    lp.GlobalArg("tgt_coeffs", shape=lp.auto, is_input=True,
                         is_output=True),
                     lp.GlobalArg("src_coeffs, data",
-                        shape=lp.auto, is_input=False),
-                    lp.ValueArg("src_rscale, tgt_rscale"),
+                        shape=lp.auto, is_input=True, is_output=False),
+                    lp.ValueArg("src_rscale, tgt_rscale", is_input=True),
                     ...],
                 name="e2e",
                 lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
@@ -680,7 +679,6 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
 
         assert translation_classes_dependent_data
         derivatives = translation_classes_dependent_data
-        print(src_coeff_exprs, derivatives)
         assert len(src_coeff_exprs) == len(derivatives)
         result = [a*b for a, b in zip(derivatives, src_coeff_exprs)]
         return result
@@ -848,20 +846,15 @@ class FourierBesselM2LWithPreprocessedMultipoles(FourierBesselM2LTranslation):
         insns = [
             lp.Assignment(
                 assignee=tgt_coeffs[icoeff_tgt],
-                expression=0,
-                id="init"),
-            lp.Assignment(
-                assignee=tgt_coeffs[icoeff_tgt],
-                expression=tgt_coeffs[icoeff_tgt] + expr,
-                depends_on=frozenset(["init"])),
+                expression=tgt_coeffs[icoeff_tgt] + expr),
         ]
         return lp.make_function(domains, insns,
                 kernel_data=[
-                    lp.GlobalArg("tgt_coeffs", shape=lp.auto, is_input=False,
+                    lp.GlobalArg("tgt_coeffs", shape=lp.auto, is_input=True,
                         is_output=True),
                     lp.GlobalArg("src_coeffs, data",
                         shape=lp.auto, is_input=True, is_output=False),
-                    lp.ValueArg("src_rscale, tgt_rscale"),
+                    lp.ValueArg("src_rscale, tgt_rscale", is_input=True),
                     ...],
                 name="e2e",
                 lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
