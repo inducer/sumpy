@@ -190,7 +190,7 @@ _SECONDS_PER_NANOSECOND = 1e-9
 EventLike objects have an attribute native_event that returns
 a cl.Event that indicates the end of the event.
 """
-EventLike = TypeVar('CLEventLike')
+EventLike = TypeVar("CLEventLike")
 
 
 class UnableToCollectTimingData(UserWarning):
