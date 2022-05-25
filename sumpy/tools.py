@@ -36,7 +36,7 @@ __doc__ = """
  .. autoclass:: DifferentiatedExprDerivativeTaker
 """
 
-from pytools import memoize_method, memoize
+from pytools import memoize_method
 from pytools.tag import Tag, tag_dataclass
 import numbers
 from collections import defaultdict, namedtuple
@@ -975,46 +975,40 @@ class MarkerBasedProfilingEvent:
         return self.native_event.wait()
 
 
-@memoize(use_kwargs=True)
-def cached_vkfft_app(shape, dtype, queue, ndim, inplace):
-    from pyvkfft.opencl import VkFFTApp
-    return VkFFTApp(shape=shape, dtype=dtype, queue=queue, ndim=ndim,
-        inplace=inplace)
-
-
-def run_opencl_fft(queue, input_vec, output_vec=None, inverse=False, wait_for=None):
-    """Runs a FFT on input_vec and returns two opencl markers that indicate the
-    end and start of the operations carried out. Only supports in-order queues.
-    If output_vec is given, the FFT is run out-of-place and the input_vec
-    is overwritten iff it is an inverse FFT with the output_vec type is real.
-    If output_vec is not given, an in-place FFT on input_vec is run.
+def get_opencl_fft_app(queue, shape, dtype):
+    """Setup an object for inplace FFT on with given shape and dtype on given queue.
+    Only supports in-order queues.
     """
     if queue.properties & cl.command_queue_properties.OUT_OF_ORDER_EXEC_MODE_ENABLE:
         raise RuntimeError("VkFFT does not support out of order queues yet.")
 
+    assert dtype.type in (np.float32, np.float64, np.complex64,
+                           np.complex128)
+
+    from pyvkfft.opencl import VkFFTApp
+    app = VkFFTApp(shape=shape, dtype=dtype, queue=queue, ndim=1, inplace=True)
+    return app
+
+
+def run_opencl_fft(vkfft_app, queue, input_vec, inverse=False, wait_for=None):
+    """Runs an inplace FFT on input_vec and returns a :class:`MarkerBasedProfilingEvent`
+    that indicate the end and start of the operations carried out.
+    Only supports in-order queues.
+    """
     if wait_for is None:
         wait_for = []
 
     start_evt = cl.enqueue_marker(queue, wait_for=wait_for[:])
 
-    input_dtype = input_vec.dtype.type
-    assert input_dtype in (np.float32, np.float64, np.complex64,
-                           np.complex128)
-
-    inplace = output_vec is None
-    app = cached_vkfft_app(input_vec.shape, input_vec.dtype, queue, ndim=1,
-               inplace=inplace)
     if inverse:
-        app.ifft(input_vec, output_vec)
+        vkfft_app.ifft(input_vec)
     else:
-        app.fft(input_vec, output_vec)
+        vkfft_app.fft(input_vec)
 
     end_evt = cl.enqueue_marker(queue, wait_for=[start_evt])
-    output_vec = input_vec if inplace else output_vec
-    output_vec.add_event(end_evt)
+    input_vec.add_event(end_evt)
 
-    return MarkerBasedProfilingEvent(end_event=end_evt,
-            start_event=start_evt), output_vec
+    return MarkerBasedProfilingEvent(end_event=end_evt, start_event=start_evt)
 
 # }}}
 

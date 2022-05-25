@@ -41,7 +41,8 @@ from sumpy import (
         E2EFromChildren, E2EFromParent,
         M2LGenerateTranslationClassesDependentData,
         M2LPreprocessMultipole, M2LPostprocessLocal)
-from sumpy.tools import to_complex_dtype
+from sumpy.tools import (to_complex_dtype, AggregateProfilingEvent,
+        run_opencl_fft, get_opencl_fft_app)
 
 from typing import TypeVar, List, Union
 
@@ -541,6 +542,14 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
     # }}}
 
+    @memoize_method
+    def get_opencl_fft_app(self, queue, shape, dtype):
+        return get_opencl_fft_app(queue, shape, dtype)
+
+    def run_opencl_fft(self, queue, input_vec, inverse, wait_for):
+        app = self.get_opencl_fft_app(queue, input_vec.shape, input_vec.dtype)
+        return run_opencl_fft(app, queue, input_vec, inverse, wait_for)
+
     def form_multipoles(self,
             level_start_source_box_nrs, source_boxes,
             src_weight_vecs):
@@ -703,6 +712,11 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     **self.kernel_extra_kwargs
                 )
 
+                if self.tree_indep.m2l_translation.use_fft:
+                    _ = self.run_opencl_fft(queue,
+                        m2l_translation_classes_dependent_data_view,
+                        inverse=False, wait_for=[evt])
+
             for lev in range(self.tree.nlevels):
                 m2l_translation_classes_dependent_data_view = \
                     m2l_translation_classes_dependent_data[lev]
@@ -744,11 +758,11 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         if self.tree_indep.m2l_translation.use_preprocessing:
             preprocessed_mpole_exps = \
                 self.m2l_preproc_mpole_expansion_zeros(mpole_exps)
-            mpole_exps = preprocessed_mpole_exps
             m2l_work_array = self.m2l_work_array_zeros(local_exps)
             mpole_exps_view_func = self.m2l_preproc_mpole_expansions_view
             local_exps_view_func = self.m2l_work_array_view
         else:
+            preprocessed_mpole_exps = mpole_exps
             m2l_work_array = local_exps
             mpole_exps_view_func = self.multipole_expansions_view
             local_exps_view_func = self.local_expansions_view
@@ -789,16 +803,23 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     wait_for=wait_for,
                     **self.kernel_extra_kwargs
                 )
+                wait_for.append(evt)
+
+                if self.tree_indep.m2l_translation.use_fft:
+                    evt_fft = self.run_opencl_fft(queue,
+                        preprocessed_source_mpoles_view,
+                        inverse=False, wait_for=wait_for)
+                    wait_for.append(evt_fft.native_event)
+                    evt = AggregateProfilingEvent([evt, evt_fft])
+
                 preprocess_evts.append(evt)
-                wait_for.append(
-                    evt if isinstance(evt, cl.Event) else evt.native_event)
 
             order = self.level_orders[lev]
             m2l = self.tree_indep.m2l(order, order,
                     self.supports_translation_classes)
 
             source_level_start_ibox, source_mpoles_view = \
-                    mpole_exps_view_func(mpole_exps, lev)
+                    mpole_exps_view_func(preprocessed_mpole_exps, lev)
             target_level_start_ibox, target_locals_view = \
                     local_exps_view_func(m2l_work_array, lev)
 
@@ -824,8 +845,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 # There is nothing to do for this level
                 continue
             evt, _ = m2l(queue, **kwargs, wait_for=wait_for)
-
-            wait_for.append(evt if isinstance(evt, cl.Event) else evt.native_event)
+            wait_for.append(evt)
             translate_evts.append(evt)
 
             if self.tree_indep.m2l_translation.use_preprocessing:
@@ -845,6 +865,12 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     # There is no M2L happening in this level
                     continue
 
+                if self.tree_indep.m2l_translation.use_fft:
+                    evt_fft = self.run_opencl_fft(queue,
+                        target_locals_before_postprocessing_view,
+                        inverse=True, wait_for=wait_for)
+                    wait_for.append(evt_fft.native_event)
+
                 evt, _ = postprocess_local_kernel(
                     queue,
                     tgt_expansions=target_locals_view,
@@ -855,7 +881,11 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     wait_for=wait_for,
                     **self.kernel_extra_kwargs,
                 )
-                postprocess_evts.append(evt)
+
+                if self.tree_indep.m2l_translation.use_fft:
+                    postprocess_evts.append(AggregateProfilingEvent([evt, evt_fft]))
+                else:
+                    postprocess_evts.append(evt)
 
         timing_events = preprocess_evts + translate_evts + postprocess_evts
 
