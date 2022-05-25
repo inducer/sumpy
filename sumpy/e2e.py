@@ -558,7 +558,7 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                             {id=set_d,dup=idim}
                     <> coeff[idata] = 0  {id=init,dup=idata}
                     [idata]: coeff[idata] = \
-                        m2l_data_inner(
+                        m2l_data(
                             src_rscale,
                             [idim]: d[idim],
                             [idata]: coeff[idata]
@@ -594,7 +594,7 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.merge([loopy_knl, child_knl])
-        loopy_knl = lp.inline_callable_kernel(loopy_knl, "m2l_data_inner")
+        loopy_knl = lp.inline_callable_kernel(loopy_knl, "m2l_data")
         loopy_knl = lp.set_options(loopy_knl,
                 enforce_variable_access_ordered="no_check")
 

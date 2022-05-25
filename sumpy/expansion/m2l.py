@@ -968,7 +968,7 @@ def translation_classes_dependent_data_loopy_knl(tgt_expansion, src_expansion,
                 shape=len(derivatives), is_input=True,
                 is_output=True),
         ],
-        name="m2l_data_inner",
+        name="m2l_data",
         lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
     )
 
