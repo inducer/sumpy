@@ -540,7 +540,7 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
             m2l_translation.translation_classes_dependent_ndata(
                 self.tgt_expansion, self.src_expansion)
 
-        child_knl = \
+        translation_classes_data_knl = \
             m2l_translation.translation_classes_dependent_data_loopy_knl(
                 self.tgt_expansion, self.src_expansion, result_dtype)
 
@@ -593,7 +593,7 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
         for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
-        loopy_knl = lp.merge([loopy_knl, child_knl])
+        loopy_knl = lp.merge([loopy_knl, translation_classes_data_knl])
         loopy_knl = lp.inline_callable_kernel(loopy_knl, "m2l_data")
         loopy_knl = lp.set_options(loopy_knl,
                 enforce_variable_access_ordered="no_check")
@@ -657,7 +657,7 @@ class M2LPreprocessMultipole(E2EBase):
         npreprocessed_src_coeffs = \
             m2l_translation.preprocess_multipole_nexprs(self.tgt_expansion,
                 self.src_expansion)
-        child_knl = m2l_translation.preprocess_multipole_loopy_knl(
+        single_box_preprocess_knl = m2l_translation.preprocess_multipole_loopy_knl(
             self.tgt_expansion, self.src_expansion, result_dtype)
 
         from sumpy.tools import gather_loopy_arguments
@@ -702,7 +702,7 @@ class M2LPreprocessMultipole(E2EBase):
         for expn in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
-        loopy_knl = lp.merge([loopy_knl, child_knl])
+        loopy_knl = lp.merge([loopy_knl, single_box_preprocess_knl])
         loopy_knl = lp.inline_callable_kernel(loopy_knl, "m2l_preprocess_inner")
 
         return loopy_knl
@@ -750,7 +750,7 @@ class M2LPostprocessLocal(E2EBase):
             m2l_translation.postprocess_local_nexprs(self.tgt_expansion,
                 self.src_expansion)
 
-        child_knl = m2l_translation.postprocess_local_loopy_knl(
+        single_box_postprocess_knl = m2l_translation.postprocess_local_loopy_knl(
             self.tgt_expansion, self.src_expansion, result_dtype)
 
         from sumpy.tools import gather_loopy_arguments
@@ -800,7 +800,7 @@ class M2LPostprocessLocal(E2EBase):
         for expn in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
-        loopy_knl = lp.merge([loopy_knl, child_knl])
+        loopy_knl = lp.merge([loopy_knl, single_box_postprocess_knl])
         loopy_knl = lp.inline_callable_kernel(loopy_knl, "m2l_postprocess_inner")
 
         loopy_knl = lp.set_options(loopy_knl,
