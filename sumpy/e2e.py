@@ -590,8 +590,8 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                 lang_version=MOST_RECENT_LANGUAGE_VERSION
                 )
 
-        for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
-            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
+        for expr_knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
+            loopy_knl = expr_knl.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.merge([loopy_knl, translation_classes_data_knl])
         loopy_knl = lp.inline_callable_kernel(loopy_knl, "m2l_data")
