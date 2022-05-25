@@ -740,13 +740,31 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
         queue = mpole_exps.queue
         local_exps = self.local_expansion_zeros(mpole_exps)
-        wait_for = []
-        preprocess_evts = []
 
         if self.tree_indep.m2l_translation.use_preprocessing:
             preprocessed_mpole_exps = \
                 self.m2l_preproc_mpole_expansion_zeros(mpole_exps)
-            for lev in range(self.tree.nlevels):
+            mpole_exps = preprocessed_mpole_exps
+            m2l_work_array = self.m2l_work_array_zeros(local_exps)
+            mpole_exps_view_func = self.m2l_preproc_mpole_expansions_view
+            local_exps_view_func = self.m2l_work_array_view
+        else:
+            m2l_work_array = local_exps
+            mpole_exps_view_func = self.multipole_expansions_view
+            local_exps_view_func = self.local_expansions_view
+
+        preprocess_evts = []
+        translate_evts = []
+        postprocess_evts = []
+
+        for lev in range(self.tree.nlevels):
+            wait_for = []
+
+            start, stop = level_start_target_box_nrs[lev:lev+2]
+            if start == stop:
+                continue
+
+            if self.tree_indep.m2l_translation.use_preprocessing:
                 order = self.level_orders[lev]
                 preprocess_mpole_kernel = \
                     self.tree_indep.m2l_preprocess_mpole_kernel(order, order)
@@ -772,21 +790,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     **self.kernel_extra_kwargs
                 )
                 preprocess_evts.append(evt)
-            mpole_exps = preprocessed_mpole_exps
-            m2l_work_array = self.m2l_work_array_zeros(local_exps)
-            mpole_exps_view_func = self.m2l_preproc_mpole_expansions_view
-            local_exps_view_func = self.m2l_work_array_view
-        else:
-            m2l_work_array = local_exps
-            mpole_exps_view_func = self.multipole_expansions_view
-            local_exps_view_func = self.local_expansions_view
-
-        translate_evts = []
-
-        for lev in range(self.tree.nlevels):
-            start, stop = level_start_target_box_nrs[lev:lev+2]
-            if start == stop:
-                continue
+                wait_for.append(
+                    evt if isinstance(evt, cl.Event) else evt.native_event)
 
             order = self.level_orders[lev]
             m2l = self.tree_indep.m2l(order, order,
@@ -820,12 +825,10 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 continue
             evt, _ = m2l(queue, **kwargs, wait_for=wait_for)
 
+            wait_for.append(evt if isinstance(evt, cl.Event) else evt.native_event)
             translate_evts.append(evt)
 
-        postprocess_evts = []
-
-        if self.tree_indep.m2l_translation.use_preprocessing:
-            for lev in range(self.tree.nlevels):
+            if self.tree_indep.m2l_translation.use_preprocessing:
                 order = self.level_orders[lev]
                 postprocess_local_kernel = \
                     self.tree_indep.m2l_postprocess_local_kernel(order, order)
