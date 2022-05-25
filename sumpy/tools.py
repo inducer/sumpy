@@ -933,17 +933,6 @@ def to_complex_dtype(dtype):
         raise RuntimeError(f"Unknown dtype: {dtype}")
 
 
-@memoize
-def get_real_part_kernel(context, dtype):
-    from pyopencl.elementwise import ElementwiseKernel
-    pyopencl_name = "float" if dtype == np.float32 else "double"
-    return ElementwiseKernel(context,
-        f"c{pyopencl_name}_t *x, {pyopencl_name} *z",
-        f"z[i] = c{pyopencl_name}_real(x[i])",
-        "real_part",
-        preamble="#include <pyopencl-complex.h>")
-
-
 ProfileGetter = namedtuple("ProfileGetter", "start, end")
 
 
