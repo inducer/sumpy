@@ -779,12 +779,9 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
     def get_local_expansion_class(self, base_kernel):
         """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
-        from sumpy.kernel import (HelmholtzKernel, YukawaKernel)
-
-        from sumpy.expansion.local import (H2DLocalExpansion, Y2DLocalExpansion,
+        from sumpy.expansion.local import (
                 LinearPDEConformingVolumeTaylorLocalExpansion,
                 VolumeTaylorLocalExpansion)
-
         try:
             base_kernel.get_base_kernel().get_pde_as_diff_op()
             return LinearPDEConformingVolumeTaylorLocalExpansion
@@ -794,13 +791,9 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
     def get_multipole_expansion_class(self, base_kernel):
         """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
-        from sumpy.kernel import (HelmholtzKernel, YukawaKernel)
-
-        from sumpy.expansion.multipole import (H2DMultipoleExpansion,
-                Y2DMultipoleExpansion,
+        from sumpy.expansion.multipole import (
                 LinearPDEConformingVolumeTaylorMultipoleExpansion,
                 VolumeTaylorMultipoleExpansion)
-
         try:
             base_kernel.get_base_kernel().get_pde_as_diff_op()
             return LinearPDEConformingVolumeTaylorMultipoleExpansion

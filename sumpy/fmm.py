@@ -323,13 +323,16 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         # YALE UNIV NEW HAVEN CT DEPT OF COMPUTER SCIENCE, 1988.
         # rscale that we use in sumpy is the inverse of the scaling used in the
         # paper and therefore we should use r / order. However empirically
-        # we have observed that 2r / order is better for numerical stability.
+        # we have observed that 2r / order is better for numerical stability
+        # for LaplaceKernel and 4r / order for biharmonic and Helmholtz.
         knl = self.tree_indep.get_base_kernel()
-        from sumpy.kernel import HelmholtzKernel
-        if isinstance(knl, HelmholtzKernel):
+        from sumpy.kernel import HelmholtzKernel, BiharmonicKernel
+        if isinstance(knl, (HelmholtzKernel, BiharmonicKernel)):
             return r * 4 / order
-        else:
+        elif isinstance(knl, LaplaceKernel):
             return r * 2 / order
+        else:
+            return r / order
 
     # {{{ data vector utilities
 
