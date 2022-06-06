@@ -45,6 +45,7 @@ from pymbolic.mapper import WalkMapper
 import numpy as np
 import sumpy.symbolic as sym
 import pyopencl as cl
+import pyopencl.array as cla
 
 import loopy as lp
 from typing import Dict, Tuple, Any
@@ -1001,13 +1002,15 @@ def run_opencl_fft(vkfft_app, queue, input_vec, inverse=False, wait_for=None):
 
     start_evt = cl.enqueue_marker(queue, wait_for=wait_for[:])
 
-    if inverse:
-        output_vec = vkfft_app.ifft(input_vec)
-    else:
-        output_vec = vkfft_app.fft(input_vec)
-
     if vkfft_app.inplace:
         output_vec = input_vec
+    else:
+        output_vec = cl.empty_like(input_vec, queue)
+
+    if inverse:
+        vkfft_app.ifft(input_vec, output_vec)
+    else:
+        vkfft_app.fft(input_vec, output_vec)
 
     end_evt = cl.enqueue_marker(queue, wait_for=[start_evt])
     output_vec.add_event(end_evt)
