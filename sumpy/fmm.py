@@ -326,7 +326,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         # we have observed that 2r / order is better for numerical stability
         # for LaplaceKernel and 4r / order for biharmonic and Helmholtz.
         knl = self.tree_indep.get_base_kernel()
-        from sumpy.kernel import HelmholtzKernel, BiharmonicKernel
+        from sumpy.kernel import HelmholtzKernel, BiharmonicKernel, LaplaceKernel
         if isinstance(knl, (HelmholtzKernel, BiharmonicKernel)):
             return r * 4 / order
         elif isinstance(knl, LaplaceKernel):
