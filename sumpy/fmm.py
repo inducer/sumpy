@@ -325,7 +325,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         # paper and therefore we should use r / order. However empirically
         # we have observed that 2r / order is better for numerical stability.
         knl = self.tree_indep.get_base_kernel()
-        from sumpy.kernels import HelmholtzKernel
+        from sumpy.kernel import HelmholtzKernel
         if isinstance(knl, HelmholtzKernel):
             return r * 4 / order
         else:
