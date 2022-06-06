@@ -514,7 +514,6 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
 
         assert translation_classes_dependent_data
         derivatives = translation_classes_dependent_data
-        print(src_coeff_exprs, derivatives)
         assert len(src_coeff_exprs) == len(derivatives)
         result = [a*b for a, b in zip(derivatives, src_coeff_exprs)]
         return result
