@@ -548,7 +548,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     # }}}
 
     def run_opencl_fft(self, queue, input_vec, inverse, wait_for, inplace):
-        app = self.tree_indep.opencl_fft_app(input_vec.shape, input_vec.dtype,
+        app = get_opencl_fft_app(queue, input_vec.shape, input_vec.dtype,
             inplace)
         return run_opencl_fft(app, queue, input_vec, inverse, wait_for)
 
@@ -697,6 +697,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                         m2l_translation_classes_dependent_data_view.shape[0]
 
                 if ntranslation_classes == 0:
+                    result.append(pyopencl.array.empty_like(
+                        m2l_translation_classes_dependent_data_view))
                     continue
 
                 data = self.translation_classes_data
