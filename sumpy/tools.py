@@ -1005,7 +1005,7 @@ def run_opencl_fft(vkfft_app, queue, input_vec, inverse=False, wait_for=None):
     if vkfft_app.inplace:
         output_vec = input_vec
     else:
-        output_vec = cl.empty_like(input_vec, queue)
+        output_vec = cla.empty_like(input_vec, queue)
 
     if inverse:
         vkfft_app.ifft(input_vec, output_vec)
