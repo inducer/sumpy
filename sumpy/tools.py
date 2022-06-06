@@ -975,9 +975,9 @@ class MarkerBasedProfilingEvent:
         return self.native_event.wait()
 
 
-def get_opencl_fft_app(queue, shape, dtype):
-    """Setup an object for inplace FFT on with given shape and dtype on given queue.
-    Only supports in-order queues.
+def get_opencl_fft_app(queue, shape, dtype, inplace=False):
+    """Setup an object for inplace/out-of-place FFT on with given shape and dtype
+    on given queue. Only supports in-order queues.
     """
     if queue.properties & cl.command_queue_properties.OUT_OF_ORDER_EXEC_MODE_ENABLE:
         raise RuntimeError("VkFFT does not support out of order queues yet.")
@@ -986,13 +986,14 @@ def get_opencl_fft_app(queue, shape, dtype):
                            np.complex128)
 
     from pyvkfft.opencl import VkFFTApp
-    app = VkFFTApp(shape=shape, dtype=dtype, queue=queue, ndim=1, inplace=True)
+    app = VkFFTApp(shape=shape, dtype=dtype, queue=queue, ndim=1, inplace=inplace)
     return app
 
 
 def run_opencl_fft(vkfft_app, queue, input_vec, inverse=False, wait_for=None):
-    """Runs an inplace FFT on input_vec and returns a :class:`MarkerBasedProfilingEvent`
-    that indicate the end and start of the operations carried out.
+    """Runs an FFT on input_vec and returns a :class:`MarkerBasedProfilingEvent`
+    that indicate the end and start of the operations carried out and the output
+    vector.
     Only supports in-order queues.
     """
     if wait_for is None:
@@ -1001,14 +1002,18 @@ def run_opencl_fft(vkfft_app, queue, input_vec, inverse=False, wait_for=None):
     start_evt = cl.enqueue_marker(queue, wait_for=wait_for[:])
 
     if inverse:
-        vkfft_app.ifft(input_vec)
+        output_vec = vkfft_app.ifft(input_vec)
     else:
-        vkfft_app.fft(input_vec)
+        output_vec = vkfft_app.fft(input_vec)
+
+    if vkfft_app.inplace:
+        output_vec = input_vec
 
     end_evt = cl.enqueue_marker(queue, wait_for=[start_evt])
-    input_vec.add_event(end_evt)
+    output_vec.add_event(end_evt)
 
-    return MarkerBasedProfilingEvent(end_event=end_evt, start_event=start_evt)
+    return (MarkerBasedProfilingEvent(end_event=end_evt, start_event=start_evt),
+        output_vec)
 
 # }}}
 

@@ -675,6 +675,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
     @memoize_method
     def multipole_to_local_precompute(self):
+        result = []
         with cl.CommandQueue(self.tree_indep.cl_context) as queue:
             m2l_translation_classes_dependent_data = \
                     self.m2l_translation_classes_dependent_data_zeros(queue)
@@ -713,18 +714,17 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 )
 
                 if self.tree_indep.m2l_translation.use_fft:
-                    _ = self.run_opencl_fft(queue,
-                        m2l_translation_classes_dependent_data_view,
-                        inverse=False, wait_for=[evt])
+                    _, m2l_translation_classes_dependent_data_view = \
+                        self.run_opencl_fft(queue,
+                            m2l_translation_classes_dependent_data_view,
+                            inverse=False, wait_for=[evt], inplace=False)
+                result.append(m2l_translation_classes_dependent_data_view)
 
             for lev in range(self.tree.nlevels):
-                m2l_translation_classes_dependent_data_view = \
-                    m2l_translation_classes_dependent_data[lev]
-                m2l_translation_classes_dependent_data_view.finish()
-                m2l_translation_classes_dependent_data[lev] = \
-                    m2l_translation_classes_dependent_data_view.with_queue(None)
+                result[lev].finish()
 
-        return m2l_translation_classes_dependent_data
+            result = [arr.with_queue(None) for arr in result]
+        return result
 
     def _add_m2l_precompute_kwargs(self, kwargs_for_m2l,
             lev):
@@ -786,10 +786,6 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 _, source_mpoles_view = \
                         self.multipole_expansions_view(mpole_exps, lev)
 
-                _, preprocessed_source_mpoles_view = \
-                        self.m2l_preproc_mpole_expansions_view(
-                                preprocessed_mpole_exps, lev)
-
                 tr_classes = self.m2l_translation_class_level_start_box_nrs()
                 if tr_classes[lev] == tr_classes[lev + 1]:
                     # There is no M2L happening in this level
@@ -798,7 +794,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 evt, _ = preprocess_mpole_kernel(
                     queue,
                     src_expansions=source_mpoles_view,
-                    preprocessed_src_expansions=preprocessed_source_mpoles_view,
+                    preprocessed_src_expansions=preprocessed_mpole_exps[lev],
                     src_rscale=self.level_to_rscale(lev),
                     wait_for=wait_for,
                     **self.kernel_extra_kwargs
@@ -806,9 +802,10 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 wait_for.append(evt)
 
                 if self.tree_indep.m2l_translation.use_fft:
-                    evt_fft = self.run_opencl_fft(queue,
-                        preprocessed_source_mpoles_view,
-                        inverse=False, wait_for=wait_for)
+                    evt_fft, preprocessed_mpole_exps[lev] = \
+                        self.run_opencl_fft(queue,
+                            preprocessed_mpole_exps[lev],
+                            inverse=False, wait_for=wait_for, inplace=False)
                     wait_for.append(evt_fft.native_event)
                     evt = AggregateProfilingEvent([evt, evt_fft])
 
@@ -866,9 +863,10 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     continue
 
                 if self.tree_indep.m2l_translation.use_fft:
-                    evt_fft = self.run_opencl_fft(queue,
-                        target_locals_before_postprocessing_view,
-                        inverse=True, wait_for=wait_for)
+                    evt_fft, target_locals_before_postprocessing_view = \
+                        self.run_opencl_fft(queue,
+                            target_locals_before_postprocessing_view,
+                            inverse=True, wait_for=wait_for, inplace=False)
                     wait_for.append(evt_fft.native_event)
 
                 evt, _ = postprocess_local_kernel(
