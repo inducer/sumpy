@@ -548,7 +548,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     # }}}
 
     def run_opencl_fft(self, queue, input_vec, inverse, wait_for, inplace):
-        app = get_opencl_fft_app(queue, input_vec.shape, input_vec.dtype,
+        app = self.tree_indep.opencl_fft_app(input_vec.shape, input_vec.dtype,
             inplace)
         return run_opencl_fft(app, queue, input_vec, inverse, wait_for)
 
