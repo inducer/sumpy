@@ -49,8 +49,8 @@ Expansion-to-expansion
 # {{{ translation base class
 
 class E2EBase(KernelCacheWrapper):
-    def __init__(self, ctx, src_expansion, tgt_expansion,
-            name=None, device=None):
+    def __init__(self, src_expansion, tgt_expansion,
+            name=None):
         """
         :arg expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
         :arg strength_usage: A list of integers indicating which expression
@@ -58,9 +58,6 @@ class E2EBase(KernelCacheWrapper):
             number of strength arrays that need to be passed.
             Default: all kernels use the same strength.
         """
-
-        if device is None:
-            device = ctx.devices[0]
 
         if src_expansion is tgt_expansion:
             from sumpy.kernel import (TargetTransformationRemover,
@@ -80,11 +77,9 @@ class E2EBase(KernelCacheWrapper):
                     SourceTransformationRemover()(
                         TargetTransformationRemover()(tgt_expansion.kernel)))
 
-        self.ctx = ctx
         self.src_expansion = src_expansion
         self.tgt_expansion = tgt_expansion
         self.name = name or self.default_name
-        self.device = device
 
         if src_expansion.dim != tgt_expansion.dim:
             raise ValueError("source and target expansions must have "
@@ -148,11 +143,6 @@ class E2EFromCSR(E2EBase):
     """
 
     default_name = "e2e_from_csr"
-
-    def __init__(self, ctx, src_expansion, tgt_expansion,
-            name=None, device=None):
-        super().__init__(ctx, src_expansion, tgt_expansion,
-            name=name, device=device)
 
     def get_translation_loopy_insns(self):
         from sumpy.symbolic import make_sym_vector

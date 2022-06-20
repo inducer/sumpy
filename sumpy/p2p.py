@@ -51,8 +51,8 @@ Particle-to-particle
 # {{{ p2p base class
 
 class P2PBase(KernelComputation, KernelCacheWrapper):
-    def __init__(self, ctx, target_kernels, exclude_self, strength_usage=None,
-            value_dtypes=None, name=None, device=None, source_kernels=None):
+    def __init__(self, target_kernels, exclude_self, strength_usage=None,
+            value_dtypes=None, name=None, source_kernels=None):
         """
         :arg target_kernels: list of :class:`sumpy.kernel.Kernel` instances
           with only target derivatives.
@@ -82,9 +82,9 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
         base_target_kernel = single_valued(txr(knl) for knl in target_kernels)
         assert base_source_kernel == base_target_kernel
 
-        KernelComputation.__init__(self, ctx=ctx, target_kernels=target_kernels,
+        KernelComputation.__init__(self, target_kernels=target_kernels,
             source_kernels=source_kernels, strength_usage=strength_usage,
-            value_dtypes=value_dtypes, name=name, device=device)
+            value_dtypes=value_dtypes, name=name)
 
         self.exclude_self = exclude_self
 
@@ -94,8 +94,7 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
     def get_cache_key(self):
         return (type(self).__name__, tuple(self.target_kernels), self.exclude_self,
                 tuple(self.strength_usage), tuple(self.value_dtypes),
-                tuple(self.source_kernels),
-                self.device.hashable_model_and_version_identifier)
+                tuple(self.source_kernels))
 
     def get_loopy_insns_and_result_names(self):
         from sumpy.symbolic import make_sym_vector
@@ -638,10 +637,8 @@ class P2PFromCSR(P2PBase):
         return loopy_knl
 
     def get_optimized_kernel(self, max_nsources_in_one_box,
-            max_ntargets_in_one_box):
-        import pyopencl as cl
-        dev = self.context.devices[0]
-        if dev.type & cl.device_type.CPU:
+            max_ntargets_in_one_box, is_cpu):
+        if is_cpu:
             knl = self.get_kernel(max_nsources_in_one_box,
                     max_ntargets_in_one_box, gpu=False)
             knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
@@ -661,11 +658,13 @@ class P2PFromCSR(P2PBase):
         return knl
 
     def __call__(self, queue, **kwargs):
+        import pyopencl as cl
         max_nsources_in_one_box = kwargs.pop("max_nsources_in_one_box")
         max_ntargets_in_one_box = kwargs.pop("max_ntargets_in_one_box")
         knl = self.get_cached_optimized_kernel(
                 max_nsources_in_one_box=max_nsources_in_one_box,
-                max_ntargets_in_one_box=max_ntargets_in_one_box)
+                max_ntargets_in_one_box=max_ntargets_in_one_box,
+                is_cpu=queue.dev.type & cl.device_type.CPU)
 
         return knl(queue, **kwargs)
 

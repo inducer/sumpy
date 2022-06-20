@@ -43,8 +43,7 @@ Expansion-to-particle
 # {{{ E2P base class
 
 class E2PBase(KernelCacheWrapper):
-    def __init__(self, ctx, expansion, kernels,
-            name=None, device=None):
+    def __init__(self, expansion, kernels, name=None):
         """
         :arg expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
         :arg strength_usage: A list of integers indicating which expression
@@ -52,9 +51,6 @@ class E2PBase(KernelCacheWrapper):
           number of strength arrays that need to be passed.
           Default: all kernels use the same strength.
         """
-
-        if device is None:
-            device = ctx.devices[0]
 
         from sumpy.kernel import (SourceTransformationRemover,
                 TargetTransformationRemover)
@@ -67,11 +63,9 @@ class E2PBase(KernelCacheWrapper):
         for knl in kernels:
             assert txr(knl) == expansion.kernel
 
-        self.ctx = ctx
         self.expansion = expansion
         self.kernels = kernels
         self.name = name or self.default_name
-        self.device = device
 
         self.dim = expansion.dim
 

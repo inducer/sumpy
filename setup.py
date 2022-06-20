@@ -103,6 +103,7 @@ setup(
         "boxtree>=2018.1",
         "pytest>=2.3",
         "pyrsistent>=0.16.0",
+        "arraycontext",
         "dataclasses>=0.7;python_version<='3.6'",
         "sympy>=0.7.2",
         "pymbolic>=2021.1",
