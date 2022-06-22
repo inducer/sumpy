@@ -1007,10 +1007,15 @@ def run_opencl_fft(vkfft_app, queue, input_vec, inverse=False, wait_for=None):
     else:
         output_vec = cla.empty_like(input_vec, queue)
 
+    # FIXME: use a public API
+    from pyvkfft.opencl import _vkfft_opencl
     if inverse:
-        vkfft_app.ifft(input_vec, output_vec, queue=queue)
+        meth = _vkfft_opencl.ifft
     else:
-        vkfft_app.fft(input_vec, output_vec, queue=queue)
+        meth = _vkfft_opencl.fft
+
+    meth(vkfft_app.app, int(input_vec.data.int_ptr), int(output_vec.data.int_ptr),
+        int(queue.int_ptr))
 
     end_evt = cl.enqueue_marker(queue, wait_for=[start_evt])
     output_vec.add_event(end_evt)
