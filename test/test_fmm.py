@@ -27,7 +27,8 @@ import numpy.linalg as la
 import pyopencl as cl
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
-from sumpy.kernel import LaplaceKernel, HelmholtzKernel, YukawaKernel
+from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, YukawaKernel,
+    BiharmonicKernel)
 from sumpy.expansion.multipole import (
     VolumeTaylorMultipoleExpansion,
     H2DMultipoleExpansion, Y2DMultipoleExpansion,
@@ -232,6 +233,87 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
 
     print(pconv_verifier)
     pconv_verifier()
+
+
+@pytest.mark.parametrize("knl", [LaplaceKernel(2), BiharmonicKernel(2)])
+def test_coeff_magnitude_rscale(ctx_factory, knl):
+    """Checks that the rscale used keeps the coefficient magnitude
+    difference small
+    """
+    local_expn_class = LinearPDEConformingVolumeTaylorLocalExpansion
+    mpole_expn_class = LinearPDEConformingVolumeTaylorMultipoleExpansion
+
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    nsources = 1000
+    ntargets = 300
+    dtype = np.float64
+
+    from boxtree.tools import (
+            make_normal_particle_array as p_normal)
+
+    sources = p_normal(queue, nsources, knl.dim, dtype, seed=15)
+    offset = np.zeros(knl.dim)
+    offset[0] = 0.1
+
+    targets = (
+        p_normal(queue, ntargets, knl.dim, dtype, seed=18) + offset)
+
+    from boxtree import TreeBuilder
+    tb = TreeBuilder(ctx)
+
+    tree, _ = tb(queue, sources, targets=targets,
+            max_particles_in_box=30, debug=True)
+
+    from boxtree.traversal import FMMTraversalBuilder
+    tbuild = FMMTraversalBuilder(ctx)
+    trav, _ = tbuild(queue, tree, debug=True)
+
+    from pyopencl.clrandom import PhiloxGenerator
+    rng = PhiloxGenerator(ctx, seed=44)
+    weights = rng.uniform(queue, nsources, dtype=np.float64)
+
+    extra_kwargs = {}
+    dtype = np.float64
+    order = 10
+    if isinstance(knl, HelmholtzKernel):
+        extra_kwargs["k"] = 0.05
+        dtype = np.complex128
+
+    elif isinstance(knl, YukawaKernel):
+        extra_kwargs["lam"] = 2
+        dtype = np.complex128
+
+    from functools import partial
+    target_kernels = [knl]
+
+    tree_indep = SumpyTreeIndependentDataForWrangler(
+        ctx,
+        partial(mpole_expn_class, knl),
+        partial(local_expn_class, knl),
+        target_kernels)
+
+    def fmm_level_to_order(kernel, kernel_args, tree, lev):
+        return order
+
+    wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,
+        fmm_level_to_order=fmm_level_to_order,
+        kernel_extra_kwargs=extra_kwargs)
+
+    weights = wrangler.reorder_sources(weights)
+    (weights,) = wrangler.distribute_source_weights((weights,), None)
+
+    local_result, _ = wrangler.form_locals(
+        trav.level_start_target_or_target_parent_box_nrs,
+        trav.target_or_target_parent_boxes,
+        trav.from_sep_bigger_starts,
+        trav.from_sep_bigger_lists,
+        (weights,))
+
+    result = np.abs(wrangler.local_expansions_view(local_result, 5)[1][0])
+
+    assert np.max(result) / np.min(result) < 10**6
 
 
 def test_unified_single_and_double(ctx_factory):
