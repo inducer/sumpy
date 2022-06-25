@@ -12,7 +12,7 @@ dependencies:
 - islpy
 - pyopencl
 - python=3
-- python-symengine=0.6.0
+- python-symengine
 - pyfmmlib
 - pyrsistent
 - pyvkfft
