@@ -1007,7 +1007,7 @@ def run_opencl_fft(vkfft_app, queue, input_vec, inverse=False, wait_for=None):
     else:
         output_vec = cla.empty_like(input_vec, queue)
 
-    # FIXME: use a public API
+    # FIXME: use the public API once https://github.com/vincefn/pyvkfft/pull/17 is in
     from pyvkfft.opencl import _vkfft_opencl
     if inverse:
         meth = _vkfft_opencl.ifft
