@@ -59,10 +59,10 @@ def add_mi(mi1, mi2):
 
 
 def mi_factorial(mi):
-    from pytools import factorial
+    import math
     result = 1
     for mi_i in mi:
-        result *= factorial(mi_i)
+        result *= math.factorial(mi_i)
     return result
 
 
@@ -102,7 +102,7 @@ def add_to_sac(sac, expr):
     return sym.Symbol(name)
 
 
-class ExprDerivativeTaker(object):
+class ExprDerivativeTaker:
     """Facilitates the efficient computation of (potentially) high-order
     derivatives of a given :mod:`sympy` expression *expr* while attempting
     to maximize the number of common subexpressions generated.
@@ -233,7 +233,7 @@ class LaplaceDerivativeTaker(ExprDerivativeTaker):
     """
 
     def __init__(self, expr, var_list, rscale=1, sac=None):
-        super(LaplaceDerivativeTaker, self).__init__(expr, var_list, rscale, sac)
+        super().__init__(expr, var_list, rscale, sac)
         self.scaled_var_list = [add_to_sac(self.sac, v/rscale) for v in var_list]
         self.scaled_r = add_to_sac(self.sac,
                 sym.sqrt(sum(v**2 for v in self.scaled_var_list)))
@@ -302,7 +302,7 @@ class RadialDerivativeTaker(ExprDerivativeTaker):
         Takes the derivatives of a radial function.
         """
         import sumpy.symbolic as sym
-        super(RadialDerivativeTaker, self).__init__(expr, var_list, rscale, sac)
+        super().__init__(expr, var_list, rscale, sac)
         empty_mi = (0,) * len(var_list)
         self.cache_by_mi_q = {(empty_mi, 0): expr}
         self.r = sym.sqrt(sum(v**2 for v in var_list))
@@ -374,6 +374,7 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
         import sumpy.symbolic as sym
         if q < 2 or mi != (0,)*self.dim:
             return RadialDerivativeTaker.diff(self, mi, q)
+
         try:
             return self.cache_by_mi_q[(mi, q)]
         except KeyError:
@@ -383,14 +384,15 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
             # See https://dlmf.nist.gov/10.6.E6
             # and https://dlmf.nist.gov/10.6#E1
             k = self.orig_expr.args[1] / self.r
-            expr = -  2 * (q - 1) * self.diff(mi, q - 1)
-            expr += - k**2 * self.diff(mi, q - 2)
-            expr /= self.r**2
+            expr = (-2*(q - 1) * self.diff(mi, q - 1)
+                    - k**2 * self.diff(mi, q - 2)) / self.r**2
         else:
             # See reference [Tausch2003] in RadialDerivativeTaker.diff
+            # Note that there is a typo in the paper where
+            # -k**2/r is given instead of -k**2/r**2.
             k = (self.orig_expr * self.r).args[-1] / sym.I / self.r
-            expr = -(2*q - 1)/self.r**2 * self.diff(mi, q - 1)
-            expr += -k**2 / self.r * self.diff(mi, q - 2)
+            expr = (-(2*q - 1) * self.diff(mi, q - 1)
+                    - k**2 * self.diff(mi, q - 2)) / self.r**2
         self.cache_by_mi_q[(mi, q)] = expr
         return expr
 
@@ -629,7 +631,7 @@ class KernelComputation:
         import loopy as lp
         return [
                 lp.Assignment(id=None,
-                    assignee="knl_%d_scaling" % i,
+                    assignee=f"knl_{i}_scaling",
                     expression=sympy_conv(kernel.get_global_scaling_const()),
                     temp_var_type=lp.Optional(dtype),
                     tags=frozenset([ScalingAssignmentTag()]))
@@ -702,7 +704,7 @@ class OrderedSet(MutableSet):
     def __repr__(self):
         if not self:
             return f"{self.__class__.__name__}()"
-        return "{}({!r})".format(self.__class__.__name__, list(self))
+        return f"{self.__class__.__name__}({list(self)!r})"
 
     def __eq__(self, other):
         if isinstance(other, OrderedSet):
@@ -735,7 +737,7 @@ class KernelCacheWrapper:
             except KeyError:
                 pass
 
-        logger.info("%s: kernel cache miss" % self.name)
+        logger.info("%s: kernel cache miss", self.name)
         if CACHING_ENABLED:
             logger.info("{}: kernel cache miss [key={}]".format(
                 self.name, cache_key))
@@ -856,34 +858,8 @@ def nullspace(m, atol=0):
         n.append(vec)
     return np.array(n, dtype=object).T
 
-
-def find_linear_relationship(matrix):
-    """
-    This method does elementary row operations to figure out the first row
-    which is linearly dependent on the previous rows. Partial pivoting is not done
-    to find the row with the lowest degree.
-    """
-    ncols = matrix.shape[1]
-    nrows = min(matrix.shape[0], ncols+1)
-    augment = np.eye(nrows, nrows, dtype=matrix.dtype)
-    mat = np.hstack((matrix[:nrows, :], augment))
-    for i in range(nrows):
-        for j in range(ncols):
-            if mat[i, j] != 0:
-                col = j
-                break
-        else:
-            pde_dict = {}
-            for col in range(ncols, ncols+nrows):
-                if mat[i, col] != 0:
-                    pde_dict[col-ncols] = mat[i, col]
-            return pde_dict
-        for j in range(i+1, nrows):
-            mat[j, :] = mat[j, :]*mat[i, col] - mat[i, :]*mat[j, col]
-    return {}
-
-
 # }}}
+
 
 # {{{ FFT
 
@@ -896,16 +872,18 @@ def fft(seq, inverse=False, sac=None):
 
     from pymbolic.algorithm import fft as _fft, ifft as _ifft
 
-    def wrap(expr):
+    def wrap(level, expr):
         if isinstance(expr, np.ndarray):
-            res = [wrap(a) for a in expr]
+            res = [wrap(level, a) for a in expr]
             return np.array(res, dtype=object).reshape(expr.shape)
         return add_to_sac(sac, expr)
 
     if inverse:
-        return _ifft(list(seq), wrap_intermediate=wrap).tolist()
+        return _ifft(np.array(seq), wrap_intermediate_with_level=wrap,
+                complex_dtype=np.complex128).tolist()
     else:
-        return _fft(list(seq), wrap_intermediate=wrap).tolist()
+        return _fft(np.array(seq), wrap_intermediate_with_level=wrap,
+                complex_dtype=np.complex128).tolist()
 
 
 def fft_toeplitz_upper_triangular(first_row, x, sac=None):

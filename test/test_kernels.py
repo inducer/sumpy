@@ -36,6 +36,7 @@ from sumpy.expansion.multipole import (
 from sumpy.expansion.local import (
         VolumeTaylorLocalExpansion, H2DLocalExpansion,
         LinearPDEConformingVolumeTaylorLocalExpansion)
+from sumpy.expansion.m2l import NonFFTM2LTranslationClassFactory
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel, AxisTargetDerivative,
         DirectionalSourceDerivative, BiharmonicKernel, StokesletKernel)
 import sumpy.symbolic as sym
@@ -455,8 +456,14 @@ def test_p2e2p(ctx_factory, base_knl, expn_class, order, with_source_derivative)
     (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
     (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
      LinearPDEConformingVolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
+     LinearPDEConformingVolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+     LinearPDEConformingVolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
      LinearPDEConformingVolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion),
     (StokesletKernel(2, 0, 0), VolumeTaylorLocalExpansion,
@@ -519,14 +526,11 @@ def test_translations(ctx_factory, knl, local_expn_class, mpole_expn_class):
 
     del eval_offset
 
-    from sumpy.expansion import VolumeTaylorExpansionBase
-
-    if isinstance(knl, HelmholtzKernel) and \
-           issubclass(local_expn_class, VolumeTaylorExpansionBase):
-        # FIXME: Embarrassing--but we run out of memory for higher orders.
-        orders = [2, 3]
-    else:
+    if knl.dim == 2:
         orders = [2, 3, 4]
+    else:
+        orders = [3, 4, 5]
+
     nboxes = centers.shape[-1]
 
     def eval_at(e2p, source_box_nr, rscale):
@@ -557,9 +561,12 @@ def test_translations(ctx_factory, knl, local_expn_class, mpole_expn_class):
 
         return pot
 
+    m2l_factory = NonFFTM2LTranslationClassFactory()
+    m2l_translation = m2l_factory.get_m2l_translation_class(knl, local_expn_class)()
+
     for order in orders:
         m_expn = mpole_expn_class(knl, order=order)
-        l_expn = local_expn_class(knl, order=order)
+        l_expn = local_expn_class(knl, order=order, m2l_translation=m2l_translation)
 
         from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P, E2EFromCSR
         p2m = P2EFromSingleBox(ctx, m_expn)
@@ -768,7 +775,7 @@ def test_m2m_and_l2l_exprs_simpler(base_knl, local_expn_class, mpole_expn_class,
 
     from sumpy.symbolic import make_sym_vector, Symbol, USE_SYMENGINE
     dvec = make_sym_vector("d", knl.dim)
-    src_coeff_exprs = [Symbol("src_coeff%d" % i) for i in range(len(mpole_expn))]
+    src_coeff_exprs = [Symbol(f"src_coeff{i}") for i in range(len(mpole_expn))]
 
     src_rscale = 3
     tgt_rscale = 2
@@ -840,8 +847,10 @@ def test_m2l_toeplitz():
     knl = LaplaceKernel(dim)
     local_expn_class = LinearPDEConformingVolumeTaylorLocalExpansion
     mpole_expn_class = LinearPDEConformingVolumeTaylorMultipoleExpansion
+    m2l_factory = NonFFTM2LTranslationClassFactory()
+    m2l_translation = m2l_factory.get_m2l_translation_class(knl, local_expn_class)()
 
-    local_expn = local_expn_class(knl, order=5)
+    local_expn = local_expn_class(knl, order=5, m2l_translation=m2l_translation)
     mpole_expn = mpole_expn_class(knl, order=5)
 
     dvec = sym.make_sym_vector("d", dim)
@@ -854,11 +863,86 @@ def test_m2l_toeplitz():
     actual_output = local_expn.translate_from(mpole_expn, src_coeff_exprs,
                                               src_rscale, dvec, tgt_rscale, sac=None)
 
-    replace_dict = dict((d, np.random.rand(1)[0]) for d in dvec)
+    replace_dict = {d: np.random.rand(1)[0] for d in dvec}
     for sym_a, sym_b in zip(expected_output, actual_output):
         num_a = sym_a.xreplace(replace_dict)
         num_b = sym_b.xreplace(replace_dict)
         assert abs(num_a - num_b)/abs(num_a) < 1e-10
+
+# }}}
+
+
+# {{{ test_m2m_compressed
+
+@pytest.mark.parametrize("dim", [2, 3])
+@pytest.mark.parametrize("order", [2, 4, 6])
+def test_m2m_compressed_error_helmholtz(ctx_factory, dim, order):
+    import sumpy.toys as t
+
+    ctx = ctx_factory()
+    knl = HelmholtzKernel(dim)
+    extra_kernel_kwargs = {"k": 5}
+
+    mpole_expn_classes = [LinearPDEConformingVolumeTaylorMultipoleExpansion,
+                                VolumeTaylorMultipoleExpansion]
+    local_expn_classes = [LinearPDEConformingVolumeTaylorLocalExpansion,
+                                VolumeTaylorLocalExpansion]
+
+    eval_center = np.array([0.1, 0.0, 0.0][:dim]).reshape(dim, 1)
+    mpole_center = np.array([0.0, 0.0, 0.0][:dim]).reshape(dim, 1)
+
+    ntargets_per_dim = 10
+    nsources_per_dim = 10
+
+    sources_grid = np.meshgrid(*[np.linspace(0, 1, nsources_per_dim)
+            for _ in range(dim)])
+    sources_grid = np.ndarray.flatten(np.array(sources_grid)).reshape(dim, -1)
+
+    targets_grid = np.meshgrid(*[np.linspace(0, 1, ntargets_per_dim)
+            for _ in range(dim)])
+    targets_grid = np.ndarray.flatten(np.array(targets_grid)).reshape(dim, -1)
+
+    targets = eval_center - 0.1*(targets_grid - 0.5)
+
+    from pytools.convergence import EOCRecorder
+    eoc_rec = EOCRecorder()
+    h_values = 2.0**np.arange(-7, -3)
+    for h in h_values:
+        sources = (h*(-0.5+sources_grid.astype(np.float64)) + mpole_center)
+        second_center = mpole_center + h/2
+        furthest_source = np.max(np.abs(sources - mpole_center))
+        m2m_vals = [0, 0]
+        for i, (mpole_expn_class, local_expn_class) in \
+                enumerate(zip(mpole_expn_classes, local_expn_classes)):
+            tctx = t.ToyContext(
+                ctx,
+                knl,
+                extra_kernel_kwargs=extra_kernel_kwargs,
+                local_expn_class=local_expn_class,
+                mpole_expn_class=mpole_expn_class,
+            )
+            pt_src = t.PointSources(
+                tctx,
+                sources,
+                np.ones(sources.shape[-1])
+            )
+
+            mexp = t.multipole_expand(pt_src,
+                center=mpole_center.reshape(dim),
+                order=order,
+                rscale=h)
+            mexp2 = t.multipole_expand(mexp,
+                center=second_center.reshape(dim),
+                order=order,
+                rscale=h)
+            m2m_vals[i] = mexp2.eval(targets)
+
+        err = np.linalg.norm(m2m_vals[1] - m2m_vals[0]) \
+                / np.linalg.norm(m2m_vals[1])
+        eoc_rec.add_data_point(furthest_source, err)
+
+    print(eoc_rec)
+    assert eoc_rec.order_estimate() >= order + 1
 
 # }}}
 

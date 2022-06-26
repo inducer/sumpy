@@ -85,11 +85,12 @@ class E2PBase(KernelCacheWrapper):
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
 
-        coeff_exprs = [sym.Symbol("coeff%d" % i)
+        coeff_exprs = [
+                sym.Symbol(f"coeff{i}")
                 for i in range(len(self.expansion.get_coefficient_identifiers()))]
 
         result_names = [
-            sac.assign_unique("result_%d_p" % i,
+            sac.assign_unique(f"result_{i}_p",
                 self.expansion.evaluate(knl, coeff_exprs, bvec, rscale, sac=sac))
             for i, knl in enumerate(self.kernels)
             ]

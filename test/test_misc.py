@@ -20,9 +20,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import sys
+from dataclasses import dataclass
+from typing import Any, Callable
+
 import numpy as np
 import numpy.linalg as la
-import sys
+
 import sumpy.toys as t
 import sumpy.symbolic as sym
 
@@ -31,11 +35,9 @@ import pyopencl as cl  # noqa: F401
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 
-from pytools import Record
-
 from sumpy.kernel import (LaplaceKernel, HelmholtzKernel,
         BiharmonicKernel, YukawaKernel, StokesletKernel, StressletKernel,
-        ElasticityKernel, LineOfCompressionKernel)
+        ElasticityKernel, LineOfCompressionKernel, ExpressionKernel)
 from sumpy.expansion.diff_op import (make_identity_diff_op, gradient,
         divergence, laplacian, concat, as_scalar_pde, curl, diff)
 
@@ -191,38 +193,19 @@ def approx_convergence_factor(orders, errors):
     return np.exp(poly[0])
 
 
-class P2E2E2PTestCase(Record):
+@dataclass
+class P2E2E2PTestCase:
+    source: np.ndarray
+    target: np.ndarray
+    center1: np.ndarray
+    center2: np.ndarray
+    expansion1: Callable[..., Any]
+    expansion2: Callable[..., Any]
+    conv_factor: str
 
     @property
     def dim(self):
         return len(self.source)
-
-    @staticmethod
-    def eval(expr, source, center1, center2, target):
-        from pymbolic import parse, evaluate
-        context = {
-                "s": source,
-                "c1": center1,
-                "c2": center2,
-                "t": target,
-                "norm": la.norm}
-
-        return evaluate(parse(expr), context)
-
-    def __init__(self,
-            source, center1, center2, target, expansion1, expansion2, conv_factor):
-
-        if isinstance(conv_factor, str):
-            conv_factor = self.eval(conv_factor, source, center1, center2, target)
-
-        Record.__init__(self,
-                source=source,
-                center1=center1,
-                center2=center2,
-                target=target,
-                expansion1=expansion1,
-                expansion2=expansion2,
-                conv_factor=conv_factor)
 
 
 P2E2E2P_TEST_CASES = (
@@ -271,18 +254,25 @@ def test_toy_p2e2e2p(ctx_factory, case):
     src = case.source.reshape(dim, -1)
     tgt = case.target.reshape(dim, -1)
 
-    if not 0 <= case.conv_factor <= 1:
-        raise ValueError(
-                "convergence factor not in valid range: %e" % case.conv_factor)
+    from pymbolic import parse, evaluate
+    case_conv_factor = evaluate(parse(case.conv_factor), {
+            "s": case.source,
+            "c1": case.center1,
+            "c2": case.center2,
+            "t": case.target,
+            "norm": la.norm,
+    })
 
-    from sumpy.expansion.local import VolumeTaylorLocalExpansion
-    from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansion
+    if not 0 <= case_conv_factor <= 1:
+        raise ValueError(
+            f"convergence factor not in valid range: {case_conv_factor}")
+
+    from sumpy.expansion import VolumeTaylorExpansionFactory
 
     cl_ctx = ctx_factory()
     ctx = t.ToyContext(cl_ctx,
              LaplaceKernel(dim),
-             VolumeTaylorMultipoleExpansion,
-             VolumeTaylorLocalExpansion)
+             expansion_factory=VolumeTaylorExpansionFactory())
 
     errors = []
 
@@ -296,8 +286,8 @@ def test_toy_p2e2e2p(ctx_factory, case):
         errors.append(np.abs(pot_actual - pot_p2e2e2p))
 
     conv_factor = approx_convergence_factor(1 + np.array(ORDERS_P2E2E2P), errors)
-    assert conv_factor <= min(1, case.conv_factor * (1 + RTOL_P2E2E2P)), \
-        (conv_factor, case.conv_factor * (1 + RTOL_P2E2E2P))
+    assert conv_factor <= min(1, case_conv_factor * (1 + RTOL_P2E2E2P)), \
+        (conv_factor, case_conv_factor * (1 + RTOL_P2E2E2P))
 
 
 def test_cse_matvec():
@@ -340,7 +330,7 @@ def test_diff_op_stokes():
     actual_output = pde.to_sym()
     x, y, z = syms = symbols("x0, x1, x2")
     funcs = symbols("f0, f1, f2, f3", cls=Function)
-    u, v, w, p = [f(*syms) for f in funcs]
+    u, v, w, p = (f(*syms) for f in funcs)
 
     eq1 = u.diff(x, x) + u.diff(y, y) + u.diff(z, z) - p.diff(x)
     eq2 = v.diff(x, x) + v.diff(y, y) + v.diff(z, z) - p.diff(y)
@@ -382,7 +372,7 @@ def test_as_scalar_pde_maxwell():
 
     for i in range(6):
         assert as_scalar_pde(pde, i) == \
-            -1/(mu*epsilon)*laplacian(op[0]) + diff(diff(op[0], t), t)
+            laplacian(op[0]) - mu*epsilon*diff(diff(op[0], t), t)
 
 
 def test_as_scalar_pde_elasticity():
@@ -397,7 +387,8 @@ def test_as_scalar_pde_elasticity():
     v = diff_op[4]
 
     # Use numeric values as the expressions grow exponentially large otherwise
-    lam, mu = 2, 3
+    from sumpy.symbolic import symbols
+    lam, mu = symbols("lam, mu")
 
     x = (1, 0)
     y = (0, 1)
@@ -432,6 +423,39 @@ def test_elasticity_new():
     for knl in [elasticity_knl, elasticity_helper_knl]:
         assert not isinstance(knl, StokesletKernel)
         assert loads(dumps(knl)) == knl
+
+
+w = make_identity_diff_op(2)
+
+pdes = [
+    diff(w, (1, 1)) + diff(w, (2, 0)),
+    diff(w, (1, 1)) + diff(w, (0, 2)),
+]
+
+
+@pytest.mark.parametrize("pde", pdes)
+def test_weird_kernel(pde):
+    class MyKernel(ExpressionKernel):
+        def __init__(self):
+            super().__init__(dim=2, expression=1, global_scaling_const=1,
+                is_complex_valued=False)
+
+        def get_pde_as_diff_op(self):
+            return pde
+
+    from sumpy.expansion import LinearPDEConformingVolumeTaylorExpansion
+    from operator import mul
+    from functools import reduce
+
+    knl = MyKernel()
+    order = 10
+    expn = LinearPDEConformingVolumeTaylorExpansion(kernel=knl,
+            order=order, use_rscale=False)
+
+    coeffs = expn.get_coefficient_identifiers()
+    fft_size = reduce(mul, map(max, *coeffs), 1)
+
+    assert fft_size == order
 
 
 # You can test individual routines by typing

@@ -20,12 +20,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import sumpy.symbolic as sym  # noqa
+import math
 
+import sumpy.symbolic as sym
 from sumpy.expansion import (
     ExpansionBase, VolumeTaylorExpansion, LinearPDEConformingVolumeTaylorExpansion)
-from pytools import factorial
-from sumpy.tools import mi_set_axis, add_to_sac
+from sumpy.tools import mi_set_axis, add_to_sac, mi_power, mi_factorial
 
 import logging
 logger = logging.getLogger(__name__)
@@ -58,7 +58,6 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         coefficients, compressing and then summing.
         """
         from sumpy.kernel import KernelWrapper
-        from sumpy.tools import mi_power, mi_factorial
 
         if not self.use_rscale:
             rscale = 1
@@ -109,22 +108,20 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, _fast_version=True):
         if not isinstance(src_expansion, type(self)):
-            raise RuntimeError("do not know how to translate %s to "
-                    "Taylor multipole expansion"
-                               % type(src_expansion).__name__)
+            raise RuntimeError(
+                f"do not know how to translate {type(src_expansion).__name__} to "
+                "a Taylor multipole expansion")
 
         if not self.use_rscale:
             src_rscale = 1
             tgt_rscale = 1
 
-        logger.info("building translation operator for %s: %s(%d) -> %s(%d): start"
-                % (src_expansion.kernel,
+        logger.info("building translation operator for %s: %s(%d) -> %s(%d): start",
+                    src_expansion.kernel,
                     type(src_expansion).__name__,
                     src_expansion.order,
                     type(self).__name__,
-                    self.order))
-
-        from sumpy.tools import mi_factorial
+                    self.order)
 
         src_mi_to_index = {mi: i for i, mi in enumerate(
             src_expansion.get_coefficient_identifiers())}
@@ -284,7 +281,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
                         contrib = cur_dim_input_coeffs[tgt_mi_to_index[input_mi]]
                         for n, k, dist in zip(tgt_mi, input_mi, dvec):
                             assert n >= k
-                            contrib /= factorial(n-k)
+                            contrib /= math.factorial(n-k)
                             contrib *= \
                                 sym.UnevaluatedExpr(dist/tgt_rscale)**(n-k)
 
@@ -299,8 +296,8 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
 
         # {{{ simpler, functionally equivalent code
         if not _fast_version:
-            src_mi_to_index = dict((mi, i) for i, mi in enumerate(
-                src_expansion.get_coefficient_identifiers()))
+            src_mi_to_index = {mi: i for i, mi in enumerate(
+                src_expansion.get_coefficient_identifiers())}
             result = [0] * len(self.get_full_coefficient_identifiers())
 
             for i, mi in enumerate(src_expansion.get_coefficient_identifiers()):
@@ -447,9 +444,9 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None):
         if not isinstance(src_expansion, type(self)):
-            raise RuntimeError("do not know how to translate %s to %s"
-                               % (type(src_expansion).__name__,
-                                   type(self).__name__))
+            raise RuntimeError(
+                "do not know how to translate "
+                f"{type(src_expansion).__name__} to {type(self).__name__}")
 
         if not self.use_rscale:
             src_rscale = 1

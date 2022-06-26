@@ -32,7 +32,7 @@ def process_kernel(knl, what_operator):
     #     from sumpy.kernel import DirectionalTargetDerivative
     #     knl = DirectionalTargetDerivative(knl)
     else:
-        raise RuntimeError("unrecognized operator '%s'" % what_operator)
+        raise RuntimeError(f"unrecognized operator '{what_operator}'")
 
     return source_knl, target_knl
 

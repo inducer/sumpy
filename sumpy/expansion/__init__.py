@@ -179,8 +179,8 @@ class ExpansionBase:
             new_kwargs[name] = kwargs.pop(name, getattr(self, name))
 
         if kwargs:
-            raise TypeError("unexpected keyword arguments '%s'"
-                % ", ".join(kwargs))
+            raise TypeError(
+                "unexpected keyword arguments '{}'".format(", ".join(kwargs)))
 
         return type(self)(**new_kwargs)
 
@@ -236,10 +236,29 @@ class ExpansionTermsWrangler:
             new_kwargs[name] = kwargs.pop(name, getattr(self, name))
 
         if kwargs:
-            raise TypeError("unexpected keyword arguments '%s'"
-                % ", ".join(kwargs))
+            raise TypeError(
+                "unexpected keyword arguments '{}'".format(", ".join(kwargs)))
 
         return type(self)(**new_kwargs)
+
+    def _get_mi_hyperpplanes(self) -> List[Tuple[int, int]]:
+        r"""
+        Coefficient storage is organized into "hyperplanes" in multi-index
+        space. Potentially only a subset of these hyperplanes contain
+        coefficients that need to be stored. This routine returns that
+        subset, which is then used in :meth:`_split_coeffs_into_hyperplanes`
+        to appropriately partition the coefficients into segments corresponding
+        to the hyperplanes, settling any overlap in the process.
+
+        Returns a list of hyperplane where each hyperplane is represented by
+        a tuple of integers. The first integer `d` is the axis number that the
+        hyperplane is orthogonal to and the second integer is the `d`-th
+        component of the lattice point where the hyperplane intersects the
+        axis `d`.
+        """
+        d = self.dim - 1
+        hyperplanes = [(d, const) for const in range(self.order + 1)]
+        return hyperplanes
 
     @memoize_method
     def _split_coeffs_into_hyperplanes(self) -> List[Tuple[int, List[Tuple[int]]]]:
@@ -267,36 +286,7 @@ class ExpansionTermsWrangler:
           (2, [(0, 0, 1), (1, 0, 1), (2, 0, 1), (0, 1, 1), (1, 1, 1), (0, 2, 1)]),
         ]
         """
-        mis = self.get_full_coefficient_identifiers()
-        mi_to_index = {mi: i for i, mi in enumerate(mis)}
-
-        # Each hyperplane stored below is identified by a tuple of the axis
-        # to which it is orthogonal to and the constant `c` described above
-        hyperplanes = []
-        if isinstance(self, LinearPDEBasedExpansionTermsWrangler):
-            pde_dict, = self.knl.get_pde_as_diff_op().eqs
-
-            if not all(ident.mi in mi_to_index for ident in pde_dict):
-                # The order of the expansion is less than the order of the PDE.
-                # Treat as if full expansion.
-                pass
-            else:
-                # Calculate the multi-index that appears last in in the PDE in
-                # reverse degree lexicographic order (degrevlex).
-                # The monomial ordering used here which is degrevlex, must match
-                # the monomial ordering used in LinearPDEBasedExpansionTermsWrangler
-                max_mi_idx = max(mi_to_index[ident.mi] for
-                                 ident in pde_dict.keys())
-                max_mi = mis[max_mi_idx]
-                hyperplanes.extend(
-                    (d, const)
-                    for d in range(self.dim)
-                    for const in range(max_mi[d]))
-
-        if not hyperplanes:
-            d = self.dim - 1
-            hyperplanes.extend((d, const) for const in range(self.order + 1))
-
+        hyperplanes = self._get_mi_hyperpplanes()
         res = []
         seen_mis = set()
         for d, const in hyperplanes:
@@ -442,6 +432,79 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         stored_identifiers, _ = self.get_stored_ids_and_unscaled_projection_matrix()
         return stored_identifiers
 
+    # If there exists an axis-normal hyperplane without a PDE (derivative)
+    # multi-index on it, then the coefficients on that hyperplane *must* be
+    # stored (because it cannot be reached by any PDE identities). To find
+    # storage hyperplanes that reach a maximal (-ish?) number of coefficients,
+    # look for on-axis PDE coefficient multi-indices, and start enumerating
+    # hyperplanes normal to that axis.  Practically, this is done by reordering
+    # the axes so that the axis with the on-axis coefficient comes first in the
+    # multi-index tuple.
+    @memoize_method
+    def _get_mi_ordering_key(self):
+        """
+        A degree lexicographic order with the slowest varying index depending on
+        the PDE is used, returned as a callable that can be used as a
+        ``sort`` key on multi-indices.
+        A degree lexicographic ordering is needed for
+        multipole-to-multipole translation to get lower error bounds.
+        The slowest varying index is chosen such that the multipole-to-local
+        translation cost is optimized.
+        """
+        dim = self.dim
+        deriv_id_to_coeff, = self.knl.get_pde_as_diff_op().eqs
+        slowest_varying_index = dim - 1
+        for ident in deriv_id_to_coeff:
+            if ident.mi.count(0) == dim - 1:
+                non_zero_index = next(i for i in range(self.dim) if ident.mi[i] != 0)
+                slowest_varying_index = min(slowest_varying_index, non_zero_index)
+
+        axis_permutation = list(range(self.dim))
+        axis_permutation[0], axis_permutation[slowest_varying_index] = \
+                slowest_varying_index, 0
+
+        from sumpy.expansion.diff_op import DerivativeIdentifier
+
+        def mi_key(ident):
+            if isinstance(ident, DerivativeIdentifier):
+                mi = ident.mi
+            else:
+                mi = ident
+            key = [sum(mi)]
+            for i in range(dim):
+                key.append(mi[axis_permutation[i]])
+            return tuple(key)
+
+        return mi_key
+
+    def _get_mi_hyperpplanes(self) -> List[Tuple[int, int]]:
+        mis = self.get_full_coefficient_identifiers()
+        mi_to_index = {mi: i for i, mi in enumerate(mis)}
+
+        hyperplanes = []
+        deriv_id_to_coeff, = self.knl.get_pde_as_diff_op().eqs
+
+        if not all(ident.mi in mi_to_index for ident in deriv_id_to_coeff):
+            # The order of the expansion is less than the order of the PDE.
+            # Treat as if full expansion.
+            hyperplanes = super()._get_mi_hyperpplanes()
+        else:
+            # Calculate the multi-index that appears last in in the PDE in
+            # the degree lexicographic order given by
+            # _get_mi_ordering_key.
+            ordering_key = self._get_mi_ordering_key()
+            max_mi = max(deriv_id_to_coeff, key=ordering_key).mi
+            hyperplanes = [(d, const)
+                for d in range(self.dim)
+                for const in range(max_mi[d])]
+
+        return hyperplanes
+
+    def get_full_coefficient_identifiers(self):
+        identifiers = super().get_full_coefficient_identifiers()
+        key = self._get_mi_ordering_key()
+        return list(sorted(identifiers, key=key))
+
     @memoize_method
     def get_stored_ids_and_unscaled_projection_matrix(self):
         from pytools import ProcessLogger
@@ -453,8 +516,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         diff_op = self.knl.get_pde_as_diff_op()
         assert len(diff_op.eqs) == 1
-        pde_dict = {k.mi: v for k, v in diff_op.eqs[0].items()}
-        for ident in pde_dict.keys():
+        mi_to_coeff = {k.mi: v for k, v in diff_op.eqs[0].items()}
+        for ident in mi_to_coeff:
             if ident not in coeff_ident_enumerate_dict:
                 # Order of the expansion is less than the order of the PDE.
                 # In that case, the compression matrix is the identity matrix
@@ -466,12 +529,9 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                                        from_output_coeffs_by_row, shape)
                 return mis, op
 
-        # Calculate the multi-index that appears last in in the PDE in
-        # reverse degree lexicographic order (degrevlex).
-        max_mi_idx = max(coeff_ident_enumerate_dict[ident] for
-                         ident in pde_dict.keys())
-        max_mi = mis[max_mi_idx]
-        max_mi_coeff = pde_dict[max_mi]
+        ordering_key = self._get_mi_ordering_key()
+        max_mi = max((ident for ident in mi_to_coeff.keys()), key=ordering_key)
+        max_mi_coeff = mi_to_coeff[max_mi]
         max_mi_mult = -1/sym.sympify(max_mi_coeff)
 
         def is_stored(mi):
@@ -498,7 +558,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             # eg: u_xx + u_yy + u_zz is represented as
             # [((2, 0, 0), 1), ((0, 2, 0), 1), ((0, 0, 2), 1)]
             assignment = []
-            for other_mi, coeff in pde_dict.items():
+            for other_mi, coeff in mi_to_coeff.items():
                 j = coeff_ident_enumerate_dict[add_mi(other_mi, diff)]
                 if i == j:
                     # Skip the u_zz part here.
@@ -719,18 +779,9 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
     def get_local_expansion_class(self, base_kernel):
         """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
-        from sumpy.kernel import (HelmholtzKernel, YukawaKernel)
-
-        from sumpy.expansion.local import (H2DLocalExpansion, Y2DLocalExpansion,
+        from sumpy.expansion.local import (
                 LinearPDEConformingVolumeTaylorLocalExpansion,
                 VolumeTaylorLocalExpansion)
-
-        if (isinstance(base_kernel.get_base_kernel(), HelmholtzKernel)
-                and base_kernel.dim == 2):
-            return H2DLocalExpansion
-        elif (isinstance(base_kernel.get_base_kernel(), YukawaKernel)
-                and base_kernel.dim == 2):
-            return Y2DLocalExpansion
         try:
             base_kernel.get_base_kernel().get_pde_as_diff_op()
             return LinearPDEConformingVolumeTaylorLocalExpansion
@@ -740,19 +791,9 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
     def get_multipole_expansion_class(self, base_kernel):
         """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
-        from sumpy.kernel import (HelmholtzKernel, YukawaKernel)
-
-        from sumpy.expansion.multipole import (H2DMultipoleExpansion,
-                Y2DMultipoleExpansion,
+        from sumpy.expansion.multipole import (
                 LinearPDEConformingVolumeTaylorMultipoleExpansion,
                 VolumeTaylorMultipoleExpansion)
-
-        if (isinstance(base_kernel.get_base_kernel(), HelmholtzKernel)
-                and base_kernel.dim == 2):
-            return H2DMultipoleExpansion
-        elif (isinstance(base_kernel.get_base_kernel(), YukawaKernel)
-                and base_kernel.dim == 2):
-            return Y2DMultipoleExpansion
         try:
             base_kernel.get_base_kernel().get_pde_as_diff_op()
             return LinearPDEConformingVolumeTaylorMultipoleExpansion

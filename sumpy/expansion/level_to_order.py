@@ -25,6 +25,8 @@ __doc__ = """
 .. autoclass:: SimpleExpansionOrderFinder
 """
 
+import math
+
 import numpy as np
 
 
@@ -57,12 +59,12 @@ class FMMLibExpansionOrderFinder:
             if tree.dimensions == 2:
                 nterms, ier = pyfmmlib.l2dterms(self.tol)
                 if ier:
-                    raise RuntimeError("l2dterms returned error code '%d'" % ier)
+                    raise RuntimeError(f"l2dterms returned error code '{ier}'")
 
             elif tree.dimensions == 3:
                 nterms, ier = pyfmmlib.l3dterms(self.tol)
                 if ier:
-                    raise RuntimeError("l3dterms returned error code '%d'" % ier)
+                    raise RuntimeError(f"l3dterms returned error code '{ier}'")
 
         elif isinstance(kernel, HelmholtzKernel):
             helmholtz_k = dict(kernel_args)[kernel.helmholtz_k_name]
@@ -71,12 +73,12 @@ class FMMLibExpansionOrderFinder:
             if tree.dimensions == 2:
                 nterms, ier = pyfmmlib.h2dterms(size, helmholtz_k, self.tol)
                 if ier:
-                    raise RuntimeError("h2dterms returned error code '%d'" % ier)
+                    raise RuntimeError(f"h2dterms returned error code '{ier}'")
 
             elif tree.dimensions == 3:
                 nterms, ier = pyfmmlib.h3dterms(size, helmholtz_k, self.tol)
                 if ier:
-                    raise RuntimeError("h3dterms returned error code '%d'" % ier)
+                    raise RuntimeError(f"h3dterms returned error code '{ier}'")
 
         return nterms + self.extra_order
 
@@ -143,7 +145,6 @@ class SimpleExpansionOrderFinder:
                     * helmholtz_k
                     / (2*float(np.pi)))
 
-            from math import factorial
             helm_order = 1
             helm_rec_error = self.err_const_helmholtz * factor
             while True:
@@ -152,7 +153,7 @@ class SimpleExpansionOrderFinder:
                 if helm_order < 4:
                     # this may overflow for large orders
                     helm_error_direct = (
-                            1/factorial(helm_order+1)
+                            1/math.factorial(helm_order+1)
                             * self.err_const_helmholtz
                             * factor**(helm_order+1))
                     assert (abs(helm_rec_error - helm_error_direct)

@@ -57,14 +57,13 @@ def _find_symbolic_backend():
     if backend is not None:
         if backend not in ALLOWED_BACKENDS:
             raise RuntimeError(
-                "%s value is unrecognized: '%s' "
-                "(allowed values are %s)" % (
-                    BACKEND_ENV_VAR,
-                    backend,
-                    ", ".join("'%s'" % val for val in ALLOWED_BACKENDS)))
+                f"{BACKEND_ENV_VAR} value is unrecognized: '{backend}' "
+                "(allowed values are {})".format(
+                    ", ".join(f"'{val}'" for val in ALLOWED_BACKENDS))
+                )
 
         if backend == "symengine" and not symengine_found:
-            raise RuntimeError("could not find SymEngine: %s" % symengine_error)
+            raise RuntimeError(f"could not find SymEngine: {symengine_error}")
 
         USE_SYMENGINE = (backend == "symengine")
     else:
@@ -145,7 +144,7 @@ else:
 class _DerivativeKiller(IdentityMapperBase):
     def map_derivative(self, expr):
         from pymbolic import var
-        return var("d_"+"_".join(expr.variables))(expr.child)
+        return var("d_{}".format("_".join(expr.variables)))(expr.child)
 
     def map_substitution(self, expr):
         return self.rec(expr.child)
@@ -194,10 +193,10 @@ def checked_cse(exprs, symbols=None):
     new_assignments, new_exprs = sym.cse(exprs, **kwargs)
 
     max_old = _get_assignments_in_maxima({
-            "old_expr%d" % i: expr
+            f"old_expr{i}": expr
             for i, expr in enumerate(exprs)})
     new_ass_dict = {
-            "new_expr%d" % i: expr
+            f"new_expr{i}": expr
             for i, expr in enumerate(new_exprs)}
     for name, val in new_assignments:
         new_ass_dict[name.name] = val
@@ -205,11 +204,11 @@ def checked_cse(exprs, symbols=None):
 
     with open("check.mac", "w") as outf:
         outf.write("ratprint:false;\n")
-        outf.write("%s\n\n" % max_old)
-        outf.write("%s\n" % max_new)
+        outf.write(f"{max_old}\n\n")
+        outf.write(f"{max_new}\n")
         for i in range(len(exprs)):
-            outf.write('print("diff in expr %d:\n");\n' % i)
-            outf.write("print(ratsimp(old_expr%d - new_expr%d));\n" % (i, i))
+            outf.write(f'print("diff in expr {i}:\n");\n')
+            outf.write(f"print(ratsimp(old_expr{i} - new_expr{i}));\n")
 
     from subprocess import check_call
     check_call(["maxima", "--very-quiet", "-r", 'load("check.mac");'])
@@ -229,8 +228,7 @@ def pymbolic_real_norm_2(x):
 
 
 def make_sym_vector(name, components):
-    return sym.Matrix(
-            [sym.Symbol("%s%d" % (name, i)) for i in range(components)])
+    return sym.Matrix([sym.Symbol(f"{name}{i}") for i in range(components)])
 
 
 def vector_xreplace(expr, from_vec, to_vec):
@@ -292,7 +290,7 @@ class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):
 
     def map_subscript(self, expr):
         if isinstance(expr.aggregate, prim.Variable) and isinstance(expr.index, int):
-            return sym.Symbol("%s%d" % (expr.aggregate.name, expr.index))
+            return sym.Symbol(f"{expr.aggregate.name}{expr.index}")
         else:
             self.raise_conversion_error(expr)
 

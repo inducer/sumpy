@@ -321,7 +321,7 @@ class ExpressionKernel(Kernel):
                 self.is_complex_valued)
 
     def __repr__(self):
-        return "ExprKnl%dD" % self.dim
+        return f"ExprKnl{self.dim}D"
 
     def get_expression(self, scaled_dist_vec):
         from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
@@ -332,7 +332,7 @@ class ExpressionKernel(Kernel):
 
         from sumpy.symbolic import Symbol
         expr = expr.xreplace({
-            Symbol("d%d" % i): dist_vec_i
+            Symbol(f"d{i}"): dist_vec_i
             for i, dist_vec_i in enumerate(scaled_dist_vec)
             })
 
@@ -413,7 +413,7 @@ class LaplaceKernel(ExpressionKernel):
         return (self.dim,)
 
     def __repr__(self):
-        return "LapKnl%dD" % self.dim
+        return f"LapKnl{self.dim}D"
 
     mapper_method = "map_laplace_kernel"
 
@@ -461,7 +461,7 @@ class BiharmonicKernel(ExpressionKernel):
         return (self.dim,)
 
     def __repr__(self):
-        return "BiharmKnl%dD" % self.dim
+        return f"BiharmKnl{self.dim}D"
 
     mapper_method = "map_biharmonic_kernel"
 
@@ -523,8 +523,7 @@ class HelmholtzKernel(ExpressionKernel):
             self.allow_evanescent))
 
     def __repr__(self):
-        return "HelmKnl%dD(%s)" % (
-                self.dim, self.helmholtz_k_name)
+        return f"HelmKnl{self.dim}D({self.helmholtz_k_name})"
 
     def prepare_loopy_kernel(self, loopy_knl):
         from sumpy.codegen import register_bessel_callables
@@ -611,8 +610,7 @@ class YukawaKernel(ExpressionKernel):
         key_builder.rec(key_hash, (self.dim, self.yukawa_lambda_name))
 
     def __repr__(self):
-        return "YukKnl%dD(%s)" % (
-                self.dim, self.yukawa_lambda_name)
+        return f"YukKnl{self.dim}D({self.yukawa_lambda_name})"
 
     def prepare_loopy_kernel(self, loopy_knl):
         from sumpy.codegen import register_bessel_callables
@@ -645,9 +643,9 @@ class ElasticityKernel(ExpressionKernel):
 
     def __new__(cls, dim, icomp, jcomp, viscosity_mu="mu", poisson_ratio="nu"):
         if poisson_ratio == 0.5:
-            instance = super(ElasticityKernel, cls).__new__(StokesletKernel)
+            instance = super().__new__(StokesletKernel)
         else:
-            instance = super(ElasticityKernel, cls).__new__(cls)
+            instance = super().__new__(cls)
         return instance
 
     def __init__(self, dim, icomp, jcomp, viscosity_mu="mu", poisson_ratio="nu"):
@@ -721,7 +719,7 @@ class ElasticityKernel(ExpressionKernel):
         mapper(self.poisson_ratio)
 
     def __repr__(self):
-        return "ElasticityKnl%dD_%d%d" % (self.dim, self.icomp, self.jcomp)
+        return f"ElasticityKnl{self.dim}D_{self.icomp}{self.jcomp}"
 
     @memoize_method
     def get_args(self):
@@ -757,7 +755,7 @@ class StokesletKernel(ElasticityKernel):
         super().__init__(dim, icomp, jcomp, viscosity_mu, poisson_ratio)
 
     def __repr__(self):
-        return "StokesletKnl%dD_%d%d" % (self.dim, self.icomp, self.jcomp)
+        return f"StokesletKnl{self.dim}D_{self.icomp}{self.jcomp}"
 
 
 class StressletKernel(ExpressionKernel):
@@ -817,8 +815,7 @@ class StressletKernel(ExpressionKernel):
         mapper(self.viscosity_mu)
 
     def __repr__(self):
-        return "StressletKnl%dD_%d%d%d" % (self.dim, self.icomp, self.jcomp,
-                self.kcomp)
+        return f"StressletKnl{self.dim}D_{self.icomp}{self.jcomp}{self.kcomp}"
 
     @memoize_method
     def get_args(self):
@@ -896,7 +893,7 @@ class LineOfCompressionKernel(ExpressionKernel):
         mapper(self.poisson_ratio)
 
     def __repr__(self):
-        return "LineOfCompressionKnl%dD_%d" % (self.dim, self.axis)
+        return f"LineOfCompressionKnl{self.dim}D_{self.axis}"
 
     @memoize_method
     def get_args(self):
@@ -984,10 +981,10 @@ class AxisSourceDerivative(DerivativeBase):
         return (self.axis, self.inner_kernel)
 
     def __str__(self):
-        return "d/dy%d %s" % (self.axis, self.inner_kernel)
+        return f"d/dy{self.axis} {self.inner_kernel}"
 
     def __repr__(self):
-        return "AxisSourceDerivative(%d, %r)" % (self.axis, self.inner_kernel)
+        return f"AxisSourceDerivative({self.axis}, {self.inner_kernel!r})"
 
     def get_derivative_coeff_dict_at_source(self, expr_dict):
         expr_dict = self.inner_kernel.get_derivative_coeff_dict_at_source(
@@ -1021,10 +1018,10 @@ class AxisTargetDerivative(DerivativeBase):
         return (self.axis, self.inner_kernel)
 
     def __str__(self):
-        return "d/dx%d %s" % (self.axis, self.inner_kernel)
+        return f"d/dx{self.axis} {self.inner_kernel}"
 
     def __repr__(self):
-        return "AxisTargetDerivative(%d, %r)" % (self.axis, self.inner_kernel)
+        return f"AxisTargetDerivative({self.axis}, {self.inner_kernel!r})"
 
     def postprocess_at_target(self, expr, bvec):
         from sumpy.tools import (DifferentiatedExprDerivativeTaker,
@@ -1076,7 +1073,7 @@ class DirectionalDerivative(DerivativeBase):
 
     def __init__(self, inner_kernel, dir_vec_name=None):
         if dir_vec_name is None:
-            dir_vec_name = self.directional_kind + "_derivative_dir"
+            dir_vec_name = f"{self.directional_kind}_derivative_dir"
 
         KernelWrapper.__init__(self, inner_kernel)
         self.dir_vec_name = dir_vec_name
@@ -1094,8 +1091,10 @@ class DirectionalDerivative(DerivativeBase):
             dir_vec_name=self.dir_vec_name)
 
     def __str__(self):
-        return r"{} . \/_{} {}".format(
-                self.dir_vec_name, self.directional_kind[0], self.inner_kernel)
+        return r"{}·∇_{} {}".format(
+                self.dir_vec_name,
+                "y" if self.directional_kind == "src" else "x",
+                self.inner_kernel)
 
     def __repr__(self):
         return "{}({!r}, {})".format(
@@ -1228,10 +1227,10 @@ class TargetPointMultiplier(KernelWrapper):
         return (self.axis, self.inner_kernel)
 
     def __str__(self):
-        return "x%d %s" % (self.axis, self.inner_kernel)
+        return f"x{self.axis} {self.inner_kernel}"
 
     def __repr__(self):
-        return "TargetPointMultiplier(%d, %r)" % (self.axis, self.inner_kernel)
+        return f"TargetPointMultiplier({self.axis}, {self.inner_kernel!r})"
 
     def replace_base_kernel(self, new_base_kernel):
         return type(self)(self.axis,

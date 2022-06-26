@@ -274,7 +274,7 @@ class BesselDerivativeReplacer(CSECachingIdentityMapper, CallExternalRecMapper):
                     2**(-k)*sum(
                         (-1)**idx*int(sym.binomial(k, idx)) * function(i, arg)
                         for idx, i in enumerate(range(order-k, order+k+1, 2))),
-                    "d%d_%s_%s" % (n_derivs, function.name, order_str))
+                    f"d{n_derivs}_{function.name}_{order_str}")
         else:
             return CSECachingIdentityMapper.map_call(
                     rec_self or self, expr, rec_self, *args)
@@ -309,8 +309,8 @@ class BesselSubstitutor(CSECachingIdentityMapper):
 
     @memoize_method
     def bessel_jv_two(self, order, arg):
-        name_om1 = self.name_gen("bessel_%d" % (order-1))
-        name_o = self.name_gen("bessel_%d" % order)
+        name_om1 = self.name_gen(f"bessel_{order - 1}")
+        name_o = self.name_gen(f"bessel_{order}")
         self.assignments.append(
                 make_assignment(
                     (prim.Variable(name_om1), prim.Variable(name_o),),
@@ -329,16 +329,15 @@ class BesselSubstitutor(CSECachingIdentityMapper):
         elif order < 0:
             return self.wrap_in_cse(
                     (-1)**order*self.bessel_j(-order, arg),
-                    "bessel_j_neg%d" % -order)
+                    f"bessel_j_neg{-order}")
         else:
             assert abs(order) < top_order
 
             # AS (9.1.27)
             nu = order+1
             return self.wrap_in_cse(
-                    2*nu/arg*self.bessel_j(nu, arg)
-                    - self.bessel_j(nu+1, arg),
-                    "bessel_j_%d" % order)
+                    2*nu/arg*self.bessel_j(nu, arg) - self.bessel_j(nu+1, arg),
+                    f"bessel_j_{order}")
 
     # }}}
 
@@ -366,14 +365,13 @@ class BesselSubstitutor(CSECachingIdentityMapper):
             nu = -order
             return self.wrap_in_cse(
                     (-1) ** nu * self.hankel_1(nu, arg),
-                    "hank1_neg%d" % nu)
+                    f"hank1_neg{nu}")
         elif order > 1:
             # AS (9.1.27)
             nu = order-1
             return self.wrap_in_cse(
-                    2*nu/arg*self.hankel_1(nu, arg)
-                    - self.hankel_1(nu-1, arg),
-                    "hank1_%d" % order)
+                    2*nu/arg*self.hankel_1(nu, arg) - self.hankel_1(nu-1, arg),
+                    f"hank1_{order}")
         else:
             raise AssertionError()
 
@@ -392,10 +390,12 @@ class PowerRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
         if isinstance(exp, int):
             new_base = prim.wrap_in_cse(expr.base)
 
-            if exp > 1 and exp % 2 == 0:
+            if exp > 2 and exp % 2 == 0:
                 square = prim.wrap_in_cse(new_base*new_base)
                 return self.rec(prim.wrap_in_cse(square**(exp//2)),
                         rec_self, *args)
+            elif exp == 2:
+                return new_base * new_base
             elif exp > 1 and exp % 2 == 1:
                 square = prim.wrap_in_cse(new_base*new_base)
                 return self.rec(prim.wrap_in_cse(square**((exp-1)//2))*new_base,
@@ -463,8 +463,8 @@ class BigIntegerKiller(CSECachingIdentityMapper, CallExternalRecMapper):
             expr_as_float = self.float_type(expr)
             if int(expr_as_float) != int(expr):
                 from warnings import warn
-                warn("Converting '%d' to '%s' loses digits"
-                        % (expr, self.float_type.__name__))
+                warn(f"Converting '{expr}' to "
+                     f"'{self.float_type.__name__}' loses digits")
 
             # Suppress further warnings.
             self.warn = False
@@ -684,7 +684,7 @@ def to_loopy_insns(assignments, vector_names=frozenset(), pymbolic_expr_maps=(),
             return expr
 
     def convert_expr(name, expr):
-        logger.debug("generate expression for: %s" % name)
+        logger.debug("generate expression for: %s", name)
         expr = cmb_mapper(expr)
         for m in pymbolic_expr_maps:
             expr = m(expr)
@@ -692,7 +692,7 @@ def to_loopy_insns(assignments, vector_names=frozenset(), pymbolic_expr_maps=(),
 
     assignments = [(name, convert_expr(name, expr)) for name, expr in assignments]
     from pytools import UniqueNameGenerator
-    name_gen = UniqueNameGenerator(set([name for name, expr in assignments]))
+    name_gen = UniqueNameGenerator({name for name, expr in assignments})
 
     result = []
     bessel_sub = BesselSubstitutor(

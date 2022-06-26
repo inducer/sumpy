@@ -26,7 +26,8 @@ from sumpy.p2e import P2EFromSingleBox, P2EFromCSR
 from sumpy.e2p import E2PFromSingleBox, E2PFromCSR
 from sumpy.e2e import (E2EFromCSR, E2EFromChildren, E2EFromParent,
     M2LUsingTranslationClassesDependentData,
-    M2LGenerateTranslationClassesDependentData, M2LPreprocessMultipole)
+    M2LGenerateTranslationClassesDependentData, M2LPreprocessMultipole,
+    M2LPostprocessLocal)
 from sumpy.version import VERSION_TEXT
 from pytools.persistent_dict import WriteOncePersistentDict
 
@@ -37,7 +38,7 @@ __all__ = [
     "E2EFromCSR", "E2EFromChildren", "E2EFromParent",
     "M2LUsingTranslationClassesDependentData",
     "M2LGenerateTranslationClassesDependentData",
-    "M2LPreprocessMultipole"]
+    "M2LPreprocessMultipole", "M2LPostprocessLocal"]
 
 
 code_cache = WriteOncePersistentDict("sumpy-code-cache-v6-"+VERSION_TEXT)
