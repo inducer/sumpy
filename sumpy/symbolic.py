@@ -20,6 +20,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+__doc__ = """
+
+ Symbolic Tools
+ ==============
+
+ .. autoclass:: SpatialConstant
+"""
+
 
 import numpy as np
 from pymbolic.mapper import IdentityMapper as IdentityMapperBase
@@ -245,6 +253,11 @@ def find_power_of(base, prod):
 
 
 class SpatialConstant(prim.Variable):
+    """A symbolic constant to represent a symbolic variable that
+    is spatially constant. Used for differentiate between spatially
+    constant variables and spatially discretized variables.
+    """
+
     prefix = "_spatial_constant_"
     mapper_method = "map_spatial_constant"
 
