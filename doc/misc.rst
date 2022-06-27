@@ -3,6 +3,8 @@ Misc Tools
 
 .. automodule:: sumpy.tools
 
+.. automodule:: sumpy.symbolic
+
 
 Installation
 ============

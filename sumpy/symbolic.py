@@ -20,6 +20,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+__doc__ = """
+
+ Symbolic Tools
+ ==============
+
+ .. class:: Basic
+
+    The expression base class for the "heavy-duty" computer algebra toolkit
+    in use. Either :class:`sympy.core.basic.Basic` or :class:`symengine.Basic`.
+
+ .. autoclass:: SpatialConstant
+"""
+
 
 import numpy as np
 from pymbolic.mapper import IdentityMapper as IdentityMapperBase
@@ -69,12 +82,13 @@ _find_symbolic_backend()
 if USE_SYMENGINE:
     import symengine as sym
     from pymbolic.interop.symengine import (
-        PymbolicToSymEngineMapper as PymbolicToSympyMapper,
-        SymEngineToPymbolicMapper as SympyToPymbolicMapper)
+        PymbolicToSymEngineMapper as PymbolicToSympyMapperBase,
+        SymEngineToPymbolicMapper as SympyToPymbolicMapperBase)
 else:
     import sympy as sym
     from pymbolic.interop.sympy import (
-        PymbolicToSympyMapper, SympyToPymbolicMapper)
+        PymbolicToSympyMapper as PymbolicToSympyMapperBase,
+        SympyToPymbolicMapper as SympyToPymbolicMapperBase)
 
 # Symbolic API common to SymEngine and sympy.
 # Before adding a function here, make sure it's present in both modules.
@@ -239,6 +253,38 @@ def find_power_of(base, prod):
     if result is None:
         return 0
     return result[power]
+
+
+class SpatialConstant(prim.Variable):
+    """A symbolic constant to represent a symbolic variable that
+    is spatially constant, like for example the wave-number :math:`k`
+    in the setting of a constant-coefficient Helmholtz problem.
+    For use in :attr:`sumpy.kernel.ExpressionKernel.expression`.
+    Any variable occurring there that is not a :class:`SpatialConstant`
+    is assumed to have a spatial dependency.
+    """
+
+    prefix = "_spatial_constant_"
+    mapper_method = "map_spatial_constant"
+
+    def as_sympy(self):
+        return sym.Symbol(f"{self.prefix}{self.name}")
+
+    @classmethod
+    def from_sympy(cls, expr):
+        return cls(expr.name[len(cls.prefix):])
+
+
+class PymbolicToSympyMapper(PymbolicToSympyMapperBase):
+    def map_spatial_constant(self, expr):
+        return expr.as_sympy()
+
+
+class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
+    def map_Symbol(self, expr):  # noqa
+        if expr.name.startswith(SpatialConstant.prefix):
+            return SpatialConstant.from_sympy(expr)
+        return SympyToPymbolicMapperBase.map_Symbol(self, expr)
 
 
 class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):
