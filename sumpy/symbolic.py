@@ -25,6 +25,11 @@ __doc__ = """
  Symbolic Tools
  ==============
 
+ .. class:: Basic
+
+    The expression base class for the "heavy-duty" computer algebra toolkit
+    in use. Either :class:`sympy.core.basic.Basic` or :class:`symengine.Basic`.
+
  .. autoclass:: SpatialConstant
 """
 
@@ -252,8 +257,11 @@ def find_power_of(base, prod):
 
 class SpatialConstant(prim.Variable):
     """A symbolic constant to represent a symbolic variable that
-    is spatially constant. Used for differentiate between spatially
-    constant variables and spatially discretized variables.
+    is spatially constant, like for example the wave-number :math:`k`
+    in the setting of a constant-coefficient Helmholtz problem.
+    For use in :attr:`sumpy.kernel.ExpressionKernel.expression`.
+    Any variable occurring there that is not a :class:`SpatialConstant`
+    is assumed to have a spatial dependency.
     """
 
     prefix = "_spatial_constant_"

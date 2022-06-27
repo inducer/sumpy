@@ -27,3 +27,7 @@ intersphinx_mapping = {
     "https://docs.sympy.org/latest/": None,
     "https://matplotlib.org/stable/": None,
 }
+
+nitpick_ignore_regex = [
+        ["py:class", r"symengine\.(.+)"], # :cry:
+        ]

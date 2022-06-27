@@ -286,27 +286,37 @@ class Kernel:
 
 
 class ExpressionKernel(Kernel):
-    is_complex_valued = False
+    r"""
+    .. attribute:: expression
+
+        A :mod:`pymbolic` expression depending on
+        variables *d_1* through *d_N* where *N* equals *dim*.
+        (These variables match what is returned from
+        :func:`pymbolic.primitives.make_sym_vector` with
+        argument `"d"`.) Any variable that is not *d* or
+        a :class:`~sumpy.symbolic.SpatialConstant` will be
+        viewed as potentially spatially varying.
+
+    .. attribute:: global_scaling_const
+
+        A constant :mod:`pymbolic` expression for the
+        global scaling of the kernel. Typically, this ensures that
+        the kernel is scaled so that :math:`\mathcal L(G)(x)=C\delta(x)`
+        with a constant of 1, where :math:`\mathcal L` is the PDE
+        operator associated with the kernel. Not to be confused with
+        *rscale*, which keeps expansion coefficients benignly scaled.
+
+    .. attribute:: is_complex_valued
+
+    .. automethod:: __init__
+    .. automethod:: get_expression
+    """
 
     init_arg_names = ("dim", "expression", "global_scaling_const",
             "is_complex_valued")
 
     def __init__(self, dim, expression, global_scaling_const,
             is_complex_valued):
-        r"""
-        :arg expression: A :mod:`pymbolic` expression depending on
-            variables *d_1* through *d_N* where *N* equals *dim*.
-            (These variables match what is returned from
-            :func:`pymbolic.primitives.make_sym_vector` with
-            argument `"d"`.)
-        :arg global_scaling_const: A constant :mod:`pymbolic` expression for the
-            global scaling of the kernel. Typically, this ensures that
-            the kernel is scaled so that :math:`\mathcal L(G)(x)=C\delta(x)`
-            with a constant of 1, where :math:`\mathcal L` is the PDE
-            operator associated with the kernel. Not to be confused with
-            *rscale*, which keeps expansion coefficients benignly scaled.
-        """
-
         # expression and global_scaling_const are pymbolic objects because
         # those pickle cleanly. D'oh, sympy!
 
@@ -324,6 +334,8 @@ class ExpressionKernel(Kernel):
         return f"ExprKnl{self.dim}D"
 
     def get_expression(self, scaled_dist_vec):
+        """Return :attr:`expression` as a :class:`sumpy.symbolic.Basic`."""
+
         from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
         expr = PymbolicToSympyMapperWithSymbols()(self.expression)
 
@@ -339,7 +351,8 @@ class ExpressionKernel(Kernel):
         return expr
 
     def get_global_scaling_const(self):
-        """Return a global scaling of the kernel."""
+        """Return a global scaling of the kernel as a :class:`sumpy.symbolic.Basic`.
+        """
 
         from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
         return PymbolicToSympyMapperWithSymbols()(
