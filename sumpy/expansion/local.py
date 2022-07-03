@@ -197,7 +197,7 @@ class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
             # Following is a hack to make sure cse works.
             if 1:
                 def save_temp(x):
-                    return add_to_sac(sac, weight * x)
+                    return add_to_sac(sac, weight * x)  # noqa: B023
 
                 for i, mi in enumerate(self.get_coefficient_identifiers()):
                     result[i] += taker.diff(mi, save_temp)
