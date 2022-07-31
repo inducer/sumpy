@@ -74,9 +74,9 @@ class P2PBase(KernelComputation, KernelCacheWrapper):
             target_kernels = [sxr(knl) for knl in target_kernels]
         else:
             for knl in source_kernels:
-                assert(txr(knl) == knl)
+                assert txr(knl) == knl
             for knl in target_kernels:
-                assert(sxr(knl) == knl)
+                assert sxr(knl) == knl
 
         base_source_kernel = single_valued(sxr(knl) for knl in source_kernels)
         base_target_kernel = single_valued(txr(knl) for knl in target_kernels)
