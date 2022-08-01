@@ -24,10 +24,10 @@ from typing import Tuple, Any
 
 import pymbolic
 import loopy as lp
+import numpy as np
 import sumpy.symbolic as sym
 from sumpy.tools import (
-        add_to_sac, fft,
-        matvec_toeplitz_upper_triangular)
+        add_to_sac, matvec_toeplitz_upper_triangular)
 
 import logging
 logger = logging.getLogger(__name__)
@@ -164,6 +164,9 @@ class M2LTranslationBase:
         distance between per level, these can be precomputed for the tree.
         In :mod:`boxtree`, these distances are referred to as translation
         classes.
+
+        When FFT is turned on, the output expressions are assumed to be
+        transformed into Fourier space at the end by the caller.
         """
         return tuple()
 
@@ -178,17 +181,27 @@ class M2LTranslationBase:
         """
         return 0
 
+    def translation_classes_dependent_data_loopy_knl(self, tgt_expansion,
+            src_expansion, result_dtype):
+        """Return a :mod:`loopy` kernel that calculates the data described by
+        :func:`~sumpy.expansion.m2l.M2LTranslationBase.translation_classes_dependent_data`.
+        :arg result_dtype: The :mod:`numpy` type of the result.
+        """
+        return translation_classes_dependent_data_loopy_knl(tgt_expansion,
+            src_expansion, result_dtype)
+
     def preprocess_multipole_exprs(self, tgt_expansion, src_expansion,
             src_coeff_exprs, sac, src_rscale):
         """Return the preprocessed multipole expansion for an optimized M2L.
         Preprocessing happens once per source box before M2L translation is done.
 
-        When FFT is turned on, the input expressions are transformed into Fourier
-        space. These expressions are used in a separate :mod:`loopy` kernel
-        to avoid having to transform for each target and source box pair.
-        When FFT is turned off, the expressions are equal to the multipole
-        expansion coefficients with zeros added
-        to make the M2L computation a circulant matvec.
+        These expressions are used in a separate :mod:`loopy` kernel
+        to avoid having to process for each target and source box pair.
+        When FFT is turned on, the output expressions are assumed to be
+        transformed into Fourier space at the end by the caller.
+        When FFT is turned off, the output expressions are equal to the multipole
+        expansion coefficients with zeros added to make the M2L computation a
+        circulant matvec.
         """
         raise NotImplementedError
 
@@ -211,8 +224,8 @@ class M2LTranslationBase:
         is done and before storing the expansion coefficients for the local
         expansion.
 
-        When FFT is turned on, the output expressions are transformed from Fourier
-        space back to the original space.
+        When FFT is turned on, the output expressions are assumed to have been
+        transformed from Fourier space back to the original space by the caller.
         """
         raise NotImplementedError
 
@@ -397,9 +410,9 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
 
     def preprocess_multipole_exprs(self, tgt_expansion, src_expansion,
             src_coeff_exprs, sac, src_rscale):
-        circulant_matrix_mis, needed_vector_terms, max_mi = \
-                self._translation_classes_dependent_data_mis(tgt_expansion,
-                                                                 src_expansion)
+        circulant_matrix_mis, _, _ = \
+            self._translation_classes_dependent_data_mis(tgt_expansion,
+                src_expansion)
         circulant_matrix_ident_to_index = {ident: i for i, ident in
                             enumerate(circulant_matrix_mis)}
 
@@ -416,12 +429,65 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
     def preprocess_multipole_nexprs(self, tgt_expansion, src_expansion):
         circulant_matrix_mis, _, _ = \
             self._translation_classes_dependent_data_mis(tgt_expansion,
-                                                             src_expansion)
+                src_expansion)
         return len(circulant_matrix_mis)
+
+    def preprocess_multipole_loopy_knl(self, tgt_expansion, src_expansion,
+            result_dtype):
+
+        circulant_matrix_mis, _, _ = \
+            self._translation_classes_dependent_data_mis(tgt_expansion,
+                src_expansion)
+        circulant_matrix_ident_to_index = dict((ident, i) for i, ident in
+            enumerate(circulant_matrix_mis))
+
+        ncoeff_src = len(src_expansion.get_coefficient_identifiers())
+        ncoeff_preprocessed = self.preprocess_multipole_nexprs(tgt_expansion,
+            src_expansion)
+
+        output_coeffs = pymbolic.var("output_coeffs")
+        input_coeffs = pymbolic.var("input_coeffs")
+        ioutput_coeff = pymbolic.var("ioutput_coeff")
+
+        domains = [
+            "{[ioutput_coeff]: 0<=ioutput_coeff<noutput_coeffs}",
+        ]
+        insns = [
+            lp.Assignment(
+                assignee=output_coeffs[ioutput_coeff],
+                expression=0,
+                id="init",
+            )
+        ]
+        prev_insn = "init"
+        for icoeff_src, term in enumerate(
+                src_expansion.get_coefficient_identifiers()):
+            new_icoeff_src = circulant_matrix_ident_to_index[term]
+            insns += [
+                lp.Assignment(
+                    assignee=output_coeffs[new_icoeff_src],
+                    expression=input_coeffs[icoeff_src],
+                    id=f"coeff_insn_{icoeff_src}",
+                    depends_on=frozenset([prev_insn])
+                ),
+            ]
+            prev_insn = f"coeff_insn_{icoeff_src}"
+
+        return lp.make_function(domains, insns,
+            kernel_data=[
+                lp.ValueArg("src_rscale", None),
+                lp.GlobalArg("output_coeffs", None, shape=ncoeff_preprocessed,
+                    is_input=False, is_output=True),
+                lp.GlobalArg("input_coeffs", None, shape=ncoeff_src),
+                ...],
+            name="m2l_preprocess_inner",
+            lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
+            fixed_parameters=dict(noutput_coeffs=ncoeff_preprocessed),
+        )
 
     def postprocess_local_exprs(self, tgt_expansion, src_expansion, m2l_result,
             src_rscale, tgt_rscale, sac):
-        circulant_matrix_mis, needed_vector_terms, max_mi = \
+        circulant_matrix_mis, _, _ = \
                 self._translation_classes_dependent_data_mis(tgt_expansion,
                                                                  src_expansion)
         circulant_matrix_ident_to_index = {ident: i for i, ident in
@@ -439,6 +505,99 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
     def postprocess_local_nexprs(self, tgt_expansion, src_expansion):
         return self.translation_classes_dependent_ndata(
             tgt_expansion, src_expansion)
+
+    def postprocess_local_loopy_knl(self, tgt_expansion, src_expansion,
+            result_dtype):
+        circulant_matrix_mis, needed_vector_terms, _ = \
+            self._translation_classes_dependent_data_mis(tgt_expansion,
+                src_expansion)
+        circulant_matrix_ident_to_index = dict((ident, i) for i, ident in
+                            enumerate(circulant_matrix_mis))
+
+        ncoeff_tgt = len(tgt_expansion.get_coefficient_identifiers())
+        ncoeff_before_postprocessed = self.postprocess_local_nexprs(tgt_expansion,
+                src_expansion)
+        order = tgt_expansion.order
+
+        fixed_parameters = {
+            "ncoeff_tgt": ncoeff_tgt,
+            "ncoeff_before_postprocessed": ncoeff_before_postprocessed,
+            "order": order,
+        }
+
+        domains = [
+            "{[iorder]: 0<iorder<=order}"
+        ]
+
+        insns = ["<> rscale_ratio = tgt_rscale / src_rscale {id=rscale_ratio}"]
+
+        rscale_arr = pymbolic.var("rscale_arr")
+        rscale_ratio = pymbolic.var("rscale_ratio")
+        iorder = pymbolic.var("iorder")
+
+        insns += [
+            lp.Assignment(
+                assignee=rscale_arr[0],
+                expression=1,
+                id="rscale_arr0",
+                depends_on="rscale_ratio",
+            ),
+            lp.Assignment(
+                assignee=rscale_arr[iorder],
+                expression=rscale_arr[iorder - 1]*rscale_ratio,
+                id="rscale_arr",
+                depends_on="rscale_arr0",
+            ),
+        ]
+
+        output_coeffs = pymbolic.var("output_coeffs")
+        input_coeffs = pymbolic.var("input_coeffs")
+
+        if self.use_fft and result_dtype in \
+                (np.float64, np.float32):
+            result_func = pymbolic.var("real")
+        else:
+            def result_func(x):
+                return x
+
+        for new_icoeff_tgt, term in enumerate(
+                tgt_expansion.get_coefficient_identifiers()):
+            if self.use_fft:
+                # since we reversed the M2L matrix, we reverse the result
+                # to get the correct result
+                n = len(circulant_matrix_mis)
+                icoeff_tgt = n - 1 - circulant_matrix_ident_to_index[term]
+            else:
+                icoeff_tgt = circulant_matrix_ident_to_index[term]
+
+            insns += [
+                lp.Assignment(
+                    assignee=output_coeffs[new_icoeff_tgt],
+                    expression=result_func(
+                        input_coeffs[icoeff_tgt]) * rscale_arr[sum(term)],
+                    id=f"coeff_insn_{new_icoeff_tgt}",
+                    depends_on="rscale_arr",
+                )
+            ]
+
+        return lp.make_function(domains, insns,
+            kernel_data=[
+                lp.ValueArg("src_rscale", None),
+                lp.ValueArg("tgt_rscale", None),
+                lp.GlobalArg("output_coeffs", None,
+                    shape=ncoeff_tgt, is_input=False,
+                    is_output=True),
+                lp.GlobalArg("input_coeffs", None,
+                    shape=ncoeff_before_postprocessed,
+                    is_output=False, is_input=True),
+                lp.TemporaryVariable("rscale_arr",
+                    None,
+                    shape=(order + 1,)),
+                ...],
+            name="m2l_postprocess_inner",
+            lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
+            fixed_parameters=fixed_parameters,
+        )
 
 
 # }}} VolumeTaylorM2LTranslation
@@ -468,7 +627,7 @@ class VolumeTaylorM2LWithPreprocessedMultipoles(VolumeTaylorM2LTranslation):
         icoeff_tgt = pymbolic.var("icoeff_tgt")
         domains = [f"{{[icoeff_tgt]: 0<=icoeff_tgt<{ncoeff_tgt} }}"]
 
-        coeff = pymbolic.var("coeff")
+        tgt_coeffs = pymbolic.var("tgt_coeffs")
         src_coeffs = pymbolic.var("src_coeffs")
         translation_classes_dependent_data = pymbolic.var("data")
 
@@ -487,14 +646,17 @@ class VolumeTaylorM2LWithPreprocessedMultipoles(VolumeTaylorM2LTranslation):
 
         insns = [
             lp.Assignment(
-                assignee=coeff[icoeff_tgt],
-                expression=coeff[icoeff_tgt] + expr),
+                assignee=tgt_coeffs[icoeff_tgt],
+                expression=tgt_coeffs[icoeff_tgt] + expr
+            ),
         ]
         return lp.make_function(domains, insns,
                 kernel_data=[
-                    lp.GlobalArg("coeff, src_coeffs, data",
-                        shape=lp.auto),
-                    lp.ValueArg("src_rscale, tgt_rscale"),
+                    lp.GlobalArg("tgt_coeffs", shape=lp.auto, is_input=True,
+                        is_output=True),
+                    lp.GlobalArg("src_coeffs, data",
+                        shape=lp.auto, is_input=True, is_output=False),
+                    lp.ValueArg("src_rscale, tgt_rscale", is_input=True),
                     ...],
                 name="e2e",
                 lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
@@ -519,7 +681,13 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
 
     def translation_classes_dependent_data(self, tgt_expansion, src_expansion,
             src_rscale, dvec, sac):
+        """Return an iterable of expressions that needs to be precomputed
+        for multipole-to-local translations that depend only on the
+        distance between the multipole center and the local center which
+        is given as *dvec*.
 
+        The final result should be transformed using an FFT.
+        """
         derivatives_full = super().translation_classes_dependent_data(
             tgt_expansion, src_expansion, src_rscale, dvec, sac)
         # Note that the matrix we have now is a mirror image of a
@@ -527,14 +695,7 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
         # first column for the circulant matrix and then finally
         # use the FFT for convolution represented by the circulant
         # matrix.
-        return fft(list(reversed(derivatives_full)), sac=sac)
-
-    def preprocess_multipole_exprs(self, tgt_expansion, src_expansion,
-            src_coeff_exprs, sac, src_rscale):
-        input_vector = super().preprocess_multipole_exprs(
-            tgt_expansion, src_expansion, src_coeff_exprs, sac, src_rscale)
-
-        return fft(input_vector, sac=sac)
+        return list(reversed(derivatives_full))
 
     def postprocess_local_exprs(self, tgt_expansion, src_expansion, m2l_result,
             src_rscale, tgt_rscale, sac):
@@ -542,7 +703,6 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
                 self._translation_classes_dependent_data_mis(tgt_expansion,
                                                                  src_expansion)
         n = len(circulant_matrix_mis)
-        m2l_result = fft(m2l_result, inverse=True, sac=sac)
         # since we reversed the M2L matrix, we reverse the result
         # to get the correct result
         m2l_result = list(reversed(m2l_result[:n]))
@@ -665,7 +825,7 @@ class FourierBesselM2LWithPreprocessedMultipoles(FourierBesselM2LTranslation):
         icoeff_tgt = pymbolic.var("icoeff_tgt")
         domains = [f"{{[icoeff_tgt]: 0<=icoeff_tgt<{ncoeff_tgt} }}"]
 
-        coeff = pymbolic.var("coeff")
+        tgt_coeffs = pymbolic.var("tgt_coeffs")
         src_coeffs = pymbolic.var("src_coeffs")
         translation_classes_dependent_data = pymbolic.var("data")
 
@@ -681,14 +841,16 @@ class FourierBesselM2LWithPreprocessedMultipoles(FourierBesselM2LTranslation):
 
         insns = [
             lp.Assignment(
-                assignee=coeff[icoeff_tgt],
-                expression=coeff[icoeff_tgt] + expr),
+                assignee=tgt_coeffs[icoeff_tgt],
+                expression=tgt_coeffs[icoeff_tgt] + expr),
         ]
         return lp.make_function(domains, insns,
                 kernel_data=[
-                    lp.GlobalArg("coeff, src_coeffs, data",
-                        shape=lp.auto),
-                    lp.ValueArg("src_rscale, tgt_rscale"),
+                    lp.GlobalArg("tgt_coeffs", shape=lp.auto, is_input=True,
+                        is_output=True),
+                    lp.GlobalArg("src_coeffs, data",
+                        shape=lp.auto, is_input=True, is_output=False),
+                    lp.ValueArg("src_rscale, tgt_rscale", is_input=True),
                     ...],
                 name="e2e",
                 lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
@@ -726,7 +888,6 @@ class FourierBesselM2LWithFFT(FourierBesselM2LWithPreprocessedMultipoles):
     def translation_classes_dependent_data(self, tgt_expansion, src_expansion,
             src_rscale, dvec, sac):
 
-        from sumpy.tools import fft
         translation_classes_dependent_data = \
             super().translation_classes_dependent_data(tgt_expansion,
                 src_expansion, src_rscale, dvec, sac)
@@ -748,26 +909,94 @@ class FourierBesselM2LWithFFT(FourierBesselM2LWithPreprocessedMultipoles):
 
         first_column_circulant = list(first_column_toeplitz) + \
                 list(reversed(first_row_toeplitz))
-        return fft(first_column_circulant, sac)
+        return first_column_circulant
 
     def preprocess_multipole_exprs(self, tgt_expansion, src_expansion,
             src_coeff_exprs, sac, src_rscale):
 
-        from sumpy.tools import fft
         result = super().preprocess_multipole_exprs(tgt_expansion,
             src_expansion, src_coeff_exprs, sac, src_rscale)
 
         result = list(reversed(result))
         result += [0] * (len(result) - 1)
-        return fft(result, sac=sac)
+        return result
 
     def postprocess_local_exprs(self, tgt_expansion, src_expansion,
             m2l_result, src_rscale, tgt_rscale, sac):
 
-        m2l_result = fft(m2l_result, inverse=True, sac=sac)
         m2l_result = m2l_result[:2*tgt_expansion.order+1]
         return super().postprocess_local_exprs(tgt_expansion,
             src_expansion, m2l_result, src_rscale, tgt_rscale, sac)
 
+
 # }}} FourierBesselM2LWithFFT
+
+# {{{ translation_classes_dependent_data_loopy_knl
+
+def translation_classes_dependent_data_loopy_knl(tgt_expansion, src_expansion,
+            result_dtype):
+    """
+    This is a helper function to create a loopy kernel to generate translation
+    classes dependent data. This function uses symbolic expressions given by the
+    M2L translation, converts them to pymbolic expressions and generates a loopy
+    kernel. Note that the loopy kernel returned has lots of expressions in it and
+    takes a long time. Therefore, this function should be used only as a fallback
+    when there is no "loop-y" kernel to calculate the data.
+    """
+    src_rscale = sym.Symbol("src_rscale")
+    dvec = sym.make_sym_vector("d", tgt_expansion.dim)
+    from sumpy.assignment_collection import SymbolicAssignmentCollection
+    sac = SymbolicAssignmentCollection()
+    derivatives = tgt_expansion.m2l_translation.translation_classes_dependent_data(
+        tgt_expansion, src_expansion, src_rscale, dvec, sac)
+
+    vec_name = "m2l_translation_classes_dependent_data"
+
+    tgt_coeff_names = [
+            sac.assign_unique("m2l_translation_classes_dependent_data%d" % i,
+                coeff_i)
+            for i, coeff_i in enumerate(derivatives)]
+    sac.run_global_cse()
+
+    from sumpy.codegen import to_loopy_insns
+    from sumpy.tools import to_complex_dtype
+    insns = to_loopy_insns(
+            sac.assignments.items(),
+            vector_names=set(["d"]),
+            pymbolic_expr_maps=[tgt_expansion.get_code_transformer()],
+            retain_names=tgt_coeff_names,
+            complex_dtype=to_complex_dtype(result_dtype),
+            )
+
+    data = pymbolic.var("m2l_translation_classes_dependent_data")
+    depends_on = None
+    for i in range(len(insns)):
+        insn = insns[i]
+        if isinstance(insn, lp.Assignment) and \
+                insn.assignee.name.startswith(vec_name):
+            idx = int(insn.assignee.name[len(vec_name):])
+            insns[i] = lp.Assignment(
+                assignee=data[idx],
+                expression=insn.expression,
+                id=f"data_{idx}",
+                depends_on=depends_on,
+            )
+            depends_on = frozenset([f"data_{idx}"])
+
+    knl = lp.make_function([], insns,
+        kernel_data=[
+            lp.ValueArg("src_rscale", None),
+            lp.GlobalArg("d", None, shape=tgt_expansion.dim),
+            lp.GlobalArg(data.name, None,
+                shape=len(derivatives), is_input=False,
+                is_output=True),
+        ],
+        name="m2l_data",
+        lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
+    )
+
+    return knl
+
+# }}} translation_classes_dependent_data_loopy_knl
+
 # vim: fdm=marker

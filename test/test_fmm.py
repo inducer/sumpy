@@ -409,7 +409,8 @@ def test_unified_single_and_double(ctx_factory):
     assert rel_err < 1e-12
 
 
-def test_sumpy_fmm_timing_data_collection(ctx_factory):
+@pytest.mark.parametrize("use_fft", [True, False])
+def test_sumpy_fmm_timing_data_collection(ctx_factory, use_fft):
     logging.basicConfig(level=logging.INFO)
 
     ctx = ctx_factory()
@@ -448,10 +449,20 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory):
 
     from functools import partial
 
+    if use_fft:
+        from sumpy.expansion.m2l import FFTM2LTranslationClassFactory
+        m2l_translation_factory = FFTM2LTranslationClassFactory()
+    else:
+        from sumpy.expansion.m2l import NonFFTM2LTranslationClassFactory
+        m2l_translation_factory = NonFFTM2LTranslationClassFactory()
+
+    m2l_translation = m2l_translation_factory.get_m2l_translation_class(
+                knl, local_expn_class)()
+
     tree_indep = SumpyTreeIndependentDataForWrangler(
             ctx,
             partial(mpole_expn_class, knl),
-            partial(local_expn_class, knl),
+            partial(local_expn_class, knl, m2l_translation=m2l_translation),
             target_kernels)
 
     wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,

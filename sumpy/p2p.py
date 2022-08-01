@@ -468,7 +468,6 @@ class P2PFromCSR(P2PBase):
             "{[iknl]: 0 <= iknl < noutputs}",
             "{[isrc_box]: isrc_box_start <= isrc_box < isrc_box_end}",
             "{[idim]: 0 <= idim < dim}",
-            "{[istrength]: 0 <= istrength < nstrengths}",
             "{[isrc]: isrc_start <= isrc < isrc_end}"
         ]
 
@@ -483,6 +482,7 @@ class P2PFromCSR(P2PBase):
                     shape=(self.strength_count, max_nsources_in_one_box)),
             ]
             domains += [
+                "{[istrength]: 0 <= istrength < nstrengths}",
                 "{[inner]: 0 <= inner < nsplit}",
                 "{[itgt_offset_outer]: 0 <= itgt_offset_outer <= tgt_outer_limit}",
                 "{[isrc_offset_outer]: 0 <= isrc_offset_outer <= src_outer_limit}",

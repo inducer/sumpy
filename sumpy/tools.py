@@ -39,11 +39,13 @@ __doc__ = """
 from pytools import memoize_method
 from pytools.tag import Tag, tag_dataclass
 import numbers
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from pymbolic.mapper import WalkMapper
 
 import numpy as np
 import sumpy.symbolic as sym
+import pyopencl as cl
+import pyopencl.array as cla
 
 import loopy as lp
 from typing import Dict, Tuple, Any
@@ -930,6 +932,96 @@ def to_complex_dtype(dtype):
         return to_complex_type_dict[np_type]
     except KeyError:
         raise RuntimeError(f"Unknown dtype: {dtype}")
+
+
+ProfileGetter = namedtuple("ProfileGetter", "start, end")
+
+
+class AggregateProfilingEvent:
+    """An object to hold a list of events and provides compatibility
+    with some of the functionality of :class:`pyopencl.Event`.
+    Assumes that the last event waits on all of the previous events.
+    """
+    def __init__(self, events):
+        self.events = events[:]
+        if isinstance(events[-1], cl.Event):
+            self.native_event = events[-1]
+        else:
+            self.native_event = events[-1].native_event
+
+    @property
+    def profile(self):
+        total = sum(evt.profile.end - evt.profile.start for evt in self.events)
+        end = self.native_event.profile.end
+        return ProfileGetter(start=end - total, end=end)
+
+    def wait(self):
+        return self.native_event.wait()
+
+
+class MarkerBasedProfilingEvent:
+    """An object to hold two marker events and provides compatibility
+    with some of the functionality of :class:`pyopencl.Event`.
+    """
+    def __init__(self, *, end_event, start_event):
+        self.native_event = end_event
+        self.start_event = start_event
+
+    @property
+    def profile(self):
+        return ProfileGetter(start=self.start_event.profile.start,
+                             end=self.native_event.profile.end)
+
+    def wait(self):
+        return self.native_event.wait()
+
+
+def get_opencl_fft_app(queue, shape, dtype):
+    """Setup an object for out-of-place FFT on with given shape and dtype
+    on given queue. Only supports in-order queues.
+    """
+    if queue.properties & cl.command_queue_properties.OUT_OF_ORDER_EXEC_MODE_ENABLE:
+        raise RuntimeError("VkFFT does not support out of order queues yet.")
+
+    assert dtype.type in (np.float32, np.float64, np.complex64,
+                           np.complex128)
+
+    from pyvkfft.opencl import VkFFTApp
+    app = VkFFTApp(shape=shape, dtype=dtype, queue=queue, ndim=1, inplace=False)
+    return app
+
+
+def run_opencl_fft(vkfft_app, queue, input_vec, inverse=False, wait_for=None):
+    """Runs an FFT on input_vec and returns a :class:`MarkerBasedProfilingEvent`
+    that indicate the end and start of the operations carried out and the output
+    vector.
+    Only supports in-order queues.
+    """
+    if wait_for is None:
+        wait_for = []
+
+    start_evt = cl.enqueue_marker(queue, wait_for=wait_for[:])
+
+    if vkfft_app.inplace:
+        raise RuntimeError("inplace fft is not supported")
+    else:
+        output_vec = cla.empty_like(input_vec, queue)
+
+    # FIXME: use the public API once https://github.com/vincefn/pyvkfft/pull/17 is in
+    from pyvkfft.opencl import _vkfft_opencl
+    if inverse:
+        meth = _vkfft_opencl.ifft
+    else:
+        meth = _vkfft_opencl.fft
+
+    meth(vkfft_app.app, int(input_vec.data.int_ptr), int(output_vec.data.int_ptr),
+        int(queue.int_ptr))
+
+    end_evt = cl.enqueue_marker(queue, wait_for=[start_evt])
+    output_vec.add_event(end_evt)
+
+    return (MarkerBasedProfilingEvent(end_event=end_evt, start_event=start_evt),
+        output_vec)
 
 # }}}
 
