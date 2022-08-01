@@ -180,9 +180,9 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
                           strength_usage=self.strength_usage)
 
     @memoize_method
-    def opencl_fft_app(self, shape, dtype, inplace):
+    def opencl_fft_app(self, shape, dtype):
         with cl.CommandQueue(self.cl_context) as queue:
-            return get_opencl_fft_app(queue, shape, dtype, inplace)
+            return get_opencl_fft_app(queue, shape, dtype)
 
 # }}}
 
@@ -553,9 +553,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
     # }}}
 
-    def run_opencl_fft(self, queue, input_vec, inverse, wait_for, inplace):
-        app = self.tree_indep.opencl_fft_app(input_vec.shape, input_vec.dtype,
-            inplace)
+    def run_opencl_fft(self, queue, input_vec, inverse, wait_for):
+        app = self.tree_indep.opencl_fft_app(input_vec.shape, input_vec.dtype)
         return run_opencl_fft(app, queue, input_vec, inverse, wait_for)
 
     def form_multipoles(self,
@@ -727,7 +726,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     _, m2l_translation_classes_dependent_data_view = \
                         self.run_opencl_fft(queue,
                             m2l_translation_classes_dependent_data_view,
-                            inverse=False, wait_for=[evt], inplace=False)
+                            inverse=False, wait_for=[evt])
                 result.append(m2l_translation_classes_dependent_data_view)
 
             for lev in range(self.tree.nlevels):
@@ -815,7 +814,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     evt_fft, preprocessed_mpole_exps[lev] = \
                         self.run_opencl_fft(queue,
                             preprocessed_mpole_exps[lev],
-                            inverse=False, wait_for=wait_for, inplace=False)
+                            inverse=False, wait_for=wait_for)
                     wait_for.append(evt_fft.native_event)
                     evt = AggregateProfilingEvent([evt, evt_fft])
 
@@ -876,7 +875,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     evt_fft, target_locals_before_postprocessing_view = \
                         self.run_opencl_fft(queue,
                             target_locals_before_postprocessing_view,
-                            inverse=True, wait_for=wait_for, inplace=False)
+                            inverse=True, wait_for=wait_for)
                     wait_for.append(evt_fft.native_event)
 
                 evt, _ = postprocess_local_kernel(

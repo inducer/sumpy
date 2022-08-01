@@ -976,8 +976,8 @@ class MarkerBasedProfilingEvent:
         return self.native_event.wait()
 
 
-def get_opencl_fft_app(queue, shape, dtype, inplace=False):
-    """Setup an object for inplace/out-of-place FFT on with given shape and dtype
+def get_opencl_fft_app(queue, shape, dtype):
+    """Setup an object for out-of-place FFT on with given shape and dtype
     on given queue. Only supports in-order queues.
     """
     if queue.properties & cl.command_queue_properties.OUT_OF_ORDER_EXEC_MODE_ENABLE:
@@ -987,7 +987,7 @@ def get_opencl_fft_app(queue, shape, dtype, inplace=False):
                            np.complex128)
 
     from pyvkfft.opencl import VkFFTApp
-    app = VkFFTApp(shape=shape, dtype=dtype, queue=queue, ndim=1, inplace=inplace)
+    app = VkFFTApp(shape=shape, dtype=dtype, queue=queue, ndim=1, inplace=False)
     return app
 
 
@@ -1003,7 +1003,7 @@ def run_opencl_fft(vkfft_app, queue, input_vec, inverse=False, wait_for=None):
     start_evt = cl.enqueue_marker(queue, wait_for=wait_for[:])
 
     if vkfft_app.inplace:
-        output_vec = input_vec
+        raise RuntimeError("inplace fft is not supported")
     else:
         output_vec = cla.empty_like(input_vec, queue)
 
