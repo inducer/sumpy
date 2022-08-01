@@ -204,10 +204,10 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
 
         if order_varies_with_level:
             def fmm_level_to_order(kernel, kernel_args, tree, lev):
-                return order + lev % 2
+                return order + lev % 2  # noqa: B023
         else:
             def fmm_level_to_order(kernel, kernel_args, tree, lev):
-                return order
+                return order  # noqa: B023
 
         wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,
             fmm_level_to_order=fmm_level_to_order,
