@@ -890,7 +890,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 )
 
                 if self.tree_indep.m2l_translation.use_fft:
-                    postprocess_evts.append(AggregateProfilingEvent([evt, evt_fft]))
+                    postprocess_evts.append(AggregateProfilingEvent([evt_fft, evt]))
                 else:
                     postprocess_evts.append(evt)
 
