@@ -180,9 +180,9 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
                           strength_usage=self.strength_usage)
 
     @memoize_method
-    def opencl_fft_app(self, shape, dtype):
+    def opencl_fft_app(self, shape, dtype, inverse):
         with cl.CommandQueue(self.cl_context) as queue:
-            return get_opencl_fft_app(queue, shape, dtype)
+            return get_opencl_fft_app(queue, shape, dtype, inverse)
 
 # }}}
 
@@ -554,7 +554,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     # }}}
 
     def run_opencl_fft(self, queue, input_vec, inverse, wait_for):
-        app = self.tree_indep.opencl_fft_app(input_vec.shape, input_vec.dtype)
+        app = self.tree_indep.opencl_fft_app(input_vec.shape, input_vec.dtype,
+            inverse)
         return run_opencl_fft(app, queue, input_vec, inverse, wait_for)
 
     def form_multipoles(self,
