@@ -40,8 +40,11 @@ from pytools import memoize_method
 from pytools.tag import Tag, tag_dataclass
 import numbers
 import warnings
+import os
+import sys
 from collections import defaultdict, namedtuple
 from pymbolic.mapper import WalkMapper
+import pymbolic
 
 import numpy as np
 import sumpy.symbolic as sym
@@ -938,6 +941,10 @@ def to_complex_dtype(dtype):
 ProfileGetter = namedtuple("ProfileGetter", "start, end")
 
 
+def get_native_event(evt):
+    return evt if isinstance(evt, cl.Event) else evt.native_event
+
+
 class AggregateProfilingEvent:
     """An object to hold a list of events and provides compatibility
     with some of the functionality of :class:`pyopencl.Event`.
@@ -945,10 +952,7 @@ class AggregateProfilingEvent:
     """
     def __init__(self, events):
         self.events = events[:]
-        if isinstance(events[-1], cl.Event):
-            self.native_event = events[-1]
-        else:
-            self.native_event = events[-1].native_event
+        self.native_event = get_native_event(events[-1])
 
     @property
     def profile(self):
@@ -977,12 +981,13 @@ class MarkerBasedProfilingEvent:
         return self.native_event.wait()
 
 
-def loopy_fft(n, inverse=False, complex_dtype=np.complex64, index_dtype=None,
+def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
         name=None):
     from pymbolic.algorithm import find_factors
     from math import pi
 
     sign = 1 if not inverse else -1
+    n = shape[-1]
 
     m = n
     factors = []
@@ -992,25 +997,42 @@ def loopy_fft(n, inverse=False, complex_dtype=np.complex64, index_dtype=None,
 
     nfft = n
 
-    insns = [
-        "x[i] = y[i] {dup=i, id=copy}",
-        "exp_table[i] = exp(const * i) {id=exp_table,dep=copy}",
+    broadcast_dims = tuple(pymbolic.var(f"j{d}") for d in range(len(shape) - 1))
+    domains = [
+        "{[i]: 0<=i<n}",
+        "{[i2]: 0<=i2<n}",
+        "{[i3]: 0<=i3<n}",
     ]
-    domains = ["{[i]: 0<=i<n}"]
+    domains += [f"{{[j{d}]: 0<=j{d}<{shape[d]} }}" for d in range(len(shape) - 1)]
+
+    x = pymbolic.var("x")
+    y = pymbolic.var("y")
+    i = pymbolic.var("i")
+    i2 = pymbolic.var("i2")
+    i3 = pymbolic.var("i3")
 
     fixed_parameters = {"const": complex_dtype(sign*(-2j)*pi/n), "n": n}
+
+    insns = [
+        "exp_table[i] = exp(const * i) {id=exp_table}",
+        lp.Assignment(
+            assignee=x[(*broadcast_dims, i2)],
+            expression=y[(*broadcast_dims, i2)],
+            id="copy",
+            depends_on=frozenset(["exp_table"]),
+        ),
+    ]
 
     for ilev, N1 in enumerate(list(reversed(factors))):  # noqa: N806
         nfft //= N1
         N2 = n // (nfft * N1)  # noqa: N806
         if ilev == 0:
-            init_depends_on = "exp_table"
+            init_depends_on = "copy"
         else:
             init_depends_on = f"update_{ilev-1}"
 
         temp = pymbolic.var("temp")
         exp_table = pymbolic.var("exp_table")
-        x = pymbolic.var("x")
         i = pymbolic.var(f"i_{ilev}")
         i2 = pymbolic.var(f"i2_{ilev}")
         ifft = pymbolic.var(f"ifft_{ilev}")
@@ -1023,12 +1045,12 @@ def loopy_fft(n, inverse=False, complex_dtype=np.complex64, index_dtype=None,
         insns += [
             lp.Assignment(
                 assignee=temp[i],
-                expression=x[i],
+                expression=x[(*broadcast_dims, i)],
                 id=f"copy_{ilev}",
                 depends_on=frozenset([init_depends_on]),
             ),
             lp.Assignment(
-                assignee=x[i2],
+                assignee=x[(*broadcast_dims, i2)],
                 expression=0,
                 id=f"reset_{ilev}",
                 depends_on=frozenset([f"copy_{ilev}"])),
@@ -1043,11 +1065,12 @@ def loopy_fft(n, inverse=False, complex_dtype=np.complex64, index_dtype=None,
                 expression=exp_table[table_idx % n],
                 id=f"exp_{ilev}",
                 depends_on=frozenset([f"idx_{ilev}"]),
-                within_inames=frozenset([iN1_sum.name, iN1.name, iN2.name]),
+                within_inames=frozenset(map(lambda x: x.name,
+                    [*broadcast_dims, iN1_sum, iN1, iN2])),
                 temp_var_type=lp.Optional(complex_dtype)),
             lp.Assignment(
-                assignee=x[ifft + nfft * (iN1*N2 + iN2)],
-                expression=(x[ifft + nfft*(iN1*N2 + iN2)]
+                assignee=x[(*broadcast_dims, ifft + nfft * (iN1*N2 + iN2))],
+                expression=(x[(*broadcast_dims, ifft + nfft*(iN1*N2 + iN2))]
                     + exp * temp[ifft + nfft * (iN2*N1 + iN1_sum)]),
                 id=f"update_{ilev}",
                 depends_on=frozenset([f"exp_{ilev}"])),
@@ -1067,9 +1090,15 @@ def loopy_fft(n, inverse=False, complex_dtype=np.complex64, index_dtype=None,
             domains[idom] = "{" + dom + "}"
 
     if n == 1:
-        insns += ["x[i] = x[i] {dup=i}"]
+        insns += ["x[:, i] = x[:, i] {dup=i}"]
     elif inverse:
-        insns += [f"x[i] = x[i] / {n} {{dep=update_{len(factors) - 1},dup=i}}"]
+        insns += [
+            lp.Assignment(
+                assignee=x[(*broadcast_dims, i3)],
+                expression=x[(*broadcast_dims, i3)] / n,
+                depends_on=frozenset([f"update_{len(factors) - 1}"]),
+            ),
+        ]
 
     if name is None:
         if inverse:
@@ -1077,11 +1106,11 @@ def loopy_fft(n, inverse=False, complex_dtype=np.complex64, index_dtype=None,
         else:
             name = f"fft_{n}"
 
-    knl = lp.make_function(domains, insns,
+    knl = lp.make_kernel(domains, insns,
         kernel_data=[
-            lp.GlobalArg("x", shape=(n,), is_input=False, is_output=True,
+            lp.GlobalArg("x", shape=shape, is_input=False, is_output=True,
                 dtype=complex_dtype),
-            lp.GlobalArg("y", shape=(n,), is_input=True, is_output=False,
+            lp.GlobalArg("y", shape=shape, is_input=True, is_output=False,
                 dtype=complex_dtype),
             lp.TemporaryVariable("exp_table", shape=(n,),
                 dtype=complex_dtype),
@@ -1089,10 +1118,13 @@ def loopy_fft(n, inverse=False, complex_dtype=np.complex64, index_dtype=None,
                 dtype=complex_dtype),
             ...],
         name=name,
+        fixed_parameters=fixed_parameters,
         lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
         index_dtype=index_dtype,
-        fixed_parameters=fixed_parameters,
     )
+    if broadcast_dims:
+        knl = lp.split_iname(knl, "j0", 32, inner_tag="l.0", outer_tag="g.0")
+        knl = lp.add_inames_for_unused_hw_axes(knl)
 
     return knl
 
@@ -1106,7 +1138,7 @@ def _get_fft_backend(queue):
         return env_val
 
     try:
-        from pyvkfft.opencl import VkFFTApp
+        import pyvkfft.opencl  # noqa: F401
     except ImportError:
         warnings.warn("VkFFT not found. FFT runs will be slower.")
         return "loopy"
@@ -1117,7 +1149,8 @@ def _get_fft_backend(queue):
         return "loopy"
 
     if (sys.platform == "darwin"
-            and queue.context.devices[0].platform.name == "Portable Computing Language"):
+            and queue.context.devices[0].platform.name
+            == "Portable Computing Language"):
         warnings.warn("Pocl miscompiles some VkFFT kernels. "
             "Falling back to slower implementation.")
         return "loopy"
@@ -1135,9 +1168,7 @@ def get_opencl_fft_app(queue, shape, dtype, inverse):
     backend = _get_fft_backend(queue)
 
     if backend == "loopy":
-        if len(shape) > 1:
-            raise RuntimeError("Only 1-D FFTs are supported at the moment.")
-        return loopy_fft(shape, inverse=inverse, complex_dtype=np.complex64)
+        return loopy_fft(shape, inverse=inverse, complex_dtype=dtype.type)
     else:
         from pyvkfft.opencl import VkFFTApp
         app = VkFFTApp(shape=shape, dtype=dtype, queue=queue, ndim=1, inplace=False)
@@ -1153,7 +1184,8 @@ def run_opencl_fft(vkfft_app, queue, input_vec, inverse=False, wait_for=None):
     backend = _get_fft_backend(queue)
 
     if backend == "loopy":
-        return vkfft_app(queue, y=input_vec, wait_for=wait_for)
+        evt, (output_vec,) = vkfft_app(queue, y=input_vec, wait_for=wait_for)
+        return (evt, output_vec)
     else:
         if wait_for is None:
             wait_for = []
@@ -1165,15 +1197,16 @@ def run_opencl_fft(vkfft_app, queue, input_vec, inverse=False, wait_for=None):
         else:
             output_vec = cla.empty_like(input_vec, queue)
 
-        # FIXME: use the public API once https://github.com/vincefn/pyvkfft/pull/17 is in
+        # FIXME: use the public API once
+        # https://github.com/vincefn/pyvkfft/pull/17 is in
         from pyvkfft.opencl import _vkfft_opencl
         if inverse:
             meth = _vkfft_opencl.ifft
         else:
             meth = _vkfft_opencl.fft
 
-        meth(vkfft_app.app, int(input_vec.data.int_ptr), int(output_vec.data.int_ptr),
-            int(queue.int_ptr))
+        meth(vkfft_app.app, int(input_vec.data.int_ptr),
+            int(output_vec.data.int_ptr), int(queue.int_ptr))
 
         end_evt = cl.enqueue_marker(queue, wait_for=[start_evt])
         output_vec.add_event(end_evt)
