@@ -42,6 +42,7 @@ import numbers
 import warnings
 import os
 import sys
+import enum
 from collections import defaultdict, namedtuple
 from pymbolic.mapper import WalkMapper
 import pymbolic
@@ -1129,33 +1130,38 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
     return knl
 
 
-def _get_fft_backend(queue):
+class FFTBackend(enum.Enum):
+    pyvkfft = 1
+    loopy = 2
+
+
+def _get_fft_backend(queue) -> FFTBackend:
     env_val = os.environ.get("SUMPY_FFT_BACKEND", None)
     if env_val:
-        if env_val not in ["loopy", "vkfft"]:
-            raise ValueError("Expected 'loopy' or 'vkfft' for SUMPY_FFT_BACKEND. "
+        if env_val not in ["loopy", "pyvkfft"]:
+            raise ValueError("Expected 'loopy' or 'pyvkfft' for SUMPY_FFT_BACKEND. "
                    f"Found {env_val}.")
-        return env_val
+        return FFTBackend[env_val]
 
     try:
         import pyvkfft.opencl  # noqa: F401
     except ImportError:
         warnings.warn("VkFFT not found. FFT runs will be slower.")
-        return "loopy"
+        return FFTBackend.loopy
 
     if queue.properties & cl.command_queue_properties.OUT_OF_ORDER_EXEC_MODE_ENABLE:
         warnings.warn("VkFFT does not support out of order queues yet. "
             "Falling back to slower implementation.")
-        return "loopy"
+        return FFTBackend.loopy
 
     if (sys.platform == "darwin"
             and queue.context.devices[0].platform.name
             == "Portable Computing Language"):
         warnings.warn("Pocl miscompiles some VkFFT kernels. "
             "Falling back to slower implementation.")
-        return "loopy"
+        return FFTBackend.loopy
 
-    return "vkfft"
+    return FFTBackend.pyvkfft
 
 
 def get_opencl_fft_app(queue, shape, dtype, inverse):
@@ -1167,32 +1173,34 @@ def get_opencl_fft_app(queue, shape, dtype, inverse):
 
     backend = _get_fft_backend(queue)
 
-    if backend == "loopy":
-        return loopy_fft(shape, inverse=inverse, complex_dtype=dtype.type)
-    else:
+    if backend == FFTBackend.loopy:
+        return loopy_fft(shape, inverse=inverse, complex_dtype=dtype.type), backend
+    elif backend == FFTBackend.pyvkfft:
         from pyvkfft.opencl import VkFFTApp
         app = VkFFTApp(shape=shape, dtype=dtype, queue=queue, ndim=1, inplace=False)
-        return app
+        return app, backend
+    else:
+        raise RuntimeError(f"Unsupported FFT backend {backend}")
 
 
-def run_opencl_fft(vkfft_app, queue, input_vec, inverse=False, wait_for=None):
+def run_opencl_fft(fft_app, queue, input_vec, inverse=False, wait_for=None):
     """Runs an FFT on input_vec and returns a :class:`MarkerBasedProfilingEvent`
     that indicate the end and start of the operations carried out and the output
     vector.
     Only supports in-order queues.
     """
-    backend = _get_fft_backend(queue)
+    app, backend = fft_app
 
-    if backend == "loopy":
-        evt, (output_vec,) = vkfft_app(queue, y=input_vec, wait_for=wait_for)
+    if backend == FFTBackend.loopy:
+        evt, (output_vec,) = app(queue, y=input_vec, wait_for=wait_for)
         return (evt, output_vec)
-    else:
+    elif backend == FFTBackend.pyvkfft:
         if wait_for is None:
             wait_for = []
 
         start_evt = cl.enqueue_marker(queue, wait_for=wait_for[:])
 
-        if vkfft_app.inplace:
+        if app.inplace:
             raise RuntimeError("inplace fft is not supported")
         else:
             output_vec = cla.empty_like(input_vec, queue)
@@ -1205,7 +1213,7 @@ def run_opencl_fft(vkfft_app, queue, input_vec, inverse=False, wait_for=None):
         else:
             meth = _vkfft_opencl.fft
 
-        meth(vkfft_app.app, int(input_vec.data.int_ptr),
+        meth(app.app, int(input_vec.data.int_ptr),
             int(output_vec.data.int_ptr), int(queue.int_ptr))
 
         end_evt = cl.enqueue_marker(queue, wait_for=[start_evt])
@@ -1213,6 +1221,8 @@ def run_opencl_fft(vkfft_app, queue, input_vec, inverse=False, wait_for=None):
 
         return (MarkerBasedProfilingEvent(end_event=end_evt, start_event=start_evt),
             output_vec)
+    else:
+        raise RuntimeError(f"Unsupported FFT backend {backend}")
 
 # }}}
 
