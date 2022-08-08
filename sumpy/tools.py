@@ -1158,6 +1158,7 @@ def _get_fft_backend(queue) -> FFTBackend:
             and queue.context.devices[0].platform.name
             == "Portable Computing Language"):
         warnings.warn("Pocl miscompiles some VkFFT kernels. "
+            "See https://github.com/inducer/sumpy/issues/129. "
             "Falling back to slower implementation.")
         return FFTBackend.loopy
 
