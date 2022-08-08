@@ -22,6 +22,8 @@ THE SOFTWARE.
 
 
 import sys
+import os
+from unittest.mock import patch
 import numpy as np
 import numpy.linalg as la
 import pyopencl as cl
@@ -55,8 +57,9 @@ else:
     faulthandler.enable()
 
 
-@pytest.mark.parametrize("use_translation_classes, use_fft",
-    [(False, False), (True, False), (True, True)])
+@pytest.mark.parametrize("use_translation_classes, use_fft, fft_backend",
+    [(False, False, None), (True, False, None), (True, True, "loopy"),
+     (True, True, "pyvkfft")])
 @pytest.mark.parametrize(
         ("knl", "local_expn_class", "mpole_expn_class",
         "order_varies_with_level"), [
@@ -82,7 +85,8 @@ else:
                 False),
             ])
 def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
-        order_varies_with_level, use_translation_classes, use_fft):
+        order_varies_with_level, use_translation_classes, use_fft,
+        fft_backend):
     logging.basicConfig(level=logging.INFO)
 
     if local_expn_class == VolumeTaylorLocalExpansion and use_fft:
@@ -90,6 +94,21 @@ def test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
 
     if local_expn_class in [H2DLocalExpansion, Y2DLocalExpansion] and use_fft:
         pytest.skip("Fourier/Bessel based expansions with FFT is not supported yet.")
+
+    if use_fft:
+        with patch.dict(os.environ, {"SUMPY_FFT_BACKEND": fft_backend}):
+            _test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
+                order_varies_with_level, use_translation_classes, use_fft,
+                fft_backend)
+    else:
+        _test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
+            order_varies_with_level, use_translation_classes, use_fft,
+            fft_backend)
+
+
+def _test_sumpy_fmm(ctx_factory, knl, local_expn_class, mpole_expn_class,
+        order_varies_with_level, use_translation_classes, use_fft,
+        fft_backend):
 
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
