@@ -33,6 +33,8 @@ import pyopencl.array as cla
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 
+import pytest
+
 
 def test_matvec_fft():
     k = 5
@@ -58,10 +60,12 @@ def test_matvec_fft_small_floats():
                 continue
             assert abs(f) > 1e-10
 
-def test_fft(ctx_factory):
+
+@pytest.mark.parametrize("size", [1, 2, 7, 10, 30, 210])
+def test_fft(ctx_factory, size):
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx)
-    inp = np.arange(10, dtype=np.complex64)
+    inp = np.arange(size, dtype=np.complex64)
     inp_dev = cla.to_device(queue, inp)
     out = fft(inp)
 

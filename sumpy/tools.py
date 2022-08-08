@@ -999,10 +999,10 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
     nfft = n
 
     broadcast_dims = tuple(pymbolic.var(f"j{d}") for d in range(len(shape) - 1))
+
     domains = [
         "{[i]: 0<=i<n}",
         "{[i2]: 0<=i2<n}",
-        "{[i3]: 0<=i3<n}",
     ]
     domains += [f"{{[j{d}]: 0<=j{d}<{shape[d]} }}" for d in range(len(shape) - 1)]
 
@@ -1090,9 +1090,29 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
         if not dom.startswith("{"):
             domains[idom] = "{" + dom + "}"
 
+    kernel_data = [
+        lp.GlobalArg("x", shape=shape, is_input=False, is_output=True,
+            dtype=complex_dtype),
+        lp.GlobalArg("y", shape=shape, is_input=True, is_output=False,
+            dtype=complex_dtype),
+        lp.TemporaryVariable("exp_table", shape=(n,),
+            dtype=complex_dtype),
+        lp.TemporaryVariable("temp", shape=(n,),
+            dtype=complex_dtype),
+        ...
+    ]
+
     if n == 1:
-        insns += ["x[:, i] = x[:, i] {dup=i}"]
+        domains = domains[2:]
+        insns = [
+            lp.Assignment(
+                assignee=x[(*broadcast_dims, 0)],
+                expression=y[(*broadcast_dims, 0)],
+            ),
+        ]
+        kernel_data = kernel_data[:2]
     elif inverse:
+        domains += ["{[i3]: 0<=i3<n}"]
         insns += [
             lp.Assignment(
                 assignee=x[(*broadcast_dims, i3)],
@@ -1107,22 +1127,15 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
         else:
             name = f"fft_{n}"
 
-    knl = lp.make_kernel(domains, insns,
-        kernel_data=[
-            lp.GlobalArg("x", shape=shape, is_input=False, is_output=True,
-                dtype=complex_dtype),
-            lp.GlobalArg("y", shape=shape, is_input=True, is_output=False,
-                dtype=complex_dtype),
-            lp.TemporaryVariable("exp_table", shape=(n,),
-                dtype=complex_dtype),
-            lp.TemporaryVariable("temp", shape=(n,),
-                dtype=complex_dtype),
-            ...],
+    knl = lp.make_kernel(
+        domains, insns,
+        kernel_data=kernel_data,
         name=name,
         fixed_parameters=fixed_parameters,
         lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
         index_dtype=index_dtype,
     )
+
     if broadcast_dims:
         knl = lp.split_iname(knl, "j0", 32, inner_tag="l.0", outer_tag="g.0")
         knl = lp.add_inames_for_unused_hw_axes(knl)
