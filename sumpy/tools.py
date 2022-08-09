@@ -43,6 +43,7 @@ import warnings
 import os
 import sys
 import enum
+import platform
 from collections import defaultdict, namedtuple
 from pymbolic.mapper import WalkMapper
 import pymbolic
