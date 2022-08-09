@@ -1169,7 +1169,7 @@ def _get_fft_backend(queue) -> FFTBackend:
         return FFTBackend.loopy
 
     if (sys.platform == "darwin"
-            and platform.machine == "x86_64"
+            and platform.machine() == "x86_64"
             and queue.context.devices[0].platform.name
             == "Portable Computing Language"):
         warnings.warn("Pocl miscompiles some VkFFT kernels. "
