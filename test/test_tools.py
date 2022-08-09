@@ -25,11 +25,18 @@ logger = logging.getLogger(__name__)
 
 import sumpy.symbolic as sym
 from sumpy.tools import (fft_toeplitz_upper_triangular,
-    matvec_toeplitz_upper_triangular)
+    matvec_toeplitz_upper_triangular, loopy_fft, fft)
 import numpy as np
 
+import pyopencl as cl
+import pyopencl.array as cla
+from pyopencl.tools import (  # noqa
+        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 
-def test_fft():
+import pytest
+
+
+def test_matvec_fft():
     k = 5
     v = np.random.rand(k)
     x = np.random.rand(k)
@@ -41,7 +48,7 @@ def test_fft():
         assert abs(fft[i] - matvec[i]) < 1e-14
 
 
-def test_fft_small_floats():
+def test_matvec_fft_small_floats():
     k = 5
     v = sym.make_sym_vector("v", k)
     x = sym.make_sym_vector("x", k)
@@ -52,3 +59,16 @@ def test_fft_small_floats():
             if f == 0:
                 continue
             assert abs(f) > 1e-10
+
+
+@pytest.mark.parametrize("size", [1, 2, 7, 10, 30, 210])
+def test_fft(ctx_factory, size):
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+    inp = np.arange(size, dtype=np.complex64)
+    inp_dev = cla.to_device(queue, inp)
+    out = fft(inp)
+
+    fft_func = loopy_fft(inp.shape, inverse=False, complex_dtype=inp.dtype.type)
+    evt, (out_dev,) = fft_func(queue, y=inp_dev)
+    assert np.allclose(out_dev.get(), out)

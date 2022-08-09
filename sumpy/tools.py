@@ -39,8 +39,14 @@ __doc__ = """
 from pytools import memoize_method
 from pytools.tag import Tag, tag_dataclass
 import numbers
+import warnings
+import os
+import sys
+import enum
+import platform
 from collections import defaultdict, namedtuple
 from pymbolic.mapper import WalkMapper
+import pymbolic
 
 import numpy as np
 import sumpy.symbolic as sym
@@ -937,6 +943,10 @@ def to_complex_dtype(dtype):
 ProfileGetter = namedtuple("ProfileGetter", "start, end")
 
 
+def get_native_event(evt):
+    return evt if isinstance(evt, cl.Event) else evt.native_event
+
+
 class AggregateProfilingEvent:
     """An object to hold a list of events and provides compatibility
     with some of the functionality of :class:`pyopencl.Event`.
@@ -944,10 +954,7 @@ class AggregateProfilingEvent:
     """
     def __init__(self, events):
         self.events = events[:]
-        if isinstance(events[-1], cl.Event):
-            self.native_event = events[-1]
-        else:
-            self.native_event = events[-1].native_event
+        self.native_event = get_native_event(events[-1])
 
     @property
     def profile(self):
@@ -976,52 +983,262 @@ class MarkerBasedProfilingEvent:
         return self.native_event.wait()
 
 
-def get_opencl_fft_app(queue, shape, dtype):
-    """Setup an object for out-of-place FFT on with given shape and dtype
-    on given queue. Only supports in-order queues.
-    """
-    if queue.properties & cl.command_queue_properties.OUT_OF_ORDER_EXEC_MODE_ENABLE:
-        raise RuntimeError("VkFFT does not support out of order queues yet.")
+def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
+        name=None):
+    from pymbolic.algorithm import find_factors
+    from math import pi
 
+    sign = 1 if not inverse else -1
+    n = shape[-1]
+
+    m = n
+    factors = []
+    while m != 1:
+        N1, m = find_factors(m)  # noqa: N806
+        factors.append(N1)
+
+    nfft = n
+
+    broadcast_dims = tuple(pymbolic.var(f"j{d}") for d in range(len(shape) - 1))
+
+    domains = [
+        "{[i]: 0<=i<n}",
+        "{[i2]: 0<=i2<n}",
+    ]
+    domains += [f"{{[j{d}]: 0<=j{d}<{shape[d]} }}" for d in range(len(shape) - 1)]
+
+    x = pymbolic.var("x")
+    y = pymbolic.var("y")
+    i = pymbolic.var("i")
+    i2 = pymbolic.var("i2")
+    i3 = pymbolic.var("i3")
+
+    fixed_parameters = {"const": complex_dtype(sign*(-2j)*pi/n), "n": n}
+
+    insns = [
+        "exp_table[i] = exp(const * i) {id=exp_table}",
+        lp.Assignment(
+            assignee=x[(*broadcast_dims, i2)],
+            expression=y[(*broadcast_dims, i2)],
+            id="copy",
+            depends_on=frozenset(["exp_table"]),
+        ),
+    ]
+
+    for ilev, N1 in enumerate(list(reversed(factors))):  # noqa: N806
+        nfft //= N1
+        N2 = n // (nfft * N1)  # noqa: N806
+        if ilev == 0:
+            init_depends_on = "copy"
+        else:
+            init_depends_on = f"update_{ilev-1}"
+
+        temp = pymbolic.var("temp")
+        exp_table = pymbolic.var("exp_table")
+        i = pymbolic.var(f"i_{ilev}")
+        i2 = pymbolic.var(f"i2_{ilev}")
+        ifft = pymbolic.var(f"ifft_{ilev}")
+        iN1 = pymbolic.var(f"iN1_{ilev}")           # noqa: N806
+        iN1_sum = pymbolic.var(f"iN1_sum_{ilev}")   # noqa: N806
+        iN2 = pymbolic.var(f"iN2_{ilev}")           # noqa: N806
+        table_idx = pymbolic.var(f"table_idx_{ilev}")
+        exp = pymbolic.var(f"exp_{ilev}")
+
+        insns += [
+            lp.Assignment(
+                assignee=temp[i],
+                expression=x[(*broadcast_dims, i)],
+                id=f"copy_{ilev}",
+                depends_on=frozenset([init_depends_on]),
+            ),
+            lp.Assignment(
+                assignee=x[(*broadcast_dims, i2)],
+                expression=0,
+                id=f"reset_{ilev}",
+                depends_on=frozenset([f"copy_{ilev}"])),
+            lp.Assignment(
+                assignee=table_idx,
+                expression=nfft*iN1_sum*(iN2 + N2*iN1),
+                id=f"idx_{ilev}",
+                depends_on=frozenset([f"reset_{ilev}"]),
+                temp_var_type=lp.Optional(np.uint32)),
+            lp.Assignment(
+                assignee=exp,
+                expression=exp_table[table_idx % n],
+                id=f"exp_{ilev}",
+                depends_on=frozenset([f"idx_{ilev}"]),
+                within_inames=frozenset(map(lambda x: x.name,
+                    [*broadcast_dims, iN1_sum, iN1, iN2])),
+                temp_var_type=lp.Optional(complex_dtype)),
+            lp.Assignment(
+                assignee=x[(*broadcast_dims, ifft + nfft * (iN1*N2 + iN2))],
+                expression=(x[(*broadcast_dims, ifft + nfft*(iN1*N2 + iN2))]
+                    + exp * temp[ifft + nfft * (iN2*N1 + iN1_sum)]),
+                id=f"update_{ilev}",
+                depends_on=frozenset([f"exp_{ilev}"])),
+        ]
+
+        domains += [
+            f"[ifft_{ilev}]: 0<=ifft_{ilev}<{nfft}",
+            f"[iN1_{ilev}]: 0<=iN1_{ilev}<{N1}",
+            f"[iN1_sum_{ilev}]: 0<=iN1_sum_{ilev}<{N1}",
+            f"[iN2_{ilev}]: 0<=iN2_{ilev}<{N2}",
+            f"[i_{ilev}]: 0<=i_{ilev}<{n}",
+            f"[i2_{ilev}]: 0<=i2_{ilev}<{n}",
+        ]
+
+    for idom, dom in enumerate(domains):
+        if not dom.startswith("{"):
+            domains[idom] = "{" + dom + "}"
+
+    kernel_data = [
+        lp.GlobalArg("x", shape=shape, is_input=False, is_output=True,
+            dtype=complex_dtype),
+        lp.GlobalArg("y", shape=shape, is_input=True, is_output=False,
+            dtype=complex_dtype),
+        lp.TemporaryVariable("exp_table", shape=(n,),
+            dtype=complex_dtype),
+        lp.TemporaryVariable("temp", shape=(n,),
+            dtype=complex_dtype),
+        ...
+    ]
+
+    if n == 1:
+        domains = domains[2:]
+        insns = [
+            lp.Assignment(
+                assignee=x[(*broadcast_dims, 0)],
+                expression=y[(*broadcast_dims, 0)],
+            ),
+        ]
+        kernel_data = kernel_data[:2]
+    elif inverse:
+        domains += ["{[i3]: 0<=i3<n}"]
+        insns += [
+            lp.Assignment(
+                assignee=x[(*broadcast_dims, i3)],
+                expression=x[(*broadcast_dims, i3)] / n,
+                depends_on=frozenset([f"update_{len(factors) - 1}"]),
+            ),
+        ]
+
+    if name is None:
+        if inverse:
+            name = f"ifft_{n}"
+        else:
+            name = f"fft_{n}"
+
+    knl = lp.make_kernel(
+        domains, insns,
+        kernel_data=kernel_data,
+        name=name,
+        fixed_parameters=fixed_parameters,
+        lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
+        index_dtype=index_dtype,
+    )
+
+    if broadcast_dims:
+        knl = lp.split_iname(knl, "j0", 32, inner_tag="l.0", outer_tag="g.0")
+        knl = lp.add_inames_for_unused_hw_axes(knl)
+
+    return knl
+
+
+class FFTBackend(enum.Enum):
+    pyvkfft = 1
+    loopy = 2
+
+
+def _get_fft_backend(queue) -> FFTBackend:
+    env_val = os.environ.get("SUMPY_FFT_BACKEND", None)
+    if env_val:
+        if env_val not in ["loopy", "pyvkfft"]:
+            raise ValueError("Expected 'loopy' or 'pyvkfft' for SUMPY_FFT_BACKEND. "
+                   f"Found {env_val}.")
+        return FFTBackend[env_val]
+
+    try:
+        import pyvkfft.opencl  # noqa: F401
+    except ImportError:
+        warnings.warn("VkFFT not found. FFT runs will be slower.")
+        return FFTBackend.loopy
+
+    if queue.properties & cl.command_queue_properties.OUT_OF_ORDER_EXEC_MODE_ENABLE:
+        warnings.warn("VkFFT does not support out of order queues yet. "
+            "Falling back to slower implementation.")
+        return FFTBackend.loopy
+
+    if (sys.platform == "darwin"
+            and platform.machine() == "x86_64"
+            and queue.context.devices[0].platform.name
+            == "Portable Computing Language"):
+        warnings.warn("Pocl miscompiles some VkFFT kernels. "
+            "See https://github.com/inducer/sumpy/issues/129. "
+            "Falling back to slower implementation.")
+        return FFTBackend.loopy
+
+    return FFTBackend.pyvkfft
+
+
+def get_opencl_fft_app(queue, shape, dtype, inverse):
+    """Setup an object for out-of-place FFT on with given shape and dtype
+    on given queue.
+    """
     assert dtype.type in (np.float32, np.float64, np.complex64,
                            np.complex128)
 
-    from pyvkfft.opencl import VkFFTApp
-    app = VkFFTApp(shape=shape, dtype=dtype, queue=queue, ndim=1, inplace=False)
-    return app
+    backend = _get_fft_backend(queue)
+
+    if backend == FFTBackend.loopy:
+        return loopy_fft(shape, inverse=inverse, complex_dtype=dtype.type), backend
+    elif backend == FFTBackend.pyvkfft:
+        from pyvkfft.opencl import VkFFTApp
+        app = VkFFTApp(shape=shape, dtype=dtype, queue=queue, ndim=1, inplace=False)
+        return app, backend
+    else:
+        raise RuntimeError(f"Unsupported FFT backend {backend}")
 
 
-def run_opencl_fft(vkfft_app, queue, input_vec, inverse=False, wait_for=None):
+def run_opencl_fft(fft_app, queue, input_vec, inverse=False, wait_for=None):
     """Runs an FFT on input_vec and returns a :class:`MarkerBasedProfilingEvent`
     that indicate the end and start of the operations carried out and the output
     vector.
     Only supports in-order queues.
     """
-    if wait_for is None:
-        wait_for = []
+    app, backend = fft_app
 
-    start_evt = cl.enqueue_marker(queue, wait_for=wait_for[:])
+    if backend == FFTBackend.loopy:
+        evt, (output_vec,) = app(queue, y=input_vec, wait_for=wait_for)
+        return (evt, output_vec)
+    elif backend == FFTBackend.pyvkfft:
+        if wait_for is None:
+            wait_for = []
 
-    if vkfft_app.inplace:
-        raise RuntimeError("inplace fft is not supported")
+        start_evt = cl.enqueue_marker(queue, wait_for=wait_for[:])
+
+        if app.inplace:
+            raise RuntimeError("inplace fft is not supported")
+        else:
+            output_vec = cla.empty_like(input_vec, queue)
+
+        # FIXME: use the public API once
+        # https://github.com/vincefn/pyvkfft/pull/17 is in
+        from pyvkfft.opencl import _vkfft_opencl
+        if inverse:
+            meth = _vkfft_opencl.ifft
+        else:
+            meth = _vkfft_opencl.fft
+
+        meth(app.app, int(input_vec.data.int_ptr),
+            int(output_vec.data.int_ptr), int(queue.int_ptr))
+
+        end_evt = cl.enqueue_marker(queue, wait_for=[start_evt])
+        output_vec.add_event(end_evt)
+
+        return (MarkerBasedProfilingEvent(end_event=end_evt, start_event=start_evt),
+            output_vec)
     else:
-        output_vec = cla.empty_like(input_vec, queue)
-
-    # FIXME: use the public API once https://github.com/vincefn/pyvkfft/pull/17 is in
-    from pyvkfft.opencl import _vkfft_opencl
-    if inverse:
-        meth = _vkfft_opencl.ifft
-    else:
-        meth = _vkfft_opencl.fft
-
-    meth(vkfft_app.app, int(input_vec.data.int_ptr), int(output_vec.data.int_ptr),
-        int(queue.int_ptr))
-
-    end_evt = cl.enqueue_marker(queue, wait_for=[start_evt])
-    output_vec.add_event(end_evt)
-
-    return (MarkerBasedProfilingEvent(end_event=end_evt, start_event=start_evt),
-        output_vec)
+        raise RuntimeError(f"Unsupported FFT backend {backend}")
 
 # }}}
 

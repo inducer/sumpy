@@ -42,7 +42,7 @@ from sumpy import (
         M2LGenerateTranslationClassesDependentData,
         M2LPreprocessMultipole, M2LPostprocessLocal)
 from sumpy.tools import (to_complex_dtype, AggregateProfilingEvent,
-        run_opencl_fft, get_opencl_fft_app)
+        run_opencl_fft, get_opencl_fft_app, get_native_event)
 
 from typing import TypeVar, List, Union
 
@@ -180,9 +180,9 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
                           strength_usage=self.strength_usage)
 
     @memoize_method
-    def opencl_fft_app(self, shape, dtype):
+    def opencl_fft_app(self, shape, dtype, inverse):
         with cl.CommandQueue(self.cl_context) as queue:
-            return get_opencl_fft_app(queue, shape, dtype)
+            return get_opencl_fft_app(queue, shape, dtype, inverse)
 
 # }}}
 
@@ -554,7 +554,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     # }}}
 
     def run_opencl_fft(self, queue, input_vec, inverse, wait_for):
-        app = self.tree_indep.opencl_fft_app(input_vec.shape, input_vec.dtype)
+        app = self.tree_indep.opencl_fft_app(input_vec.shape, input_vec.dtype,
+            inverse)
         return run_opencl_fft(app, queue, input_vec, inverse, wait_for)
 
     def form_multipoles(self,
@@ -815,7 +816,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                         self.run_opencl_fft(queue,
                             preprocessed_mpole_exps[lev],
                             inverse=False, wait_for=wait_for)
-                    wait_for.append(evt_fft.native_event)
+                    wait_for.append(get_native_event(evt_fft))
                     evt = AggregateProfilingEvent([evt, evt_fft])
 
                 preprocess_evts.append(evt)
@@ -876,7 +877,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                         self.run_opencl_fft(queue,
                             target_locals_before_postprocessing_view,
                             inverse=True, wait_for=wait_for)
-                    wait_for.append(evt_fft.native_event)
+                    wait_for.append(get_native_event(evt_fft))
 
                 evt, _ = postprocess_local_kernel(
                     queue,
