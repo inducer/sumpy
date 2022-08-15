@@ -447,31 +447,35 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
 
         output_coeffs = pymbolic.var("output_coeffs")
         input_coeffs = pymbolic.var("input_coeffs")
-        ioutput_coeff = pymbolic.var("ioutput_coeff")
+        srcidx_sym = pymbolic.var("srcidx")
+        output_icoeff = pymbolic.var("output_icoeff")
+        input_icoeff = pymbolic.var("input_icoeff")
 
         domains = [
-            "{[ioutput_coeff]: 0<=ioutput_coeff<noutput_coeffs}",
+            "{[output_icoeff]: 0<=output_icoeff<noutput_coeffs}",
         ]
         insns = [
             lp.Assignment(
-                assignee=output_coeffs[ioutput_coeff],
-                expression=0,
-                id="init",
+                assignee=input_icoeff,
+                expression=srcidx_sym[output_icoeff],
+                id="input_icoeff",
+            ),
+            lp.Assignment(
+                assignee=output_coeffs[output_icoeff],
+                expression=pymbolic.primitives.If(
+                    pymbolic.primitives.Comparison(input_icoeff, ">=", 0),
+                    input_coeffs[input_icoeff],
+                    0,
+                ),
+                depends_on=frozenset(["input_icoeff"]),
             )
         ]
-        prev_insn = "init"
+
+        srcidx = np.full(ncoeff_preprocessed, -1, dtype=np.int32)
         for icoeff_src, term in enumerate(
                 src_expansion.get_coefficient_identifiers()):
             new_icoeff_src = circulant_matrix_ident_to_index[term]
-            insns += [
-                lp.Assignment(
-                    assignee=output_coeffs[new_icoeff_src],
-                    expression=input_coeffs[icoeff_src],
-                    id=f"coeff_insn_{icoeff_src}",
-                    depends_on=frozenset([prev_insn])
-                ),
-            ]
-            prev_insn = f"coeff_insn_{icoeff_src}"
+            srcidx[new_icoeff_src] = icoeff_src
 
         return lp.make_function(domains, insns,
             kernel_data=[
@@ -479,6 +483,10 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
                 lp.GlobalArg("output_coeffs", None, shape=ncoeff_preprocessed,
                     is_input=False, is_output=True),
                 lp.GlobalArg("input_coeffs", None, shape=ncoeff_src),
+                lp.TemporaryVariable(input_icoeff.name, dtype=np.int32),
+                lp.TemporaryVariable(
+                    srcidx_sym.name, initializer=srcidx,
+                    address_space=lp.AddressSpace.GLOBAL, read_only=True),
                 ...],
             name="m2l_preprocess_inner",
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
