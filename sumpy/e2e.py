@@ -594,7 +594,11 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
         loopy_knl = lp.merge([loopy_knl, translation_classes_data_knl])
         loopy_knl = lp.inline_callable_kernel(loopy_knl, "m2l_data")
         loopy_knl = lp.set_options(loopy_knl,
-                enforce_variable_access_ordered="no_check")
+                enforce_variable_access_ordered="no_check",
+                # FIXME: Without this, Loopy spends an eternity checking
+                # scattered writes to global variables to see whether barriers
+                # need to be inserted.
+                disable_global_barriers=True)
 
         return loopy_knl
 
