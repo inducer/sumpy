@@ -46,7 +46,7 @@ from boxtree.fmm import ExpansionWranglerInterface, TreeIndependentDataForWrangl
 from boxtree.tree import Tree
 
 import pytools.obj_array as obj_array
-from pytools import memoize_method
+from pytools import memoize_in, memoize_method
 
 from sumpy import (
     E2EFromChildren,
@@ -240,9 +240,17 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
                           exclude_self=self.exclude_self,
                           strength_usage=self.strength_usage, name="p2p")
 
-    @memoize_method
-    def opencl_fft_app(self, shape, dtype, inverse):
-        return get_opencl_fft_app(self._setup_actx, shape, dtype, inverse=inverse)
+    def opencl_fft_app(self,
+                       shape: tuple[int, ...],
+                       dtype: np.dtype[Any],
+                       inverse: bool) -> Any:
+        @memoize_in(self._setup_actx, (
+            SumpyTreeIndependentDataForWrangler.opencl_fft_app,
+            shape, dtype, inverse))
+        def app() -> Any:
+            return get_opencl_fft_app(self._setup_actx, shape, dtype, inverse=inverse)
+
+        return app()
 
 # }}}
 
