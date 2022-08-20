@@ -137,9 +137,15 @@ if not have_unevaluated_expr:
 
 
 if USE_SYMENGINE:
+    def doit(expr):
+        return expr
+
     def unevaluated_pow(a, b):
         return sym.Pow(a, b)
 else:
+    def doit(expr):
+        return expr.doit()
+
     def unevaluated_pow(a, b):
         return sym.Pow(a, b, evaluate=False)
 
