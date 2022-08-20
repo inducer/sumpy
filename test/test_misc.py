@@ -20,6 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import pytest
 import sys
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -27,19 +28,33 @@ from typing import Any, Callable
 import numpy as np
 import numpy.linalg as la
 
+from arraycontext import pytest_generate_tests_for_array_contexts
+from sumpy.array_context import (                                 # noqa: F401
+        PytestPyOpenCLArrayContextFactory, _acf)
+
 import sumpy.toys as t
 import sumpy.symbolic as sym
 
-import pytest
-import pyopencl as cl  # noqa: F401
-from pyopencl.tools import (  # noqa
-        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
+from sumpy.kernel import (
+    LaplaceKernel,
+    HelmholtzKernel,
+    BiharmonicKernel,
+    YukawaKernel,
+    StokesletKernel,
+    StressletKernel,
+    ElasticityKernel,
+    LineOfCompressionKernel,
+    ExpressionKernel)
+from sumpy.expansion.diff_op import (
+    make_identity_diff_op, concat, as_scalar_pde, diff,
+    gradient, divergence, laplacian, curl)
 
-from sumpy.kernel import (LaplaceKernel, HelmholtzKernel,
-        BiharmonicKernel, YukawaKernel, StokesletKernel, StressletKernel,
-        ElasticityKernel, LineOfCompressionKernel, ExpressionKernel)
-from sumpy.expansion.diff_op import (make_identity_diff_op, gradient,
-        divergence, laplacian, concat, as_scalar_pde, curl, diff)
+import logging
+logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts([
+    PytestPyOpenCLArrayContextFactory,
+    ])
 
 
 # {{{ pde check for kernels
@@ -93,15 +108,17 @@ class KernelInfo:
     KernelInfo(LineOfCompressionKernel(3, 0), mu=5, nu=0.2),
     KernelInfo(LineOfCompressionKernel(3, 1), mu=5, nu=0.2),
     ])
-def test_pde_check_kernels(ctx_factory, knl_info, order=5):
+def test_pde_check_kernels(actx_factory, knl_info, order=5):
+    actx = actx_factory()
+
     dim = knl_info.kernel.dim
-    tctx = t.ToyContext(ctx_factory(), knl_info.kernel,
+    tctx = t.ToyContext(actx.context, knl_info.kernel,
             extra_source_kwargs=knl_info.extra_kwargs)
 
-    np.random.seed(17)
+    rng = np.random.default_rng(42)
     pt_src = t.PointSources(
             tctx,
-            np.random.rand(dim, 50) - 0.5,
+            rng.random(size=(dim, 50)) - 0.5,
             np.ones(50))
 
     from pytools.convergence import EOCRecorder
@@ -117,11 +134,13 @@ def test_pde_check_kernels(ctx_factory, knl_info, order=5):
         err = la.norm(pde)
         eoc_rec.add_data_point(h, err)
 
-    print(eoc_rec)
+    logger.info("eoc:\n%s", eoc_rec)
     assert eoc_rec.order_estimate() > order - knl_info.nderivs + 1 - 0.1
 
 # }}}
 
+
+# {{{ test_pde_check
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_pde_check(dim, order=4):
@@ -138,15 +157,19 @@ def test_pde_check(dim, order=4):
             err = la.norm(df_num-df_true)
             eoc_rec.add_data_point(h, err)
 
-        print(eoc_rec)
+        logger.info("eoc:\n%s", eoc_rec)
         assert eoc_rec.order_estimate() > order-2-0.1
 
+# }}}
 
+
+# {{{ test_order_finder
+
+@dataclass(frozen=True)
 class FakeTree:
-    def __init__(self, dimensions, root_extent, stick_out_factor):
-        self.dimensions = dimensions
-        self.root_extent = root_extent
-        self.stick_out_factor = stick_out_factor
+    dimensions: int
+    root_extent: float
+    stick_out_factor: float
 
 
 @pytest.mark.parametrize("knl", [
@@ -161,7 +184,7 @@ def test_order_finder(knl):
     orders = [
         ofind(knl, frozenset([("k", 5)]), tree, level)
         for level in range(30)]
-    print(orders)
+    logger.info("orders: %s", orders)
 
     # Order should not increase with level
     assert (np.diff(orders) <= 0).all()
@@ -180,10 +203,12 @@ def test_fmmlib_order_finder(knl):
     orders = [
         ofind(knl, frozenset([("k", 5)]), tree, level)
         for level in range(30)]
-    print(orders)
+    logger.info("orders: %s", orders)
 
     # Order should not increase with level
     assert (np.diff(orders) <= 0).all()
+
+# }}}
 
 
 # {{{ expansion toys p2e2e2p test cases
@@ -193,7 +218,7 @@ def approx_convergence_factor(orders, errors):
     return np.exp(poly[0])
 
 
-@dataclass
+@dataclass(frozen=True)
 class P2E2E2PTestCase:
     source: np.ndarray
     target: np.ndarray
@@ -243,12 +268,14 @@ P2E2E2P_TEST_CASES = (
 # }}}
 
 
+# {{{ test_toy_p2e2e2p
+
 ORDERS_P2E2E2P = (3, 4, 5)
 RTOL_P2E2E2P = 1e-2
 
 
 @pytest.mark.parametrize("case", P2E2E2P_TEST_CASES)
-def test_toy_p2e2e2p(ctx_factory, case):
+def test_toy_p2e2e2p(actx_factory, case):
     dim = case.dim
 
     src = case.source.reshape(dim, -1)
@@ -269,8 +296,8 @@ def test_toy_p2e2e2p(ctx_factory, case):
 
     from sumpy.expansion import VolumeTaylorExpansionFactory
 
-    cl_ctx = ctx_factory()
-    ctx = t.ToyContext(cl_ctx,
+    actx = actx_factory()
+    ctx = t.ToyContext(actx.context,
              LaplaceKernel(dim),
              expansion_factory=VolumeTaylorExpansionFactory())
 
@@ -289,6 +316,10 @@ def test_toy_p2e2e2p(ctx_factory, case):
     assert conv_factor <= min(1, case_conv_factor * (1 + RTOL_P2E2E2P)), \
         (conv_factor, case_conv_factor * (1 + RTOL_P2E2E2P))
 
+# }}}
+
+
+# {{{ test_cse_matvec
 
 def test_cse_matvec():
     from sumpy.expansion import CSEMatVecOperator
@@ -309,16 +340,21 @@ def test_cse_matvec():
     op = CSEMatVecOperator(input_coeffs, output_coeffs, shape=(4, 2))
     m = np.array([[2, 0], [6, 0], [0, 1], [30, 16]])
 
-    vec = np.random.random(2)
+    rng = np.random.default_rng(42)
+    vec = rng.random(2)
     expected_result = m @ vec
     actual_result = op.matvec(vec)
     assert np.allclose(expected_result, actual_result)
 
-    vec = np.random.random(4)
+    vec = rng.random(4)
     expected_result = m.T @ vec
     actual_result = op.transpose_matvec(vec)
     assert np.allclose(expected_result, actual_result)
 
+# }}}
+
+
+# {{{ test_diff_op_stokes
 
 def test_diff_op_stokes():
     from sumpy.symbolic import symbols, Function
@@ -341,6 +377,10 @@ def test_diff_op_stokes():
 
     assert expected_output == actual_output
 
+# }}}
+
+
+# {{{ test_as_scalar_pde_stokes
 
 def test_as_scalar_pde_stokes():
     diff_op = make_identity_diff_op(3, 4)
@@ -350,13 +390,17 @@ def test_as_scalar_pde_stokes():
 
     # velocity components in Stokes should satisfy Biharmonic
     for i in range(3):
-        print(as_scalar_pde(pde, i))
-        print(laplacian(laplacian(u[i])))
+        logger.info("pde\n%s", as_scalar_pde(pde, i))
+        logger.info("\n%s", laplacian(laplacian(u[i])))
         assert as_scalar_pde(pde, i) == laplacian(laplacian(u[0]))
 
     # pressure should satisfy Laplace
     assert as_scalar_pde(pde, 3) == laplacian(u[0])
 
+# }}}
+
+
+# {{{ test_as_scalar_pde_maxwell
 
 def test_as_scalar_pde_maxwell():
     from sumpy.symbolic import symbols
@@ -374,6 +418,10 @@ def test_as_scalar_pde_maxwell():
         assert as_scalar_pde(pde, i) == \
             laplacian(op[0]) - mu*epsilon*diff(diff(op[0], t), t)
 
+# }}}
+
+
+# {{{ test_as_scalar_pde_elasticity
 
 def test_as_scalar_pde_elasticity():
 
@@ -408,6 +456,10 @@ def test_as_scalar_pde_elasticity():
         assert scalar_pde == laplacian(laplacian(diff_op[0]))
         assert scalar_pde.order == 4
 
+# }}}
+
+
+# {{{ test_elasticity_new
 
 def test_elasticity_new():
     from pickle import dumps, loads
@@ -424,6 +476,10 @@ def test_elasticity_new():
         assert not isinstance(knl, StokesletKernel)
         assert loads(dumps(knl)) == knl
 
+# }}}
+
+
+# {{{ test_weird_kernel
 
 w = make_identity_diff_op(2)
 
@@ -457,15 +513,17 @@ def test_weird_kernel(pde):
 
     assert fft_size == order
 
+# }}}
+
 
 # You can test individual routines by typing
-# $ python test_misc.py 'test_p2p(cl.create_some_context)'
+# $ python test_misc.py 'test_pde_check_kernels(_acf,
+#       KernelInfo(HelmholtzKernel(2), k=5), order=5)'
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
     else:
-        from pytest import main
-        main([__file__])
+        pytest.main([__file__])
 
 # vim: fdm=marker
