@@ -101,6 +101,7 @@ setup(
         "pytools>=2021.1.1",
         "loopy>=2021.1",
         "boxtree>=2018.1",
+        "arraycontext",
         "pytest>=2.3",
         "pyrsistent>=0.16.0",
         "dataclasses>=0.7;python_version<='3.6'",
