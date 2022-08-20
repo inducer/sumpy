@@ -20,12 +20,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-
+import pytest
 import sys
 
 import logging
 logger = logging.getLogger(__name__)
 
+
+# {{{ test_symbolic_assignment_name_uniqueness
 
 def test_symbolic_assignment_name_uniqueness():
     # https://gitlab.tiker.net/inducer/sumpy/issues/13
@@ -43,6 +45,10 @@ def test_symbolic_assignment_name_uniqueness():
 
     assert len(sac.assignments) == 3
 
+# }}}
+
+
+# {{{ test_line_taylor_coeff_growth
 
 def test_line_taylor_coeff_growth():
     # Regression test for LineTaylorLocalExpansion.
@@ -70,15 +76,16 @@ def test_line_taylor_coeff_growth():
     max_order = 2
     assert np.polyfit(np.log(indices), np.log(counts), deg=1)[0] < max_order
 
+# }}}
+
 
 # You can test individual routines by typing
-# $ python test_fmm.py "test_sumpy_fmm(cl.create_some_context)"
+# $ python test_codegen.py 'test_line_taylor_coeff_growth()'
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
     else:
-        from pytest import main
-        main([__file__])
+        pytest.main([__file__])
 
 # vim: fdm=marker

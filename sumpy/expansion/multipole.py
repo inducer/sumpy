@@ -203,7 +203,7 @@ class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
         #    └───⬏ ↑
         #    └─────┘
         #
-        # For the second hyperplane, data is propogated rightwards first
+        # For the second hyperplane, data is propagated rightwards first
         # and then upwards second which is opposite to that of the first
         # hyperplane.
         #
