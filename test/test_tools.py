@@ -20,26 +20,38 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import pytest
+import sys
+
+import numpy as np
+
+from arraycontext import pytest_generate_tests_for_array_contexts
+from sumpy.array_context import (                                 # noqa: F401
+        PytestPyOpenCLArrayContextFactory, _acf)
+
+import sumpy.symbolic as sym
+from sumpy.tools import (
+    fft_toeplitz_upper_triangular,
+    matvec_toeplitz_upper_triangular,
+    loopy_fft,
+    fft)
+
 import logging
 logger = logging.getLogger(__name__)
 
-import sumpy.symbolic as sym
-from sumpy.tools import (fft_toeplitz_upper_triangular,
-    matvec_toeplitz_upper_triangular, loopy_fft, fft)
-import numpy as np
+pytest_generate_tests = pytest_generate_tests_for_array_contexts([
+    PytestPyOpenCLArrayContextFactory,
+    ])
 
-import pyopencl as cl
-import pyopencl.array as cla
-from pyopencl.tools import (  # noqa
-        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 
-import pytest
-
+# {{{ test_matvec_fft
 
 def test_matvec_fft():
     k = 5
-    v = np.random.rand(k)
-    x = np.random.rand(k)
+
+    rng = np.random.default_rng(42)
+    v = rng.random(k)
+    x = rng.random(k)
 
     fft = fft_toeplitz_upper_triangular(v, x)
     matvec = matvec_toeplitz_upper_triangular(v, x)
@@ -47,6 +59,10 @@ def test_matvec_fft():
     for i in range(k):
         assert abs(fft[i] - matvec[i]) < 1e-14
 
+# }}}
+
+
+# {{{ test_matvec_fft_small_floats
 
 def test_matvec_fft_small_floats():
     k = 5
@@ -60,15 +76,34 @@ def test_matvec_fft_small_floats():
                 continue
             assert abs(f) > 1e-10
 
+# }}}
+
+
+# {{{ test_fft
 
 @pytest.mark.parametrize("size", [1, 2, 7, 10, 30, 210])
-def test_fft(ctx_factory, size):
-    ctx = ctx_factory()
-    queue = cl.CommandQueue(ctx)
+def test_fft(actx_factory, size):
+    actx = actx_factory()
+
     inp = np.arange(size, dtype=np.complex64)
-    inp_dev = cla.to_device(queue, inp)
+    inp_dev = actx.from_numpy(inp)
     out = fft(inp)
 
     fft_func = loopy_fft(inp.shape, inverse=False, complex_dtype=inp.dtype.type)
-    evt, (out_dev,) = fft_func(queue, y=inp_dev)
-    assert np.allclose(out_dev.get(), out)
+    evt, (out_dev,) = fft_func(actx.queue, y=inp_dev)
+
+    assert np.allclose(actx.to_numpy(out_dev), out)
+
+# }}}
+
+
+# You can test individual routines by typing
+# $ python test_tools.py 'test_fft(_acf, 30)'
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        exec(sys.argv[1])
+    else:
+        pytest.main([__file__])
+
+# vim: fdm=marker
