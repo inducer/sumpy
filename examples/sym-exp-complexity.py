@@ -1,6 +1,8 @@
 import numpy as np
-import pyopencl as cl
 import loopy as lp
+
+import pyopencl as cl
+
 from sumpy.kernel import LaplaceKernel, HelmholtzKernel
 from sumpy.expansion.local import (
         LinearPDEConformingVolumeTaylorLocalExpansion,
@@ -9,14 +11,19 @@ from sumpy.expansion.multipole import (
         LinearPDEConformingVolumeTaylorMultipoleExpansion,
         )
 from sumpy.e2e import E2EFromCSR
+
 try:
     import matplotlib.pyplot as plt
-except ModuleNotFoundError:
-    plt = None
+    USE_MATPLOTLIB = True
+except ImportError:
+    USE_MATPLOTLIB = False
 
 
 def find_flops():
+    from sumpy.array_context import PyOpenCLArrayContext
     ctx = cl.create_some_context()
+    queue = cl.CommandQueue(ctx)
+    actx = PyOpenCLArrayContext(queue, force_device_scalars=True)
 
     if 0:
         knl = LaplaceKernel(2)
@@ -35,7 +42,7 @@ def find_flops():
         print(order)
         m_expn = m_expn_cls(knl, order)
         l_expn = l_expn_cls(knl, order)
-        m2l = E2EFromCSR(ctx, m_expn, l_expn)
+        m2l = E2EFromCSR(actx.context, m_expn, l_expn)
 
         loopy_knl = m2l.get_kernel()
         loopy_knl = lp.add_and_infer_dtypes(
@@ -74,7 +81,7 @@ def plot_flops():
         flops = [45, 194, 474, 931, 1650, 2632, 3925, 5591, 7706, 10272]
         filename = "helmholtz-m2l-complexity-2d.pdf"
 
-    if plt is not None:
+    if USE_MATPLOTLIB:
         plt.rc("font", size=16)
         plt.title(case)
         plt.ylabel("Flop count")
@@ -86,5 +93,5 @@ def plot_flops():
 
 
 if __name__ == "__main__":
-    #find_flops()
+    # find_flops()
     plot_flops()
