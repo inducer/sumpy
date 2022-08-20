@@ -558,9 +558,6 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
             ),
         ]
 
-        output_coeffs = pymbolic.var("output_coeffs")
-        input_coeffs = pymbolic.var("input_coeffs")
-
         if self.use_fft and result_dtype in \
                 (np.float64, np.float32):
             result_func = pymbolic.var("real")
@@ -568,25 +565,42 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
             def result_func(x):
                 return x
 
-        for new_icoeff_tgt, term in enumerate(
+        output_coeffs = pymbolic.var("output_coeffs")
+        input_coeffs = pymbolic.var("input_coeffs")
+        src_idx_sym = pymbolic.var("src_idx")
+        rscale_idx_arr_sym = pymbolic.var("rscale_idx_arr")
+        output_icoeff_sym = pymbolic.var("output_icoeff")
+
+        src_idx = np.full(ncoeff_tgt, -1, dtype=np.int32)
+        for output_icoeff, term in enumerate(
                 tgt_expansion.get_coefficient_identifiers()):
             if self.use_fft:
                 # since we reversed the M2L matrix, we reverse the result
                 # to get the correct result
                 n = len(circulant_matrix_mis)
-                icoeff_tgt = n - 1 - circulant_matrix_ident_to_index[term]
+                input_icoeff = n - 1 - circulant_matrix_ident_to_index[term]
             else:
-                icoeff_tgt = circulant_matrix_ident_to_index[term]
+                input_icoeff = circulant_matrix_ident_to_index[term]
+            src_idx[output_icoeff] = input_icoeff
 
-            insns += [
-                lp.Assignment(
-                    assignee=output_coeffs[new_icoeff_tgt],
-                    expression=result_func(
-                        input_coeffs[icoeff_tgt]) * rscale_arr[sum(term)],
-                    id=f"coeff_insn_{new_icoeff_tgt}",
-                    depends_on="rscale_arr",
-                )
-            ]
+        rscale_idx_arr = np.full(ncoeff_tgt, -1, dtype=np.int32)
+        for output_icoeff, term in enumerate(
+                tgt_expansion.get_coefficient_identifiers()):
+            rscale_idx_arr[output_icoeff] = sum(term)
+
+        insns += [
+            lp.Assignment(
+                assignee=output_coeffs[output_icoeff_sym],
+                expression=(result_func(input_coeffs[src_idx_sym[output_icoeff_sym]])
+                    * rscale_arr[rscale_idx_arr_sym[output_icoeff_sym]]),
+                id="coeff_insn",
+                depends_on=frozenset(["rscale_arr"]),
+            )
+        ]
+
+        domains += [
+            "{[output_icoeff]: 0<=output_icoeff<ncoeff_tgt}"
+        ]
 
         return lp.make_function(domains, insns,
             kernel_data=[
@@ -601,6 +615,12 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
                 lp.TemporaryVariable("rscale_arr",
                     None,
                     shape=(order + 1,)),
+                lp.TemporaryVariable(
+                    src_idx_sym.name, initializer=src_idx,
+                    address_space=lp.AddressSpace.GLOBAL, read_only=True),
+                lp.TemporaryVariable(
+                    rscale_idx_arr_sym.name, initializer=rscale_idx_arr,
+                    address_space=lp.AddressSpace.GLOBAL, read_only=True),
                 ...],
             name="m2l_postprocess_inner",
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
