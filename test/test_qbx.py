@@ -20,33 +20,41 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
+import pytest
 import sys
 
-import pyopencl as cl
-from pyopencl.tools import (  # noqa
-        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
+import numpy as np
+
+from arraycontext import pytest_generate_tests_for_array_contexts
+from sumpy.array_context import (                                 # noqa: F401
+        PytestPyOpenCLArrayContextFactory, _acf)
+
+from sumpy.expansion.local import (
+        LineTaylorLocalExpansion,
+        VolumeTaylorLocalExpansion)
 
 import logging
 logger = logging.getLogger(__name__)
-from sumpy.expansion.local import (
-        LineTaylorLocalExpansion, VolumeTaylorLocalExpansion)
-import pytest
 
+pytest_generate_tests = pytest_generate_tests_for_array_contexts([
+    PytestPyOpenCLArrayContextFactory,
+    ])
+
+
+# {{{ test_direct_qbx_vs_eigval
 
 @pytest.mark.parametrize("expn_class", [
             LineTaylorLocalExpansion,
             VolumeTaylorLocalExpansion,
             ])
-def test_direct_qbx_vs_eigval(ctx_factory, expn_class):
+def test_direct_qbx_vs_eigval(actx_factory, expn_class, visualize=False):
     """This evaluates a single layer potential on a circle using a known
     eigenvalue/eigenvector combination.
     """
+    if visualize:
+        logging.basicConfig(level=logging.INFO)
 
-    logging.basicConfig(level=logging.INFO)
-
-    ctx = ctx_factory()
-    queue = cl.CommandQueue(ctx)
+    actx = actx_factory()
 
     from sumpy.kernel import LaplaceKernel
     lknl = LaplaceKernel(2)
@@ -55,8 +63,10 @@ def test_direct_qbx_vs_eigval(ctx_factory, expn_class):
 
     from sumpy.qbx import LayerPotential
 
-    lpot = LayerPotential(ctx, expansion=expn_class(lknl, order),
-            target_kernels=(lknl,), source_kernels=(lknl,))
+    lpot = LayerPotential(actx.context,
+            expansion=expn_class(lknl, order),
+            target_kernels=(lknl,),
+            source_kernels=(lknl,))
 
     mode_nr = 25
 
@@ -85,30 +95,36 @@ def test_direct_qbx_vs_eigval(ctx_factory, expn_class):
         expansion_radii = np.ones(n) * radius
 
         strengths = (sigma * h,)
-        evt, (result_qbx,) = lpot(queue, targets, sources, centers, strengths,
+        evt, (result_qbx,) = lpot(
+                actx.queue,
+                targets, sources, centers, strengths,
                 expansion_radii=expansion_radii)
 
         eocrec.add_data_point(h, np.max(np.abs(result_ref - result_qbx)))
 
-    print(eocrec)
+    logger.info("eoc:\n%s", eocrec)
 
     slack = 1.5
     assert eocrec.order_estimate() > order - slack
 
+# }}}
+
+
+# {{{ test_direct_qbx_vs_eigval_with_tgt_deriv
 
 @pytest.mark.parametrize("expn_class", [
             LineTaylorLocalExpansion,
             VolumeTaylorLocalExpansion,
             ])
-def test_direct_qbx_vs_eigval_with_tgt_deriv(ctx_factory, expn_class):
+def test_direct_qbx_vs_eigval_with_tgt_deriv(
+        actx_factory, expn_class, visualize=False):
     """This evaluates a single layer potential on a circle using a known
     eigenvalue/eigenvector combination.
     """
+    if visualize:
+        logging.basicConfig(level=logging.INFO)
 
-    logging.basicConfig(level=logging.INFO)
-
-    ctx = ctx_factory()
-    queue = cl.CommandQueue(ctx)
+    actx = actx_factory()
 
     from sumpy.kernel import LaplaceKernel, AxisTargetDerivative
     lknl = LaplaceKernel(2)
@@ -117,9 +133,9 @@ def test_direct_qbx_vs_eigval_with_tgt_deriv(ctx_factory, expn_class):
 
     from sumpy.qbx import LayerPotential
 
-    lpot_dx = LayerPotential(ctx, expansion=expn_class(lknl, order),
+    lpot_dx = LayerPotential(actx.context, expansion=expn_class(lknl, order),
             target_kernels=(AxisTargetDerivative(0, lknl),), source_kernels=(lknl,))
-    lpot_dy = LayerPotential(ctx, expansion=expn_class(lknl, order),
+    lpot_dy = LayerPotential(actx.context, expansion=expn_class(lknl, order),
             target_kernels=(AxisTargetDerivative(1, lknl),), source_kernels=(lknl,))
 
     mode_nr = 15
@@ -151,9 +167,11 @@ def test_direct_qbx_vs_eigval_with_tgt_deriv(ctx_factory, expn_class):
 
         strengths = (sigma * h,)
 
-        evt, (result_qbx_dx,) = lpot_dx(queue, targets, sources, centers, strengths,
+        evt, (result_qbx_dx,) = lpot_dx(actx.queue,
+                targets, sources, centers, strengths,
                 expansion_radii=expansion_radii)
-        evt, (result_qbx_dy,) = lpot_dy(queue, targets, sources, centers, strengths,
+        evt, (result_qbx_dy,) = lpot_dy(actx.queue,
+                targets, sources, centers, strengths,
                 expansion_radii=expansion_radii)
 
         normals = unit_circle
@@ -162,17 +180,21 @@ def test_direct_qbx_vs_eigval_with_tgt_deriv(ctx_factory, expn_class):
         eocrec.add_data_point(h, np.max(np.abs(result_ref - result_qbx)))
 
     if expn_class is not LineTaylorLocalExpansion:
-        print(eocrec)
+        logger.info("eoc:\n%s", eocrec)
 
         slack = 1.5
         assert eocrec.order_estimate() > order - slack
 
+# }}}
+
+
+# You can test individual routines by typing
+# $ python test_qbx.py 'test_direct_qbx_vs_eigval(_acf, LineTaylorLocalExpansion)'
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         exec(sys.argv[1])
     else:
-        from pytest import main
-        main([__file__])
+        pytest.main([__file__])
 
 # vim: fdm=marker
