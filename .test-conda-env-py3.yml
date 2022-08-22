@@ -16,3 +16,4 @@ dependencies:
 - pyfmmlib
 - pyrsistent
 - pyvkfft
+- mpi4py
