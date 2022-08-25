@@ -744,13 +744,40 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
             src_expansion, m2l_result, src_rscale, tgt_rscale, sac)
 
     def optimize_loopy_kernel(self, knl, tgt_expansion, src_expansion):
-        knl = lp.split_iname(knl, "e2e_icoeff_tgt", 32, inner_iname="inner",
+        from loopy.translation_unit import for_each_kernel
+        from loopy.match import parse_stack_match
+        from pymbolic import var
+        from pymbolic.mapper.substitutor import make_subst_func
+        from loopy.symbolic import (RuleAwareSubstitutionMapper,
+            SubstitutionRuleMappingContext)
+
+        # Transform the kernel so that icoeff_tgt and its duplicates
+        # become the top most iname
+        inames = knl.default_entrypoint.all_inames()
+        knl = lp.rename_inames(knl,
+            [iname for iname in inames if "icoeff_tgt" in iname],
+            "icoeff_tgt", existing_ok=True)
+        knl = lp.add_inames_to_insn(knl, "icoeff_tgt", None)
+
+        # Replace instances of tgt_expansion[icoeff_tgt] with tgt_expansion
+        # as the outer loop is icoeff_tgt and we only need one temporary
+        temp_array = var("tgt_expansion")
+        temp_array_access = temp_array[var("icoeff_tgt")]
+
+        @for_each_kernel
+        def transform(kernel):
+            rule_mapping_context = SubstitutionRuleMappingContext(
+                kernel.substitutions, kernel.get_var_name_generator())
+            mapper = RuleAwareSubstitutionMapper(rule_mapping_context,
+                make_subst_func({temp_array_access: temp_array}),
+                within=parse_stack_match(None))
+            kernel = rule_mapping_context.finish_kernel(
+                mapper.map_kernel(kernel))
+            return kernel
+
+        knl = transform(knl)
+        knl = lp.split_iname(knl, "icoeff_tgt", 32, inner_iname="inner",
                 inner_tag="l.0")
-        knl = lp.split_iname(knl, "icoeff_tgt_0", 32, inner_tag="l.0")
-        knl = lp.split_iname(knl, "icoeff_tgt_1", 32, inner_tag="l.0")
-        knl = lp.add_inames_to_insn(knl, "inner", "id:insn*")
-        knl = lp.add_inames_to_insn(knl, "inner", "id:read_src_ibox")
-        knl = lp.add_inames_to_insn(knl, "inner", "id:translation_offset")
         return knl
 
 

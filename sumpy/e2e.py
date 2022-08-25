@@ -435,7 +435,7 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                     <> isrc_start = src_box_starts[itgt_box]
                     <> isrc_stop = src_box_starts[itgt_box+1]
                     for icoeff_tgt
-                        <> tgt_expansion[icoeff_tgt] = 0 \
+                        tgt_expansion[icoeff_tgt] = 0 \
                             {id=init_coeffs, dup=icoeff_tgt}
                     end
                     for isrc_box
@@ -486,6 +486,8 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                         offset=lp.auto),
                     lp.ValueArg("ntranslation_classes, ntranslation_classes_lists",
                         np.int32),
+                    lp.TemporaryVariable("tgt_expansion", None,
+                        address_space=lp.AddressSpace.PRIVATE),
                     ...
                 ] + gather_loopy_arguments([self.src_expansion,
                                             self.tgt_expansion]),
