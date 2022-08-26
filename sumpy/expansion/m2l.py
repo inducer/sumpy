@@ -29,6 +29,9 @@ import numpy as np
 import sumpy.symbolic as sym
 from sumpy.tools import (
         add_to_sac, matvec_toeplitz_upper_triangular)
+from loopy.translation_unit import for_each_kernel
+from pymbolic.mapper.substitutor import make_subst_func
+from loopy.symbolic import SubstitutionMapper
 
 import logging
 logger = logging.getLogger(__name__)
@@ -744,13 +747,6 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
             src_expansion, m2l_result, src_rscale, tgt_rscale, sac)
 
     def optimize_loopy_kernel(self, knl, tgt_expansion, src_expansion):
-        from loopy.translation_unit import for_each_kernel
-        from loopy.match import parse_stack_match
-        from pymbolic import var
-        from pymbolic.mapper.substitutor import make_subst_func
-        from loopy.symbolic import (RuleAwareSubstitutionMapper,
-            SubstitutionRuleMappingContext)
-
         # Transform the kernel so that icoeff_tgt and its duplicates
         # become the top most iname
         inames = knl.default_entrypoint.all_inames()
@@ -761,19 +757,25 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
 
         # Replace instances of tgt_expansion[icoeff_tgt] with tgt_expansion
         # as the outer loop is icoeff_tgt and we only need one temporary
-        temp_array = var("tgt_expansion")
-        temp_array_access = temp_array[var("icoeff_tgt")]
+        temp_array = pymbolic.var("tgt_expansion")
+        icoeff_tgt = pymbolic.var("icoeff_tgt")
+        temp_array_access = temp_array[icoeff_tgt]
+        temp_array_access2 = temp_array[(icoeff_tgt,)]
 
         @for_each_kernel
         def transform(kernel):
-            rule_mapping_context = SubstitutionRuleMappingContext(
-                kernel.substitutions, kernel.get_var_name_generator())
-            mapper = RuleAwareSubstitutionMapper(rule_mapping_context,
-                make_subst_func({temp_array_access: temp_array}),
-                within=parse_stack_match(None))
-            kernel = rule_mapping_context.finish_kernel(
-                mapper.map_kernel(kernel))
-            return kernel
+            insns = kernel.instructions[:]
+            mapper = SubstitutionMapper(
+                make_subst_func({
+                    temp_array_access: temp_array,
+                    temp_array_access2: temp_array,
+                }))
+            new_insns = [
+                insn.with_transformed_expressions(mapper) for insn in insns]
+            tvs = kernel.temporary_variables.copy()
+            tvs[temp_array.name] = lp.TemporaryVariable(
+                temp_array.name, None, shape=())
+            return kernel.copy(temporary_variables=tvs, instructions=new_insns)
 
         knl = transform(knl)
         knl = lp.split_iname(knl, "icoeff_tgt", 32, inner_iname="inner",
