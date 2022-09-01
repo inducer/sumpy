@@ -748,36 +748,17 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
 
     def optimize_loopy_kernel(self, knl, tgt_expansion, src_expansion):
         # Transform the kernel so that icoeff_tgt and its duplicates
-        # become the top most iname
+        # become the outermost iname
         inames = knl.default_entrypoint.all_inames()
         knl = lp.rename_inames(knl,
             [iname for iname in inames if "icoeff_tgt" in iname],
             "icoeff_tgt", existing_ok=True)
         knl = lp.add_inames_to_insn(knl, "icoeff_tgt", None)
 
-        # Replace instances of tgt_expansion[icoeff_tgt] with tgt_expansion
-        # as the outer loop is icoeff_tgt and we only need one temporary
-        temp_array = pymbolic.var("tgt_expansion")
-        icoeff_tgt = pymbolic.var("icoeff_tgt")
-        temp_array_access = temp_array[icoeff_tgt]
-        temp_array_access2 = temp_array[(icoeff_tgt,)]
+        # unprivatize icoeff_tgt because it is the outermost iname
+        knl = lp.unprivatize_temporaries_with_inames(knl,
+                {"icoeff_tgt"}, {"tgt_expansion"})
 
-        @for_each_kernel
-        def transform(kernel):
-            insns = kernel.instructions[:]
-            mapper = SubstitutionMapper(
-                make_subst_func({
-                    temp_array_access: temp_array,
-                    temp_array_access2: temp_array,
-                }))
-            new_insns = [
-                insn.with_transformed_expressions(mapper) for insn in insns]
-            tvs = kernel.temporary_variables.copy()
-            tvs[temp_array.name] = lp.TemporaryVariable(
-                temp_array.name, None, shape=())
-            return kernel.copy(temporary_variables=tvs, instructions=new_insns)
-
-        knl = transform(knl)
         knl = lp.split_iname(knl, "icoeff_tgt", 32, inner_iname="inner",
                 inner_tag="l.0")
         return knl
