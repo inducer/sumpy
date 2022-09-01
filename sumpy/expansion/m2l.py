@@ -29,9 +29,6 @@ import numpy as np
 import sumpy.symbolic as sym
 from sumpy.tools import (
         add_to_sac, matvec_toeplitz_upper_triangular)
-from loopy.translation_unit import for_each_kernel
-from pymbolic.mapper.substitutor import make_subst_func
-from loopy.symbolic import SubstitutionMapper
 
 import logging
 logger = logging.getLogger(__name__)
