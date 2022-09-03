@@ -36,25 +36,24 @@ __doc__ = """
  .. autoclass:: DifferentiatedExprDerivativeTaker
 """
 
-from pytools import memoize_method
-from pytools.tag import Tag, tag_dataclass
-import numbers
-import warnings
 import os
 import sys
 import enum
-import platform
-from collections import defaultdict, namedtuple
-from pymbolic.mapper import WalkMapper
-import pymbolic
+import numbers
+import warnings
+from dataclasses import dataclass
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
-import sumpy.symbolic as sym
-import pyopencl as cl
-import pyopencl.array as cla
 
 import loopy as lp
-from typing import Dict, Tuple, Any
+from pytools import memoize_method
+from pytools.tag import Tag, tag_dataclass
+from pymbolic.mapper import WalkMapper
+from arraycontext import Array
+
+import sumpy.symbolic as sym
+from sumpy.array_context import PyOpenCLArrayContext
 
 import logging
 logger = logging.getLogger(__name__)
@@ -452,7 +451,9 @@ def diff_derivative_coeff_dict(derivative_coeff_dict: DerivativeCoeffDict,
     *derivative_coeff_dict* using the variable given by **variable_idx**
     and return a new derivative transformation dictionary.
     """
+    from collections import defaultdict
     new_derivative_coeff_dict = defaultdict(lambda: 0)
+
     for mi, coeff in derivative_coeff_dict.items():
         # In the case where we have x * u.diff(x), the result should
         # be x.diff(x) + x * u.diff(x, x)
@@ -509,31 +510,6 @@ def build_matrix(op, dtype=None, shape=None):
     pb.finished()
 
     return mat
-
-
-def vector_to_device(queue, vec):
-    from pytools.obj_array import obj_array_vectorize
-
-    from pyopencl.array import to_device
-
-    def to_dev(ary):
-        return to_device(queue, ary)
-
-    return obj_array_vectorize(to_dev, vec)
-
-
-def vector_from_device(queue, vec):
-    from pytools.obj_array import obj_array_vectorize
-
-    def from_dev(ary):
-        from numbers import Number
-        if isinstance(ary, (np.number, Number)):
-            # zero, most likely
-            return ary
-
-        return ary.get(queue=queue)
-
-    return obj_array_vectorize(from_dev, vec)
 
 
 def _merge_kernel_arguments(dictionary, arg):
@@ -716,7 +692,7 @@ class OrderedSet(MutableSet):
 # }}}
 
 
-class KernelCacheWrapper:
+class KernelCacheMixin:
     @memoize_method
     def get_cached_optimized_kernel(self, **kwargs):
         from sumpy import code_cache, CACHING_ENABLED, OPT_ENABLED
@@ -761,6 +737,9 @@ class KernelCacheWrapper:
         from loopy.match import ObjTagged
         return lp.add_inames_for_unused_hw_axes(
                 knl, within=ObjTagged(ScalingAssignmentTag()))
+
+
+KernelCacheWrapper = KernelCacheMixin
 
 
 def is_obj_array_like(ary):
@@ -934,10 +913,14 @@ def to_complex_dtype(dtype):
         raise RuntimeError(f"Unknown dtype: {dtype}")
 
 
-ProfileGetter = namedtuple("ProfileGetter", "start, end")
+@dataclass(frozen=True)
+class ProfileGetter:
+    start: int
+    end: int
 
 
 def get_native_event(evt):
+    import pyopencl as cl
     return evt if isinstance(evt, cl.Event) else evt.native_event
 
 
@@ -991,9 +974,10 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
         N1, m = find_factors(m)  # noqa: N806
         factors.append(N1)
 
+    import pymbolic as prim
     nfft = n
 
-    broadcast_dims = tuple(pymbolic.var(f"j{d}") for d in range(len(shape) - 1))
+    broadcast_dims = tuple(prim.var(f"j{d}") for d in range(len(shape) - 1))
 
     domains = [
         "{[i]: 0<=i<n}",
@@ -1001,11 +985,11 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
     ]
     domains += [f"{{[j{d}]: 0<=j{d}<{shape[d]} }}" for d in range(len(shape) - 1)]
 
-    x = pymbolic.var("x")
-    y = pymbolic.var("y")
-    i = pymbolic.var("i")
-    i2 = pymbolic.var("i2")
-    i3 = pymbolic.var("i3")
+    x = prim.var("x")
+    y = prim.var("y")
+    i = prim.var("i")
+    i2 = prim.var("i2")
+    i3 = prim.var("i3")
 
     fixed_parameters = {"const": complex_dtype(sign*(-2j)*pi/n), "n": n}
 
@@ -1027,16 +1011,16 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
         else:
             init_depends_on = f"update_{ilev-1}"
 
-        temp = pymbolic.var("temp")
-        exp_table = pymbolic.var("exp_table")
-        i = pymbolic.var(f"i_{ilev}")
-        i2 = pymbolic.var(f"i2_{ilev}")
-        ifft = pymbolic.var(f"ifft_{ilev}")
-        iN1 = pymbolic.var(f"iN1_{ilev}")           # noqa: N806
-        iN1_sum = pymbolic.var(f"iN1_sum_{ilev}")   # noqa: N806
-        iN2 = pymbolic.var(f"iN2_{ilev}")           # noqa: N806
-        table_idx = pymbolic.var(f"table_idx_{ilev}")
-        exp = pymbolic.var(f"exp_{ilev}")
+        temp = prim.var("temp")
+        exp_table = prim.var("exp_table")
+        i = prim.var(f"i_{ilev}")
+        i2 = prim.var(f"i2_{ilev}")
+        ifft = prim.var(f"ifft_{ilev}")
+        iN1 = prim.var(f"iN1_{ilev}")           # noqa: N806
+        iN1_sum = prim.var(f"iN1_sum_{ilev}")   # noqa: N806
+        iN2 = prim.var(f"iN2_{ilev}")           # noqa: N806
+        table_idx = prim.var(f"table_idx_{ilev}")
+        exp = prim.var(f"exp_{ilev}")
 
         insns += [
             lp.Assignment(
@@ -1122,14 +1106,15 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
         else:
             name = f"fft_{n}"
 
-    knl = lp.make_kernel(
+    from arraycontext import make_loopy_program
+    knl = make_loopy_program(
         domains, insns,
         kernel_data=kernel_data,
         name=name,
-        fixed_parameters=fixed_parameters,
-        lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
-        index_dtype=index_dtype,
     )
+
+    # FIXME: set index_dtype?
+    knl = lp.fix_parameters(knl, **fixed_parameters)
 
     if broadcast_dims:
         knl = lp.split_iname(knl, "j0", 32, inner_tag="l.0", outer_tag="g.0")
@@ -1143,7 +1128,7 @@ class FFTBackend(enum.Enum):
     loopy = 2
 
 
-def _get_fft_backend(queue) -> FFTBackend:
+def _get_fft_backend(actx: PyOpenCLArrayContext) -> FFTBackend:
     env_val = os.environ.get("SUMPY_FFT_BACKEND", None)
     if env_val:
         if env_val not in ["loopy", "pyvkfft"]:
@@ -1157,11 +1142,15 @@ def _get_fft_backend(queue) -> FFTBackend:
         warnings.warn("VkFFT not found. FFT runs will be slower.")
         return FFTBackend.loopy
 
+    import pyopencl as cl
+    queue = actx.queue
+
     if queue.properties & cl.command_queue_properties.OUT_OF_ORDER_EXEC_MODE_ENABLE:
         warnings.warn("VkFFT does not support out of order queues yet. "
             "Falling back to slower implementation.")
         return FFTBackend.loopy
 
+    import platform
     if (sys.platform == "darwin"
             and platform.machine() == "x86_64"
             and queue.context.devices[0].platform.name
@@ -1174,26 +1163,34 @@ def _get_fft_backend(queue) -> FFTBackend:
     return FFTBackend.pyvkfft
 
 
-def get_opencl_fft_app(queue, shape, dtype, inverse):
+def get_opencl_fft_app(
+        actx: PyOpenCLArrayContext,
+        shape: Tuple[int, ...], dtype: "np.dtype", *,
+        inverse: bool) -> Any:
     """Setup an object for out-of-place FFT on with given shape and dtype
     on given queue.
     """
     assert dtype.type in (np.float32, np.float64, np.complex64,
                            np.complex128)
 
-    backend = _get_fft_backend(queue)
+    backend = _get_fft_backend(actx)
 
     if backend == FFTBackend.loopy:
         return loopy_fft(shape, inverse=inverse, complex_dtype=dtype.type), backend
     elif backend == FFTBackend.pyvkfft:
         from pyvkfft.opencl import VkFFTApp
-        app = VkFFTApp(shape=shape, dtype=dtype, queue=queue, ndim=1, inplace=False)
+        app = VkFFTApp(
+            shape=shape, dtype=dtype,
+            queue=actx.queue, ndim=1, inplace=False)
         return app, backend
     else:
         raise RuntimeError(f"Unsupported FFT backend {backend}")
 
 
-def run_opencl_fft(fft_app, queue, input_vec, inverse=False, wait_for=None):
+def run_opencl_fft(actx: PyOpenCLArrayContext,
+        fft_app: Tuple[Any, FFTBackend], input_vec: Array, *,
+        inverse: bool = False,
+        wait_for: List[Any] = None):
     """Runs an FFT on input_vec and returns a :class:`MarkerBasedProfilingEvent`
     that indicate the end and start of the operations carried out and the output
     vector.
@@ -1202,18 +1199,19 @@ def run_opencl_fft(fft_app, queue, input_vec, inverse=False, wait_for=None):
     app, backend = fft_app
 
     if backend == FFTBackend.loopy:
-        evt, (output_vec,) = app(queue, y=input_vec, wait_for=wait_for)
+        evt, (output_vec,) = app(actx.queue, y=input_vec, wait_for=wait_for)
         return (evt, output_vec)
     elif backend == FFTBackend.pyvkfft:
         if wait_for is None:
             wait_for = []
 
-        start_evt = cl.enqueue_marker(queue, wait_for=wait_for[:])
+        import pyopencl as cl
+        start_evt = cl.enqueue_marker(actx.queue, wait_for=wait_for[:])
 
         if app.inplace:
             raise RuntimeError("inplace fft is not supported")
         else:
-            output_vec = cla.empty_like(input_vec, queue)
+            output_vec = actx.np.empty_like(input_vec)
 
         # FIXME: use the public API once
         # https://github.com/vincefn/pyvkfft/pull/17 is in
@@ -1224,9 +1222,9 @@ def run_opencl_fft(fft_app, queue, input_vec, inverse=False, wait_for=None):
             meth = _vkfft_opencl.fft
 
         meth(app.app, int(input_vec.data.int_ptr),
-            int(output_vec.data.int_ptr), int(queue.int_ptr))
+            int(output_vec.data.int_ptr), int(actx.queue.int_ptr))
 
-        end_evt = cl.enqueue_marker(queue, wait_for=[start_evt])
+        end_evt = cl.enqueue_marker(actx.queue, wait_for=[start_evt])
         output_vec.add_event(end_evt)
 
         return (MarkerBasedProfilingEvent(end_event=end_evt, start_event=start_evt),

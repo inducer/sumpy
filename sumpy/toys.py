@@ -23,14 +23,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from pytools import memoize_method
-from numbers import Number
 from functools import partial
-from sumpy.kernel import TargetTransformationRemover
+from typing import Any, Optional
 
-import numpy as np  # noqa: F401
-import loopy as lp  # noqa: F401
-import pyopencl as cl
+import numpy as np
+
+from pytools import memoize_method
+from sumpy.kernel import TargetTransformationRemover
+from sumpy.array_context import PyOpenCLArrayContext
 
 import logging
 logger = logging.getLogger(__name__)
@@ -85,34 +85,33 @@ class ToyContext:
     .. automethod:: __init__
     """
 
-    def __init__(self, cl_context, kernel,
+    def __init__(self, kernel,
             mpole_expn_class=None,
             local_expn_class=None,
             expansion_factory=None,
             extra_source_kwargs=None,
             extra_kernel_kwargs=None):
-        self.cl_context = cl_context
-        self.queue = cl.CommandQueue(self.cl_context)
         self.kernel = kernel
-
         self.no_target_deriv_kernel = TargetTransformationRemover()(kernel)
 
         if expansion_factory is None:
             from sumpy.expansion import DefaultExpansionFactory
             expansion_factory = DefaultExpansionFactory()
+
         if mpole_expn_class is None:
-            mpole_expn_class = \
-                    expansion_factory.get_multipole_expansion_class(kernel)
+            mpole_expn_class = (
+                expansion_factory.get_multipole_expansion_class(kernel))
+
         if local_expn_class is None:
             from sumpy.expansion.m2l import NonFFTM2LTranslationClassFactory
-            local_expn_class = \
-                    expansion_factory.get_local_expansion_class(kernel)
+            local_expn_class = (
+                expansion_factory.get_local_expansion_class(kernel))
             m2l_translation_class_factory = NonFFTM2LTranslationClassFactory()
-            m2l_translation_class = \
-                    m2l_translation_class_factory.get_m2l_translation_class(
-                        kernel, local_expn_class)
-            local_expn_class = partial(local_expn_class,
-                    m2l_translation=m2l_translation_class())
+            m2l_translation_class = (
+                m2l_translation_class_factory.get_m2l_translation_class(
+                    kernel, local_expn_class))
+            local_expn_class = (
+                partial(local_expn_class, m2l_translation=m2l_translation_class()))
 
         self.mpole_expn_class = mpole_expn_class
         self.local_expn_class = local_expn_class
@@ -132,107 +131,110 @@ class ToyContext:
     @memoize_method
     def get_p2p(self):
         from sumpy.p2p import P2P
-        return P2P(self.cl_context, (self.kernel,), exclude_self=False)
+        return P2P((self.kernel,), exclude_self=False)
 
     @memoize_method
     def get_p2m(self, order):
         from sumpy import P2EFromSingleBox
-        return P2EFromSingleBox(self.cl_context,
-                self.mpole_expn_class(self.no_target_deriv_kernel, order),
-                kernels=(self.kernel,))
+        return P2EFromSingleBox(
+            self.mpole_expn_class(self.no_target_deriv_kernel, order),
+            kernels=(self.kernel,))
 
     @memoize_method
     def get_p2l(self, order):
         from sumpy import P2EFromSingleBox
-        return P2EFromSingleBox(self.cl_context,
-                self.local_expn_class(self.no_target_deriv_kernel, order),
-                kernels=(self.kernel,))
+        return P2EFromSingleBox(
+            self.local_expn_class(self.no_target_deriv_kernel, order),
+            kernels=(self.kernel,))
 
     @memoize_method
     def get_m2p(self, order):
         from sumpy import E2PFromSingleBox
-        return E2PFromSingleBox(self.cl_context,
-                self.mpole_expn_class(self.no_target_deriv_kernel, order),
-                (self.kernel,))
+        return E2PFromSingleBox(
+            self.mpole_expn_class(self.no_target_deriv_kernel, order),
+            (self.kernel,))
 
     @memoize_method
     def get_l2p(self, order):
         from sumpy import E2PFromSingleBox
-        return E2PFromSingleBox(self.cl_context,
-                self.local_expn_class(self.no_target_deriv_kernel, order),
-                (self.kernel,))
+        return E2PFromSingleBox(
+            self.local_expn_class(self.no_target_deriv_kernel, order),
+            (self.kernel,))
 
     @memoize_method
     def get_m2m(self, from_order, to_order):
         from sumpy import E2EFromCSR
-        return E2EFromCSR(self.cl_context,
-                self.mpole_expn_class(self.no_target_deriv_kernel, from_order),
-                self.mpole_expn_class(self.no_target_deriv_kernel, to_order))
+        return E2EFromCSR(
+            self.mpole_expn_class(self.no_target_deriv_kernel, from_order),
+            self.mpole_expn_class(self.no_target_deriv_kernel, to_order))
 
     @memoize_method
     def get_m2l(self, from_order, to_order):
         from sumpy import E2EFromCSR
-        return E2EFromCSR(self.cl_context,
-                self.mpole_expn_class(self.no_target_deriv_kernel, from_order),
-                self.local_expn_class(self.no_target_deriv_kernel, to_order))
+        return E2EFromCSR(
+            self.mpole_expn_class(self.no_target_deriv_kernel, from_order),
+            self.local_expn_class(self.no_target_deriv_kernel, to_order))
 
     @memoize_method
     def get_l2l(self, from_order, to_order):
         from sumpy import E2EFromCSR
-        return E2EFromCSR(self.cl_context,
-                self.local_expn_class(self.no_target_deriv_kernel, from_order),
-                self.local_expn_class(self.no_target_deriv_kernel, to_order))
+        return E2EFromCSR(
+            self.local_expn_class(self.no_target_deriv_kernel, from_order),
+            self.local_expn_class(self.no_target_deriv_kernel, to_order))
 
 # }}}
 
 
 # {{{ helpers
 
-def _p2e(psource, center, rscale, order, p2e, expn_class, expn_kwargs):
-    source_boxes = np.array([0], dtype=np.int32)
-    box_source_starts = np.array([0], dtype=np.int32)
-    box_source_counts_nonchild = np.array(
-            [psource.points.shape[-1]], dtype=np.int32)
+def _p2e(actx: PyOpenCLArrayContext,
+        psource, center, rscale, order, p2e, expn_class, expn_kwargs):
+    source_boxes = actx.zeros(1, dtype=np.int32)
+    box_source_starts = actx.zeros(1, dtype=np.int32)
+    box_source_counts_nonchild = actx.from_numpy(
+        np.array([psource.points.shape[-1]], dtype=np.int32)
+        )
 
     toy_ctx = psource.toy_ctx
-    center = np.asarray(center)
-    centers = np.array(center, dtype=np.float64).reshape(
-            toy_ctx.kernel.dim, 1)
+    centers = actx.from_numpy(
+        np.asarray(center, dtype=np.float64).reshape(-1, 1)
+        )
 
-    evt, (coeffs,) = p2e(toy_ctx.queue,
+    coeffs = p2e(actx,
             source_boxes=source_boxes,
             box_source_starts=box_source_starts,
             box_source_counts_nonchild=box_source_counts_nonchild,
             centers=centers,
-            sources=psource.points,
-            strengths=(psource.weights,),
+            sources=actx.from_numpy(psource.points),
+            strengths=(actx.from_numpy(psource.weights),),
             rscale=rscale,
             nboxes=1,
             tgt_base_ibox=0,
 
-            #flags="print_hl_cl",
-            out_host=True,
-            **toy_ctx.extra_source_and_kernel_kwargs)
+            **toy_ctx.extra_source_and_kernel_kwargs)["tgt_expansions"]
 
-    return expn_class(toy_ctx, center, rscale, order, coeffs[0],
-            derived_from=psource, **expn_kwargs)
+    return expn_class(
+        toy_ctx, center, rscale, order, actx.to_numpy(coeffs[0]),
+        derived_from=psource, **expn_kwargs)
 
 
-def _e2p(psource, targets, e2p):
+def _e2p(actx: PyOpenCLArrayContext, psource, targets, e2p):
     ntargets = targets.shape[-1]
 
-    boxes = np.array([0], dtype=np.int32)
-
-    box_target_starts = np.array([0], dtype=np.int32)
-    box_target_counts_nonchild = np.array([ntargets], dtype=np.int32)
+    boxes = actx.zeros(1, dtype=np.int32)
+    box_target_starts = actx.zeros(1, dtype=np.int32)
+    box_target_counts_nonchild = actx.from_numpy(
+        np.array([ntargets], dtype=np.int32))
 
     toy_ctx = psource.toy_ctx
-    centers = np.array(psource.center, dtype=np.float64).reshape(
-            toy_ctx.kernel.dim, 1)
+    centers = actx.from_numpy(
+        np.asarray(psource.center, dtype=np.float64).reshape(-1, 1)
+        )
+    coeffs = actx.from_numpy(np.array([psource.coeffs]))
 
-    coeffs = np.array([psource.coeffs])
-    evt, (pot,) = e2p(
-            toy_ctx.queue,
+    from pytools.obj_array import make_obj_array
+    pot = e2p(
+            actx,
             src_expansions=coeffs,
             src_base_ibox=0,
             target_boxes=boxes,
@@ -240,34 +242,32 @@ def _e2p(psource, targets, e2p):
             box_target_counts_nonchild=box_target_counts_nonchild,
             centers=centers,
             rscale=psource.rscale,
-            targets=targets,
-            #flags="print_hl_cl",
-            out_host=True, **toy_ctx.extra_kernel_kwargs)
+            targets=actx.from_numpy(make_obj_array(targets)),
 
-    return pot
+            **toy_ctx.extra_kernel_kwargs)["result_s0"]
+
+    return actx.to_numpy(pot)
 
 
-def _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs):
+def _e2e(actx: PyOpenCLArrayContext,
+        psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs):
     toy_ctx = psource.toy_ctx
 
-    target_boxes = np.array([1], dtype=np.int32)
-    src_box_starts = np.array([0, 1], dtype=np.int32)
-    src_box_lists = np.array([0], dtype=np.int32)
+    target_boxes = actx.from_numpy(np.array([1], dtype=np.int32))
+    src_box_starts = actx.from_numpy(np.array([0, 1], dtype=np.int32))
+    src_box_lists = actx.zeros(1, dtype=np.int32)
 
-    centers = (np.array(
-            [
-                # box 0: source
-                psource.center,
+    centers = np.array([
+        # box 0: source
+        psource.center,
+        # box 1: target
+        to_center,
+        ], dtype=np.float64)
+    centers = actx.from_numpy(centers.T.copy())
+    coeffs = actx.from_numpy(np.array([psource.coeffs]))
 
-                # box 1: target
-                to_center,
-                ],
-            dtype=np.float64)).T.copy()
-
-    coeffs = np.array([psource.coeffs])
-
-    evt, (to_coeffs,) = e2e(
-            toy_ctx.queue,
+    to_coeffs = e2e(
+            actx,
             src_expansions=coeffs,
             src_base_ibox=0,
             tgt_base_ibox=0,
@@ -282,11 +282,11 @@ def _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs):
             src_rscale=psource.rscale,
             tgt_rscale=to_rscale,
 
-            #flags="print_hl_cl",
-            out_host=True, **toy_ctx.extra_kernel_kwargs)
+            **toy_ctx.extra_kernel_kwargs)["tgt_expansions"]
 
-    return expn_class(toy_ctx, to_center, to_rscale, to_order, to_coeffs[1],
-            derived_from=psource, **expn_kwargs)
+    return expn_class(
+        toy_ctx, to_center, to_rscale, to_order, actx.to_numpy(to_coeffs[1]),
+        derived_from=psource, **expn_kwargs)
 
 # }}}
 
@@ -313,13 +313,14 @@ class PotentialSource:
     def __init__(self, toy_ctx):
         self.toy_ctx = toy_ctx
 
-    def eval(self, targets):
+    def eval(self, actx: PyOpenCLArrayContext, targets):
         raise NotImplementedError()
 
     def __neg__(self):
         return -1*self
 
     def __add__(self, other):
+        from numbers import Number
         if isinstance(other, (Number, np.number)):
             other = ConstantPotential(self.toy_ctx, other)
         elif not isinstance(other, PotentialSource):
@@ -336,6 +337,7 @@ class PotentialSource:
         return (-self).__add__(other)
 
     def __mul__(self, other):
+        from numbers import Number
         if isinstance(other, (Number, np.number)):
             other = ConstantPotential(self.toy_ctx, other)
         elif not isinstance(other, PotentialSource):
@@ -407,13 +409,15 @@ class PointSources(PotentialSource):
         self.weights = weights
         self._center = center
 
-    def eval(self, targets):
-        evt, (potential,) = self.toy_ctx.get_p2p()(
-                self.toy_ctx.queue, targets, self.points, [self.weights],
-                out_host=True,
+    def eval(self, actx: PyOpenCLArrayContext, targets):
+        potential = self.toy_ctx.get_p2p()(
+                actx,
+                actx.from_numpy(targets),
+                actx.from_numpy(self.points),
+                [actx.from_numpy(self.weights)],
                 **self.toy_ctx.extra_source_and_kernel_kwargs)
 
-        return potential
+        return actx.to_numpy(potential["result_s0"])
 
     @property
     def center(self):
@@ -455,13 +459,13 @@ class ExpansionPotentialSource(PotentialSource):
 
 
 class MultipoleExpansion(ExpansionPotentialSource):
-    def eval(self, targets):
-        return _e2p(self, targets, self.toy_ctx.get_m2p(self.order))
+    def eval(self, actx: PyOpenCLArrayContext, targets):
+        return _e2p(actx, self, targets, self.toy_ctx.get_m2p(self.order))
 
 
 class LocalExpansion(ExpansionPotentialSource):
-    def eval(self, targets):
-        return _e2p(self, targets, self.toy_ctx.get_l2p(self.order))
+    def eval(self, actx: PyOpenCLArrayContext, targets):
+        return _e2p(actx, self, targets, self.toy_ctx.get_l2p(self.order))
 
 
 class PotentialExpressionNode(PotentialSource):
@@ -484,38 +488,42 @@ class PotentialExpressionNode(PotentialSource):
 
 
 class Sum(PotentialExpressionNode):
-    def eval(self, targets):
+    def eval(self, actx: PyOpenCLArrayContext, targets):
         result = 0
         for psource in self.psources:
-            result = result + psource.eval(targets)
+            result = result + psource.eval(actx, targets)
 
         return result
 
 
 class Product(PotentialExpressionNode):
-    def eval(self, targets):
+    def eval(self, actx: PyOpenCLArrayContext, targets):
         result = 1
         for psource in self.psources:
-            result = result * psource.eval(targets)
+            result = result * psource.eval(actx, targets)
 
         return result
 
 # }}}
 
 
-def multipole_expand(psource, center, order=None, rscale=1, **expn_kwargs):
+def multipole_expand(
+        actx: PyOpenCLArrayContext, psource: PotentialSource, center, *,
+        order: Optional[int] = None, rscale: float = 1,
+        **expn_kwargs: Any):
     if isinstance(psource, PointSources):
         if order is None:
             raise ValueError("order may not be None")
 
-        return _p2e(psource, center, rscale, order, psource.toy_ctx.get_p2m(order),
-                MultipoleExpansion, expn_kwargs)
+        return _p2e(actx,
+            psource, center, rscale, order, psource.toy_ctx.get_p2m(order),
+            MultipoleExpansion, expn_kwargs)
 
     elif isinstance(psource, MultipoleExpansion):
         if order is None:
             order = psource.order
 
-        return _e2e(psource, center, rscale, order,
+        return _e2e(actx, psource, center, rscale, order,
                 psource.toy_ctx.get_m2m(psource.order, order),
                 MultipoleExpansion, expn_kwargs)
 
@@ -523,29 +531,33 @@ def multipole_expand(psource, center, order=None, rscale=1, **expn_kwargs):
         raise TypeError(f"do not know how to expand '{type(psource).__name__}'")
 
 
-def local_expand(psource, center, order=None, rscale=1, **expn_kwargs):
+def local_expand(
+        actx: PyOpenCLArrayContext, psource: PotentialSource, center, *,
+        order: Optional[int] = None, rscale: float = 1,
+        **expn_kwargs: Any):
     if isinstance(psource, PointSources):
         if order is None:
             raise ValueError("order may not be None")
 
-        return _p2e(psource, center, rscale, order, psource.toy_ctx.get_p2l(order),
-                LocalExpansion, expn_kwargs)
+        return _p2e(actx,
+            psource, center, rscale, order, psource.toy_ctx.get_p2l(order),
+            LocalExpansion, expn_kwargs)
 
     elif isinstance(psource, MultipoleExpansion):
         if order is None:
             order = psource.order
 
-        return _e2e(psource, center, rscale, order,
-                psource.toy_ctx.get_m2l(psource.order, order),
-                LocalExpansion, expn_kwargs)
+        return _e2e(actx, psource, center, rscale, order,
+            psource.toy_ctx.get_m2l(psource.order, order),
+            LocalExpansion, expn_kwargs)
 
     elif isinstance(psource, LocalExpansion):
         if order is None:
             order = psource.order
 
-        return _e2e(psource, center, rscale, order,
-                psource.toy_ctx.get_l2l(psource.order, order),
-                LocalExpansion, expn_kwargs)
+        return _e2e(actx, psource, center, rscale, order,
+            psource.toy_ctx.get_l2l(psource.order, order),
+            LocalExpansion, expn_kwargs)
 
     else:
         raise TypeError(f"do not know how to expand '{type(psource).__name__}'")
