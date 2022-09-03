@@ -22,9 +22,9 @@ THE SOFTWARE.
 
 import numpy as np
 import loopy as lp
-from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 
-from sumpy.tools import KernelCacheWrapper, KernelComputation
+from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
+from sumpy.tools import KernelCacheMixin, KernelComputation
 
 import logging
 logger = logging.getLogger(__name__)
@@ -43,14 +43,13 @@ Particle-to-Expansion
 
 # {{{ P2E base class
 
-class P2EBase(KernelComputation, KernelCacheWrapper):
+class P2EBase(KernelCacheMixin, KernelComputation):
     """Common input processing for kernel computations.
 
     .. automethod:: __init__
     """
 
-    def __init__(self, expansion, kernels=None,
-            name=None, strength_usage=None):
+    def __init__(self, expansion, kernels=None, name=None, strength_usage=None):
         """
         :arg expansion: a subclass of :class:`sumpy.expansion.ExpansionBase`
         :arg kernels: if not provided, the kernel of the *expansion* is used.
@@ -135,11 +134,11 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
                 enforce_variable_access_ordered="no_check")
         return knl
 
-    def __call__(self, actx: ArrayContext, **kwargs):
+    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
         from sumpy.tools import is_obj_array_like
         sources = kwargs.pop("sources")
         centers = kwargs.pop("centers")
-        knl = self.get_kernel(
+        knl = self.get_cached_optimized_kernel(
                 sources_is_obj_array=is_obj_array_like(sources),
                 centers_is_obj_array=is_obj_array_like(centers))
 
@@ -148,7 +147,10 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
         dtype = centers[0].dtype if is_obj_array_like(centers) else centers.dtype
         rscale = dtype.type(kwargs.pop("rscale"))
 
-        return actx.call_loopy(knl, sources=sources, centers=centers, rscale=rscale, **kwargs)
+        return actx.call_loopy(
+            knl,
+            sources=sources, centers=centers, rscale=rscale,
+            **kwargs)
 
 # }}}
 
@@ -166,7 +168,7 @@ class P2EFromSingleBox(P2EBase):
         ncoeffs = len(self.expansion)
 
         from sumpy.tools import gather_loopy_source_arguments
-        loopy_knl = lp.make_kernel([
+        loopy_knl = make_loopy_program([
                 "{[isrc_box]: 0 <= isrc_box < nsrc_boxes}",
                 "{[isrc, idim]: isrc_start <= isrc < isrc_end and 0 <= idim < dim}",
                 ], ["""
@@ -208,16 +210,17 @@ class P2EFromSingleBox(P2EBase):
                 ] + gather_loopy_source_arguments(
                     self.source_kernels + (self.expansion,)),
                 name=self.name,
-                assumptions="nsrc_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
-                default_offset=lp.auto,
-                fixed_parameters=dict(dim=self.dim,
-                    strength_count=self.strength_count),
-                lang_version=MOST_RECENT_LANGUAGE_VERSION)
+                )
+
+        loopy_knl = lp.assume(loopy_knl, "nsrc_boxes>=1")
+        loopy_knl = lp.fix_parameters(loopy_knl,
+            dim=self.dim,
+            strength_count=self.strength_count)
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         for knl in self.source_kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
-        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         return loopy_knl
 
@@ -230,7 +233,7 @@ class P2EFromSingleBox(P2EBase):
         knl = lp.split_iname(knl, "isrc_box", 16, outer_tag="g.0")
         return knl
 
-    def __call__(self, queue, **kwargs):
+    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
         """
         :arg source_boxes: an array of integer indices into *box_source_starts*
             and *box_source_counts_nonchild*.
@@ -250,7 +253,7 @@ class P2EFromSingleBox(P2EBase):
 
         :returns: an array of *tgt_expansions*.
         """
-        return super().__call__(queue, **kwargs)
+        return super().__call__(actx, **kwargs)
 
 # }}}
 
@@ -288,7 +291,7 @@ class P2EFromCSR(P2EBase):
                 ] + gather_loopy_source_arguments(
                     self.source_kernels + (self.expansion,)))
 
-        loopy_knl = lp.make_kernel(
+        loopy_knl = make_loopy_program(
                 [
                     "{[itgt_box]: 0 <= itgt_box < ntgt_boxes}",
                     "{[isrc_box]: isrc_box_start <= isrc_box < isrc_box_stop}",
@@ -325,18 +328,19 @@ class P2EFromCSR(P2EBase):
                     """ for coeffidx in range(ncoeffs)] + ["""
                 end
                 """],
-                arguments,
+                kernel_data=arguments,
                 name=self.name,
-                assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
-                default_offset=lp.auto,
-                fixed_parameters=dict(dim=self.dim,
-                    strength_count=self.strength_count),
-                lang_version=MOST_RECENT_LANGUAGE_VERSION)
+                )
+
+        loopy_knl = lp.assume(loopy_knl, "ntgt_boxes>=1")
+        loopy_knl = lp.fix_parameters(loopy_knl,
+            dim=self.dim,
+            strength_count=self.strength_count)
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         for knl in self.source_kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
-        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         return loopy_knl
 
@@ -349,7 +353,7 @@ class P2EFromCSR(P2EBase):
         knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
         return knl
 
-    def __call__(self, queue, **kwargs):
+    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
         """
         :arg target_boxes: array of integer indices into *source_box_starts*
             and *centers*.
@@ -368,7 +372,7 @@ class P2EFromCSR(P2EBase):
         :arg tgt_base_ibox: see :meth:`P2EFromSingleBox.__call__`.
         :arg tgt_expansion: see :meth:`P2EFromSingleBox.__call__`.
         """
-        return super().__call__(queue, **kwargs)
+        return super().__call__(actx, **kwargs)
 
 # }}}
 
