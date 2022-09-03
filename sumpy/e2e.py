@@ -22,12 +22,10 @@ THE SOFTWARE.
 
 import numpy as np
 import loopy as lp
-import sumpy.symbolic as sym
-import pymbolic
 
-from loopy.version import MOST_RECENT_LANGUAGE_VERSION
-from sumpy.tools import KernelCacheWrapper, to_complex_dtype
 from pytools import memoize_method
+from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
+from sumpy.tools import KernelCacheMixin, to_complex_dtype
 
 import logging
 logger = logging.getLogger(__name__)
@@ -48,9 +46,8 @@ Expansion-to-expansion
 
 # {{{ translation base class
 
-class E2EBase(KernelCacheWrapper):
-    def __init__(self, src_expansion, tgt_expansion,
-            name=None):
+class E2EBase(KernelCacheMixin):
+    def __init__(self, src_expansion, tgt_expansion, name=None):
         """
         :arg expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
         :arg strength_usage: A list of integers indicating which expression
@@ -58,24 +55,19 @@ class E2EBase(KernelCacheWrapper):
             number of strength arrays that need to be passed.
             Default: all kernels use the same strength.
         """
+        from sumpy.kernel import (
+            TargetTransformationRemover, SourceTransformationRemover)
+        txr = TargetTransformationRemover()
+        sxr = SourceTransformationRemover()
 
         if src_expansion is tgt_expansion:
-            from sumpy.kernel import (TargetTransformationRemover,
-                    SourceTransformationRemover)
-            tgt_expansion = src_expansion = src_expansion.with_kernel(
-                    SourceTransformationRemover()(
-                        TargetTransformationRemover()(src_expansion.kernel)))
-
+            tgt_expansion = src_expansion = (
+                src_expansion.with_kernel(sxr(txr(src_expansion.kernel))))
         else:
-
-            from sumpy.kernel import (TargetTransformationRemover,
-                    SourceTransformationRemover)
-            src_expansion = src_expansion.with_kernel(
-                    SourceTransformationRemover()(
-                        TargetTransformationRemover()(src_expansion.kernel)))
-            tgt_expansion = tgt_expansion.with_kernel(
-                    SourceTransformationRemover()(
-                        TargetTransformationRemover()(tgt_expansion.kernel)))
+            src_expansion = (
+                src_expansion.with_kernel(sxr(txr(src_expansion.kernel))))
+            tgt_expansion = (
+                tgt_expansion.with_kernel(sxr(txr(tgt_expansion.kernel))))
 
         self.src_expansion = src_expansion
         self.tgt_expansion = tgt_expansion
@@ -89,8 +81,8 @@ class E2EBase(KernelCacheWrapper):
 
     @memoize_method
     def get_translation_loopy_insns(self):
-        from sumpy.symbolic import make_sym_vector
-        dvec = make_sym_vector("d", self.dim)
+        import sumpy.symbolic as sym
+        dvec = sym.make_sym_vector("d", self.dim)
 
         src_coeff_exprs = [
             sym.Symbol(f"src_coeff{i}")
@@ -119,11 +111,7 @@ class E2EBase(KernelCacheWrapper):
                 )
 
     def get_cache_key(self):
-        return (
-                type(self).__name__,
-                self.src_expansion,
-                self.tgt_expansion,
-        )
+        return (type(self).__name__, self.src_expansion, self.tgt_expansion)
 
     def get_optimized_kernel(self):
         # FIXME
@@ -145,8 +133,8 @@ class E2EFromCSR(E2EBase):
     default_name = "e2e_from_csr"
 
     def get_translation_loopy_insns(self):
-        from sumpy.symbolic import make_sym_vector
-        dvec = make_sym_vector("d", self.dim)
+        import sumpy.symbolic as sym
+        dvec = sym.make_sym_vector("d", self.dim)
 
         src_rscale = sym.Symbol("src_rscale")
         tgt_rscale = sym.Symbol("tgt_rscale")
@@ -185,12 +173,11 @@ class E2EFromCSR(E2EBase):
         # (same for itgt_box, tgt_ibox)
 
         from sumpy.tools import gather_loopy_arguments
-        loopy_knl = lp.make_kernel(
-                [
-                    "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
-                    "{[isrc_box]: isrc_start<=isrc_box<isrc_stop}",
-                    "{[idim]: 0<=idim<dim}",
-                    ],
+        loopy_knl = make_loopy_program([
+                "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
+                "{[isrc_box]: isrc_start<=isrc_box<isrc_stop}",
+                "{[idim]: 0<=idim<dim}",
+                ],
                 ["""
                 for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
@@ -219,7 +206,7 @@ class E2EFromCSR(E2EBase):
                     """ for coeffidx in range(ncoeff_tgt)] + ["""
                 end
                 """],
-                [
+                kernel_data=[
                     lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
                     lp.ValueArg("src_rscale,tgt_rscale", None),
                     lp.GlobalArg("src_box_starts, src_box_lists",
@@ -232,23 +219,22 @@ class E2EFromCSR(E2EBase):
                         shape=("nsrc_level_boxes", ncoeff_src), offset=lp.auto),
                     lp.GlobalArg("tgt_expansions", None,
                         shape=("ntgt_level_boxes", ncoeff_tgt), offset=lp.auto),
-                    "..."
+                    ...
                 ] + gather_loopy_arguments([self.src_expansion,
                                             self.tgt_expansion]),
                 name=self.name,
-                assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
-                default_offset=lp.auto,
-                fixed_parameters=dict(dim=self.dim),
-                lang_version=MOST_RECENT_LANGUAGE_VERSION
                 )
 
-        for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
-            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
+        loopy_knl = lp.assume(loopy_knl, "ntgt_boxes>=1")
+        loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.set_options(loopy_knl,
                 enforce_variable_access_ordered="no_check")
+
+        for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
+            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
 
@@ -259,7 +245,7 @@ class E2EFromCSR(E2EBase):
 
         return knl
 
-    def __call__(self, queue, **kwargs):
+    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
         """
         :arg src_expansions:
         :arg src_box_starts:
@@ -274,12 +260,11 @@ class E2EFromCSR(E2EBase):
         src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
 
-        knl = self.get_cached_optimized_kernel()
-
-        return knl(queue,
-                centers=centers,
-                src_rscale=src_rscale, tgt_rscale=tgt_rscale,
-                **kwargs)
+        return actx.call_loopy(
+            self.get_cached_optimized_kernel(),
+            centers=centers,
+            src_rscale=src_rscale, tgt_rscale=tgt_rscale,
+            **kwargs)
 
 
 class M2LUsingTranslationClassesDependentData(E2EFromCSR):
@@ -290,8 +275,8 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
     default_name = "m2l_using_translation_classes_dependent_data"
 
     def get_translation_loopy_insns(self, result_dtype):
-        from sumpy.symbolic import make_sym_vector
-        dvec = make_sym_vector("d", self.dim)
+        import sumpy.symbolic as sym
+        dvec = sym.make_sym_vector("d", self.dim)
 
         src_rscale = sym.Symbol("src_rscale")
         tgt_rscale = sym.Symbol("tgt_rscale")
@@ -349,11 +334,13 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
             ncoeff_src = len(self.src_expansion)
             ncoeff_tgt = len(self.tgt_expansion)
 
+        import pymbolic as prim
+
         domains = []
         insns = self.get_translation_loopy_insns(result_dtype)
-        tgt_coeffs = pymbolic.var("tgt_coeffs")
+        tgt_coeffs = prim.var("tgt_coeffs")
         for i in range(ncoeff_tgt):
-            expr = pymbolic.var(f"tgt_coeff{i}")
+            expr = prim.var(f"tgt_coeff{i}")
             insn = lp.Assignment(assignee=tgt_coeffs[i],
                     expression=tgt_coeffs[i] + expr)
             insns.append(insn)
@@ -396,13 +383,12 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
         translation_knl = self.get_inner_loopy_kernel(result_dtype)
 
         from sumpy.tools import gather_loopy_arguments
-        loopy_knl = lp.make_kernel(
-                [
-                    "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
-                    "{[isrc_box]: isrc_start<=isrc_box<isrc_stop}",
-                    "{[icoeff_tgt]: 0<=icoeff_tgt<ncoeff_tgt}",
-                    "{[icoeff_src]: 0<=icoeff_src<ncoeff_src}",
-                    "{[idep]: 0<=idep<m2l_translation_classes_dependent_ndata}",
+        loopy_knl = make_loopy_program([
+                "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
+                "{[isrc_box]: isrc_start<=isrc_box<isrc_stop}",
+                "{[icoeff_tgt]: 0<=icoeff_tgt<ncoeff_tgt}",
+                "{[icoeff_src]: 0<=icoeff_src<ncoeff_src}",
+                "{[idep]: 0<=idep<m2l_translation_classes_dependent_ndata}",
                 ],
                 ["""
                 for itgt_box
@@ -436,7 +422,7 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                             {dep=update_coeffs, dup=icoeff_tgt}
                 end
                 """],
-                [
+                kernel_data=[
                     lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
                     lp.ValueArg("src_rscale,tgt_rscale", None),
                     lp.GlobalArg("src_box_starts, src_box_lists",
@@ -465,15 +451,15 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                 ] + gather_loopy_arguments([self.src_expansion,
                                             self.tgt_expansion]),
                 name=self.name,
-                assumptions="ntgt_boxes>=1",
-                default_offset=lp.auto,
-                fixed_parameters=dict(dim=self.dim,
-                        m2l_translation_classes_dependent_ndata=(
-                            m2l_translation_classes_dependent_ndata),
-                        ncoeff_tgt=ncoeff_tgt,
-                        ncoeff_src=ncoeff_src),
-                lang_version=MOST_RECENT_LANGUAGE_VERSION
                 )
+
+        loopy_knl = lp.assume(loopy_knl, "ntgt_boxes>=1")
+        loopy_knl = lp.fix_parameters(loopy_knl,
+            dim=self.dim,
+            m2l_translation_classes_dependent_ndata=(
+                m2l_translation_classes_dependent_ndata),
+            ncoeff_tgt=ncoeff_tgt,
+            ncoeff_src=ncoeff_src)
 
         loopy_knl = lp.merge([translation_knl, loopy_knl])
         loopy_knl = lp.inline_callable_kernel(loopy_knl, "e2e")
@@ -494,7 +480,7 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
 
         return knl
 
-    def __call__(self, queue, **kwargs):
+    def __call__(self, actx, **kwargs):
         """
         :arg src_expansions:
         :arg src_box_starts:
@@ -510,13 +496,12 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
         src_expansions = kwargs.pop("src_expansions")
 
-        knl = self.get_cached_optimized_kernel(result_dtype=src_expansions.dtype)
-
-        return knl(queue,
-                src_expansions=src_expansions,
-                centers=centers,
-                src_rscale=src_rscale, tgt_rscale=tgt_rscale,
-                **kwargs)
+        return actx.call_loopy(
+            self.get_cached_optimized_kernel(result_dtype=src_expansions.dtype),
+            src_expansions=src_expansions,
+            centers=centers,
+            src_rscale=src_rscale, tgt_rscale=tgt_rscale,
+            **kwargs)
 
 
 class M2LGenerateTranslationClassesDependentData(E2EBase):
@@ -536,12 +521,11 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                 self.tgt_expansion, self.src_expansion, result_dtype)
 
         from sumpy.tools import gather_loopy_arguments
-        loopy_knl = lp.make_kernel(
-                [
-                    "{[itr_class]: 0<=itr_class<ntranslation_classes}",
-                    "{[idim]: 0<=idim<dim}",
-                    "{[idata]: 0<=idata<m2l_translation_classes_dependent_ndata}",
-                    ],
+        loopy_knl = make_loopy_program([
+                "{[itr_class]: 0<=itr_class<ntranslation_classes}",
+                "{[idim]: 0<=idim<dim}",
+                "{[idata]: 0<=idata<m2l_translation_classes_dependent_ndata}",
+                ],
                 ["""
                 for itr_class
                     <> d[idim] = m2l_translation_vectors[idim, \
@@ -555,7 +539,7 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                         ) {id=update,dep=set_d}
                 end
                 """],
-                [
+                kernel_data=[
                     lp.ValueArg("src_rscale", None),
                     lp.GlobalArg("m2l_translation_classes_dependent_data", None,
                         shape=("ntranslation_classes",
@@ -566,17 +550,16 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                     lp.ValueArg("ntranslation_classes", np.int32),
                     lp.ValueArg("ntranslation_vectors", np.int32),
                     lp.ValueArg("translation_classes_level_start", np.int32),
-                    "..."
+                    ...
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
-                assumptions="ntranslation_classes>=1",
-                default_offset=lp.auto,
-                fixed_parameters=dict(
-                    dim=self.dim,
-                    m2l_translation_classes_dependent_ndata=(
-                        m2l_translation_classes_dependent_ndata)),
-                lang_version=MOST_RECENT_LANGUAGE_VERSION
                 )
+
+        loopy_knl = lp.assume(loopy_knl, "ntranslation_classes>=1")
+        loopy_knl = lp.fix_parameters(loopy_knl,
+            dim=self.dim,
+            m2l_translation_classes_dependent_ndata=(
+                m2l_translation_classes_dependent_ndata))
 
         for expr_knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
             loopy_knl = expr_knl.prepare_loopy_kernel(loopy_knl)
@@ -600,7 +583,7 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
 
         return knl
 
-    def __call__(self, queue, **kwargs):
+    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
         """
         :arg src_rscale:
         :arg translation_classes_level_start:
@@ -617,14 +600,13 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                 "m2l_translation_classes_dependent_data")
         result_dtype = m2l_translation_classes_dependent_data.dtype
 
-        knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
-
-        return knl(queue,
-                src_rscale=src_rscale,
-                m2l_translation_vectors=m2l_translation_vectors,
-                m2l_translation_classes_dependent_data=(
-                    m2l_translation_classes_dependent_data),
-                **kwargs)
+        return actx.call_loopy(
+            self.get_cached_optimized_kernel(result_dtype=result_dtype),
+            src_rscale=src_rscale,
+            m2l_translation_vectors=m2l_translation_vectors,
+            m2l_translation_classes_dependent_data=(
+                m2l_translation_classes_dependent_data),
+            **kwargs)
 
 # }}}
 
@@ -646,7 +628,7 @@ class M2LPreprocessMultipole(E2EBase):
             self.tgt_expansion, self.src_expansion, result_dtype)
 
         from sumpy.tools import gather_loopy_arguments
-        loopy_knl = lp.make_kernel(
+        loopy_knl = make_loopy_program(
                 [
                     "{[isrc_box]: 0<=isrc_box<nsrc_boxes}",
                     "{[isrc_coeff]: 0<=isrc_coeff<nsrc_coeffs}",
@@ -661,7 +643,7 @@ class M2LPreprocessMultipole(E2EBase):
                         )
                 end
                 """],
-                [
+                kernel_data=[
                     lp.ValueArg("nsrc_boxes", np.int32),
                     lp.ValueArg("src_rscale", None),
                     lp.GlobalArg("src_expansions", None,
@@ -669,16 +651,15 @@ class M2LPreprocessMultipole(E2EBase):
                     lp.GlobalArg("preprocessed_src_expansions", None,
                         shape=("nsrc_boxes", npreprocessed_src_coeffs),
                         offset=lp.auto),
-                    "..."
+                    ...
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
-                assumptions="nsrc_boxes>=1",
-                fixed_parameters=dict(
-                    nsrc_coeffs=nsrc_coeffs,
-                    npreprocessed_src_coeffs=npreprocessed_src_coeffs),
-                default_offset=lp.auto,
-                lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
                 )
+
+        loopy_knl = lp.assume(loopy_knl, "nsrc_boxes>=1")
+        loopy_knl = lp.fix_parameters(loopy_knl,
+            nsrc_coeffs=nsrc_coeffs,
+            npreprocessed_src_coeffs=npreprocessed_src_coeffs)
 
         for expn in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
@@ -696,17 +677,18 @@ class M2LPreprocessMultipole(E2EBase):
         knl = lp.add_inames_for_unused_hw_axes(knl)
         return knl
 
-    def __call__(self, queue, **kwargs):
+    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
         """
         :arg src_expansions
         :arg preprocessed_src_expansions
         """
         preprocessed_src_expansions = kwargs.pop("preprocessed_src_expansions")
         result_dtype = preprocessed_src_expansions.dtype
-        knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
 
-        return knl(queue,
-                preprocessed_src_expansions=preprocessed_src_expansions, **kwargs)
+        return actx.call_loopy(
+            self.get_cached_optimized_kernel(result_dtype=result_dtype),
+            preprocessed_src_expansions=preprocessed_src_expansions,
+            **kwargs)
 
 # }}}
 
@@ -729,11 +711,10 @@ class M2LPostprocessLocal(E2EBase):
             self.tgt_expansion, self.src_expansion, result_dtype)
 
         from sumpy.tools import gather_loopy_arguments
-        loopy_knl = lp.make_kernel(
-                [
-                    "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
-                    "{[isrc_coeff]: 0<=isrc_coeff<nsrc_coeffs}",
-                    "{[itgt_coeff]: 0<=itgt_coeff<ntgt_coeffs}",
+        loopy_knl = make_loopy_program([
+                "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
+                "{[isrc_coeff]: 0<=isrc_coeff<nsrc_coeffs}",
+                "{[itgt_coeff]: 0<=itgt_coeff<ntgt_coeffs}",
                 ],
                 ["""
                 for itgt_box
@@ -746,7 +727,7 @@ class M2LPostprocessLocal(E2EBase):
                        )
                 end
                 """],
-                [
+                kernel_data=[
                     lp.ValueArg("ntgt_boxes", np.int32),
                     lp.ValueArg("src_rscale", None),
                     lp.ValueArg("tgt_rscale", None),
@@ -755,18 +736,16 @@ class M2LPostprocessLocal(E2EBase):
                     lp.GlobalArg("tgt_expansions_before_postprocessing", None,
                         shape=("ntgt_boxes", ntgt_coeffs_before_postprocessing),
                         offset=lp.auto),
-                    "..."
+                    ...
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
-                assumptions="ntgt_boxes>=1",
-                default_offset=lp.auto,
-                fixed_parameters=dict(
-                    dim=self.dim,
-                    nsrc_coeffs=ntgt_coeffs_before_postprocessing,
-                    ntgt_coeffs=ntgt_coeffs,
-                ),
-                lang_version=MOST_RECENT_LANGUAGE_VERSION
                 )
+
+        loopy_knl = lp.assume(loopy_knl, "ntgt_boxes>=1")
+        loopy_knl = lp.fix_parameters(loopy_knl,
+            dim=self.dim,
+            nsrc_coeffs=ntgt_coeffs_before_postprocessing,
+            ntgt_coeffs=ntgt_coeffs)
 
         for expn in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
@@ -784,16 +763,18 @@ class M2LPostprocessLocal(E2EBase):
         knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
         return knl
 
-    def __call__(self, queue, **kwargs):
+    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
         """
         :arg tgt_expansions
         :arg tgt_expansions_before_postprocessing
         """
         tgt_expansions = kwargs.pop("tgt_expansions")
         result_dtype = tgt_expansions.dtype
-        knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
 
-        return knl(queue, tgt_expansions=tgt_expansions, **kwargs)
+        return actx.call_loopy(
+            self.get_cached_optimized_kernel(result_dtype=result_dtype),
+            tgt_expansions=tgt_expansions,
+            **kwargs)
 
 # }}}
 
@@ -821,12 +802,11 @@ class E2EFromChildren(E2EBase):
                 for insn in self.get_translation_loopy_insns()]
 
         from sumpy.tools import gather_loopy_arguments
-        loopy_knl = lp.make_kernel(
-                [
-                    "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
-                    "{[isrc_box]: 0<=isrc_box<nchildren}",
-                    "{[idim]: 0<=idim<dim}",
-                    ],
+        loopy_knl = make_loopy_program([
+                "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
+                "{[isrc_box]: 0<=isrc_box<nchildren}",
+                "{[idim]: 0<=idim<dim}",
+                ],
                 ["""
                 for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
@@ -859,7 +839,7 @@ class E2EFromChildren(E2EBase):
                     end
                 end
                 """],
-                [
+                kernel_data=[
                     lp.GlobalArg("target_boxes", None, shape=lp.auto,
                         offset=lp.auto),
                     lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
@@ -873,13 +853,14 @@ class E2EFromChildren(E2EBase):
                     lp.ValueArg("src_base_ibox,tgt_base_ibox", np.int32),
                     lp.ValueArg("ntgt_level_boxes,nsrc_level_boxes", np.int32),
                     lp.ValueArg("aligned_nboxes", np.int32),
-                    "..."
+                    ...
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
-                assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
-                fixed_parameters=dict(dim=self.dim, nchildren=2**self.dim),
-                lang_version=MOST_RECENT_LANGUAGE_VERSION)
+                )
+
+        loopy_knl = lp.assume(loopy_knl, "ntgt_boxes>=1")
+        loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim, nchildren=2**self.dim)
 
         for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
@@ -890,7 +871,7 @@ class E2EFromChildren(E2EBase):
 
         return loopy_knl
 
-    def __call__(self, queue, **kwargs):
+    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
         """
         :arg src_expansions:
         :arg src_box_starts:
@@ -899,7 +880,6 @@ class E2EFromChildren(E2EBase):
         :arg tgt_rscale:
         :arg centers:
         """
-        knl = self.get_cached_optimized_kernel()
 
         centers = kwargs.pop("centers")
         # "1" may be passed for rscale, which won't have its type
@@ -907,10 +887,11 @@ class E2EFromChildren(E2EBase):
         src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
 
-        return knl(queue,
-                centers=centers,
-                src_rscale=src_rscale, tgt_rscale=tgt_rscale,
-                **kwargs)
+        return actx.call_loopy(
+            self.get_cached_optimized_kernel(),
+            centers=centers,
+            src_rscale=src_rscale, tgt_rscale=tgt_rscale,
+            **kwargs)
 
 # }}}
 
@@ -932,11 +913,10 @@ class E2EFromParent(E2EBase):
         # (same for itgt_box, tgt_ibox)
 
         from sumpy.tools import gather_loopy_arguments
-        loopy_knl = lp.make_kernel(
-                [
-                    "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
-                    "{[idim]: 0<=idim<dim}",
-                    ],
+        loopy_knl = make_loopy_program([
+                "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
+                "{[idim]: 0<=idim<dim}",
+                ],
                 ["""
                 for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
@@ -963,7 +943,7 @@ class E2EFromParent(E2EBase):
                     """.format(i=i) for i in range(ncoeffs_tgt)] + ["""
                 end
                 """],
-                [
+                kernel_data=[
                     lp.GlobalArg("target_boxes", None, shape=lp.auto,
                         offset=lp.auto),
                     lp.GlobalArg("centers", None, shape="dim, naligned_boxes"),
@@ -976,12 +956,14 @@ class E2EFromParent(E2EBase):
                         shape=("ntgt_level_boxes", ncoeffs_tgt), offset=lp.auto),
                     lp.GlobalArg("src_expansions", None,
                         shape=("nsrc_level_boxes", ncoeffs_src), offset=lp.auto),
-                    "..."
+                    ...
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
-                name=self.name, assumptions="ntgt_boxes>=1",
+                name=self.name,
                 silenced_warnings="write_race(write_expn*)",
-                fixed_parameters=dict(dim=self.dim, nchildren=2**self.dim),
-                lang_version=MOST_RECENT_LANGUAGE_VERSION)
+                )
+
+        loopy_knl = lp.assume(loopy_knl, "ntgt_boxes>=1")
+        loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim, nchildren=2**self.dim)
 
         for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
@@ -992,7 +974,7 @@ class E2EFromParent(E2EBase):
 
         return loopy_knl
 
-    def __call__(self, queue, **kwargs):
+    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
         """
         :arg src_expansions:
         :arg src_box_starts:
@@ -1001,7 +983,6 @@ class E2EFromParent(E2EBase):
         :arg tgt_rscale:
         :arg centers:
         """
-        knl = self.get_cached_optimized_kernel()
 
         centers = kwargs.pop("centers")
         # "1" may be passed for rscale, which won't have its type
@@ -1009,10 +990,11 @@ class E2EFromParent(E2EBase):
         src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
 
-        return knl(queue,
-                centers=centers,
-                src_rscale=src_rscale, tgt_rscale=tgt_rscale,
-                **kwargs)
+        return actx.call_loopy(
+            self.get_cached_optimized_kernel(),
+            centers=centers,
+            src_rscale=src_rscale, tgt_rscale=tgt_rscale,
+            **kwargs)
 
 # }}}
 
