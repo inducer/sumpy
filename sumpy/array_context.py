@@ -32,18 +32,49 @@ __doc__ = """
 
 # {{{ PyOpenCLArrayContext
 
+def make_loopy_program(
+        domains, statements,
+        kernel_data=None, *,
+        name="sumpy_loopy_kernel",
+        silenced_warnings=None,
+        index_dtype=None,
+        tags=None):
+    """Return a :class:`loopy.LoopKernel` suitable for use with
+    :meth:`ArrayContext.call_loopy`.
+    """
+    if kernel_data is None:
+        kernel_data = [...]
+
+    if silenced_warnings is None:
+        silenced_warnings = []
+
+    import loopy as lp
+    from arraycontext.loopy import _DEFAULT_LOOPY_OPTIONS
+
+    return lp.make_kernel(
+            domains,
+            statements,
+            kernel_data=kernel_data,
+            options=_DEFAULT_LOOPY_OPTIONS,
+            default_offset=lp.auto,
+            name=name,
+            lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
+            silenced_warnings=silenced_warnings,
+            index_dtype=index_dtype,
+            tags=tags)
+
+
 class PyOpenCLArrayContext(PyOpenCLArrayContextBase):
     def transform_loopy_program(self, t_unit):
-        default_ep = t_unit.default_entrypoint
-        options = default_ep.options
+        for name in t_unit.entrypoints:
+            options = t_unit[name].options
+            if not (options.return_dict and options.no_numpy):
+                raise ValueError(
+                    f"loopy kernel '{name}' passed to call_loopy must "
+                    "have 'return_dict' and 'no_numpy' options set. "
+                    "Did you use 'make_loopy_program' to create this kernel?")
 
-        if not (options.return_dict and options.no_numpy):
-            raise ValueError("Loopy kernel passed to call_loopy must "
-                    "have return_dict and no_numpy options set. "
-                    "Did you use arraycontext.make_loopy_program "
-                    "to create this kernel?")
-
-        return super().transform_loopy_program(t_unit)
+        return t_unit
 
 # }}}
 
