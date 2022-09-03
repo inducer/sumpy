@@ -112,7 +112,7 @@ def test_pde_check_kernels(actx_factory, knl_info, order=5):
     actx = actx_factory()
 
     dim = knl_info.kernel.dim
-    tctx = t.ToyContext(actx, knl_info.kernel,
+    tctx = t.ToyContext(knl_info.kernel,
             extra_source_kwargs=knl_info.extra_kwargs)
 
     rng = np.random.default_rng(42)
@@ -127,7 +127,7 @@ def test_pde_check_kernels(actx_factory, knl_info, order=5):
 
     for h in [0.1, 0.05, 0.025]:
         cp = CalculusPatch(np.array([1, 0, 0])[:dim], h=h, order=order)
-        pot = pt_src.eval(cp.points)
+        pot = pt_src.eval(actx, cp.points)
 
         pde = knl_info.pde_func(cp, pot)
 
@@ -297,19 +297,19 @@ def test_toy_p2e2e2p(actx_factory, case):
     from sumpy.expansion import VolumeTaylorExpansionFactory
 
     actx = actx_factory()
-    ctx = t.ToyContext(actx,
+    ctx = t.ToyContext(
              LaplaceKernel(dim),
              expansion_factory=VolumeTaylorExpansionFactory())
 
     errors = []
 
     src_pot = t.PointSources(ctx, src, weights=np.array([1.]))
-    pot_actual = src_pot.eval(tgt).item()
+    pot_actual = src_pot.eval(actx, tgt).item()
 
     for order in ORDERS_P2E2E2P:
-        expn = case.expansion1(src_pot, case.center1, order=order)
-        expn2 = case.expansion2(expn, case.center2, order=order)
-        pot_p2e2e2p = expn2.eval(tgt).item()
+        expn = case.expansion1(actx, src_pot, case.center1, order=order)
+        expn2 = case.expansion2(actx, expn, case.center2, order=order)
+        pot_p2e2e2p = expn2.eval(actx, tgt).item()
         errors.append(np.abs(pot_actual - pot_p2e2e2p))
 
     conv_factor = approx_convergence_factor(1 + np.array(ORDERS_P2E2E2P), errors)
