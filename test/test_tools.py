@@ -90,7 +90,7 @@ def test_fft(actx_factory, size):
     out = fft(inp)
 
     fft_func = loopy_fft(inp.shape, inverse=False, complex_dtype=inp.dtype.type)
-    evt, (out_dev,) = fft_func(actx.queue, y=inp_dev)
+    evt, (out_dev,) = fft_func(actx, y=inp_dev)
 
     assert np.allclose(actx.to_numpy(out_dev), out)
 

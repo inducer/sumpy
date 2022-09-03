@@ -69,7 +69,7 @@ def test_p2p(actx_factory, exclude_self):
 
     from sumpy.p2p import P2P
     lknl = LaplaceKernel(dimensions)
-    knl = P2P(actx.context,
+    knl = P2P(actx,
             [lknl, AxisTargetDerivative(0, lknl)],
             exclude_self=exclude_self)
 
@@ -85,7 +85,7 @@ def test_p2p(actx_factory, exclude_self):
         extra_kwargs["target_to_source"] = np.arange(n, dtype=np.int32)
 
     evt, (potential, x_derivative) = knl(
-            actx.queue, targets, sources, [strengths],
+            actx, targets, sources, [strengths],
             out_host=True, **extra_kwargs)
 
     potential_ref = np.empty_like(potential)
@@ -174,11 +174,11 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
     rscale = 0.5  # pick something non-1
 
     # apply p2e at the same time
-    p2e = P2EFromSingleBox(actx.context, expn,
+    p2e = P2EFromSingleBox(actx, expn,
         kernels=source_kernels,
         strength_usage=[0, 1])
 
-    evt, (mpoles,) = p2e(actx.queue,
+    evt, (mpoles,) = p2e(actx,
             source_boxes=source_boxes,
             box_source_starts=box_source_starts,
             box_source_counts_nonchild=box_source_counts_nonchild,
@@ -202,10 +202,10 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
         if isinstance(source_kernel, DirectionalSourceDerivative):
             extra_source_kwargs["dir_vec"] = dir_vec
 
-        p2e = P2EFromSingleBox(actx.context, expn,
+        p2e = P2EFromSingleBox(actx, expn,
             kernels=[source_kernel], strength_usage=[i])
 
-        evt, (mpoles,) = p2e(actx.queue,
+        evt, (mpoles,) = p2e(actx,
             source_boxes=source_boxes,
             box_source_starts=box_source_starts,
             box_source_counts_nonchild=box_source_counts_nonchild,
@@ -286,9 +286,9 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
     expn = expn_class(knl, order=order)
 
     from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P
-    p2e = P2EFromSingleBox(actx.context, expn, kernels=[knl])
-    e2p = E2PFromSingleBox(actx.context, expn, kernels=target_kernels)
-    p2p = P2P(actx.context, target_kernels, exclude_self=False)
+    p2e = P2EFromSingleBox(actx, expn, kernels=[knl])
+    e2p = E2PFromSingleBox(actx, expn, kernels=target_kernels)
+    p2p = P2P(actx, target_kernels, exclude_self=False)
 
     from pytools.convergence import EOCRecorder
     eoc_rec_pot = EOCRecorder()
@@ -338,7 +338,7 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
 
         # {{{ apply p2e
 
-        evt, (mpoles,) = p2e(actx.queue,
+        evt, (mpoles,) = p2e(actx,
                 source_boxes=source_boxes,
                 box_source_starts=box_source_starts,
                 box_source_counts_nonchild=box_source_counts_nonchild,
@@ -361,7 +361,7 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
         box_target_counts_nonchild = np.array([ntargets], dtype=np.int32)
 
         evt, (pot, grad_x, ) = e2p(
-                actx.queue,
+                actx,
                 src_expansions=mpoles,
                 src_base_ibox=0,
                 target_boxes=source_boxes,
@@ -378,7 +378,7 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
         # {{{ compute (direct) reference solution
 
         evt, (pot_direct, grad_x_direct, ) = p2p(
-                actx.queue,
+                actx,
                 targets, sources, (strengths,),
                 out_host=True,
                 **extra_source_kwargs)
@@ -550,7 +550,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
         e2p_box_target_counts_nonchild[source_box_nr] = ntargets
 
         evt, (pot,) = e2p(
-                actx.queue,
+                actx,
 
                 src_expansions=mpoles,
                 src_base_ibox=0,
@@ -576,13 +576,13 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
         l_expn = local_expn_class(knl, order=order, m2l_translation=m2l_translation)
 
         from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P, E2EFromCSR
-        p2m = P2EFromSingleBox(actx.context, m_expn)
-        m2m = E2EFromCSR(actx.context, m_expn, m_expn)
-        m2p = E2PFromSingleBox(actx.context, m_expn, target_kernels)
-        m2l = E2EFromCSR(actx.context, m_expn, l_expn)
-        l2l = E2EFromCSR(actx.context, l_expn, l_expn)
-        l2p = E2PFromSingleBox(actx.context, l_expn, target_kernels)
-        p2p = P2P(actx.context, target_kernels, exclude_self=False)
+        p2m = P2EFromSingleBox(actx, m_expn)
+        m2m = E2EFromCSR(actx, m_expn, m_expn)
+        m2p = E2PFromSingleBox(actx, m_expn, target_kernels)
+        m2l = E2EFromCSR(actx, m_expn, l_expn)
+        l2l = E2EFromCSR(actx, l_expn, l_expn)
+        l2p = E2PFromSingleBox(actx, l_expn, target_kernels)
+        p2p = P2P(actx, target_kernels, exclude_self=False)
 
         fp = FieldPlotter(centers[:, -1], extent=0.3, npoints=res)
         targets = fp.points
@@ -590,7 +590,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
         # {{{ compute (direct) reference solution
 
         evt, (pot_direct,) = p2p(
-                actx.queue,
+                actx,
                 targets, sources, (strengths,),
                 out_host=True, **extra_kwargs)
 
@@ -610,7 +610,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
         p2m_box_source_counts_nonchild = np.array([nsources, 0, 0, 0],
                 dtype=np.int32)
 
-        evt, (mpoles,) = p2m(actx.queue,
+        evt, (mpoles,) = p2m(actx,
                 source_boxes=p2m_source_boxes,
                 box_source_starts=p2m_box_source_starts,
                 box_source_counts_nonchild=p2m_box_source_counts_nonchild,
@@ -641,7 +641,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
         m2m_src_box_starts = np.array([0, 1], dtype=np.int32)
         m2m_src_box_lists = np.array([0], dtype=np.int32)
 
-        evt, (mpoles,) = m2m(actx.queue,
+        evt, (mpoles,) = m2m(actx,
                 src_expansions=mpoles,
                 src_base_ibox=0,
                 tgt_base_ibox=0,
@@ -673,7 +673,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
         m2l_src_box_starts = np.array([0, 1], dtype=np.int32)
         m2l_src_box_lists = np.array([1], dtype=np.int32)
 
-        evt, (mpoles,) = m2l(actx.queue,
+        evt, (mpoles,) = m2l(actx,
                 src_expansions=mpoles,
                 src_base_ibox=0,
                 tgt_base_ibox=0,
@@ -704,7 +704,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
         l2l_src_box_starts = np.array([0, 1], dtype=np.int32)
         l2l_src_box_lists = np.array([2], dtype=np.int32)
 
-        evt, (mpoles,) = l2l(actx.queue,
+        evt, (mpoles,) = l2l(actx,
                 src_expansions=mpoles,
                 src_base_ibox=0,
                 tgt_base_ibox=0,
@@ -917,7 +917,7 @@ def test_m2m_compressed_error_helmholtz(actx_factory, dim, order):
         for i, (mpole_expn_class, local_expn_class) in \
                 enumerate(zip(mpole_expn_classes, local_expn_classes)):
             tctx = toys.ToyContext(
-                actx.context,
+                actx,
                 knl,
                 extra_kernel_kwargs=extra_kernel_kwargs,
                 local_expn_class=local_expn_class,

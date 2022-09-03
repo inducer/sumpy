@@ -63,7 +63,7 @@ def test_direct_qbx_vs_eigval(actx_factory, expn_class, visualize=False):
 
     from sumpy.qbx import LayerPotential
 
-    lpot = LayerPotential(actx.context,
+    lpot = LayerPotential(actx,
             expansion=expn_class(lknl, order),
             target_kernels=(lknl,),
             source_kernels=(lknl,))
@@ -96,7 +96,7 @@ def test_direct_qbx_vs_eigval(actx_factory, expn_class, visualize=False):
 
         strengths = (sigma * h,)
         evt, (result_qbx,) = lpot(
-                actx.queue,
+                actx,
                 targets, sources, centers, strengths,
                 expansion_radii=expansion_radii)
 
@@ -133,9 +133,9 @@ def test_direct_qbx_vs_eigval_with_tgt_deriv(
 
     from sumpy.qbx import LayerPotential
 
-    lpot_dx = LayerPotential(actx.context, expansion=expn_class(lknl, order),
+    lpot_dx = LayerPotential(actx, expansion=expn_class(lknl, order),
             target_kernels=(AxisTargetDerivative(0, lknl),), source_kernels=(lknl,))
-    lpot_dy = LayerPotential(actx.context, expansion=expn_class(lknl, order),
+    lpot_dy = LayerPotential(actx, expansion=expn_class(lknl, order),
             target_kernels=(AxisTargetDerivative(1, lknl),), source_kernels=(lknl,))
 
     mode_nr = 15
@@ -167,10 +167,10 @@ def test_direct_qbx_vs_eigval_with_tgt_deriv(
 
         strengths = (sigma * h,)
 
-        evt, (result_qbx_dx,) = lpot_dx(actx.queue,
+        evt, (result_qbx_dx,) = lpot_dx(actx,
                 targets, sources, centers, strengths,
                 expansion_radii=expansion_radii)
-        evt, (result_qbx_dy,) = lpot_dy(actx.queue,
+        evt, (result_qbx_dy,) = lpot_dy(actx,
                 targets, sources, centers, strengths,
                 expansion_radii=expansion_radii)
 

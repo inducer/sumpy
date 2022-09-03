@@ -111,17 +111,17 @@ def test_qbx_direct(actx_factory, factor, lpot_id, visualize=False):
     expn = LineTaylorLocalExpansion(knl, order)
 
     from sumpy.qbx import LayerPotential
-    lpot = LayerPotential(actx.context, expansion=expn, source_kernels=(knl,),
+    lpot = LayerPotential(actx, expansion=expn, source_kernels=(knl,),
             target_kernels=(base_knl,))
 
     from sumpy.qbx import LayerPotentialMatrixGenerator
-    mat_gen = LayerPotentialMatrixGenerator(actx.context,
+    mat_gen = LayerPotentialMatrixGenerator(actx,
             expansion=expn,
             source_kernels=(knl,),
             target_kernels=(base_knl,))
 
     from sumpy.qbx import LayerPotentialMatrixSubsetGenerator
-    blk_gen = LayerPotentialMatrixSubsetGenerator(actx.context,
+    blk_gen = LayerPotentialMatrixSubsetGenerator(actx,
             expansion=expn,
             source_kernels=(knl,),
             target_kernels=(base_knl,))
@@ -142,7 +142,7 @@ def test_qbx_direct(actx_factory, factor, lpot_id, visualize=False):
                     actx.from_numpy(make_obj_array(np.ones((ndim, n))))
                     )
 
-        _, (result_lpot,) = lpot(actx.queue,
+        _, (result_lpot,) = lpot(actx,
                 targets=targets,
                 sources=sources,
                 centers=centers,
@@ -150,7 +150,7 @@ def test_qbx_direct(actx_factory, factor, lpot_id, visualize=False):
                 strengths=strengths, **extra_kwargs)
         result_lpot = actx.to_numpy(result_lpot)
 
-        _, (mat,) = mat_gen(actx.queue,
+        _, (mat,) = mat_gen(actx,
                 targets=targets,
                 sources=sources,
                 centers=centers,
@@ -158,7 +158,7 @@ def test_qbx_direct(actx_factory, factor, lpot_id, visualize=False):
         mat = actx.to_numpy(mat)
         result_mat = mat @ actx.to_numpy(strengths[0])
 
-        _, (blk,) = blk_gen(actx.queue,
+        _, (blk,) = blk_gen(actx,
                 targets=targets,
                 sources=sources,
                 centers=centers,
@@ -201,14 +201,13 @@ def test_p2p_direct(actx_factory, exclude_self, factor, lpot_id, visualize=False
         raise ValueError(f"unknown lpot_id: '{lpot_id}'")
 
     from sumpy.p2p import P2P
-    lpot = P2P(actx.context, [lknl], exclude_self=exclude_self)
+    lpot = P2P(actx, [lknl], exclude_self=exclude_self)
 
     from sumpy.p2p import P2PMatrixGenerator
-    mat_gen = P2PMatrixGenerator(actx.context, [lknl], exclude_self=exclude_self)
+    mat_gen = P2PMatrixGenerator(actx, [lknl], exclude_self=exclude_self)
 
     from sumpy.p2p import P2PMatrixSubsetGenerator
-    blk_gen = P2PMatrixSubsetGenerator(
-        actx.context, [lknl], exclude_self=exclude_self)
+    blk_gen = P2PMatrixSubsetGenerator(actx, [lknl], exclude_self=exclude_self)
 
     for n in [200, 300, 400]:
         targets, sources, _, _, sigma = (
@@ -229,19 +228,19 @@ def test_p2p_direct(actx_factory, exclude_self, factor, lpot_id, visualize=False
             extra_kwargs["dsource_vec"] = (
                     actx.from_numpy(make_obj_array(np.ones((ndim, n)))))
 
-        _, (result_lpot,) = lpot(actx.queue,
+        _, (result_lpot,) = lpot(actx,
                 targets=targets,
                 sources=sources,
                 strength=strengths, **extra_kwargs)
         result_lpot = actx.to_numpy(result_lpot)
 
-        _, (mat,) = mat_gen(actx.queue,
+        _, (mat,) = mat_gen(actx,
                 targets=targets,
                 sources=sources, **extra_kwargs)
         mat = actx.to_numpy(mat)
         result_mat = mat @ actx.to_numpy(strengths[0])
 
-        _, (blk,) = blk_gen(actx.queue,
+        _, (blk,) = blk_gen(actx,
                 targets=targets,
                 sources=sources,
                 tgtindices=tgtindices,

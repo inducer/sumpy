@@ -112,7 +112,7 @@ def test_pde_check_kernels(actx_factory, knl_info, order=5):
     actx = actx_factory()
 
     dim = knl_info.kernel.dim
-    tctx = t.ToyContext(actx.context, knl_info.kernel,
+    tctx = t.ToyContext(actx, knl_info.kernel,
             extra_source_kwargs=knl_info.extra_kwargs)
 
     rng = np.random.default_rng(42)
@@ -297,7 +297,7 @@ def test_toy_p2e2e2p(actx_factory, case):
     from sumpy.expansion import VolumeTaylorExpansionFactory
 
     actx = actx_factory()
-    ctx = t.ToyContext(actx.context,
+    ctx = t.ToyContext(actx,
              LaplaceKernel(dim),
              expansion_factory=VolumeTaylorExpansionFactory())
 
