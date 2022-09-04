@@ -709,8 +709,7 @@ class KernelCacheMixin:
 
             try:
                 result = code_cache[cache_key]
-                logger.debug("{}: kernel cache hit [key={}]".format(
-                    self.name, cache_key))
+                logger.debug("%s: kernel cache hit [key=%s]", self.name, cache_key)
                 return result
             except KeyError:
                 pass

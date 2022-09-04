@@ -69,9 +69,7 @@ def test_p2p(actx_factory, exclude_self):
 
     from sumpy.p2p import P2P
     lknl = LaplaceKernel(dimensions)
-    knl = P2P(actx,
-            [lknl, AxisTargetDerivative(0, lknl)],
-            exclude_self=exclude_self)
+    knl = P2P([lknl, AxisTargetDerivative(0, lknl)], exclude_self=exclude_self)
 
     rng = np.random.default_rng(42)
     targets = rng.random(size=(dimensions, n))
@@ -82,12 +80,17 @@ def test_p2p(actx_factory, exclude_self):
     extra_kwargs = {}
 
     if exclude_self:
-        extra_kwargs["target_to_source"] = np.arange(n, dtype=np.int32)
+        extra_kwargs["target_to_source"] = (
+            actx.from_numpy(np.arange(n, dtype=np.int32)))
 
-    evt, (potential, x_derivative) = knl(
-            actx, targets, sources, [strengths],
-            out_host=True, **extra_kwargs)
+    result = knl(
+            actx,
+            actx.from_numpy(targets),
+            actx.from_numpy(sources),
+            [actx.from_numpy(strengths)],
+            **extra_kwargs)
 
+    potential = actx.to_numpy(result["result_s0"])
     potential_ref = np.empty_like(potential)
 
     targets = targets.T
@@ -151,8 +154,8 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
         + center[:, np.newaxis])
 
     strengths = [
-        np.ones(nsources, dtype=np.float64) * (1/nsources),
-        np.ones(nsources, dtype=np.float64) * (2/nsources)
+        actx.from_numpy(np.full(nsources, 1 / nsources, dtype=np.float64)),
+        actx.from_numpy(np.full(nsources, 2 / nsources, dtype=np.float64))
     ]
 
     source_boxes = np.array([0], dtype=np.int32)
@@ -174,7 +177,7 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
     rscale = 0.5  # pick something non-1
 
     # apply p2e at the same time
-    p2e = P2EFromSingleBox(actx, expn,
+    p2e = P2EFromSingleBox(expn,
         kernels=source_kernels,
         strength_usage=[0, 1])
 
@@ -202,7 +205,7 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
         if isinstance(source_kernel, DirectionalSourceDerivative):
             extra_source_kwargs["dir_vec"] = dir_vec
 
-        p2e = P2EFromSingleBox(actx, expn,
+        p2e = P2EFromSingleBox(expn,
             kernels=[source_kernel], strength_usage=[i])
 
         evt, (mpoles,) = p2e(actx,
@@ -286,9 +289,9 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
     expn = expn_class(knl, order=order)
 
     from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P
-    p2e = P2EFromSingleBox(actx, expn, kernels=[knl])
-    e2p = E2PFromSingleBox(actx, expn, kernels=target_kernels)
-    p2p = P2P(actx, target_kernels, exclude_self=False)
+    p2e = P2EFromSingleBox(expn, kernels=[knl])
+    e2p = E2PFromSingleBox(expn, kernels=target_kernels)
+    p2p = P2P(target_kernels, exclude_self=False)
 
     from pytools.convergence import EOCRecorder
     eoc_rec_pot = EOCRecorder()
@@ -576,13 +579,13 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
         l_expn = local_expn_class(knl, order=order, m2l_translation=m2l_translation)
 
         from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P, E2EFromCSR
-        p2m = P2EFromSingleBox(actx, m_expn)
-        m2m = E2EFromCSR(actx, m_expn, m_expn)
-        m2p = E2PFromSingleBox(actx, m_expn, target_kernels)
-        m2l = E2EFromCSR(actx, m_expn, l_expn)
-        l2l = E2EFromCSR(actx, l_expn, l_expn)
-        l2p = E2PFromSingleBox(actx, l_expn, target_kernels)
-        p2p = P2P(actx, target_kernels, exclude_self=False)
+        p2m = P2EFromSingleBox(m_expn)
+        m2m = E2EFromCSR(m_expn, m_expn)
+        m2p = E2PFromSingleBox(m_expn, target_kernels)
+        m2l = E2EFromCSR(m_expn, l_expn)
+        l2l = E2EFromCSR(l_expn, l_expn)
+        l2p = E2PFromSingleBox(l_expn, target_kernels)
+        p2p = P2P(target_kernels, exclude_self=False)
 
         fp = FieldPlotter(centers[:, -1], extent=0.3, npoints=res)
         targets = fp.points
@@ -917,7 +920,6 @@ def test_m2m_compressed_error_helmholtz(actx_factory, dim, order):
         for i, (mpole_expn_class, local_expn_class) in \
                 enumerate(zip(mpole_expn_classes, local_expn_classes)):
             tctx = toys.ToyContext(
-                actx,
                 knl,
                 extra_kernel_kwargs=extra_kernel_kwargs,
                 local_expn_class=local_expn_class,
@@ -929,11 +931,11 @@ def test_m2m_compressed_error_helmholtz(actx_factory, dim, order):
                 np.ones(sources.shape[-1])
             )
 
-            mexp = toys.multipole_expand(pt_src,
+            mexp = toys.multipole_expand(actx, pt_src,
                 center=mpole_center.reshape(dim),
                 order=order,
                 rscale=h)
-            mexp2 = toys.multipole_expand(mexp,
+            mexp2 = toys.multipole_expand(actx, mexp,
                 center=second_center.reshape(dim),
                 order=order,
                 rscale=h)

@@ -41,7 +41,7 @@ __all__ = [
     "M2LPreprocessMultipole", "M2LPostprocessLocal"]
 
 
-code_cache = WriteOncePersistentDict("sumpy-code-cache-v6-"+VERSION_TEXT)
+code_cache = WriteOncePersistentDict(f"sumpy-code-cache-v6-{VERSION_TEXT}")
 
 
 # {{{ optimization control
