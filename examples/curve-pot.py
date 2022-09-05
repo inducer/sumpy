@@ -91,7 +91,8 @@ def draw_pot_figure(aspect_ratio,
         knl_kwargs = {}
 
     vol_source_knl, vol_target_knl = process_kernel(knl, what_operator)
-    p2p = P2P(actx.context, source_kernels=(vol_source_knl,),
+    p2p = P2P(
+            source_kernels=(vol_source_knl,),
             target_kernels=(vol_target_knl,),
             exclude_self=False,
             value_dtypes=np.complex128)
@@ -99,7 +100,7 @@ def draw_pot_figure(aspect_ratio,
     lpot_source_knl, lpot_target_knl = process_kernel(knl, what_operator_lpot)
 
     from sumpy.qbx import LayerPotential
-    lpot = LayerPotential(actx.context,
+    lpot = LayerPotential(
             expansion=expn_class(knl, order=order),
             source_kernels=(lpot_source_knl,),
             target_kernels=(lpot_target_knl,),
@@ -157,13 +158,13 @@ def draw_pot_figure(aspect_ratio,
     lpot_kwargs = knl_kwargs.copy()
 
     if what_operator == "D":
-        volpot_kwargs["src_derivative_dir"] = native_curve.normal
+        volpot_kwargs["src_derivative_dir"] = actx.from_numpy(native_curve.normal)
 
     if what_operator_lpot == "D":
-        lpot_kwargs["src_derivative_dir"] = ovsmp_curve.normal
+        lpot_kwargs["src_derivative_dir"] = actx.from_numpy(ovsmp_curve.normal)
 
     if what_operator_lpot == "S'":
-        lpot_kwargs["tgt_derivative_dir"] = native_curve.normal
+        lpot_kwargs["tgt_derivative_dir"] = actx.from_numpy(native_curve.normal)
 
     # }}}
 
@@ -177,7 +178,7 @@ def draw_pot_figure(aspect_ratio,
 
         def apply_lpot(x):
             xovsmp = np.dot(fim, x)
-            evt, (y,) = lpot(actx.queue,
+            evt, (y,) = lpot(actx,
                     native_curve.pos,
                     ovsmp_curve.pos,
                     centers,
@@ -198,21 +199,33 @@ def draw_pot_figure(aspect_ratio,
 
     # {{{ compute potentials
 
+    targets = actx.from_numpy(native_curve.pos)
+    sources = actx.from_numpy(fp.points)
+
     mode_nr = 0
     density = np.cos(mode_nr*2*np.pi*native_t).astype(np.complex128)
-    ovsmp_density = np.cos(mode_nr*2*np.pi*ovsmp_t).astype(np.complex128)
-    evt, (vol_pot,) = p2p(actx.queue,
-            fp.points,
-            native_curve.pos,
-            [native_curve.speed*native_weights*density], **volpot_kwargs)
+    strengths = actx.from_numpy(native_curve.speed * native_weights * density)
 
-    evt, (curve_pot,) = lpot(actx.queue,
-            native_curve.pos,
-            ovsmp_curve.pos,
-            centers,
-            [ovsmp_density * ovsmp_curve.speed * ovsmp_weights],
-            expansion_radii=np.ones(centers.shape[1]),
+    result = p2p(actx,
+            sources,
+            targets,
+            [strengths], **volpot_kwargs)
+    vol_pot = actx.to_numpy(result["result_s0"])
+
+    ovsmp_targets = actx.from_numpy(ovsmp_curve.pos)
+
+    ovsmp_density = np.cos(mode_nr*2*np.pi*ovsmp_t).astype(np.complex128)
+    ovsmp_strengths = actx.from_numpy(
+        ovsmp_curve.speed * ovsmp_weights * ovsmp_density)
+
+    result = lpot(actx,
+            targets,
+            ovsmp_targets,
+            actx.from_numpy(centers),
+            [ovsmp_strengths],
+            expansion_radii=actx.from_numpy(np.ones(centers.shape[1])),
             **lpot_kwargs)
+    curve_pot = actx.to_numpy(result["result_0"])
 
     # }}}
 
