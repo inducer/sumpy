@@ -149,7 +149,7 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
 
     rng = np.random.default_rng(14)
     center = np.array([2, 1, 0][:knl.dim], np.float64)
-    sources = (
+    sources = actx.from_numpy(
         0.7 * (-0.5 + rng.random(size=(knl.dim, nsources), dtype=np.float64))
         + center[:, np.newaxis])
 
@@ -158,12 +158,14 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
         actx.from_numpy(np.full(nsources, 2 / nsources, dtype=np.float64))
     ]
 
-    source_boxes = np.array([0], dtype=np.int32)
-    box_source_starts = np.array([0], dtype=np.int32)
-    box_source_counts_nonchild = np.array([nsources], dtype=np.int32)
+    source_boxes = actx.zeros(1, dtype=np.int32)
+    box_source_starts = actx.zeros(1, dtype=np.int32)
+    box_source_counts_nonchild = (
+        actx.from_numpy(np.array([nsources], dtype=np.int32)))
 
     alpha = np.linspace(0, 2*np.pi, nsources, np.float64)
-    dir_vec = np.vstack([np.cos(alpha), np.sin(alpha)])
+    dir_vec = actx.from_numpy(
+        np.vstack([np.cos(alpha), np.sin(alpha)]))
 
     from sumpy.expansion.local import LocalExpansionBase
     if issubclass(expn_class, LocalExpansionBase):
@@ -174,6 +176,7 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
                             dtype=np.float64).reshape(knl.dim, 1)
                     + center[:, np.newaxis])
 
+    centers = actx.from_numpy(centers)
     rscale = 0.5  # pick something non-1
 
     # apply p2e at the same time
@@ -181,7 +184,7 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
         kernels=source_kernels,
         strength_usage=[0, 1])
 
-    evt, (mpoles,) = p2e(actx,
+    mpoles = p2e(actx,
             source_boxes=source_boxes,
             box_source_starts=box_source_starts,
             box_source_counts_nonchild=box_source_counts_nonchild,
@@ -191,12 +194,9 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
             nboxes=1,
             tgt_base_ibox=0,
             rscale=rscale,
-
-            out_host=True,
             dir_vec=dir_vec,
-            **extra_kwargs)
-
-    actual_result = mpoles
+            **extra_kwargs)["tgt_expansions"]
+    actual_result = actx.to_numpy(mpoles)
 
     # apply p2e separately
     expected_result = np.zeros_like(actual_result)
@@ -208,7 +208,7 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
         p2e = P2EFromSingleBox(expn,
             kernels=[source_kernel], strength_usage=[i])
 
-        evt, (mpoles,) = p2e(actx,
+        mpoles = p2e(actx,
             source_boxes=source_boxes,
             box_source_starts=box_source_starts,
             box_source_counts_nonchild=box_source_counts_nonchild,
@@ -218,11 +218,10 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
             nboxes=1,
             tgt_base_ibox=0,
             rscale=rscale,
+            **extra_source_kwargs)["tgt_expansions"]
+        expected_result += actx.to_numpy(mpoles)
 
-            out_host=True, **extra_source_kwargs)
-        expected_result += mpoles
-
-    norm = la.norm(actual_result - expected_result)/la.norm(expected_result)
+    norm = la.norm(actual_result - expected_result) / la.norm(expected_result)
     assert norm < 1e-12
 
 # }}}
