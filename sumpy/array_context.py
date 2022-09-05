@@ -46,6 +46,7 @@ def make_loopy_program(
         kernel_data: Optional[List[Any]] = None, *,
         name: str = "sumpy_loopy_kernel",
         silenced_warnings: Optional[Union[List[str], str]] = None,
+        assumptions: Optional[Union[List[str], str]] = None,
         index_dtype: Optional["np.dtype"] = None,
         tags: ToTagSetConvertible = None):
     """Return a :class:`loopy.LoopKernel` suitable for use with
@@ -68,6 +69,7 @@ def make_loopy_program(
             default_offset=lp.auto,
             name=name,
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
+            assumptions=assumptions,
             silenced_warnings=silenced_warnings,
             index_dtype=index_dtype,
             tags=tags)

@@ -177,10 +177,10 @@ class E2PFromSingleBox(E2PBase):
                     ...
                 ] + [arg.loopy_arg for arg in self.expansion.get_args()],
                 name=self.name,
+                assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_result*)",
                 )
 
-        loopy_knl = lp.assume(loopy_knl, "ntgt_boxes>=1")
         loopy_knl = lp.fix_parameters(loopy_knl,
             dim=self.dim, nresults=len(result_names))
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
@@ -290,10 +290,10 @@ class E2PFromCSR(E2PBase):
                     ...
                 ] + [arg.loopy_arg for arg in self.expansion.get_args()],
                 name=self.name,
+                assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_result*)",
                 )
 
-        loopy_knl = lp.assume(loopy_knl, "ntgt_boxes>=1")
         loopy_knl = lp.fix_parameters(loopy_knl,
             dim=self.dim,
             nresults=len(result_names))

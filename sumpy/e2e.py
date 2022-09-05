@@ -224,9 +224,9 @@ class E2EFromCSR(E2EBase):
                                             self.tgt_expansion]),
                 name=self.name,
                 silenced_warnings="write_race(write_expn*)",
+                assumptions="ntgt_boxes>=1",
                 )
 
-        loopy_knl = lp.assume(loopy_knl, "ntgt_boxes>=1")
         loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
@@ -451,9 +451,9 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                 ] + gather_loopy_arguments([self.src_expansion,
                                             self.tgt_expansion]),
                 name=self.name,
+                assumptions="ntgt_boxes>=1",
                 )
 
-        loopy_knl = lp.assume(loopy_knl, "ntgt_boxes>=1")
         loopy_knl = lp.fix_parameters(loopy_knl,
             dim=self.dim,
             m2l_translation_classes_dependent_ndata=(
@@ -553,9 +553,9 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                     ...
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
+                assumptions="ntranslation_classes>=1",
                 )
 
-        loopy_knl = lp.assume(loopy_knl, "ntranslation_classes>=1")
         loopy_knl = lp.fix_parameters(loopy_knl,
             dim=self.dim,
             m2l_translation_classes_dependent_ndata=(
@@ -654,9 +654,9 @@ class M2LPreprocessMultipole(E2EBase):
                     ...
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
+                assumptions="nsrc_boxes>=1",
                 )
 
-        loopy_knl = lp.assume(loopy_knl, "nsrc_boxes>=1")
         loopy_knl = lp.fix_parameters(loopy_knl,
             nsrc_coeffs=nsrc_coeffs,
             npreprocessed_src_coeffs=npreprocessed_src_coeffs)
@@ -739,9 +739,9 @@ class M2LPostprocessLocal(E2EBase):
                     ...
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
+                assumptions="ntgt_boxes>=1",
                 )
 
-        loopy_knl = lp.assume(loopy_knl, "ntgt_boxes>=1")
         loopy_knl = lp.fix_parameters(loopy_knl,
             dim=self.dim,
             nsrc_coeffs=ntgt_coeffs_before_postprocessing,
@@ -857,9 +857,9 @@ class E2EFromChildren(E2EBase):
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
                 silenced_warnings="write_race(write_expn*)",
+                assumptions="ntgt_boxes>=1",
                 )
 
-        loopy_knl = lp.assume(loopy_knl, "ntgt_boxes>=1")
         loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim, nchildren=2**self.dim)
 
         for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
@@ -960,11 +960,10 @@ class E2EFromParent(E2EBase):
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
                 silenced_warnings="write_race(write_expn*)",
+                assumptions="ntgt_boxes>=1",
                 )
 
-        loopy_knl = lp.assume(loopy_knl, "ntgt_boxes>=1")
         loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim, nchildren=2**self.dim)
-
         for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 

@@ -237,9 +237,9 @@ class P2P(P2PBase):
             + ["end"],
             kernel_data=arguments,
             name=self.name,
+            assumptions="nsources>=1 and ntargets>=1",
             )
 
-        loopy_knl = lp.assume(loopy_knl, "nsources>=1 and ntargets>=1")
         loopy_knl = lp.fix_parameters(loopy_knl,
             dim=self.dim,
             nstrengths=self.strength_count,
@@ -303,9 +303,9 @@ class P2PMatrixGenerator(P2PBase):
             + ["end"],
             arguments,
             name=self.name,
+            assumptions="nsources>=1 and ntargets>=1",
             )
 
-        loopy_knl = lp.assume(loopy_knl, "nsources>=1 and ntargets>=1")
         loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
@@ -380,11 +380,10 @@ class P2PMatrixSubsetGenerator(P2PBase):
             arguments,
             silenced_warnings="write_race(write_p2p*)",
             name=self.name,
+            assumptions="nresult>=1",
             )
 
-        loopy_knl = lp.assume(loopy_knl, "nresult>=1")
         loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
-
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.add_dtypes(loopy_knl,
             dict(nsources=np.int32, ntargets=np.int32))
@@ -624,9 +623,9 @@ class P2PFromCSR(P2PBase):
                 "write_race(write_csr*)",
                 "write_race(prefetch_src)",
                 "write_race(prefetch_charge)"],
+            assumptions="ntgt_boxes>=1",
             )
 
-        loopy_knl = lp.assume(loopy_knl, "ntgt_boxes>=1")
         loopy_knl = lp.fix_parameters(loopy_knl,
             dim=self.dim,
             nstrengths=self.strength_count,

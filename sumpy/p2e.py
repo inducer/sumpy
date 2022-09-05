@@ -211,9 +211,9 @@ class P2EFromSingleBox(P2EBase):
                     self.source_kernels + (self.expansion,)),
                 name=self.name,
                 silenced_warnings="write_race(write_expn*)",
+                assumptions="nsrc_boxes>=1",
                 )
 
-        loopy_knl = lp.assume(loopy_knl, "nsrc_boxes>=1")
         loopy_knl = lp.fix_parameters(loopy_knl,
             dim=self.dim,
             strength_count=self.strength_count)
@@ -331,9 +331,9 @@ class P2EFromCSR(P2EBase):
                 kernel_data=arguments,
                 name=self.name,
                 silenced_warnings="write_race(write_expn*)",
+                assumptions="ntgt_boxes>=1",
                 )
 
-        loopy_knl = lp.assume(loopy_knl, "ntgt_boxes>=1")
         loopy_knl = lp.fix_parameters(loopy_knl,
             dim=self.dim,
             strength_count=self.strength_count)
