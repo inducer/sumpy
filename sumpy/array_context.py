@@ -26,6 +26,10 @@ from arraycontext.pytest import (
         register_pytest_array_context_factory)
 
 __doc__ = """
+Array Context
+=============
+
+.. autofunction:: make_loopy_program
 .. autoclass:: PyOpenCLArrayContext
 """
 
@@ -40,7 +44,7 @@ def make_loopy_program(
         index_dtype=None,
         tags=None):
     """Return a :class:`loopy.LoopKernel` suitable for use with
-    :meth:`ArrayContext.call_loopy`.
+    :meth:`arraycontext.ArrayContext.call_loopy`.
     """
     if kernel_data is None:
         kernel_data = [...]

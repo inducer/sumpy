@@ -24,6 +24,7 @@ intersphinx_mapping = {
     "https://documen.tician.de/loopy/": None,
     "https://documen.tician.de/pytential/": None,
     "https://documen.tician.de/boxtree/": None,
+    "https://documen.tician.de/arraycontext/": None,
     "https://docs.sympy.org/latest/": None,
     "https://matplotlib.org/stable/": None,
 }

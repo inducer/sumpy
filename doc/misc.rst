@@ -1,6 +1,8 @@
 Misc Tools
 ==========
 
+.. automodule:: sumpy.array_context
+
 .. automodule:: sumpy.tools
 
 .. automodule:: sumpy.symbolic
