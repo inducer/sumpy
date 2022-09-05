@@ -20,10 +20,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from typing import Any, List, Optional, Union
+
+import numpy as np
+
 from boxtree.array_context import PyOpenCLArrayContext as PyOpenCLArrayContextBase
 from arraycontext.pytest import (
         _PytestPyOpenCLArrayContextFactoryWithClass,
         register_pytest_array_context_factory)
+from pytools.tag import ToTagSetConvertible
 
 __doc__ = """
 Array Context
@@ -38,11 +43,11 @@ Array Context
 
 def make_loopy_program(
         domains, statements,
-        kernel_data=None, *,
-        name="sumpy_loopy_kernel",
-        silenced_warnings=None,
-        index_dtype=None,
-        tags=None):
+        kernel_data: Optional[List[Any]] = None, *,
+        name: str = "sumpy_loopy_kernel",
+        silenced_warnings: Optional[Union[List[str], str]] = None,
+        index_dtype: Optional["np.dtype"] = None,
+        tags: ToTagSetConvertible = None):
     """Return a :class:`loopy.LoopKernel` suitable for use with
     :meth:`arraycontext.ArrayContext.call_loopy`.
     """
