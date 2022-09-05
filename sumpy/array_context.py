@@ -85,6 +85,11 @@ class PyOpenCLArrayContext(PyOpenCLArrayContextBase):
 
         return t_unit
 
+
+def is_cl_cpu(actx: PyOpenCLArrayContext) -> bool:
+    import pyopencl as cl
+    return all(dev.type & cl.device_type.CPU for dev in actx.context.devices)
+
 # }}}
 
 
