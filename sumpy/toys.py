@@ -357,7 +357,7 @@ class ConstantPotential(PotentialSource):
         super().__init__(toy_ctx)
         self.value = np.array(value)
 
-    def eval(self, targets):
+    def eval(self, actx: PyOpenCLArrayContext, targets):
         pot = np.empty(targets.shape[-1], dtype=self.value.dtype)
         pot.fill(self.value)
         return pot
@@ -372,7 +372,7 @@ class OneOnBallPotential(PotentialSource):
         self.center = np.asarray(center)
         self.radius = radius
 
-    def eval(self, targets):
+    def eval(self, actx: PyOpenCLArrayContext, targets):
         dist_vec = targets - self.center[:, np.newaxis]
         return (np.sum(dist_vec**2, axis=0) < self.radius**2).astype(np.float64)
 
@@ -387,7 +387,7 @@ class HalfspaceOnePotential(PotentialSource):
         self.axis = axis
         self.side = side
 
-    def eval(self, targets):
+    def eval(self, actx: PyOpenCLArrayContext, targets):
         return (
             (self.side*(targets[self.axis] - self.center[self.axis])) >= 0
             ).astype(np.float64)
@@ -563,9 +563,9 @@ def local_expand(
         raise TypeError(f"do not know how to expand '{type(psource).__name__}'")
 
 
-def logplot(fp, psource, **kwargs):
+def logplot(actx, fp, psource, **kwargs):
     fp.show_scalar_in_matplotlib(
-            np.log10(np.abs(psource.eval(fp.points) + 1e-15)), **kwargs)
+            np.log10(np.abs(psource.eval(actx, fp.points) + 1e-15)), **kwargs)
 
 
 def combine_inner_outer(psource_inner, psource_outer, radius, center=None):
@@ -603,7 +603,7 @@ def combine_halfspace_and_outer(psource_pos, psource_neg, psource_outer,
             psource_outer, radius, center)
 
 
-def l_inf(psource, radius, center=None, npoints=100, debug=False):
+def l_inf(actx, psource, radius, center=None, npoints=100, debug=False):
     if center is None:
         center = psource.center
 
@@ -611,7 +611,7 @@ def l_inf(psource, radius, center=None, npoints=100, debug=False):
 
     from sumpy.visualization import FieldPlotter
     fp = FieldPlotter(center, extent=2*radius, npoints=npoints)
-    z = restr.eval(fp.points)
+    z = restr.eval(actx, fp.points)
 
     if debug:
         fp.show_scalar_in_matplotlib(
