@@ -31,6 +31,7 @@ from arraycontext import pytest_generate_tests_for_array_contexts
 from sumpy.array_context import (                                 # noqa: F401
         PytestPyOpenCLArrayContextFactory, _acf)
 
+from pytools.obj_array import make_obj_array
 import sumpy.symbolic as sym
 from sumpy.expansion.multipole import (
     VolumeTaylorMultipoleExpansion,
@@ -304,21 +305,23 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
 
     rng = np.random.default_rng(19)
     center = np.array([2, 1, 0][:knl.dim], np.float64)
-    sources = (
+    sources = actx.from_numpy(
         0.7 * (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64))
         + center[:, np.newaxis])
 
-    strengths = np.ones(nsources, dtype=np.float64) / nsources
+    strengths = actx.from_numpy(
+        np.full(nsources, 1 / nsources, dtype=np.float64))
 
-    source_boxes = np.array([0], dtype=np.int32)
-    box_source_starts = np.array([0], dtype=np.int32)
-    box_source_counts_nonchild = np.array([nsources], dtype=np.int32)
+    source_boxes = actx.zeros(1, dtype=np.int32)
+    box_source_starts = actx.zeros(1, dtype=np.int32)
+    box_source_counts_nonchild = actx.from_numpy(
+        np.array([nsources], dtype=np.int32))
 
     extra_source_kwargs = extra_kwargs.copy()
     if isinstance(knl, DirectionalSourceDerivative):
         alpha = np.linspace(0, 2*np.pi, nsources, np.float64)
         dir_vec = np.vstack([np.cos(alpha), np.sin(alpha)])
-        extra_source_kwargs["dir_vec"] = dir_vec
+        extra_source_kwargs["dir_vec"] = actx.from_numpy(dir_vec)
 
     from sumpy.visualization import FieldPlotter
 
@@ -334,13 +337,14 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
                                 dtype=np.float64).reshape(knl.dim, 1)
                         + center[:, np.newaxis])
 
-        targets = fp.points
+        centers = actx.from_numpy(centers)
+        targets = actx.from_numpy(make_obj_array(fp.points))
 
         rscale = 0.5  # pick something non-1
 
         # {{{ apply p2e
 
-        evt, (mpoles,) = p2e(actx,
+        mpoles = p2e(actx,
                 source_boxes=source_boxes,
                 box_source_starts=box_source_starts,
                 box_source_counts_nonchild=box_source_counts_nonchild,
@@ -350,19 +354,19 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
                 nboxes=1,
                 tgt_base_ibox=0,
                 rscale=rscale,
-
-                out_host=True, **extra_source_kwargs)
+                **extra_source_kwargs)["tgt_expansions"]
 
         # }}}
 
         # {{{ apply e2p
 
-        ntargets = targets.shape[-1]
+        ntargets = fp.points.shape[-1]
 
-        box_target_starts = np.array([0], dtype=np.int32)
-        box_target_counts_nonchild = np.array([ntargets], dtype=np.int32)
+        box_target_starts = actx.zeros(1, dtype=np.int32)
+        box_target_counts_nonchild = actx.from_numpy(
+            np.array([ntargets], dtype=np.int32))
 
-        evt, (pot, grad_x, ) = e2p(
+        result = e2p(
                 actx,
                 src_expansions=mpoles,
                 src_base_ibox=0,
@@ -372,18 +376,22 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
                 centers=centers,
                 targets=targets,
                 rscale=rscale,
+                **extra_kwargs)
 
-                out_host=True, **extra_kwargs)
+        pot = actx.to_numpy(result["result_s0"])
+        grad_x = actx.to_numpy(result["result_s1"])
 
         # }}}
 
         # {{{ compute (direct) reference solution
 
-        evt, (pot_direct, grad_x_direct, ) = p2p(
+        result = p2p(
                 actx,
                 targets, sources, (strengths,),
-                out_host=True,
                 **extra_source_kwargs)
+
+        pot_direct = actx.to_numpy(result["result_s0"])
+        grad_x_direct = actx.to_numpy(result["result_s1"])
 
         err_pot = la.norm((pot - pot_direct)/res**2)
         err_grad_x = la.norm((grad_x - grad_x_direct)/res**2)
@@ -503,10 +511,11 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
     # Just to make sure things also work away from the origin
     rng = np.random.default_rng(18)
     origin = np.array([2, 1, 0][:knl.dim], np.float64)
-    sources = (
+    sources = actx.from_numpy(
         0.7 * (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64))
         + origin[:, np.newaxis])
-    strengths = np.ones(nsources, dtype=np.float64) * (1/nsources)
+    strengths = actx.from_numpy(
+        np.full(nsources, 1 / nsources, dtype=np.float64))
 
     pconv_verifier_p2m2p = PConvergenceVerifier()
     pconv_verifier_p2m2m2p = PConvergenceVerifier()
@@ -516,7 +525,6 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
     from sumpy.visualization import FieldPlotter
 
     eval_offset = np.array([5.5, 0.0, 0][:knl.dim])
-
     centers = (np.array(
             [
                 # box 0: particles, first mpole here
@@ -543,32 +551,28 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
     nboxes = centers.shape[-1]
 
     def eval_at(e2p, source_box_nr, rscale):
-        e2p_target_boxes = np.array([source_box_nr], dtype=np.int32)
+        e2p_target_boxes = actx.from_numpy(
+            np.array([source_box_nr], dtype=np.int32))
 
         # These are indexed by global box numbers.
-        e2p_box_target_starts = np.array([0, 0, 0, 0], dtype=np.int32)
-        e2p_box_target_counts_nonchild = np.array([0, 0, 0, 0],
-                dtype=np.int32)
+        e2p_box_target_starts = actx.zeros(4, dtype=np.int32)
+        e2p_box_target_counts_nonchild = actx.zeros(4, dtype=np.int32)
         e2p_box_target_counts_nonchild[source_box_nr] = ntargets
 
-        evt, (pot,) = e2p(
+        pot = e2p(
                 actx,
-
                 src_expansions=mpoles,
                 src_base_ibox=0,
-
                 target_boxes=e2p_target_boxes,
                 box_target_starts=e2p_box_target_starts,
                 box_target_counts_nonchild=e2p_box_target_counts_nonchild,
-                centers=centers,
+                centers=actx.from_numpy(centers),
                 targets=targets,
-
                 rscale=rscale,
-
-                out_host=True, **extra_kwargs
+                **extra_kwargs
                 )
 
-        return pot
+        return actx.to_numpy(pot["result_s0"])
 
     m2l_factory = NonFFTM2LTranslationClassFactory()
     m2l_translation = m2l_factory.get_m2l_translation_class(knl, local_expn_class)()
@@ -587,14 +591,15 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
         p2p = P2P(target_kernels, exclude_self=False)
 
         fp = FieldPlotter(centers[:, -1], extent=0.3, npoints=res)
-        targets = fp.points
+        targets = actx.from_numpy(make_obj_array(fp.points))
 
         # {{{ compute (direct) reference solution
 
-        evt, (pot_direct,) = p2p(
+        pot_direct = p2p(
                 actx,
                 targets, sources, (strengths,),
-                out_host=True, **extra_kwargs)
+                **extra_kwargs)
+        pot_direct = actx.to_numpy(pot_direct["result_s0"])
 
         # }}}
 
@@ -605,30 +610,28 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
         # {{{ apply P2M
 
-        p2m_source_boxes = np.array([0], dtype=np.int32)
+        p2m_source_boxes = actx.zeros(1, dtype=np.int32)
 
         # These are indexed by global box numbers.
-        p2m_box_source_starts = np.array([0, 0, 0, 0], dtype=np.int32)
-        p2m_box_source_counts_nonchild = np.array([nsources, 0, 0, 0],
-                dtype=np.int32)
+        p2m_box_source_starts = actx.zeros(4, dtype=np.int32)
+        p2m_box_source_counts_nonchild = actx.from_numpy(
+            np.array([nsources, 0, 0, 0], dtype=np.int32))
 
-        evt, (mpoles,) = p2m(actx,
+        mpoles = p2m(actx,
                 source_boxes=p2m_source_boxes,
                 box_source_starts=p2m_box_source_starts,
                 box_source_counts_nonchild=p2m_box_source_counts_nonchild,
-                centers=centers,
+                centers=actx.from_numpy(centers),
                 sources=sources,
                 strengths=(strengths,),
                 nboxes=nboxes,
                 rscale=m1_rscale,
-
                 tgt_base_ibox=0,
-
-                out_host=True, **extra_kwargs)
+                **extra_kwargs)["tgt_expansions"]
 
         # }}}
 
-        ntargets = targets.shape[-1]
+        ntargets = fp.points.shape[-1]
 
         pot = eval_at(m2p, 0, m1_rscale)
 
@@ -639,11 +642,14 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
         # {{{ apply M2M
 
-        m2m_target_boxes = np.array([1], dtype=np.int32)
-        m2m_src_box_starts = np.array([0, 1], dtype=np.int32)
-        m2m_src_box_lists = np.array([0], dtype=np.int32)
+        m2m_target_boxes = actx.from_numpy(
+            np.array([1], dtype=np.int32))
+        m2m_src_box_starts = actx.from_numpy(
+            np.array([0, 1], dtype=np.int32))
+        m2m_src_box_lists = actx.from_numpy(
+            np.array([0], dtype=np.int32))
 
-        evt, (mpoles,) = m2m(actx,
+        mpoles = m2m(actx,
                 src_expansions=mpoles,
                 src_base_ibox=0,
                 tgt_base_ibox=0,
@@ -653,12 +659,12 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
                 src_box_starts=m2m_src_box_starts,
                 src_box_lists=m2m_src_box_lists,
-                centers=centers,
+                centers=actx.from_numpy(centers),
 
                 src_rscale=m1_rscale,
                 tgt_rscale=m2_rscale,
 
-                out_host=True, **extra_kwargs)
+                **extra_kwargs)["tgt_expansions"]
 
         # }}}
 
@@ -671,11 +677,14 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
         # {{{ apply M2L
 
-        m2l_target_boxes = np.array([2], dtype=np.int32)
-        m2l_src_box_starts = np.array([0, 1], dtype=np.int32)
-        m2l_src_box_lists = np.array([1], dtype=np.int32)
+        m2l_target_boxes = actx.from_numpy(
+            np.array([2], dtype=np.int32))
+        m2l_src_box_starts = actx.from_numpy(
+            np.array([0, 1], dtype=np.int32))
+        m2l_src_box_lists = actx.from_numpy(
+            np.array([1], dtype=np.int32))
 
-        evt, (mpoles,) = m2l(actx,
+        mpoles = m2l(actx,
                 src_expansions=mpoles,
                 src_base_ibox=0,
                 tgt_base_ibox=0,
@@ -684,12 +693,12 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
                 target_boxes=m2l_target_boxes,
                 src_box_starts=m2l_src_box_starts,
                 src_box_lists=m2l_src_box_lists,
-                centers=centers,
+                centers=actx.from_numpy(centers),
 
                 src_rscale=m2_rscale,
                 tgt_rscale=l1_rscale,
 
-                out_host=True, **extra_kwargs)
+                **extra_kwargs)["tgt_expansions"]
 
         # }}}
 
@@ -702,11 +711,14 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
         # {{{ apply L2L
 
-        l2l_target_boxes = np.array([3], dtype=np.int32)
-        l2l_src_box_starts = np.array([0, 1], dtype=np.int32)
-        l2l_src_box_lists = np.array([2], dtype=np.int32)
+        l2l_target_boxes = actx.from_numpy(
+            np.array([3], dtype=np.int32))
+        l2l_src_box_starts = actx.from_numpy(
+            np.array([0, 1], dtype=np.int32))
+        l2l_src_box_lists = actx.from_numpy(
+            np.array([2], dtype=np.int32))
 
-        evt, (mpoles,) = l2l(actx,
+        mpoles = l2l(actx,
                 src_expansions=mpoles,
                 src_base_ibox=0,
                 tgt_base_ibox=0,
@@ -715,12 +727,12 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
                 target_boxes=l2l_target_boxes,
                 src_box_starts=l2l_src_box_starts,
                 src_box_lists=l2l_src_box_lists,
-                centers=centers,
+                centers=actx.from_numpy(centers),
 
                 src_rscale=l1_rscale,
                 tgt_rscale=l2_rscale,
 
-                out_host=True, **extra_kwargs)
+                **extra_kwargs)["tgt_expansions"]
 
         # }}}
 
@@ -938,7 +950,7 @@ def test_m2m_compressed_error_helmholtz(actx_factory, dim, order):
                 center=second_center.reshape(dim),
                 order=order,
                 rscale=h)
-            m2m_vals[i] = mexp2.eval(targets)
+            m2m_vals[i] = mexp2.eval(actx, targets)
 
         err = np.linalg.norm(m2m_vals[1] - m2m_vals[0]) \
                 / np.linalg.norm(m2m_vals[1])
