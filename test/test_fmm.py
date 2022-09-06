@@ -234,7 +234,7 @@ def _test_sumpy_fmm(actx_factory, knl, local_expn_class, mpole_expn_class,
 
         from boxtree.fmm import drive_fmm
 
-        pot, = drive_fmm(actx, wrangler, (weights,))
+        pot, = drive_fmm(wrangler, (weights,))
 
         from sumpy import P2P
         p2p = P2P(actx, target_kernels, exclude_self=False)
