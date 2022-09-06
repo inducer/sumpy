@@ -20,7 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 
@@ -47,6 +47,7 @@ def make_loopy_program(
         name: str = "sumpy_loopy_kernel",
         silenced_warnings: Optional[Union[List[str], str]] = None,
         assumptions: Optional[Union[List[str], str]] = None,
+        fixed_parameters: Optional[Dict[str, Any]] = None,
         index_dtype: Optional["np.dtype"] = None,
         tags: ToTagSetConvertible = None):
     """Return a :class:`loopy.LoopKernel` suitable for use with
@@ -70,6 +71,7 @@ def make_loopy_program(
             name=name,
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
             assumptions=assumptions,
+            fixed_parameters=fixed_parameters,
             silenced_warnings=silenced_warnings,
             index_dtype=index_dtype,
             tags=tags)

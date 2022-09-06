@@ -1110,10 +1110,8 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
         domains, insns,
         kernel_data=kernel_data,
         name=name,
+        fixed_parameters=fixed_parameters,
     )
-
-    # FIXME: set index_dtype?
-    knl = lp.fix_parameters(knl, **fixed_parameters)
 
     if broadcast_dims:
         knl = lp.split_iname(knl, "j0", 32, inner_tag="l.0", outer_tag="g.0")

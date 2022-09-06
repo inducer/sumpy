@@ -179,10 +179,9 @@ class E2PFromSingleBox(E2PBase):
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_result*)",
+                fixed_parameters=dict(dim=self.dim, nresults=len(result_names)),
                 )
 
-        loopy_knl = lp.fix_parameters(loopy_knl,
-            dim=self.dim, nresults=len(result_names))
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         for knl in self.kernels:
@@ -293,11 +292,8 @@ class E2PFromCSR(E2PBase):
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_result*)",
+                fixed_parameters=dict(dim=self.dim, nresults=len(result_names)),
                 )
-
-        loopy_knl = lp.fix_parameters(loopy_knl,
-            dim=self.dim,
-            nresults=len(result_names))
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.prioritize_loops(loopy_knl, "itgt_box,itgt,isrc_box")

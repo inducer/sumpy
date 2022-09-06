@@ -213,11 +213,11 @@ class P2EFromSingleBox(P2EBase):
                 name=self.name,
                 silenced_warnings="write_race(write_expn*)",
                 assumptions="nsrc_boxes>=1",
+                fixed_parameters=dict(
+                    dim=self.dim,
+                    strength_count=self.strength_count),
                 )
 
-        loopy_knl = lp.fix_parameters(loopy_knl,
-            dim=self.dim,
-            strength_count=self.strength_count)
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         for knl in self.source_kernels:
@@ -333,11 +333,11 @@ class P2EFromCSR(P2EBase):
                 name=self.name,
                 silenced_warnings="write_race(write_expn*)",
                 assumptions="ntgt_boxes>=1",
+                fixed_parameters=dict(
+                    dim=self.dim,
+                    strength_count=self.strength_count),
                 )
 
-        loopy_knl = lp.fix_parameters(loopy_knl,
-            dim=self.dim,
-            strength_count=self.strength_count)
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         for knl in self.source_kernels:

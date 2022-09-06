@@ -238,12 +238,12 @@ class P2P(P2PBase):
             kernel_data=arguments,
             name=self.name,
             assumptions="nsources>=1 and ntargets>=1",
+            fixed_parameters=dict(
+                dim=self.dim,
+                nstrengths=self.strength_count,
+                nresults=len(self.target_kernels)),
             )
 
-        loopy_knl = lp.fix_parameters(loopy_knl,
-            dim=self.dim,
-            nstrengths=self.strength_count,
-            nresults=len(self.target_kernels))
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         for knl in self.target_kernels + self.source_kernels:
@@ -304,9 +304,9 @@ class P2PMatrixGenerator(P2PBase):
             arguments,
             name=self.name,
             assumptions="nsources>=1 and ntargets>=1",
+            fixed_parameters=dict(dim=self.dim),
             )
 
-        loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         for knl in self.target_kernels + self.source_kernels:
@@ -381,9 +381,9 @@ class P2PMatrixSubsetGenerator(P2PBase):
             silenced_warnings="write_race(write_p2p*)",
             name=self.name,
             assumptions="nresult>=1",
+            fixed_parameters=dict(dim=self.dim),
             )
 
-        loopy_knl = lp.fix_parameters(loopy_knl, dim=self.dim)
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.add_dtypes(loopy_knl,
             dict(nsources=np.int32, ntargets=np.int32))
@@ -624,15 +624,14 @@ class P2PFromCSR(P2PBase):
                 "write_race(prefetch_src)",
                 "write_race(prefetch_charge)"],
             assumptions="ntgt_boxes>=1",
+            fixed_parameters=dict(
+                dim=self.dim,
+                nstrengths=self.strength_count,
+                nsplit=nsplit,
+                src_outer_limit=src_outer_limit,
+                tgt_outer_limit=tgt_outer_limit,
+                noutputs=len(self.target_kernels)),
             )
-
-        loopy_knl = lp.fix_parameters(loopy_knl,
-            dim=self.dim,
-            nstrengths=self.strength_count,
-            nsplit=nsplit,
-            src_outer_limit=src_outer_limit,
-            tgt_outer_limit=tgt_outer_limit,
-            noutputs=len(self.target_kernels))
 
         loopy_knl = lp.add_dtypes(loopy_knl,
             dict(nsources=np.int32, ntargets=np.int32))
