@@ -53,7 +53,7 @@ from pymbolic.mapper import WalkMapper
 from arraycontext import Array
 
 import sumpy.symbolic as sym
-from sumpy.array_context import PyOpenCLArrayContext
+from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
 
 import logging
 logger = logging.getLogger(__name__)
@@ -1105,7 +1105,6 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
         else:
             name = f"fft_{n}"
 
-    from arraycontext import make_loopy_program
     knl = make_loopy_program(
         domains, insns,
         kernel_data=kernel_data,
