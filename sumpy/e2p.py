@@ -39,7 +39,7 @@ Expansion-to-particle
 """
 
 
-# {{{ E2P base class
+# {{{ E2PBase: base class
 
 class E2PBase(KernelCacheMixin):
     def __init__(self, expansion, kernels, name=None):
@@ -119,7 +119,7 @@ class E2PBase(KernelCacheMixin):
 # }}}
 
 
-# {{{ E2P to single box (L2P, likely)
+# {{{ E2PFromSingleBox: E2P to single box (L2P, likely)
 
 class E2PFromSingleBox(E2PBase):
     default_name = "e2p_from_single_box"
@@ -215,14 +215,15 @@ class E2PFromSingleBox(E2PBase):
         # meaningfully inferred. Make the type of rscale explicit.
         rscale = centers.dtype.type(kwargs.pop("rscale"))
 
+        knl = self.get_cached_optimized_kernel()
         return actx.call_loopy(
-            self.get_cached_optimized_kernel(),
+            knl,
             centers=centers, rscale=rscale, **kwargs)
 
 # }}}
 
 
-# {{{ E2P from CSR-like interaction list
+# {{{ E2PFromCSR: E2P from CSR-like interaction list
 
 class E2PFromCSR(E2PBase):
     default_name = "e2p_from_csr"
@@ -321,8 +322,9 @@ class E2PFromCSR(E2PBase):
         # meaningfully inferred. Make the type of rscale explicit.
         rscale = centers.dtype.type(kwargs.pop("rscale"))
 
+        knl = self.get_cached_optimized_kernel()
         return actx.call_loopy(
-            self.get_cached_optimized_kernel(),
+            knl,
             centers=centers, rscale=rscale, **kwargs)
 
 # }}}

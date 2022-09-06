@@ -41,7 +41,7 @@ Particle-to-Expansion
 """
 
 
-# {{{ P2E base class
+# {{{ P2EBase: base class
 
 class P2EBase(KernelCacheMixin, KernelComputation):
     """Common input processing for kernel computations.
@@ -138,14 +138,15 @@ class P2EBase(KernelCacheMixin, KernelComputation):
         from sumpy.tools import is_obj_array_like
         sources = kwargs.pop("sources")
         centers = kwargs.pop("centers")
-        knl = self.get_cached_optimized_kernel(
-                sources_is_obj_array=is_obj_array_like(sources),
-                centers_is_obj_array=is_obj_array_like(centers))
 
         # "1" may be passed for rscale, which won't have its type
         # meaningfully inferred. Make the type of rscale explicit.
         dtype = centers[0].dtype if is_obj_array_like(centers) else centers.dtype
         rscale = dtype.type(kwargs.pop("rscale"))
+
+        knl = self.get_cached_optimized_kernel(
+                sources_is_obj_array=is_obj_array_like(sources),
+                centers_is_obj_array=is_obj_array_like(centers))
 
         return actx.call_loopy(
             knl,
@@ -155,7 +156,7 @@ class P2EBase(KernelCacheMixin, KernelComputation):
 # }}}
 
 
-# {{{ P2E from single box (P2M, likely)
+# {{{ P2EFromSingleBox: P2E from single box (P2M, likely)
 
 class P2EFromSingleBox(P2EBase):
     """
@@ -258,7 +259,7 @@ class P2EFromSingleBox(P2EBase):
 # }}}
 
 
-# {{{ P2E from CSR-like interaction list
+# {{{ P2EFromCSR: P2E from CSR-like interaction list
 
 class P2EFromCSR(P2EBase):
     """

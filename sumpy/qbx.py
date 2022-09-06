@@ -62,7 +62,7 @@ def stringify_expn_index(i: Union[Tuple[int, ...], int]) -> str:
 
 # {{{ layer potential computation
 
-# {{{ base class
+# {{{ LayerPotentialBase: base class
 
 class LayerPotentialBase(KernelCacheMixin, KernelComputation):
     def __init__(self, expansion, strength_usage=None,
@@ -228,7 +228,7 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
 # }}}
 
 
-# {{{ direct applier
+# {{{ LayerPotential: direct applier
 
 class LayerPotential(LayerPotentialBase):
     """Direct applier for the layer potential.
@@ -313,7 +313,7 @@ class LayerPotential(LayerPotentialBase):
 # }}}
 
 
-# {{{ matrix writer
+# {{{ LayerPotentialMatrixGenerator: matrix writer
 
 class LayerPotentialMatrixGenerator(LayerPotentialBase):
     """Generator for layer potential matrix entries."""
@@ -383,7 +383,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
 # }}}
 
 
-# {{{ matrix subset generator
+# {{{ LayerPotentialMatrixSubsetGenerator: matrix subset generator
 
 class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
     """Generator for a subset of the layer potential matrix entries.

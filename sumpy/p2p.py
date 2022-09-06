@@ -50,7 +50,7 @@ Particle-to-particle
 # LATER:
 # - Optimization for source == target (postpone)
 
-# {{{ p2p base class
+# {{{ P2PBase: base class
 
 class P2PBase(KernelCacheMixin, KernelComputation):
     def __init__(self, target_kernels, exclude_self, strength_usage=None,
@@ -198,7 +198,7 @@ class P2PBase(KernelCacheMixin, KernelComputation):
 # }}}
 
 
-# {{{ P2P point-interaction calculation
+# {{{ P2P: point-interaction calculation
 
 class P2P(P2PBase):
     """Direct applier for P2P interactions."""
@@ -265,7 +265,7 @@ class P2P(P2PBase):
 # }}}
 
 
-# {{{ P2P matrix writer
+# {{{ P2PMatrixGenerator: matrix writer
 
 class P2PMatrixGenerator(P2PBase):
     """Generator for P2P interaction matrix entries."""
@@ -324,7 +324,7 @@ class P2PMatrixGenerator(P2PBase):
 # }}}
 
 
-# {{{ P2P matrix subset generator
+# {{{ P2PMatrixSubsetGenerator: matrix subset generator
 
 class P2PMatrixSubsetGenerator(P2PBase):
     """Generator for a subset of P2P interaction matrix entries.
@@ -439,7 +439,7 @@ class P2PMatrixSubsetGenerator(P2PBase):
 # }}}
 
 
-# {{{ P2P from CSR-like interaction list
+# {{{ P2PFromCSR: P2P from CSR-like interaction list
 
 class P2PFromCSR(P2PBase):
     default_name = "p2p_from_csr"

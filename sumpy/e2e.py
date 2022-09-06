@@ -44,7 +44,7 @@ Expansion-to-expansion
 """
 
 
-# {{{ translation base class
+# {{{ E2EBase: base class
 
 class E2EBase(KernelCacheMixin):
     def __init__(self, src_expansion, tgt_expansion, name=None):
@@ -123,7 +123,7 @@ class E2EBase(KernelCacheMixin):
 # }}}
 
 
-# {{{ translation from "compressed sparse row"-like source box lists
+# {{{ E2EFromCSR: translation from "compressed sparse row"-like source box lists
 
 class E2EFromCSR(E2EBase):
     """Implements translation from a "compressed sparse row"-like source box
@@ -260,12 +260,17 @@ class E2EFromCSR(E2EBase):
         src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
 
+        knl = self.get_cached_optimized_kernel()
         return actx.call_loopy(
-            self.get_cached_optimized_kernel(),
+            knl,
             centers=centers,
             src_rscale=src_rscale, tgt_rscale=tgt_rscale,
             **kwargs)
 
+# }}}
+
+
+# {{{ M2LUsingTranslationClassesDependentData
 
 class M2LUsingTranslationClassesDependentData(E2EFromCSR):
     """Implements translation from a "compressed sparse row"-like source box
@@ -496,13 +501,18 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
         src_expansions = kwargs.pop("src_expansions")
 
+        knl = self.get_cached_optimized_kernel(result_dtype=src_expansions.dtype)
         return actx.call_loopy(
-            self.get_cached_optimized_kernel(result_dtype=src_expansions.dtype),
+            knl,
             src_expansions=src_expansions,
             centers=centers,
             src_rscale=src_rscale, tgt_rscale=tgt_rscale,
             **kwargs)
 
+# }}}
+
+
+# {{{ M2LGenerateTranslationClassesDependentData
 
 class M2LGenerateTranslationClassesDependentData(E2EBase):
     """Implements precomputing the M2L kernel dependent data which are
@@ -600,8 +610,9 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                 "m2l_translation_classes_dependent_data")
         result_dtype = m2l_translation_classes_dependent_data.dtype
 
+        knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
         return actx.call_loopy(
-            self.get_cached_optimized_kernel(result_dtype=result_dtype),
+            knl,
             src_rscale=src_rscale,
             m2l_translation_vectors=m2l_translation_vectors,
             m2l_translation_classes_dependent_data=(
@@ -685,8 +696,9 @@ class M2LPreprocessMultipole(E2EBase):
         preprocessed_src_expansions = kwargs.pop("preprocessed_src_expansions")
         result_dtype = preprocessed_src_expansions.dtype
 
+        knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
         return actx.call_loopy(
-            self.get_cached_optimized_kernel(result_dtype=result_dtype),
+            knl,
             preprocessed_src_expansions=preprocessed_src_expansions,
             **kwargs)
 
@@ -771,15 +783,16 @@ class M2LPostprocessLocal(E2EBase):
         tgt_expansions = kwargs.pop("tgt_expansions")
         result_dtype = tgt_expansions.dtype
 
+        knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
         return actx.call_loopy(
-            self.get_cached_optimized_kernel(result_dtype=result_dtype),
+            knl,
             tgt_expansions=tgt_expansions,
             **kwargs)
 
 # }}}
 
 
-# {{{ translation from a box's children
+# {{{ E2EFromChildren: translation from a box's children
 
 class E2EFromChildren(E2EBase):
     default_name = "e2e_from_children"
@@ -887,8 +900,9 @@ class E2EFromChildren(E2EBase):
         src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
 
+        knl = self.get_cached_optimized_kernel()
         return actx.call_loopy(
-            self.get_cached_optimized_kernel(),
+            knl,
             centers=centers,
             src_rscale=src_rscale, tgt_rscale=tgt_rscale,
             **kwargs)
@@ -896,7 +910,7 @@ class E2EFromChildren(E2EBase):
 # }}}
 
 
-# {{{ translation from a box's parent
+# {{{ E2EFromParent: translation from a box's parent
 
 class E2EFromParent(E2EBase):
     default_name = "e2e_from_parent"
@@ -989,8 +1003,9 @@ class E2EFromParent(E2EBase):
         src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
 
+        knl = self.get_cached_optimized_kernel()
         return actx.call_loopy(
-            self.get_cached_optimized_kernel(),
+            knl,
             centers=centers,
             src_rscale=src_rscale, tgt_rscale=tgt_rscale,
             **kwargs)
