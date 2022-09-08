@@ -234,7 +234,7 @@ def _test_sumpy_fmm(actx_factory, knl, local_expn_class, mpole_expn_class,
 
         from boxtree.fmm import drive_fmm
 
-        pot, = drive_fmm(wrangler, (weights,))
+        pot, = drive_fmm(actx, wrangler, (weights,))
 
         from sumpy import P2P
         p2p = P2P(actx, target_kernels, exclude_self=False)
@@ -412,7 +412,7 @@ def test_unified_single_and_double(actx_factory, visualize=False):
 
         from boxtree.fmm import drive_fmm
 
-        pot = drive_fmm(wrangler, weights)
+        pot = drive_fmm(actx, wrangler, weights)
         results.append(np.array([actx.to_numpy(pot[0]), actx.to_numpy(pot[1])]))
 
     ref_pot = results[0] + results[1]
@@ -485,7 +485,7 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory, use_fft, visualize=False)
     from boxtree.fmm import drive_fmm
 
     timing_data = {}
-    pot, = drive_fmm(wrangler, (weights,), timing_data=timing_data)
+    pot, = drive_fmm(actx, wrangler, (weights,), timing_data=timing_data)
     logger.info("timing_data:\n%s", timing_data)
 
     assert timing_data
@@ -539,7 +539,7 @@ def test_sumpy_fmm_exclude_self(actx_factory, visualize=False):
 
     from boxtree.fmm import drive_fmm
 
-    pot, = drive_fmm(wrangler, (weights,))
+    pot, = drive_fmm(actx, wrangler, (weights,))
 
     from sumpy import P2P
     p2p = P2P(actx, target_kernels, exclude_self=True)
@@ -610,7 +610,7 @@ def test_sumpy_axis_source_derivative(actx_factory, visualize=False):
 
         from boxtree.fmm import drive_fmm
 
-        pot, = drive_fmm(wrangler, (weights,))
+        pot, = drive_fmm(actx, wrangler, (weights,))
         pots.append(actx.to_numpy(pot))
 
     rel_err = la.norm(pots[0] + pots[1]) / la.norm(pots[0])
@@ -679,7 +679,7 @@ def test_sumpy_target_point_multiplier(actx_factory, deriv_axes, visualize=False
 
     from boxtree.fmm import drive_fmm
 
-    pot0, pot1, pot2 = drive_fmm(wrangler, (weights,))
+    pot0, pot1, pot2 = drive_fmm(actx, wrangler, (weights,))
     pot0, pot1, pot2 = actx.to_numpy(pot0), actx.to_numpy(pot1), actx.to_numpy(pot2)
     if deriv_axes == (0,):
         ref_pot = pot1 * actx.to_numpy(sources[0]) + pot2

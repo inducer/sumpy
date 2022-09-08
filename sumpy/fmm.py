@@ -337,6 +337,10 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
         self.translation_classes_data = translation_classes_data
 
+    @property
+    def _setup_actx(self):
+        return self.tree_indep._setup_actx
+
     def level_to_rscale(self, level):
         tree = self.tree
         order = self.level_orders[level]
@@ -374,7 +378,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
     @memoize_method
     def m2l_translation_class_level_start_box_nrs(self):
-        actx = self.tree_indep._setup_actx
+        actx = self._setup_actx
         return actx.to_numpy(
             self.translation_classes_data
             .from_sep_siblings_translation_classes_level_starts)
@@ -521,7 +525,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     @property
     @memoize_method
     def max_nsources_in_one_box(self):
-        actx = self.tree_indep._setup_actx
+        actx = self._setup_actx
         return actx.to_numpy(
             actx.np.max(self.tree.box_source_counts_nonchild)
             )
@@ -529,7 +533,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     @property
     @memoize_method
     def max_ntargets_in_one_box(self):
-        actx = self.tree_indep._setup_actx
+        actx = self._setup_actx
         return actx.to_numpy(
             actx.np.max(self.tree.box_target_counts_nonchild)
             )
@@ -682,7 +686,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
     @memoize_method
     def multipole_to_local_precompute(self):
-        actx = self.tree_indep._setup_actx
+        actx = self._setup_actx
 
         result = []
         m2l_translation_classes_dependent_data = (
