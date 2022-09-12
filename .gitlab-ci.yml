@@ -26,7 +26,7 @@ Pytest POCL:
   script:
   - export PY_EXE=python3
   - export PYOPENCL_TEST=portable:pthread
-  - export EXTRA_INSTALL="pybind11 numpy mako"
+  - export EXTRA_INSTALL="pybind11 numpy mako mpi4py"
   - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project.sh
   - ". ./build-and-test-py-project.sh"
   tags:
@@ -43,7 +43,7 @@ Pytest Titan V:
   script:
   - py_version=3
   - export PYOPENCL_TEST=nvi:titan
-  - EXTRA_INSTALL="pybind11 numpy mako"
+  - EXTRA_INSTALL="pybind11 numpy mako mpi4py"
   - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project.sh
   - ". ./build-and-test-py-project.sh"
   tags:
