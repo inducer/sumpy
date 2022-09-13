@@ -77,6 +77,7 @@ Transforming kernels
 .. autoclass:: AxisTargetDerivativeRemover
 .. autoclass:: SourceDerivativeRemover
 .. autoclass:: TargetDerivativeRemover
+.. autoclass:: TargetPointMultiplier
 .. autoclass:: DerivativeCounter
 """
 
