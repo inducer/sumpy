@@ -119,7 +119,8 @@ class LinearPDESystemOperator:
         """
         Returns the total number of dimensions including time
         """
-        return len(self.eqs[0].keys()[0].mi)
+        did = next(iter(self.eqs[0].keys()))
+        return len(did.mi)
 
     def to_sym(self, fnames=None):
         from sumpy.symbolic import make_sym_vector, Function
