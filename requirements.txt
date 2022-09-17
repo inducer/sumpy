@@ -2,6 +2,10 @@ numpy
 sympy
 pyrsistent
 pyvkfft
+
+# used in mpi-based tests
+platformdirs
+
 git+https://github.com/inducer/pytools.git#egg=pytools
 git+https://github.com/inducer/pymbolic.git#egg=pymbolic
 git+https://github.com/inducer/islpy.git#egg=islpy
