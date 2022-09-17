@@ -42,10 +42,7 @@ from sumpy import (
         E2EFromChildren, E2EFromParent,
         M2LGenerateTranslationClassesDependentData,
         M2LPreprocessMultipole, M2LPostprocessLocal)
-from sumpy.tools import (
-        to_complex_dtype,
-        run_opencl_fft, get_opencl_fft_app,
-        get_native_event)
+from sumpy.tools import (to_complex_dtype, run_opencl_fft, get_opencl_fft_app)
 
 from typing import TypeVar, List
 
@@ -571,8 +568,14 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             input_vec, inverse, wait_for):
         app = self.tree_indep.opencl_fft_app(input_vec.shape, input_vec.dtype,
             inverse)
-        return run_opencl_fft(
+        evt, result = run_opencl_fft(
             actx, app, input_vec, inverse=inverse, wait_for=wait_for)
+
+        from sumpy.tools import get_native_event
+        input_vec.add_event(get_native_event(evt))
+        result.add_event(get_native_event(evt))
+
+        return result
 
     def form_multipoles(self,
             actx: PyOpenCLArrayContext,
@@ -735,9 +738,10 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             )
 
             if self.tree_indep.m2l_translation.use_fft:
-                self.run_opencl_fft(actx,
+                m2l_translation_classes_dependent_data_view = (
+                    self.run_opencl_fft(actx,
                         m2l_translation_classes_dependent_data_view,
-                        inverse=False, wait_for=None)
+                        inverse=False, wait_for=None))
             result.append(m2l_translation_classes_dependent_data_view)
 
         result = [actx.freeze(arr) for arr in result]
@@ -819,15 +823,10 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 )
 
                 if self.tree_indep.m2l_translation.use_fft:
-                    evt, preprocessed_mpole_exps[lev] = \
+                    preprocessed_mpole_exps[lev] = \
                         self.run_opencl_fft(actx,
                             preprocessed_mpole_exps[lev],
                             inverse=False, wait_for=wait_for)
-                    wait_for.append(get_native_event(evt))
-                else:
-                    evt = None
-
-                preprocess_evts.append(evt)
 
             order = self.level_orders[lev]
             m2l = self.tree_indep.m2l(order, order,
@@ -879,11 +878,10 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     continue
 
                 if self.tree_indep.m2l_translation.use_fft:
-                    evt_fft, target_locals_before_postprocessing_view = \
+                    target_locals_before_postprocessing_view = \
                         self.run_opencl_fft(actx,
                             target_locals_before_postprocessing_view,
                             inverse=True, wait_for=wait_for)
-                    wait_for.append(get_native_event(evt_fft))
 
                 postprocess_local_kernel(
                     actx,
@@ -895,9 +893,6 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     wait_for=wait_for,
                     **self.kernel_extra_kwargs,
                 )
-
-                if self.tree_indep.m2l_translation.use_fft:
-                    postprocess_evts.append(evt_fft)
 
         timing_events = preprocess_evts + translate_evts + postprocess_evts
 

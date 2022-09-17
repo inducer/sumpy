@@ -319,6 +319,7 @@ def test_coeff_magnitude_rscale(actx_factory, knl):
     (weights,) = wrangler.distribute_source_weights((weights,), None)
 
     local_result, _ = wrangler.form_locals(
+        actx,
         trav.level_start_target_or_target_parent_box_nrs,
         trav.target_or_target_parent_boxes,
         trav.from_sep_bigger_starts,
@@ -399,7 +400,7 @@ def test_unified_single_and_double(actx_factory, visualize=False):
     for source_kernels, strength_usage in zip(source_kernel_vecs, strength_usages):
         source_extra_kwargs = {}
         if deriv_knl in source_kernels:
-            source_extra_kwargs["dir_vec"] = dir_vec
+            source_extra_kwargs["dir_vec"] = actx.from_numpy(dir_vec)
         tree_indep = SumpyTreeIndependentDataForWrangler(
                 actx,
                 partial(mpole_expn_class, knl),
@@ -522,7 +523,7 @@ def test_sumpy_fmm_exclude_self(actx_factory, visualize=False):
     weights = actx.from_numpy(rng.random(nsources, dtype=np.float64))
 
     target_to_source = np.arange(tree.ntargets, dtype=np.int32)
-    self_extra_kwargs = {"target_to_source": target_to_source}
+    self_extra_kwargs = {"target_to_source": actx.from_numpy(target_to_source)}
 
     target_kernels = [knl]
 
@@ -542,11 +543,11 @@ def test_sumpy_fmm_exclude_self(actx_factory, visualize=False):
     pot, = drive_fmm(actx, wrangler, (weights,))
 
     from sumpy import P2P
-    p2p = P2P(actx, target_kernels, exclude_self=True)
-    evt, (ref_pot,) = p2p(actx, sources, sources, (weights,), **self_extra_kwargs)
+    p2p = P2P(target_kernels, exclude_self=True)
+    ref_pot = p2p(actx, sources, sources, (weights,), **self_extra_kwargs)
 
     pot = actx.to_numpy(pot)
-    ref_pot = actx.to_numpy(ref_pot)
+    ref_pot = actx.to_numpy(ref_pot["result_s0"])
 
     rel_err = la.norm(pot - ref_pot) / la.norm(ref_pot)
     logger.info("order %d -> relative l2 error: %g", order, rel_err)
@@ -588,7 +589,7 @@ def test_sumpy_axis_source_derivative(actx_factory, visualize=False):
     weights = actx.from_numpy(rng.random(nsources, dtype=np.float64))
 
     target_to_source = np.arange(tree.ntargets, dtype=np.int32)
-    self_extra_kwargs = {"target_to_source": target_to_source}
+    self_extra_kwargs = {"target_to_source": actx.from_numpy(target_to_source)}
 
     from sumpy.kernel import AxisTargetDerivative, AxisSourceDerivative
 
@@ -656,7 +657,7 @@ def test_sumpy_target_point_multiplier(actx_factory, deriv_axes, visualize=False
     weights = actx.from_numpy(rng.random(nsources, dtype=np.float64))
 
     target_to_source = np.arange(tree.ntargets, dtype=np.int32)
-    self_extra_kwargs = {"target_to_source": target_to_source}
+    self_extra_kwargs = {"target_to_source": actx.from_numpy(target_to_source)}
 
     from sumpy.kernel import TargetPointMultiplier, AxisTargetDerivative
 

@@ -1195,8 +1195,8 @@ def run_opencl_fft(actx: PyOpenCLArrayContext,
     app, backend = fft_app
 
     if backend == FFTBackend.loopy:
-        evt, (output_vec,) = app(actx.queue, y=input_vec, wait_for=wait_for)
-        return (evt, output_vec)
+        evt, output_vec = app(actx.queue, y=input_vec, wait_for=wait_for)
+        return (evt, output_vec["x"])
     elif backend == FFTBackend.pyvkfft:
         if wait_for is None:
             wait_for = []
