@@ -675,7 +675,7 @@ class P2PFromCSR(P2PBase):
         knl = self.get_cached_optimized_kernel(
                 max_nsources_in_one_box=max_nsources_in_one_box,
                 max_ntargets_in_one_box=max_ntargets_in_one_box,
-                is_cpu=actx.queue.dev.type & cl.device_type.CPU)
+                is_cpu=actx.queue.device.type & cl.device_type.CPU)
 
         return actx.call_loopy(knl, **kwargs)
 

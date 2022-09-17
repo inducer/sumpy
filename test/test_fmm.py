@@ -237,11 +237,11 @@ def _test_sumpy_fmm(actx_factory, knl, local_expn_class, mpole_expn_class,
         pot, = drive_fmm(actx, wrangler, (weights,))
 
         from sumpy import P2P
-        p2p = P2P(actx, target_kernels, exclude_self=False)
-        evt, (ref_pot,) = p2p(actx, targets, sources, (weights,), **extra_kwargs)
+        p2p = P2P(target_kernels, exclude_self=False)
+        ref_pot = p2p(actx, targets, sources, (weights,), **extra_kwargs)
 
         pot = actx.to_numpy(pot)
-        ref_pot = actx.to_numpy(ref_pot)
+        ref_pot = actx.to_numpy(ref_pot["result_s0"])
 
         rel_err = la.norm(pot - ref_pot, np.inf) / la.norm(ref_pot, np.inf)
         logger.info("order %d -> relative l2 error: %g", order, rel_err)
