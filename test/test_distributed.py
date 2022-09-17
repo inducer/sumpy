@@ -21,10 +21,21 @@ THE SOFTWARE.
 """
 
 import os
-from functools import partial
-import pyopencl as cl
-import numpy as np
 import pytest
+from functools import partial
+
+import numpy as np
+
+from arraycontext import pytest_generate_tests_for_array_contexts
+from sumpy.array_context import (                                 # noqa: F401
+        PytestPyOpenCLArrayContextFactory, _acf)
+
+import logging
+logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts([
+    PytestPyOpenCLArrayContextFactory,
+    ])
 
 # Note: Do not import mpi4py.MPI object at the module level, because OpenMPI does not
 # support recursive invocations.
@@ -51,14 +62,13 @@ def _test_against_single_rank(
     set_cache_dir(mpi_rank)
 
     # Configure array context
-    cl_context = cl.create_some_context()
-    queue = cl.CommandQueue(cl_context)
+    actx = _acf()
 
     def fmm_level_to_order(base_kernel, kernel_arg_set, tree, level):
         return max(level, 3)
 
     from boxtree.traversal import FMMTraversalBuilder
-    traversal_builder = FMMTraversalBuilder(cl_context, well_sep_is_n_away=2)
+    traversal_builder = FMMTraversalBuilder(actx, well_sep_is_n_away=2)
 
     from sumpy.kernel import LaplaceKernel
     from sumpy.expansion import DefaultExpansionFactory
@@ -72,34 +82,30 @@ def _test_against_single_rank(
 
     from sumpy.fmm import SumpyTreeIndependentDataForWrangler
     tree_indep = SumpyTreeIndependentDataForWrangler(
-        cl_context, multipole_expansion_factory, local_expansion_factory, [kernel])
+        actx, multipole_expansion_factory, local_expansion_factory, [kernel])
 
     global_tree_dev = None
-    sources_weights = cl.array.empty(queue, 0, dtype=dtype)
+    sources_weights = actx.empty(0, dtype=dtype)
 
     if mpi_rank == 0:
         # Generate random particles and source weights
         from boxtree.tools import make_normal_particle_array as p_normal
-        sources = p_normal(queue, nsources, dims, dtype, seed=15)
-        targets = p_normal(queue, ntargets, dims, dtype, seed=18)
+        sources = p_normal(actx, nsources, dims, dtype, seed=15)
+        targets = p_normal(actx, ntargets, dims, dtype, seed=18)
 
         # FIXME: Use arraycontext instead of raw PyOpenCL arrays
-        from pyopencl.clrandom import PhiloxGenerator
-        rng = PhiloxGenerator(cl_context, seed=20)
-        sources_weights = rng.uniform(queue, nsources, dtype=np.float64)
-
-        rng = PhiloxGenerator(cl_context, seed=22)
-        target_radii = rng.uniform(
-            queue, ntargets, a=0, b=0.05, dtype=np.float64)
+        rng = np.random.default_rng(20)
+        sources_weights = actx.from_numpy(rng.random(nsources, dtype=np.float64))
+        target_radii = actx.from_numpy(0.05 * rng.random(ntargets, dtype=np.float64))
 
         # Build the tree and interaction lists
         from boxtree import TreeBuilder
-        tb = TreeBuilder(cl_context)
+        tb = TreeBuilder(actx)
         global_tree_dev, _ = tb(
-            queue, sources, targets=targets, target_radii=target_radii,
+            actx, sources, targets=targets, target_radii=target_radii,
             stick_out_factor=0.25, max_particles_in_box=30, debug=True)
 
-        global_trav_dev, _ = traversal_builder(queue, global_tree_dev, debug=True)
+        global_trav_dev, _ = traversal_builder(actx, global_tree_dev, debug=True)
 
         from sumpy.fmm import SumpyExpansionWrangler
         wrangler = SumpyExpansionWrangler(tree_indep, global_trav_dev, dtype,
@@ -107,32 +113,32 @@ def _test_against_single_rank(
 
         # Compute FMM with one MPI rank
         from boxtree.fmm import drive_fmm
-        shmem_potential = drive_fmm(wrangler, [sources_weights])
+        shmem_potential = drive_fmm(actx, wrangler, [sources_weights])
 
     # Compute FMM using the distributed implementation
 
     def wrangler_factory(local_traversal, global_traversal):
         from sumpy.distributed import DistributedSumpyExpansionWrangler
         return DistributedSumpyExpansionWrangler(
-            cl_context, comm, tree_indep, local_traversal, global_traversal, dtype,
+            actx, comm, tree_indep, local_traversal, global_traversal, dtype,
             fmm_level_to_order,
             communicate_mpoles_via_allreduce=communicate_mpoles_via_allreduce)
 
     from boxtree.distributed import DistributedFMMRunner
     distribued_fmm_info = DistributedFMMRunner(
-        queue, global_tree_dev, traversal_builder, wrangler_factory, comm=comm)
+        actx, global_tree_dev, traversal_builder, wrangler_factory, comm=comm)
 
     timing_data = {}
     distributed_potential = distribued_fmm_info.drive_dfmm(
-                [sources_weights], timing_data=timing_data)
+                actx, [sources_weights], timing_data=timing_data)
     assert timing_data
 
     if mpi_rank == 0:
         assert shmem_potential.shape == (1,)
         assert distributed_potential.shape == (1,)
 
-        shmem_potential = shmem_potential[0].get()
-        distributed_potential = distributed_potential[0].get()
+        shmem_potential = actx.to_numpy(shmem_potential[0])
+        distributed_potential = actx.to_numpy(distributed_potential[0])
 
         error = (np.linalg.norm(distributed_potential - shmem_potential, ord=np.inf)
                  / np.linalg.norm(shmem_potential, ord=np.inf))
