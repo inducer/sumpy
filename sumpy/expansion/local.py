@@ -21,6 +21,7 @@ THE SOFTWARE.
 """
 
 import math
+from abc import abstractmethod
 
 from pytools import single_valued
 
@@ -28,6 +29,7 @@ import sumpy.symbolic as sym
 from sumpy.expansion import (
         ExpansionBase,
         VolumeTaylorExpansion,
+        VolumeTaylorExpansionMixin,
         LinearPDEConformingVolumeTaylorExpansion)
 from sumpy.tools import add_to_sac, mi_increment_axis
 
@@ -48,12 +50,9 @@ __doc__ = """
 class LocalExpansionBase(ExpansionBase):
     """Base class for local expansions.
 
-    .. attribute:: kernel
-    .. attribute:: order
-    .. attribute:: use_rscale
-
     .. automethod:: translate_from
     """
+
     init_arg_names = ("kernel", "order", "use_rscale", "m2l_translation")
 
     def __init__(self, kernel, order, use_rscale=None,
@@ -78,6 +77,7 @@ class LocalExpansionBase(ExpansionBase):
             and self.m2l_translation == other.m2l_translation
         )
 
+    @abstractmethod
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, m2l_translation_classes_dependent_data=None):
         """Translate from a multipole or local expansion to a local expansion
@@ -96,13 +96,11 @@ class LocalExpansionBase(ExpansionBase):
                 expressions representing the expressions returned by
                 :func:`~sumpy.expansion.m2l.M2LTranslationBase.translation_classes_dependent_data`.
         """
-        raise NotImplementedError
 
 
 # {{{ line taylor
 
 class LineTaylorLocalExpansion(LocalExpansionBase):
-
     def get_storage_index(self, k):
         return k
 
@@ -150,12 +148,16 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
                 coeffs[self.get_storage_index(i)] / math.factorial(i)
                 for i in self.get_coefficient_identifiers()))
 
+    def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
+            dvec, tgt_rscale, sac=None, m2l_translation_classes_dependent_data=None):
+        raise NotImplementedError
+
 # }}}
 
 
 # {{{ volume taylor
 
-class VolumeTaylorLocalExpansionBase(LocalExpansionBase):
+class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionBase):
     """
     Coefficients represent derivative values of the kernel.
     """
@@ -463,14 +465,21 @@ class BiharmonicConformingVolumeTaylorLocalExpansion(
 # {{{ 2D Bessel-based-expansion
 
 class _FourierBesselLocalExpansion(LocalExpansionBase):
-    def __init__(self, kernel, order, use_rscale=None,
-            m2l_translation=None):
+    def __init__(self,
+            kernel, order, mpole_expn_class,
+            use_rscale=None, m2l_translation=None):
         if not m2l_translation:
             from sumpy.expansion.m2l import DefaultM2LTranslationClassFactory
             factory = DefaultM2LTranslationClassFactory()
-            m2l_translation = factory.get_m2l_translation_class(kernel,
-                self.__class__)()
+            m2l_translation = (
+                factory.get_m2l_translation_class(kernel, self.__class__)())
+
         super().__init__(kernel, order, use_rscale, m2l_translation)
+        self.mpole_expn_class = mpole_expn_class
+
+    @abstractmethod
+    def get_bessel_arg_scaling(self):
+        pass
 
     def get_storage_index(self, k):
         return self.order+k
@@ -561,10 +570,10 @@ class H2DLocalExpansion(_FourierBesselLocalExpansion):
         assert (isinstance(kernel.get_base_kernel(), HelmholtzKernel)
                 and kernel.dim == 2)
 
-        super().__init__(kernel, order, use_rscale, m2l_translation=m2l_translation)
-
         from sumpy.expansion.multipole import H2DMultipoleExpansion
-        self.mpole_expn_class = H2DMultipoleExpansion
+        super().__init__(kernel, order, H2DMultipoleExpansion,
+            use_rscale=use_rscale,
+            m2l_translation=m2l_translation)
 
     def get_bessel_arg_scaling(self):
         return sym.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
@@ -576,10 +585,10 @@ class Y2DLocalExpansion(_FourierBesselLocalExpansion):
         assert (isinstance(kernel.get_base_kernel(), YukawaKernel)
                 and kernel.dim == 2)
 
-        super().__init__(kernel, order, use_rscale, m2l_translation=m2l_translation)
-
         from sumpy.expansion.multipole import Y2DMultipoleExpansion
-        self.mpole_expn_class = Y2DMultipoleExpansion
+        super().__init__(kernel, order, Y2DMultipoleExpansion,
+            use_rscale=use_rscale,
+            m2l_translation=m2l_translation)
 
     def get_bessel_arg_scaling(self):
         return sym.I * sym.Symbol(self.kernel.get_base_kernel().yukawa_lambda_name)

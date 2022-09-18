@@ -20,7 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Tuple, Any
+from abc import ABC, abstractmethod
+from typing import Any, ClassVar, Tuple
 
 import pymbolic
 import loopy as lp
@@ -47,16 +48,16 @@ __doc__ = """
 
 # {{{ M2L translation factory
 
-class M2LTranslationClassFactoryBase:
-    """An interface
+class M2LTranslationClassFactoryBase(ABC):
+    """
     .. automethod:: get_m2l_translation_class
     """
 
+    @abstractmethod
     def get_m2l_translation_class(self, base_kernel, local_expansion_class):
         """Returns a subclass of :class:`M2LTranslationBase` suitable for
         *base_kernel* and *local_expansion_class*.
         """
-        raise NotImplementedError()
 
 
 class NonFFTM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
@@ -113,12 +114,12 @@ class DefaultM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
             raise RuntimeError(
                 f"Unknown local_expansion_class: {local_expansion_class}")
 
-
 # }}}
+
 
 # {{{ M2LTranslationBase
 
-class M2LTranslationBase:
+class M2LTranslationBase(ABC):
     """Base class for Multipole to Local Translation
 
     .. automethod:: translate
@@ -133,10 +134,10 @@ class M2LTranslationBase:
     .. autoattribute:: use_preprocessing
     """
 
-    use_fft = False
-    use_preprocessing = False
+    use_fft: ClassVar[bool] = False
+    use_preprocessing: ClassVar[bool] = False
 
-    def __setattr__(self):
+    def __setattr__(self, name, value):
         # These are intended to be stateless.
         raise AttributeError(f"{type(self)} is stateless and does not permit "
                 "attribute modification.")
@@ -144,9 +145,10 @@ class M2LTranslationBase:
     def __eq__(self, other):
         return type(self) is type(other)
 
+    @abstractmethod
     def translate(self, tgt_expansion, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, translation_classes_dependent_data=None):
-        raise NotImplementedError
+        pass
 
     def loopy_translate(self, tgt_expansion, src_expansion):
         raise NotImplementedError(
@@ -190,6 +192,7 @@ class M2LTranslationBase:
         return translation_classes_dependent_data_loopy_knl(tgt_expansion,
             src_expansion, result_dtype)
 
+    @abstractmethod
     def preprocess_multipole_exprs(self, tgt_expansion, src_expansion,
             src_coeff_exprs, sac, src_rscale):
         """Return the preprocessed multipole expansion for an optimized M2L.
@@ -203,7 +206,6 @@ class M2LTranslationBase:
         expansion coefficients with zeros added to make the M2L computation a
         circulant matvec.
         """
-        raise NotImplementedError
 
     def preprocess_multipole_nexprs(self, tgt_expansion, src_expansion):
         """Return the number of expressions returned by
@@ -217,6 +219,7 @@ class M2LTranslationBase:
         return self.translation_classes_dependent_ndata(tgt_expansion,
             src_expansion)
 
+    @abstractmethod
     def postprocess_local_exprs(self, tgt_expansion, src_expansion, m2l_result,
             src_rscale, tgt_rscale, sac):
         """Return postprocessed local expansion for an optimized M2L.
@@ -227,7 +230,6 @@ class M2LTranslationBase:
         When FFT is turned on, the output expressions are assumed to have been
         transformed from Fourier space back to the original space by the caller.
         """
-        raise NotImplementedError
 
     def postprocess_local_nexprs(self, tgt_expansion, src_expansion):
         """Return the number of expressions given as input to
@@ -244,8 +246,8 @@ class M2LTranslationBase:
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode("utf8"))
 
-
 # }}} M2LTranslationBase
+
 
 # {{{ VolumeTaylorM2LTranslation
 
@@ -627,13 +629,13 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
             fixed_parameters=fixed_parameters,
         )
 
-
 # }}} VolumeTaylorM2LTranslation
+
 
 # {{{ VolumeTaylorM2LWithPreprocessedMultipoles
 
 class VolumeTaylorM2LWithPreprocessedMultipoles(VolumeTaylorM2LTranslation):
-    use_preprocessing = True
+    use_preprocessing: ClassVar[bool] = True
 
     def translate(self, tgt_expansion, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, translation_classes_dependent_data=None):
@@ -690,13 +692,13 @@ class VolumeTaylorM2LWithPreprocessedMultipoles(VolumeTaylorM2LTranslation):
                 lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
                 )
 
-
 # }}} VolumeTaylorM2LWithPreprocessedMultipoles
+
 
 # {{{ VolumeTaylorM2LWithFFT
 
 class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
-    use_fft = True
+    use_fft: ClassVar[bool] = True
 
     def translate(self, tgt_expansion, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, translation_classes_dependent_data=None):
@@ -738,8 +740,8 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
         return super().postprocess_local_exprs(tgt_expansion,
             src_expansion, m2l_result, src_rscale, tgt_rscale, sac)
 
-
 # }}} VolumeTaylorM2LWithFFT
+
 
 # {{{ FourierBesselM2LTranslation
 
@@ -823,13 +825,13 @@ class FourierBesselM2LTranslation(M2LTranslationBase):
     def postprocess_local_nexprs(self, tgt_expansion, src_expansion):
         return 2*tgt_expansion.order + 1
 
-
 # }}} FourierBesselM2LTranslation
+
 
 # {{{ FourierBesselM2LWithPreprocessedMultipoles
 
 class FourierBesselM2LWithPreprocessedMultipoles(FourierBesselM2LTranslation):
-    use_preprocessing = True
+    use_preprocessing: ClassVar[bool] = True
 
     def translate(self, tgt_expansion, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, translation_classes_dependent_data=None):
@@ -846,8 +848,8 @@ class FourierBesselM2LWithPreprocessedMultipoles(FourierBesselM2LTranslation):
         return translated_coeffs
 
     def loopy_translate(self, tgt_expansion, src_expansion):
-        ncoeff_src = self.preprocess_multipole_nexprs(src_expansion)
-        ncoeff_tgt = self.postprocess_local_nexprs(src_expansion)
+        ncoeff_src = self.preprocess_multipole_nexprs(tgt_expansion, src_expansion)
+        ncoeff_tgt = self.postprocess_local_nexprs(tgt_expansion, src_expansion)
 
         icoeff_src = pymbolic.var("icoeff_src")
         icoeff_tgt = pymbolic.var("icoeff_tgt")
@@ -857,7 +859,7 @@ class FourierBesselM2LWithPreprocessedMultipoles(FourierBesselM2LTranslation):
         src_coeffs = pymbolic.var("src_coeffs")
         translation_classes_dependent_data = pymbolic.var("data")
 
-        if self.use_fft_for_m2l:
+        if self.use_fft:
             expr = src_coeffs[icoeff_tgt] \
                     * translation_classes_dependent_data[icoeff_tgt]
         else:
@@ -884,13 +886,13 @@ class FourierBesselM2LWithPreprocessedMultipoles(FourierBesselM2LTranslation):
                 lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
                 )
 
-
 # }}} FourierBesselM2LWithPreprocessedMultipoles
+
 
 # {{{ FourierBesselM2LWithFFT
 
 class FourierBesselM2LWithFFT(FourierBesselM2LWithPreprocessedMultipoles):
-    use_fft = True
+    use_fft: ClassVar[bool] = True
 
     def __init__(self):
         # FIXME: expansion with FFT is correct symbolically and can be verified
@@ -899,8 +901,7 @@ class FourierBesselM2LWithFFT(FourierBesselM2LWithPreprocessedMultipoles):
         # instability but gives rscale as a possible solution. Sumpy's rscale
         # choice is slightly different from Greengard and Rokhlin and that
         # might be the reason for this numerical issue.
-        raise ValueError("Bessel based expansions with FFT is not fully "
-                         "supported yet.")
+        raise ValueError("Bessel based expansions with FFT are not supported yet.")
 
     def translate(self, tgt_expansion, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, translation_classes_dependent_data=None):
@@ -956,8 +957,8 @@ class FourierBesselM2LWithFFT(FourierBesselM2LWithPreprocessedMultipoles):
         return super().postprocess_local_exprs(tgt_expansion,
             src_expansion, m2l_result, src_rscale, tgt_rscale, sac)
 
-
 # }}} FourierBesselM2LWithFFT
+
 
 # {{{ translation_classes_dependent_data_loopy_knl
 
