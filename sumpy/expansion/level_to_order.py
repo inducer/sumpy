@@ -48,37 +48,43 @@ class FMMLibExpansionOrderFinder:
         self.extra_order = extra_order
 
     def __call__(self, kernel, kernel_args, tree, level):
-        import pyfmmlib
-
+        from pyfmmlib import (          # pylint: disable=no-name-in-module
+            l2dterms, l3dterms, h2dterms, h3dterms)
         from sumpy.kernel import LaplaceKernel, HelmholtzKernel
-
-        assert isinstance(kernel, (LaplaceKernel, HelmholtzKernel))
-        assert tree.dimensions in (2, 3)
 
         if isinstance(kernel, LaplaceKernel):
             if tree.dimensions == 2:
-                nterms, ier = pyfmmlib.l2dterms(self.tol)
+                nterms, ier = l2dterms(self.tol)
                 if ier:
                     raise RuntimeError(f"l2dterms returned error code '{ier}'")
 
             elif tree.dimensions == 3:
-                nterms, ier = pyfmmlib.l3dterms(self.tol)
+                nterms, ier = l3dterms(self.tol)
                 if ier:
                     raise RuntimeError(f"l3dterms returned error code '{ier}'")
+
+            else:
+                raise ValueError(f"unsupported dimension: {tree.dimensions}")
 
         elif isinstance(kernel, HelmholtzKernel):
             helmholtz_k = dict(kernel_args)[kernel.helmholtz_k_name]
             size = tree.root_extent / 2 ** level
 
             if tree.dimensions == 2:
-                nterms, ier = pyfmmlib.h2dterms(size, helmholtz_k, self.tol)
+                nterms, ier = h2dterms(size, helmholtz_k, self.tol)
                 if ier:
                     raise RuntimeError(f"h2dterms returned error code '{ier}'")
 
             elif tree.dimensions == 3:
-                nterms, ier = pyfmmlib.h3dterms(size, helmholtz_k, self.tol)
+                nterms, ier = h3dterms(size, helmholtz_k, self.tol)
                 if ier:
                     raise RuntimeError(f"h3dterms returned error code '{ier}'")
+
+            else:
+                raise ValueError(f"unsupported dimension: {tree.dimensions}")
+
+        else:
+            raise TypeError(f"unsupported kernel: '{type(kernel).__name__}'")
 
         return nterms + self.extra_order
 

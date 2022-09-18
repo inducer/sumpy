@@ -24,7 +24,7 @@ import numpy as np
 import loopy as lp
 import sumpy.symbolic as sym
 
-from sumpy.tools import KernelCacheWrapper
+from sumpy.tools import KernelCacheMixin
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 
 
@@ -42,7 +42,9 @@ Expansion-to-particle
 
 # {{{ E2P base class
 
-class E2PBase(KernelCacheWrapper):
+class E2PBase(KernelCacheMixin):
+    default_name = "e2p"
+
     def __init__(self, ctx, expansion, kernels,
             name=None, device=None):
         """

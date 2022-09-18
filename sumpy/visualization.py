@@ -141,7 +141,7 @@ class FieldPlotter:
 
         if max_val is not None:
             squeezed_fld[squeezed_fld > max_val] = max_val
-            squeezed_fld[squeezed_fld < -max_val] = -max_val
+            squeezed_fld[squeezed_fld < -max_val] = -max_val  # pylint: disable=E1130
 
         squeezed_fld = squeezed_fld[..., ::-1]
 
@@ -165,7 +165,8 @@ class FieldPlotter:
     def show_vector_in_mayavi(self, fld, do_show=True, **kwargs):
         c = self.points
 
-        from mayavi import mlab
+        from mayavi import mlab     # pylint: disable=import-error
+
         mlab.quiver3d(c[0], c[1], c[2], fld[0], fld[1], fld[2],
                 **kwargs)
 
@@ -181,7 +182,7 @@ class FieldPlotter:
     def show_scalar_in_mayavi(self, fld, max_val=None, **kwargs):
         if max_val is not None:
             fld[fld > max_val] = max_val
-            fld[fld < -max_val] = -max_val
+            fld[fld < -max_val] = -max_val  # pylint: disable=E1130
 
         if len(fld.shape) == 1:
             fld = fld.reshape(self.nd_points.shape[1:])
@@ -189,7 +190,7 @@ class FieldPlotter:
         nd_points = self.nd_points.squeeze()[self._get_nontrivial_dims()]
         squeezed_fld = fld.squeeze()
 
-        from mayavi import mlab
+        from mayavi import mlab     # pylint: disable=import-error
         mlab.surf(nd_points[0], nd_points[1], squeezed_fld, **kwargs)
 
 # vim: foldmethod=marker

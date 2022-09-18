@@ -24,7 +24,7 @@ import numpy as np
 import loopy as lp
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 
-from sumpy.tools import KernelCacheWrapper, KernelComputation
+from sumpy.tools import KernelCacheMixin, KernelComputation
 
 import logging
 logger = logging.getLogger(__name__)
@@ -43,11 +43,13 @@ Particle-to-Expansion
 
 # {{{ P2E base class
 
-class P2EBase(KernelComputation, KernelCacheWrapper):
+class P2EBase(KernelCacheMixin, KernelComputation):
     """Common input processing for kernel computations.
 
     .. automethod:: __init__
     """
+
+    default_name = "p2e"
 
     def __init__(self, ctx, expansion, kernels=None,
             name=None, device=None, strength_usage=None):
@@ -121,6 +123,9 @@ class P2EBase(KernelComputation, KernelCacheWrapper):
     def get_cache_key(self):
         return (type(self).__name__, self.name, self.expansion,
                 tuple(self.source_kernels), tuple(self.strength_usage))
+
+    def get_kernel(self):
+        raise NotImplementedError
 
     def get_optimized_kernel(self, sources_is_obj_array, centers_is_obj_array):
         knl = self.get_kernel()

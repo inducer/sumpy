@@ -20,6 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from typing import ClassVar, Tuple
 
 import loopy as lp
 import numpy as np
@@ -111,7 +112,7 @@ class KernelArgument:
         # Needed for python2
         return not self == other
 
-    def __hash__(self):
+    def __hash__(self):                 # pylint: disable=invalid-hash-returned
         return (type(self), self.loopy_arg)
 
 
@@ -135,6 +136,8 @@ class Kernel:
     .. automethod:: get_args
     .. automethod:: get_source_args
     """
+
+    init_arg_names: ClassVar[Tuple[str, ...]]
 
     def __init__(self, dim):
         self.dim = dim
@@ -163,6 +166,9 @@ class Kernel:
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode("utf8"))
         key_builder.rec(key_hash, self.__getinitargs__())
+
+    def __getinitargs__(self):
+        return (self.dim,)
 
     def __getstate__(self):
         return self.__getinitargs__()
@@ -1083,6 +1089,7 @@ class _VectorIndexAdder(CSECachingMapperMixin, IdentityMapper):
 
 
 class DirectionalDerivative(DerivativeBase):
+    directional_kind: ClassVar[str]
     init_arg_names = ("inner_kernel", "dir_vec_name")
 
     def __init__(self, inner_kernel, dir_vec_name=None):
@@ -1307,6 +1314,9 @@ class KernelMapper:
 
 
 class KernelCombineMapper(KernelMapper):
+    def combine(self, values):
+        raise NotImplementedError
+
     def map_difference_kernel(self, kernel):
         return self.combine([
                 self.rec(kernel.kernel_plus),
@@ -1408,7 +1418,7 @@ def to_kernel_and_args(kernel_like):
 
     if not isinstance(kernel_like, Kernel):
         if kernel_like == 0:
-            return LaplaceKernel(), {}
+            return LaplaceKernel(None), {}
         elif isinstance(kernel_like, str):
             return HelmholtzKernel(None), {"k": var(kernel_like)}
         else:

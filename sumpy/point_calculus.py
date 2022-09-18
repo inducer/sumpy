@@ -120,7 +120,7 @@ class CalculusPatch:
         """
 
         from pytools import indices_in_shape
-        from scipy.special import eval_chebyt
+        from scipy.special import eval_chebyt   # pylint: disable=no-name-in-module
 
         def eval_basis(ind, x):
             result = 1
@@ -240,8 +240,10 @@ class CalculusPatch:
         :returns: a scalar.
         """
         f_values = f_values.reshape(*self._pshape)
+        zero_eval_vec_1d = self._zero_eval_vec_1d
+
         for _ in range(self.dim):
-            f_values = self._zero_eval_vec_1d.dot(f_values)
+            f_values = zero_eval_vec_1d @ f_values
 
         return f_values
 
