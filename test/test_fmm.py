@@ -316,7 +316,7 @@ def test_coeff_magnitude_rscale(actx_factory, knl):
         kernel_extra_kwargs=extra_kwargs)
 
     weights = wrangler.reorder_sources(weights)
-    (weights,) = wrangler.distribute_source_weights((weights,), None)
+    (weights,) = wrangler.distribute_source_weights(actx, (weights,), None)
 
     local_result, _ = wrangler.form_locals(
         actx,
