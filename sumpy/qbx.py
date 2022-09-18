@@ -32,7 +32,7 @@ from pytools import memoize_method
 from pymbolic import parse, var
 
 from sumpy.tools import (
-        KernelComputation, KernelCacheWrapper, is_obj_array_like)
+        KernelComputation, KernelCacheMixin, is_obj_array_like)
 
 import logging
 logger = logging.getLogger(__name__)
@@ -66,7 +66,9 @@ def stringify_expn_index(i):
 
 # {{{ base class
 
-class LayerPotentialBase(KernelComputation, KernelCacheWrapper):
+class LayerPotentialBase(KernelCacheMixin, KernelComputation):
+    default_name = "qbx"
+
     def __init__(self, ctx, expansion, strength_usage=None,
             value_dtypes=None, name=None, device=None,
             source_kernels=None, target_kernels=None):

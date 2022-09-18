@@ -54,7 +54,7 @@ import pyopencl as cl
 import pyopencl.array as cla
 
 import loopy as lp
-from typing import Dict, Tuple, Any
+from typing import Dict, Tuple, Any, ClassVar
 
 import logging
 logger = logging.getLogger(__name__)
@@ -579,6 +579,8 @@ class ScalingAssignmentTag(Tag):
 class KernelComputation:
     """Common input processing for kernel computations."""
 
+    default_name: ClassVar[str] = "unknown"
+
     def __init__(self, ctx, target_kernels, source_kernels, strength_usage,
             value_dtypes, name, device=None):
         """
@@ -722,7 +724,7 @@ class OrderedSet(MutableSet):
 # }}}
 
 
-class KernelCacheWrapper:
+class KernelCacheMixin:
     @memoize_method
     def get_cached_optimized_kernel(self, **kwargs):
         from sumpy import code_cache, CACHING_ENABLED, OPT_ENABLED
@@ -767,6 +769,9 @@ class KernelCacheWrapper:
         from loopy.match import ObjTagged
         return lp.add_inames_for_unused_hw_axes(
                 knl, within=ObjTagged(ScalingAssignmentTag()))
+
+
+KernelCacheWrapper = KernelCacheMixin
 
 
 def is_obj_array_like(ary):
@@ -1239,6 +1244,31 @@ def run_opencl_fft(fft_app, queue, input_vec, inverse=False, wait_for=None):
             output_vec)
     else:
         raise RuntimeError(f"Unsupported FFT backend {backend}")
+
+# }}}
+
+
+# {{{ deprecations
+
+_depr_name_to_replacement_and_obj = {
+    "KernelCacheWrapper": ("KernelCacheMixin", 2023),
+    }
+
+if sys.version_info >= (3, 7):
+    def __getattr__(name):
+        replacement_and_obj = _depr_name_to_replacement_and_obj.get(name, None)
+        if replacement_and_obj is not None:
+            replacement, obj, year = replacement_and_obj
+            from warnings import warn
+            warn(f"'sumpy.tools.{name}' is deprecated. "
+                    f"Use '{replacement}' instead. "
+                    f"'sumpy.tools.{name}' will continue to work until {year}.",
+                    DeprecationWarning, stacklevel=2)
+            return obj
+        else:
+            raise AttributeError(name)
+else:
+    KernelCacheWrapper = KernelCacheMixin
 
 # }}}
 
