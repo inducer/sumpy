@@ -20,6 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from abc import ABC, abstractmethod
+
 import numpy as np
 import loopy as lp
 import sumpy.symbolic as sym
@@ -42,9 +44,7 @@ Expansion-to-particle
 
 # {{{ E2P base class
 
-class E2PBase(KernelCacheMixin):
-    default_name = "e2p"
-
+class E2PBase(KernelCacheMixin, ABC):
     def __init__(self, ctx, expansion, kernels,
             name=None, device=None):
         """
@@ -76,6 +76,11 @@ class E2PBase(KernelCacheMixin):
         self.device = device
 
         self.dim = expansion.dim
+
+    @property
+    @abstractmethod
+    def default_name(self):
+        pass
 
     def get_loopy_insns_and_result_names(self):
         from sumpy.symbolic import make_sym_vector
@@ -132,7 +137,9 @@ class E2PBase(KernelCacheMixin):
 # {{{ E2P to single box (L2P, likely)
 
 class E2PFromSingleBox(E2PBase):
-    default_name = "e2p_from_single_box"
+    @property
+    def default_name(self):
+        return "e2p_from_single_box"
 
     def get_kernel(self):
         ncoeffs = len(self.expansion)
@@ -234,7 +241,9 @@ class E2PFromSingleBox(E2PBase):
 # {{{ E2P from CSR-like interaction list
 
 class E2PFromCSR(E2PBase):
-    default_name = "e2p_from_csr"
+    @property
+    def default_name(self):
+        return "e2p_from_csr"
 
     def get_kernel(self):
         ncoeffs = len(self.expansion)

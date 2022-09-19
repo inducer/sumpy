@@ -49,8 +49,6 @@ class P2EBase(KernelCacheMixin, KernelComputation):
     .. automethod:: __init__
     """
 
-    default_name = "p2e"
-
     def __init__(self, ctx, expansion, kernels=None,
             name=None, device=None, strength_usage=None):
         """
@@ -124,9 +122,6 @@ class P2EBase(KernelCacheMixin, KernelComputation):
         return (type(self).__name__, self.name, self.expansion,
                 tuple(self.source_kernels), tuple(self.strength_usage))
 
-    def get_kernel(self):
-        raise NotImplementedError
-
     def get_optimized_kernel(self, sources_is_obj_array, centers_is_obj_array):
         knl = self.get_kernel()
 
@@ -165,7 +160,9 @@ class P2EFromSingleBox(P2EBase):
     .. automethod:: __call__
     """
 
-    default_name = "p2e_from_single_box"
+    @property
+    def default_name(self):
+        return "p2e_from_single_box"
 
     def get_kernel(self):
         ncoeffs = len(self.expansion)
@@ -267,7 +264,9 @@ class P2EFromCSR(P2EBase):
     .. automethod:: __call__
     """
 
-    default_name = "p2e_from_csr"
+    @property
+    def default_name(self):
+        return "p2e_from_csr"
 
     def get_kernel(self):
         ncoeffs = len(self.expansion)

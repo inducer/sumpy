@@ -20,6 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from abc import ABC, abstractmethod
+
 import numpy as np
 import loopy as lp
 import sumpy.symbolic as sym
@@ -48,9 +50,7 @@ Expansion-to-expansion
 
 # {{{ translation base class
 
-class E2EBase(KernelCacheMixin):
-    default_name = "e2e"
-
+class E2EBase(KernelCacheMixin, ABC):
     def __init__(self, ctx, src_expansion, tgt_expansion,
             name=None, device=None):
         """
@@ -94,6 +94,11 @@ class E2EBase(KernelCacheMixin):
 
         self.dim = src_expansion.dim
 
+    @property
+    @abstractmethod
+    def default_name(self):
+        pass
+
     @memoize_method
     def get_translation_loopy_insns(self):
         from sumpy.symbolic import make_sym_vector
@@ -132,8 +137,9 @@ class E2EBase(KernelCacheMixin):
                 self.tgt_expansion,
         )
 
+    @abstractmethod
     def get_kernel(self):
-        raise NotImplementedError
+        pass
 
     def get_optimized_kernel(self):
         # FIXME
@@ -152,12 +158,14 @@ class E2EFromCSR(E2EBase):
     list.
     """
 
-    default_name = "e2e_from_csr"
-
     def __init__(self, ctx, src_expansion, tgt_expansion,
             name=None, device=None):
         super().__init__(ctx, src_expansion, tgt_expansion,
             name=name, device=device)
+
+    @property
+    def default_name(self):
+        return "e2e_from_csr"
 
     def get_translation_loopy_insns(self):
         from sumpy.symbolic import make_sym_vector
@@ -302,7 +310,9 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
     list using M2L translation classes dependent data
     """
 
-    default_name = "m2l_using_translation_classes_dependent_data"
+    @property
+    def default_name(self):
+        return "m2l_using_translation_classes_dependent_data"
 
     def get_translation_loopy_insns(self, result_dtype):
         from sumpy.symbolic import make_sym_vector
@@ -538,7 +548,10 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
     """Implements precomputing the M2L kernel dependent data which are
     translation classes dependent derivatives.
     """
-    default_name = "m2l_generate_translation_classes_dependent_data"
+
+    @property
+    def default_name(self):
+        return "m2l_generate_translation_classes_dependent_data"
 
     def get_kernel(self, result_dtype):
         m2l_translation = self.tgt_expansion.m2l_translation
@@ -649,7 +662,9 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
 class M2LPreprocessMultipole(E2EBase):
     """Computes the preprocessed multipole expansion for accelerated M2L"""
 
-    default_name = "m2l_preprocess_multipole"
+    @property
+    def default_name(self):
+        return "m2l_preprocess_multipole"
 
     def get_kernel(self, result_dtype):
         m2l_translation = self.tgt_expansion.m2l_translation
@@ -731,7 +746,9 @@ class M2LPreprocessMultipole(E2EBase):
 class M2LPostprocessLocal(E2EBase):
     """Postprocesses locals expansions for accelerated M2L"""
 
-    default_name = "m2l_postprocess_local"
+    @property
+    def default_name(self):
+        return "m2l_postprocess_local"
 
     def get_kernel(self, result_dtype):
         m2l_translation = self.tgt_expansion.m2l_translation
@@ -816,7 +833,9 @@ class M2LPostprocessLocal(E2EBase):
 # {{{ translation from a box's children
 
 class E2EFromChildren(E2EBase):
-    default_name = "e2e_from_children"
+    @property
+    def default_name(self):
+        return "e2e_from_children"
 
     def get_kernel(self):
         ncoeffs_src = len(self.src_expansion)
@@ -933,7 +952,9 @@ class E2EFromChildren(E2EBase):
 # {{{ translation from a box's parent
 
 class E2EFromParent(E2EBase):
-    default_name = "e2e_from_parent"
+    @property
+    def default_name(self):
+        return "e2e_from_parent"
 
     def get_kernel(self):
         ncoeffs_src = len(self.src_expansion)
