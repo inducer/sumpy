@@ -51,8 +51,6 @@ Particle-to-particle
 # {{{ p2p base class
 
 class P2PBase(KernelCacheMixin, KernelComputation):
-    default_name = "p2p"
-
     def __init__(self, ctx, target_kernels, exclude_self, strength_usage=None,
             value_dtypes=None, name=None, device=None, source_kernels=None):
         """
@@ -175,9 +173,6 @@ class P2PBase(KernelCacheMixin, KernelComputation):
                     if self.exclude_self else [])
                 + gather_loopy_source_arguments(self.source_kernels))
 
-    def get_kernel(self):
-        raise NotImplementedError
-
     def get_optimized_kernel(self, targets_is_obj_array, sources_is_obj_array):
         # FIXME
         knl = self.get_kernel()
@@ -203,7 +198,9 @@ class P2PBase(KernelCacheMixin, KernelComputation):
 class P2P(P2PBase):
     """Direct applier for P2P interactions."""
 
-    default_name = "p2p_apply"
+    @property
+    def default_name(self):
+        return "p2p_apply"
 
     def get_kernel(self):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
@@ -268,7 +265,9 @@ class P2P(P2PBase):
 class P2PMatrixGenerator(P2PBase):
     """Generator for P2P interaction matrix entries."""
 
-    default_name = "p2p_matrix"
+    @property
+    def default_name(self):
+        return "p2p_matrix"
 
     def get_strength_or_not(self, isrc, kernel_idx):
         return 1
@@ -333,7 +332,9 @@ class P2PMatrixSubsetGenerator(P2PBase):
     .. automethod:: __call__
     """
 
-    default_name = "p2p_subset"
+    @property
+    def default_name(self):
+        return "p2p_subset"
 
     def get_strength_or_not(self, isrc, kernel_idx):
         return 1
@@ -438,7 +439,9 @@ class P2PMatrixSubsetGenerator(P2PBase):
 # {{{ P2P from CSR-like interaction list
 
 class P2PFromCSR(P2PBase):
-    default_name = "p2p_from_csr"
+    @property
+    def default_name(self):
+        return "p2p_from_csr"
 
     def get_kernel(self, max_nsources_in_one_box, max_ntargets_in_one_box,
             gpu=False, nsplit=32):

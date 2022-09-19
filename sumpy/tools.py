@@ -43,8 +43,9 @@ import warnings
 import os
 import sys
 import enum
-import platform
-from collections import defaultdict, namedtuple
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
 from pymbolic.mapper import WalkMapper
 import pymbolic
 
@@ -54,10 +55,13 @@ import pyopencl as cl
 import pyopencl.array as cla
 
 import loopy as lp
-from typing import Dict, Tuple, Any, ClassVar
+from typing import Dict, Tuple, Any, List, Optional, TYPE_CHECKING
 
 import logging
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from sumpy.kernel import Kernel
 
 
 # {{{ multi_index helpers
@@ -452,7 +456,9 @@ def diff_derivative_coeff_dict(derivative_coeff_dict: DerivativeCoeffDict,
     *derivative_coeff_dict* using the variable given by **variable_idx**
     and return a new derivative transformation dictionary.
     """
+    from collections import defaultdict
     new_derivative_coeff_dict = defaultdict(lambda: 0)
+
     for mi, coeff in derivative_coeff_dict.items():
         # In the case where we have x * u.diff(x), the result should
         # be x.diff(x) + x * u.diff(x, x)
@@ -576,18 +582,32 @@ class ScalingAssignmentTag(Tag):
     pass
 
 
-class KernelComputation:
-    """Common input processing for kernel computations."""
+class KernelComputation(ABC):
+    """Common input processing for kernel computations.
 
-    default_name: ClassVar[str] = "unknown"
+    .. attribute:: name
+    .. attribute:: target_kernels
+    .. attribute:: source_kernels
+    .. attribute:: strength_usage
 
-    def __init__(self, ctx, target_kernels, source_kernels, strength_usage,
-            value_dtypes, name, device=None):
+    .. automethod:: get_kernel
+    """
+
+    def __init__(self, ctx: Any,
+            target_kernels: List["Kernel"],
+            source_kernels: List["Kernel"],
+            strength_usage: Optional[List[int]] = None,
+            value_dtypes: Optional[List["np.dtype"]] = None,
+            name: Optional[str] = None,
+            device: Optional[Any] = None) -> None:
         """
-        :arg kernels: list of :class:`sumpy.kernel.Kernel` instances
-            :class:`sumpy.kernel.TargetDerivative` wrappers should be
+        :arg target_kernels: list of :class:`~sumpy.kernel.Kernel` instances,
+            with :class:`sumpy.kernel.DirectionalTargetDerivative` as
             the outermost kernel wrappers, if present.
-        :arg strength_usage: A list of integers indicating which expression
+        :arg source_kernels: list of :class:`~sumpy.kernel.Kernel` instances
+            with :class:`~sumpy.kernel.DirectionalSourceDerivative` as the
+            outermost kernel wrappers, if present.
+        :arg strength_usage: list of integers indicating which expression
             uses which density. This implicitly specifies the
             number of density arrays that need to be passed.
             Default: all kernels use the same density.
@@ -634,6 +654,11 @@ class KernelComputation:
 
         self.name = name or self.default_name
 
+    @property
+    @abstractmethod
+    def default_name(self):
+        pass
+
     def get_kernel_scaling_assignments(self):
         from sumpy.symbolic import SympyToPymbolicMapper
         sympy_conv = SympyToPymbolicMapper()
@@ -647,6 +672,10 @@ class KernelComputation:
                     tags=frozenset([ScalingAssignmentTag()]))
                 for i, (kernel, dtype) in enumerate(
                     zip(self.target_kernels, self.value_dtypes))]
+
+    @abstractmethod
+    def get_kernel(self):
+        pass
 
 # }}}
 
@@ -945,7 +974,10 @@ def to_complex_dtype(dtype):
         raise RuntimeError(f"Unknown dtype: {dtype}")
 
 
-ProfileGetter = namedtuple("ProfileGetter", "start, end")
+@dataclass(frozen=True)
+class ProfileGetter:
+    start: int
+    end: int
 
 
 def get_native_event(evt):
@@ -1173,6 +1205,7 @@ def _get_fft_backend(queue) -> FFTBackend:
             "Falling back to slower implementation.")
         return FFTBackend.loopy
 
+    import platform
     if (sys.platform == "darwin"
             and platform.machine() == "x86_64"
             and queue.context.devices[0].platform.name
