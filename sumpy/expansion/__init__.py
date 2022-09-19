@@ -21,11 +21,12 @@ THE SOFTWARE.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar, Dict, Hashable, List, Tuple, Type
+from typing import Any, ClassVar, Dict, Hashable, List, Optional, Tuple, Type
 
 from pytools import memoize_method
 
 import sumpy.symbolic as sym
+from sumpy.kernel import Kernel
 from sumpy.tools import add_mi
 
 import logging
@@ -73,7 +74,10 @@ class ExpansionBase(ABC):
     """
     init_arg_names = ("kernel", "order", "use_rscale")
 
-    def __init__(self, kernel, order, use_rscale=None):
+    def __init__(self,
+            kernel: Kernel,
+            order: int,
+            use_rscale: Optional[bool] = None) -> None:
         # Don't be tempted to remove target derivatives here.
         # Line Taylor QBX can't do without them, because it can't
         # apply those derivatives to the expanded quantity.
@@ -92,11 +96,11 @@ class ExpansionBase(ABC):
     # to make it fit into sumpy.qbx.LayerPotential.
 
     @property
-    def dim(self):
+    def dim(self) -> int:
         return self.kernel.dim
 
     @property
-    def is_complex_valued(self):
+    def is_complex_valued(self) -> bool:
         return self.kernel.is_complex_valued
 
     def get_code_transformer(self):
@@ -116,7 +120,7 @@ class ExpansionBase(ABC):
     # {{{ abstract interface
 
     @abstractmethod
-    def get_coefficient_identifiers(self):
+    def get_coefficient_identifiers(self) -> List[Hashable]:
         """
         :returns: the identifiers of the coefficients that actually get stored.
         """
@@ -167,10 +171,10 @@ class ExpansionBase(ABC):
 
     # {{{ copy
 
-    def with_kernel(self, kernel):
+    def with_kernel(self, kernel: Kernel) -> "ExpansionBase":
         return type(self)(kernel, self.order, self.use_rscale)
 
-    def copy(self, **kwargs):
+    def copy(self, **kwargs) -> "ExpansionBase":
         new_kwargs = {
                 name: getattr(self, name)
                 for name in self.init_arg_names}
@@ -224,7 +228,10 @@ class ExpansionTermsWrangler(ABC):
     """
     init_arg_names = ("order", "dim", "max_mi")
 
-    def __init__(self, order, dim, max_mi=None):
+    def __init__(self,
+            order: int,
+            dim: int,
+            max_mi: Optional[int] = None) -> None:
         self.order = order
         self.dim = dim
         self.max_mi = max_mi
@@ -232,7 +239,7 @@ class ExpansionTermsWrangler(ABC):
     # {{{ abstract interface
 
     @abstractmethod
-    def get_coefficient_identifiers(self):
+    def get_coefficient_identifiers(self) -> List[Hashable]:
         pass
 
     @abstractmethod
@@ -248,7 +255,7 @@ class ExpansionTermsWrangler(ABC):
     # }}}
 
     @memoize_method
-    def get_full_coefficient_identifiers(self):
+    def get_full_coefficient_identifiers(self) -> List[Hashable]:
         """
         Returns identifiers for every coefficient in the complete expansion.
         """
@@ -300,7 +307,8 @@ class ExpansionTermsWrangler(ABC):
         return hyperplanes
 
     @memoize_method
-    def _split_coeffs_into_hyperplanes(self) -> List[Tuple[int, List[Tuple[int]]]]:
+    def _split_coeffs_into_hyperplanes(
+            self) -> List[Tuple[int, List[Tuple[int, ...]]]]:
         r"""
         This splits the coefficients into :math:`O(p)` disjoint sets
         so that for each set, all the identifiers have the form,
@@ -445,7 +453,9 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
     init_arg_names = ("order", "dim", "knl", "max_mi")
 
-    def __init__(self, order, dim, knl, max_mi=None):
+    def __init__(self,
+            order: int, dim: int, knl: Kernel,
+            max_mi: Optional[int] = None) -> None:
         r"""
         :param order: order of the expansion
         :param dim: number of dimensions
@@ -733,7 +743,7 @@ class VolumeTaylorExpansion(VolumeTaylorExpansionMixin):
     expansion_terms_wrangler_class = FullExpansionTermsWrangler
 
     # not user-facing, be strict about having to pass use_rscale
-    def __init__(self, kernel, order, use_rscale):
+    def __init__(self, kernel: Kernel, order: int, use_rscale: bool) -> None:
         self.expansion_terms_wrangler_key = (order, kernel.dim)
 
 
@@ -741,7 +751,7 @@ class LinearPDEConformingVolumeTaylorExpansion(VolumeTaylorExpansionMixin):
     expansion_terms_wrangler_class = LinearPDEBasedExpansionTermsWrangler
 
     # not user-facing, be strict about having to pass use_rscale
-    def __init__(self, kernel, order, use_rscale):
+    def __init__(self, kernel: Kernel, order: int, use_rscale: bool) -> None:
         self.expansion_terms_wrangler_key = (order, kernel.dim, kernel)
 
 
