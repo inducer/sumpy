@@ -619,7 +619,8 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                 m2l_translation_classes_dependent_data),
             **kwargs)
 
-        return result["tgt_expansions"]
+        return result["m2l_translation_classes_dependent_data"]
+
 # }}}
 
 
@@ -702,7 +703,7 @@ class M2LPreprocessMultipole(E2EBase):
             preprocessed_src_expansions=preprocessed_src_expansions,
             **kwargs)
 
-        return result["tgt_expansions"]
+        return result["preprocessed_src_expansions"]
 
 # }}}
 

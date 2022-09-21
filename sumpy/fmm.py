@@ -687,8 +687,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 max_ntargets_in_one_box=self.max_ntargets_in_one_box,
                 **kwargs)
 
-        for i in range(pot.size):
-            assert pot_res[f"result_s{i}"] is pot[i]
+        for pot_i, pot_res_i in zip(pot, pot_res):
+            assert pot_i is pot_res_i
 
         return pot, SumpyTimingFuture(actx.queue, [])
 
@@ -934,8 +934,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
                     **kwargs)
 
-            for i in range(pot.size):
-                assert pot_res[f"result_s{i}"] is pot[i]
+            for pot_i, pot_res_i in zip(pot, pot_res):
+                assert pot_i is pot_res_i
 
         return pot, SumpyTimingFuture(actx.queue, [])
 
@@ -1056,8 +1056,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
                     **kwargs)
 
-            for i in range(pot.size):
-                assert pot_res[f"result_s{i}"] is pot[i]
+            for pot_i, pot_res_i in zip(pot, pot_res):
+                assert pot_i is pot_res_i
 
         return pot, SumpyTimingFuture(actx.queue, [])
 
