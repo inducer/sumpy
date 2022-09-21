@@ -84,15 +84,15 @@ def test_p2p(actx_factory, exclude_self):
         extra_kwargs["target_to_source"] = (
             actx.from_numpy(np.arange(n, dtype=np.int32)))
 
-    result, = knl(
+    potential, potential_ref = knl(
             actx,
             actx.from_numpy(targets),
             actx.from_numpy(sources),
             [actx.from_numpy(strengths)],
             **extra_kwargs)
 
-    potential = actx.to_numpy(result)
-    potential_ref = np.empty_like(potential)
+    potential = actx.to_numpy(potential)
+    potential_ref = np.empty_like(potential_ref)
 
     targets = targets.T
     sources = sources.T
