@@ -69,6 +69,10 @@ class E2PBase(KernelCacheMixin):
 
         self.dim = expansion.dim
 
+    @property
+    def nresults(self):
+        return len(self.kernels)
+
     def get_loopy_insns_and_result_names(self):
         import sumpy.symbolic as sym
         bvec = sym.make_sym_vector("b", self.dim)
@@ -222,7 +226,7 @@ class E2PFromSingleBox(E2PBase):
             centers=centers, rscale=rscale, **kwargs)
 
         # FIXME: cleaner way to get the names out?
-        return make_obj_array([result[f"result_s{i}"] for i in range()])
+        return make_obj_array([result[f"result_s{i}"] for i in range(self.nresults)])
 
 # }}}
 
@@ -328,7 +332,7 @@ class E2PFromCSR(E2PBase):
             knl,
             centers=centers, rscale=rscale, **kwargs)
 
-        return make_obj_array([result[f"result_s{i}"] for i in range()])
+        return make_obj_array([result[f"result_s{i}"] for i in range(self.nresults)])
 
 # }}}
 

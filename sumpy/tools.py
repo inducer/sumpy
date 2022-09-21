@@ -602,6 +602,10 @@ class KernelComputation:
 
         self.name = name or self.default_name
 
+    @property
+    def nresults(self):
+        return len(self.target_kernels)
+
     def get_kernel_scaling_assignments(self):
         from sumpy.symbolic import SympyToPymbolicMapper
         sympy_conv = SympyToPymbolicMapper()

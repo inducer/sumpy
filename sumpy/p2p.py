@@ -264,7 +264,7 @@ class P2P(P2PBase):
             sources=sources, targets=targets, strength=strength,
             **kwargs)
 
-        return make_obj_array([result[f"result_s{i}"] for i in range()])
+        return make_obj_array([result[f"result_s{i}"] for i in range(self.nresults)])
 
 # }}}
 
@@ -324,7 +324,7 @@ class P2PMatrixGenerator(P2PBase):
                 sources_is_obj_array=is_obj_array_like(sources))
 
         result = actx.call_loopy(knl, sources=sources, targets=targets, **kwargs)
-        return make_obj_array([result[f"result_s{i}"] for i in range()])
+        return make_obj_array([result[f"result_s{i}"] for i in range(self.nresults)])
 
 # }}}
 
@@ -441,7 +441,7 @@ class P2PMatrixSubsetGenerator(P2PBase):
             tgtindices=tgtindices,
             srcindices=srcindices, **kwargs)
 
-        return make_obj_array([result[f"result_s{i}"] for i in range()])
+        return make_obj_array([result[f"result_s{i}"] for i in range(self.nresults)])
 
 # }}}
 
@@ -685,7 +685,7 @@ class P2PFromCSR(P2PBase):
                 is_cpu=actx.queue.device.type & cl.device_type.CPU)
 
         result = actx.call_loopy(knl, **kwargs)
-        return make_obj_array([result[f"result_s{i}"] for i in range()])
+        return make_obj_array([result[f"result_s{i}"] for i in range(self.nresults)])
 
 # }}}
 

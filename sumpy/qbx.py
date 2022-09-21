@@ -139,7 +139,7 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
 
         coefficients = self._expand(sac, avec, bvec, rscale, isrc_sym)
         result_names = [self._evaluate(sac, avec, bvec, rscale, i, coefficients)
-                        for i in range(len(self.target_kernels))]
+                        for i in range(self.nresults)]
 
         logger.info("compute expansion expressions: done")
 
@@ -311,7 +311,7 @@ class LayerPotential(LayerPotentialBase):
             sources=sources, targets=targets, center=centers,
             expansion_radii=expansion_radii, **kwargs)
 
-        return make_obj_array([result[f"result_s{i}"] for i in range()])
+        return make_obj_array([result[f"result_{i}"] for i in range(self.nresults)])
 
 # }}}
 
@@ -382,7 +382,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
             sources=sources, targets=targets, center=centers,
             expansion_radii=expansion_radii, **kwargs)
 
-        return make_obj_array([result[f"result_{i}"] for i in range()])
+        return make_obj_array([result[f"result_{i}"] for i in range(self.nresults)])
 
 # }}}
 
@@ -508,7 +508,7 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
             tgtindices=tgtindices,
             srcindices=srcindices, **kwargs)
 
-        return make_obj_array([result[f"result_{i}"] for i in range()])
+        return make_obj_array([result[f"result_{i}"] for i in range(self.nresults)])
 
 # }}}
 
@@ -657,7 +657,6 @@ class _JumpTermSymbolicArgumentProvider:
         self.arguments["normal"] = (
                 lp.GlobalArg("normal", self.geometry_dtype,
                              shape=("ntargets", self.dim), order="C"))
-        from pytools.obj_array import make_obj_array
         return make_obj_array([
             prim.parse(f"normal[itgt, {i}]")
             for i in range(self.dim)])
@@ -669,7 +668,6 @@ class _JumpTermSymbolicArgumentProvider:
         self.arguments["tangent"] = (
                 lp.GlobalArg("tangent", self.geometry_dtype,
                              shape=("ntargets", self.dim), order="C"))
-        from pytools.obj_array import make_obj_array
         return make_obj_array([
             prim.parse(f"tangent[itgt, {i}]")
             for i in range(self.dim)])
@@ -692,7 +690,6 @@ class _JumpTermSymbolicArgumentProvider:
                 lp.GlobalArg("src_derivative_dir",
                              self.geometry_dtype, shape=("ntargets", self.dim),
                              order="C"))
-        from pytools.obj_array import make_obj_array
         return make_obj_array([
             prim.parse(f"src_derivative_dir[itgt, {i}]")
             for i in range(self.dim)])
@@ -705,7 +702,6 @@ class _JumpTermSymbolicArgumentProvider:
                 lp.GlobalArg("tgt_derivative_dir",
                              self.geometry_dtype, shape=("ntargets", self.dim),
                              order="C"))
-        from pytools.obj_array import make_obj_array
         return make_obj_array([
             prim.parse(f"tgt_derivative_dir[itgt, {i}]")
             for i in range(self.dim)])
