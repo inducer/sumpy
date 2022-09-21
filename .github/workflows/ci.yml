@@ -35,7 +35,7 @@ jobs:
                 curl -L -O https://tiker.net/ci-support-v0
                 . ci-support-v0
                 build_py_project
-                run_pylint "$(basename $GITHUB_REPOSITORY)" test/test_*.py
+                run_pylint "$(basename $GITHUB_REPOSITORY)" examples/*.py, test/*.py
 
     docs:
         name: Documentation
@@ -86,7 +86,6 @@ jobs:
                 EXTRA_INSTALL="pyvisfile scipy"
                 build_py_project_in_conda_env
                 run_examples
-
 
     downstream_tests:
         strategy:
