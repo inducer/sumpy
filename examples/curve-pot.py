@@ -206,11 +206,11 @@ def draw_pot_figure(aspect_ratio,
     density = np.cos(mode_nr*2*np.pi*native_t).astype(np.complex128)
     strengths = actx.from_numpy(native_curve.speed * native_weights * density)
 
-    result = p2p(actx,
+    result, = p2p(actx,
             sources,
             targets,
             [strengths], **volpot_kwargs)
-    vol_pot = actx.to_numpy(result["result_s0"])
+    vol_pot = actx.to_numpy(result)
 
     ovsmp_targets = actx.from_numpy(ovsmp_curve.pos)
 
@@ -218,14 +218,14 @@ def draw_pot_figure(aspect_ratio,
     ovsmp_strengths = actx.from_numpy(
         ovsmp_curve.speed * ovsmp_weights * ovsmp_density)
 
-    result = lpot(actx,
+    result, = lpot(actx,
             targets,
             ovsmp_targets,
             actx.from_numpy(centers),
             [ovsmp_strengths],
             expansion_radii=actx.from_numpy(np.ones(centers.shape[1])),
             **lpot_kwargs)
-    curve_pot = actx.to_numpy(result["result_0"])
+    curve_pot = actx.to_numpy(result)
 
     # }}}
 

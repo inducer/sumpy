@@ -23,6 +23,8 @@ THE SOFTWARE.
 import numpy as np
 import loopy as lp
 
+from pytools.obj_array import make_obj_array
+
 from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
 from sumpy.tools import KernelCacheMixin
 
@@ -215,9 +217,12 @@ class E2PFromSingleBox(E2PBase):
         rscale = centers.dtype.type(kwargs.pop("rscale"))
 
         knl = self.get_cached_optimized_kernel()
-        return actx.call_loopy(
+        result = actx.call_loopy(
             knl,
             centers=centers, rscale=rscale, **kwargs)
+
+        # FIXME: cleaner way to get the names out?
+        return make_obj_array([result[f"result_s{i}"] for i in range()])
 
 # }}}
 
@@ -319,9 +324,11 @@ class E2PFromCSR(E2PBase):
         rscale = centers.dtype.type(kwargs.pop("rscale"))
 
         knl = self.get_cached_optimized_kernel()
-        return actx.call_loopy(
+        result = actx.call_loopy(
             knl,
             centers=centers, rscale=rscale, **kwargs)
+
+        return make_obj_array([result[f"result_s{i}"] for i in range()])
 
 # }}}
 

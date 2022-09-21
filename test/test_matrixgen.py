@@ -144,29 +144,29 @@ def test_qbx_direct(actx_factory, factor, lpot_id, visualize=False):
                 actx.from_numpy(make_obj_array(np.ones((ndim, n))))
                 )
 
-        result_lpot = lpot(actx,
+        result_lpot, = lpot(actx,
             targets=targets,
             sources=sources,
             centers=centers,
             expansion_radii=expansion_radii,
-            strengths=strengths, **extra_kwargs)["result_0"]
+            strengths=strengths, **extra_kwargs)
         result_lpot = actx.to_numpy(result_lpot)
 
-        mat = mat_gen(actx,
+        mat, = mat_gen(actx,
             targets=targets,
             sources=sources,
             centers=centers,
-            expansion_radii=expansion_radii, **extra_kwargs)["result_0"]
+            expansion_radii=expansion_radii, **extra_kwargs)
         mat = actx.to_numpy(mat)
         result_mat = mat @ actx.to_numpy(strengths[0])
 
-        blk = blk_gen(actx,
+        blk, = blk_gen(actx,
             targets=targets,
             sources=sources,
             centers=centers,
             expansion_radii=expansion_radii,
             tgtindices=tgtindices,
-            srcindices=srcindices, **extra_kwargs)["result_0"]
+            srcindices=srcindices, **extra_kwargs)
         blk = actx.to_numpy(blk)
 
         tgtindices = actx.to_numpy(tgtindices)
@@ -232,23 +232,23 @@ def test_p2p_direct(actx_factory, exclude_self, factor, lpot_id, visualize=False
             extra_kwargs["dsource_vec"] = (
                 actx.from_numpy(make_obj_array(np.ones((ndim, n)))))
 
-        result_lpot = lpot(actx,
+        result_lpot, = lpot(actx,
                 targets=targets,
                 sources=sources,
-                strength=strengths, **extra_kwargs)["result_s0"]
+                strength=strengths, **extra_kwargs)
         result_lpot = actx.to_numpy(result_lpot)
 
-        mat = mat_gen(actx,
+        mat, = mat_gen(actx,
             targets=targets,
-            sources=sources, **extra_kwargs)["result_0"]
+            sources=sources, **extra_kwargs)
         mat = actx.to_numpy(mat)
         result_mat = mat @ actx.to_numpy(strengths[0])
 
-        blk = blk_gen(actx,
+        blk, = blk_gen(actx,
             targets=targets,
             sources=sources,
             tgtindices=tgtindices,
-            srcindices=srcindices, **extra_kwargs)["result_0"]
+            srcindices=srcindices, **extra_kwargs)
         blk = actx.to_numpy(blk)
 
         tgtindices = actx.to_numpy(tgtindices)

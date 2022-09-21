@@ -29,6 +29,8 @@ import numpy as np
 import loopy as lp
 
 from pytools import memoize_method
+from pytools.obj_array import make_obj_array
+
 from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program, is_cl_cpu
 from sumpy.tools import KernelComputation, KernelCacheMixin, is_obj_array_like
 
@@ -304,10 +306,12 @@ class LayerPotential(LayerPotentialBase):
         for i, dens in enumerate(strengths):
             kwargs[f"strength_{i}"] = dens
 
-        return actx.call_loopy(
+        result = actx.call_loopy(
             knl,
             sources=sources, targets=targets, center=centers,
             expansion_radii=expansion_radii, **kwargs)
+
+        return make_obj_array([result[f"result_s{i}"] for i in range()])
 
 # }}}
 
@@ -373,10 +377,12 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
                 sources_is_obj_array=is_obj_array_like(sources),
                 centers_is_obj_array=is_obj_array_like(centers))
 
-        return actx.call_loopy(
+        result = actx.call_loopy(
             knl,
             sources=sources, targets=targets, center=centers,
             expansion_radii=expansion_radii, **kwargs)
+
+        return make_obj_array([result[f"result_{i}"] for i in range()])
 
 # }}}
 
@@ -493,7 +499,7 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
                 sources_is_obj_array=is_obj_array_like(sources),
                 centers_is_obj_array=is_obj_array_like(centers))
 
-        return actx.call_loopy(
+        result = actx.call_loopy(
             knl,
             sources=sources,
             targets=targets,
@@ -501,6 +507,8 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
             expansion_radii=expansion_radii,
             tgtindices=tgtindices,
             srcindices=srcindices, **kwargs)
+
+        return make_obj_array([result[f"result_{i}"] for i in range()])
 
 # }}}
 

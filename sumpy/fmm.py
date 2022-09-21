@@ -605,7 +605,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     tgt_base_ibox=level_start_ibox,
                     rscale=self.level_to_rscale(lev),
 
-                    **kwargs)["tgt_expansions"]
+                    **kwargs)
 
             assert mpoles_res is mpoles_view
 
@@ -660,7 +660,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     src_rscale=self.level_to_rscale(source_level),
                     tgt_rscale=self.level_to_rscale(target_level),
 
-                    **self.kernel_extra_kwargs)["tgt_expansions"]
+                    **self.kernel_extra_kwargs)
 
             assert mpoles_res is target_mpoles_view
 
@@ -974,7 +974,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
                     rscale=self.level_to_rscale(lev),
 
-                    **kwargs)["tgt_expansions"]
+                    **kwargs)
 
             assert result is target_local_exps_view
 
@@ -1017,7 +1017,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     src_rscale=self.level_to_rscale(source_lev),
                     tgt_rscale=self.level_to_rscale(target_lev),
 
-                    **self.kernel_extra_kwargs)["tgt_expansions"]
+                    **self.kernel_extra_kwargs)
 
             assert local_exps_res is target_local_exps_view
 

@@ -211,7 +211,7 @@ def _p2e(actx: PyOpenCLArrayContext,
             nboxes=1,
             tgt_base_ibox=0,
 
-            **toy_ctx.extra_source_and_kernel_kwargs)["tgt_expansions"]
+            **toy_ctx.extra_source_and_kernel_kwargs)
 
     return expn_class(
         toy_ctx, center, rscale, order, actx.to_numpy(coeffs[0]),
@@ -233,7 +233,7 @@ def _e2p(actx: PyOpenCLArrayContext, psource, targets, e2p):
     coeffs = actx.from_numpy(np.array([psource.coeffs]))
 
     from pytools.obj_array import make_obj_array
-    pot = e2p(
+    pot, = e2p(
             actx,
             src_expansions=coeffs,
             src_base_ibox=0,
@@ -244,7 +244,7 @@ def _e2p(actx: PyOpenCLArrayContext, psource, targets, e2p):
             rscale=psource.rscale,
             targets=actx.from_numpy(make_obj_array(targets)),
 
-            **toy_ctx.extra_kernel_kwargs)["result_s0"]
+            **toy_ctx.extra_kernel_kwargs)
 
     return actx.to_numpy(pot)
 
@@ -282,7 +282,7 @@ def _e2e(actx: PyOpenCLArrayContext,
             src_rscale=psource.rscale,
             tgt_rscale=to_rscale,
 
-            **toy_ctx.extra_kernel_kwargs)["tgt_expansions"]
+            **toy_ctx.extra_kernel_kwargs)
 
     return expn_class(
         toy_ctx, to_center, to_rscale, to_order, actx.to_numpy(to_coeffs[1]),
@@ -410,14 +410,14 @@ class PointSources(PotentialSource):
         self._center = center
 
     def eval(self, actx: PyOpenCLArrayContext, targets):
-        potential = self.toy_ctx.get_p2p()(
+        potential, = self.toy_ctx.get_p2p()(
                 actx,
                 actx.from_numpy(targets),
                 actx.from_numpy(self.points),
                 [actx.from_numpy(self.weights)],
                 **self.toy_ctx.extra_source_and_kernel_kwargs)
 
-        return actx.to_numpy(potential["result_s0"])
+        return actx.to_numpy(potential)
 
     @property
     def center(self):

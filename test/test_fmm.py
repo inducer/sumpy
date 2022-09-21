@@ -238,10 +238,10 @@ def _test_sumpy_fmm(actx_factory, knl, local_expn_class, mpole_expn_class,
 
         from sumpy import P2P
         p2p = P2P(target_kernels, exclude_self=False)
-        ref_pot = p2p(actx, targets, sources, (weights,), **extra_kwargs)
+        ref_pot, = p2p(actx, targets, sources, (weights,), **extra_kwargs)
 
         pot = actx.to_numpy(pot)
-        ref_pot = actx.to_numpy(ref_pot["result_s0"])
+        ref_pot = actx.to_numpy(ref_pot)
 
         rel_err = la.norm(pot - ref_pot, np.inf) / la.norm(ref_pot, np.inf)
         logger.info("order %d -> relative l2 error: %g", order, rel_err)
@@ -544,10 +544,10 @@ def test_sumpy_fmm_exclude_self(actx_factory, visualize=False):
 
     from sumpy import P2P
     p2p = P2P(target_kernels, exclude_self=True)
-    ref_pot = p2p(actx, sources, sources, (weights,), **self_extra_kwargs)
+    ref_pot, = p2p(actx, sources, sources, (weights,), **self_extra_kwargs)
 
     pot = actx.to_numpy(pot)
-    ref_pot = actx.to_numpy(ref_pot["result_s0"])
+    ref_pot = actx.to_numpy(ref_pot)
 
     rel_err = la.norm(pot - ref_pot) / la.norm(ref_pot)
     logger.info("order %d -> relative l2 error: %g", order, rel_err)

@@ -26,6 +26,8 @@ THE SOFTWARE.
 import numpy as np
 import loopy as lp
 
+from pytools.obj_array import make_obj_array
+
 from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
 from sumpy.tools import KernelComputation, KernelCacheMixin, is_obj_array_like
 
@@ -257,10 +259,12 @@ class P2P(P2PBase):
             targets_is_obj_array=is_obj_array_like(targets),
             sources_is_obj_array=is_obj_array_like(sources))
 
-        return actx.call_loopy(
+        result = actx.call_loopy(
             knl,
             sources=sources, targets=targets, strength=strength,
             **kwargs)
+
+        return make_obj_array([result[f"result_s{i}"] for i in range()])
 
 # }}}
 
@@ -319,7 +323,8 @@ class P2PMatrixGenerator(P2PBase):
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
 
-        return actx.call_loopy(knl, sources=sources, targets=targets, **kwargs)
+        result = actx.call_loopy(knl, sources=sources, targets=targets, **kwargs)
+        return make_obj_array([result[f"result_s{i}"] for i in range()])
 
 # }}}
 
@@ -429,12 +434,14 @@ class P2PMatrixSubsetGenerator(P2PBase):
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
 
-        return actx.call_loopy(
+        result = actx.call_loopy(
             knl,
             targets=targets,
             sources=sources,
             tgtindices=tgtindices,
             srcindices=srcindices, **kwargs)
+
+        return make_obj_array([result[f"result_s{i}"] for i in range()])
 
 # }}}
 
@@ -677,7 +684,8 @@ class P2PFromCSR(P2PBase):
                 max_ntargets_in_one_box=max_ntargets_in_one_box,
                 is_cpu=actx.queue.device.type & cl.device_type.CPU)
 
-        return actx.call_loopy(knl, **kwargs)
+        result = actx.call_loopy(knl, **kwargs)
+        return make_obj_array([result[f"result_s{i}"] for i in range()])
 
 # }}}
 

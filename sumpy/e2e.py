@@ -260,12 +260,13 @@ class E2EFromCSR(E2EBase):
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
 
         knl = self.get_cached_optimized_kernel()
-        return actx.call_loopy(
+        result = actx.call_loopy(
             knl,
             centers=centers,
             src_rscale=src_rscale, tgt_rscale=tgt_rscale,
             **kwargs)
 
+        return result["tgt_expansions"]
 # }}}
 
 
@@ -500,12 +501,14 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
         src_expansions = kwargs.pop("src_expansions")
 
         knl = self.get_cached_optimized_kernel(result_dtype=src_expansions.dtype)
-        return actx.call_loopy(
+        result = actx.call_loopy(
             knl,
             src_expansions=src_expansions,
             centers=centers,
             src_rscale=src_rscale, tgt_rscale=tgt_rscale,
             **kwargs)
+
+        return result["tgt_expansions"]
 
 # }}}
 
@@ -608,7 +611,7 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
         result_dtype = m2l_translation_classes_dependent_data.dtype
 
         knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
-        return actx.call_loopy(
+        result = actx.call_loopy(
             knl,
             src_rscale=src_rscale,
             m2l_translation_vectors=m2l_translation_vectors,
@@ -616,6 +619,7 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                 m2l_translation_classes_dependent_data),
             **kwargs)
 
+        return result["tgt_expansions"]
 # }}}
 
 
@@ -693,10 +697,12 @@ class M2LPreprocessMultipole(E2EBase):
         result_dtype = preprocessed_src_expansions.dtype
 
         knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
-        return actx.call_loopy(
+        result = actx.call_loopy(
             knl,
             preprocessed_src_expansions=preprocessed_src_expansions,
             **kwargs)
+
+        return result["tgt_expansions"]
 
 # }}}
 
@@ -779,10 +785,12 @@ class M2LPostprocessLocal(E2EBase):
         result_dtype = tgt_expansions.dtype
 
         knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
-        return actx.call_loopy(
+        result = actx.call_loopy(
             knl,
             tgt_expansions=tgt_expansions,
             **kwargs)
+
+        return result["tgt_expansions"]
 
 # }}}
 
@@ -895,11 +903,13 @@ class E2EFromChildren(E2EBase):
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
 
         knl = self.get_cached_optimized_kernel()
-        return actx.call_loopy(
+        result = actx.call_loopy(
             knl,
             centers=centers,
             src_rscale=src_rscale, tgt_rscale=tgt_rscale,
             **kwargs)
+
+        return result["tgt_expansions"]
 
 # }}}
 
@@ -998,11 +1008,13 @@ class E2EFromParent(E2EBase):
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
 
         knl = self.get_cached_optimized_kernel()
-        return actx.call_loopy(
+        result = actx.call_loopy(
             knl,
             centers=centers,
             src_rscale=src_rscale, tgt_rscale=tgt_rscale,
             **kwargs)
+
+        return result["tgt_expansions"]
 
 # }}}
 

@@ -148,10 +148,12 @@ class P2EBase(KernelCacheMixin, KernelComputation):
                 sources_is_obj_array=is_obj_array_like(sources),
                 centers_is_obj_array=is_obj_array_like(centers))
 
-        return actx.call_loopy(
+        result = actx.call_loopy(
             knl,
             sources=sources, centers=centers, rscale=rscale,
             **kwargs)
+
+        return result["tgt_expansions"]
 
 # }}}
 
