@@ -837,7 +837,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     tgt_base_ibox=target_level_start_ibox,
 
                     target_boxes=target_boxes[start:stop],
-                    src_box_starts=src_box_starts[start:stop],
+                    src_box_starts=src_box_starts[start:stop+1],
                     src_box_lists=src_box_lists,
                     centers=self.tree.box_centers,
 
