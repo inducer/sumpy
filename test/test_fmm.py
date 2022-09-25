@@ -318,7 +318,7 @@ def test_coeff_magnitude_rscale(actx_factory, knl):
     weights = wrangler.reorder_sources(weights)
     (weights,) = wrangler.distribute_source_weights(actx, (weights,), None)
 
-    local_result, _ = wrangler.form_locals(
+    local_result = wrangler.form_locals(
         actx,
         trav.level_start_target_or_target_parent_box_nrs,
         trav.target_or_target_parent_boxes,
