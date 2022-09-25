@@ -44,8 +44,6 @@ from sumpy import (
         M2LPreprocessMultipole, M2LPostprocessLocal)
 from sumpy.tools import (to_complex_dtype, run_opencl_fft, get_opencl_fft_app)
 
-from typing import TypeVar, List
-
 
 # {{{ tree-independent data for wrangler
 
