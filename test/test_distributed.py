@@ -128,10 +128,7 @@ def _test_against_single_rank(
     distribued_fmm_info = DistributedFMMRunner(
         actx, global_tree_dev, traversal_builder, wrangler_factory, comm=comm)
 
-    timing_data = {}
-    distributed_potential = distribued_fmm_info.drive_dfmm(
-                actx, [sources_weights], timing_data=timing_data)
-    assert timing_data
+    distributed_potential = distribued_fmm_info.drive_dfmm(actx, [sources_weights])
 
     if mpi_rank == 0:
         assert shmem_potential.shape == (1,)

@@ -485,11 +485,7 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory, use_fft, visualize=False)
             fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order)
     from boxtree.fmm import drive_fmm
 
-    timing_data = {}
-    pot, = drive_fmm(actx, wrangler, (weights,), timing_data=timing_data)
-    logger.info("timing_data:\n%s", timing_data)
-
-    assert timing_data
+    pot, = drive_fmm(actx, wrangler, (weights,))
 
 
 def test_sumpy_fmm_exclude_self(actx_factory, visualize=False):

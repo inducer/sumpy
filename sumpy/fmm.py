@@ -55,10 +55,6 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
     necessarily must have an :class:`arraycontext.ArrayContext`, but it
     is allowed to be more ephemeral than the code, the code's lifetime
     is decoupled by storing it in this object.
-
-    Timing results returned by this wrangler contain the values *wall_elapsed*
-    which measures elapsed wall time. This requires an array container with
-    profiling enabled.
     """
 
     def __init__(self, array_context: PyOpenCLArrayContext,
@@ -186,69 +182,6 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
 # }}}
 
 
-# {{{ timing future
-
-_SECONDS_PER_NANOSECOND = 1e-9
-
-
-"""
-EventLike objects have an attribute native_event that returns
-a cl.Event that indicates the end of the event.
-"""
-EventLike = TypeVar("CLEventLike")
-
-
-class UnableToCollectTimingData(UserWarning):
-    pass
-
-
-class SumpyTimingFuture:
-
-    def __init__(self, queue, events: List[EventLike]):
-        self.queue = queue
-        self.events = events
-
-    @property
-    def native_events(self) -> List[EventLike]:
-        import pyopencl as cl
-        return [evt if isinstance(evt, cl.Event) else evt.native_event
-                for evt in self.events]
-
-    @memoize_method
-    def result(self):
-        import pyopencl as cl
-        from boxtree.timing import TimingResult
-
-        if not self.queue.properties & cl.command_queue_properties.PROFILING_ENABLE:
-            from warnings import warn
-            warn(
-                    "Profiling was not enabled in the command queue. "
-                    "Timing data will not be collected.",
-                    category=UnableToCollectTimingData,
-                    stacklevel=3)
-            return TimingResult(wall_elapsed=None)
-
-        if self.events:
-            cl.wait_for_events(self.native_events)
-
-        result = 0
-        for event in self.events:
-            result += (
-                    (event.profile.end - event.profile.start)
-                    * _SECONDS_PER_NANOSECOND)
-
-        return TimingResult(wall_elapsed=result)
-
-    def done(self):
-        import pyopencl as cl
-        return all(
-                event.get_info(cl.event_info.COMMAND_EXECUTION_STATUS)
-                == cl.command_execution_status.COMPLETE
-                for event in self.native_events)
-
-# }}}
-
-
 # {{{ expansion wrangler
 
 class SumpyExpansionWrangler(ExpansionWranglerInterface):
@@ -284,7 +217,6 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             preprocessed_mpole_dtype=None,
             *, _disable_translation_classes=False):
         super().__init__(tree_indep, traversal)
-        self.issued_timing_data_warning = False
 
         self.dtype = dtype
 
@@ -609,8 +541,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
             assert mpoles_res is mpoles_view
 
-        # FIXME: rip out SumpyTimingFuture
-        return mpoles, SumpyTimingFuture(actx.queue, [])
+        return mpoles
 
     def coarsen_multipoles(self,
             actx: PyOpenCLArrayContext,
@@ -664,7 +595,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
             assert mpoles_res is target_mpoles_view
 
-        return mpoles, SumpyTimingFuture(actx.queue, [])
+        return mpoles
 
     def eval_direct(self,
             actx: PyOpenCLArrayContext,
@@ -690,7 +621,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         for pot_i, pot_res_i in zip(pot, pot_res):
             assert pot_i is pot_res_i
 
-        return pot, SumpyTimingFuture(actx.queue, [])
+        return pot
 
     @memoize_method
     def multipole_to_local_precompute(self):
@@ -788,10 +719,6 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             m2l_work_array = local_exps
             mpole_exps_view_func = self.multipole_expansions_view
             local_exps_view_func = self.local_expansions_view
-
-        preprocess_evts = []
-        translate_evts = []
-        postprocess_evts = []
 
         for lev in range(self.tree.nlevels):
             wait_for = []
@@ -894,9 +821,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     **self.kernel_extra_kwargs,
                 )
 
-        timing_events = preprocess_evts + translate_evts + postprocess_evts
-
-        return (local_exps, SumpyTimingFuture(actx.queue, timing_events))
+        return local_exps
 
     def eval_multipoles(self,
             actx: PyOpenCLArrayContext,
@@ -937,7 +862,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             for pot_i, pot_res_i in zip(pot, pot_res):
                 assert pot_i is pot_res_i
 
-        return pot, SumpyTimingFuture(actx.queue, [])
+        return pot
 
     def form_locals(self,
             actx: PyOpenCLArrayContext,
@@ -978,7 +903,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
             assert result is target_local_exps_view
 
-        return local_exps, SumpyTimingFuture(actx.queue, [])
+        return local_exps
 
     def refine_locals(self,
             actx: PyOpenCLArrayContext,
@@ -1021,7 +946,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
             assert local_exps_res is target_local_exps_view
 
-        return local_exps, SumpyTimingFuture(actx.queue, [])
+        return local_exps
 
     def eval_locals(self,
             actx: PyOpenCLArrayContext,
@@ -1059,7 +984,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             for pot_i, pot_res_i in zip(pot, pot_res):
                 assert pot_i is pot_res_i
 
-        return pot, SumpyTimingFuture(actx.queue, [])
+        return pot
 
     def finalize_potentials(self, actx: PyOpenCLArrayContext, potentials):
         return potentials
