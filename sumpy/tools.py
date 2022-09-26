@@ -567,7 +567,7 @@ class KernelComputation(ABC):
     .. automethod:: get_kernel
     """
 
-    def __init__(self, ctx: Any,
+    def __init__(self,
             target_kernels: List["Kernel"],
             source_kernels: List["Kernel"],
             strength_usage: Optional[List[int]] = None,
