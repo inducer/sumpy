@@ -667,8 +667,6 @@ def to_loopy_insns(assignments, vector_names=frozenset(), pymbolic_expr_maps=(),
     bik = BigIntegerKiller()
     cmr = ComplexRewriter(complex_dtype)
 
-    cmb_mapper = combine_mappers(bdr, btog, vcr, pwr, ssg, bik, cmr)
-
     if 0:
         # https://github.com/inducer/sumpy/pull/40#issuecomment-852635444
         cmb_mapper = combine_mappers(bdr, btog, vcr, pwr, ssg, bik, cmr)

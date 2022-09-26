@@ -1,0 +1,2 @@
+- arg: extension-pkg-whitelist
+  val: mayavi

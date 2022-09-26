@@ -25,11 +25,11 @@ def process_kernel(knl, what_operator):
     if what_operator == "S":
         pass
     elif what_operator == "S0":
-        from sumpy.kernel import TargetDerivative
-        target_knl = TargetDerivative(0, knl)
+        from sumpy.kernel import AxisTargetDerivative
+        target_knl = AxisTargetDerivative(0, knl)
     elif what_operator == "S1":
-        from sumpy.kernel import TargetDerivative
-        target_knl = TargetDerivative(1, knl)
+        from sumpy.kernel import AxisTargetDerivative
+        target_knl = AxisTargetDerivative(1, knl)
     elif what_operator == "D":
         from sumpy.kernel import DirectionalSourceDerivative
         source_knl = DirectionalSourceDerivative(knl)

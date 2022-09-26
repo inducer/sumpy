@@ -21,10 +21,14 @@ THE SOFTWARE.
 """
 
 import math
+from abc import abstractmethod
 
 import sumpy.symbolic as sym
 from sumpy.expansion import (
-    ExpansionBase, VolumeTaylorExpansion, LinearPDEConformingVolumeTaylorExpansion)
+    ExpansionBase,
+    VolumeTaylorExpansion,
+    VolumeTaylorExpansionMixin,
+    LinearPDEConformingVolumeTaylorExpansion)
 from sumpy.tools import mi_set_axis, add_to_sac, mi_power, mi_factorial
 
 import logging
@@ -46,7 +50,8 @@ class MultipoleExpansionBase(ExpansionBase):
 
 # {{{ volume taylor
 
-class VolumeTaylorMultipoleExpansionBase(MultipoleExpansionBase):
+class VolumeTaylorMultipoleExpansionBase(
+        VolumeTaylorExpansionMixin, MultipoleExpansionBase):
     """
     Coefficients represent the terms in front of the kernel derivatives.
     """
@@ -396,6 +401,10 @@ class BiharmonicConformingVolumeTaylorMultipoleExpansion(
 # {{{ 2D Hankel-based expansions
 
 class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
+    @abstractmethod
+    def get_bessel_arg_scaling(self):
+        return
+
     def get_storage_index(self, k):
         return self.order+k
 

@@ -238,7 +238,9 @@ class LayerPotential(LayerPotentialBase):
     .. automethod:: __call__
     """
 
-    default_name = "qbx_apply"
+    @property
+    def default_name(self):
+        return "qbx_apply"
 
     @memoize_method
     def get_kernel(self):
@@ -321,7 +323,9 @@ class LayerPotential(LayerPotentialBase):
 class LayerPotentialMatrixGenerator(LayerPotentialBase):
     """Generator for layer potential matrix entries."""
 
-    default_name = "qbx_matrix"
+    @property
+    def default_name(self):
+        return "qbx_matrix"
 
     def get_strength_or_not(self, isrc, kernel_idx):
         return 1
@@ -395,7 +399,9 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
     .. automethod:: __call__
     """
 
-    default_name = "qbx_subset"
+    @property
+    def default_name(self):
+        return "qbx_subset"
 
     def get_strength_or_not(self, isrc, kernel_idx):
         return 1

@@ -165,7 +165,9 @@ class P2EFromSingleBox(P2EBase):
     .. automethod:: __call__
     """
 
-    default_name = "p2e_from_single_box"
+    @property
+    def default_name(self):
+        return "p2e_from_single_box"
 
     def get_kernel(self):
         ncoeffs = len(self.expansion)
@@ -268,7 +270,9 @@ class P2EFromCSR(P2EBase):
     .. automethod:: __call__
     """
 
-    default_name = "p2e_from_csr"
+    @property
+    def default_name(self):
+        return "p2e_from_csr"
 
     def get_kernel(self):
         ncoeffs = len(self.expansion)

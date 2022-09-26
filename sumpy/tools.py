@@ -41,8 +41,9 @@ import sys
 import enum
 import numbers
 import warnings
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 import numpy as np
 
@@ -57,6 +58,9 @@ from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
 
 import logging
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from sumpy.kernel import Kernel
 
 
 # {{{ multi_index helpers
@@ -552,16 +556,31 @@ class ScalingAssignmentTag(Tag):
     pass
 
 
-class KernelComputation:
-    """Common input processing for kernel computations."""
+class KernelComputation(ABC):
+    """Common input processing for kernel computations.
 
-    def __init__(self, target_kernels, source_kernels, strength_usage,
-            value_dtypes, name):
+    .. attribute:: name
+    .. attribute:: target_kernels
+    .. attribute:: source_kernels
+    .. attribute:: strength_usage
+
+    .. automethod:: get_kernel
+    """
+
+    def __init__(self, ctx: Any,
+            target_kernels: List["Kernel"],
+            source_kernels: List["Kernel"],
+            strength_usage: Optional[List[int]] = None,
+            value_dtypes: Optional[List["np.dtype"]] = None,
+            name: Optional[str] = None) -> None:
         """
-        :arg kernels: list of :class:`sumpy.kernel.Kernel` instances
-            :class:`sumpy.kernel.TargetDerivative` wrappers should be
+        :arg target_kernels: list of :class:`~sumpy.kernel.Kernel` instances,
+            with :class:`sumpy.kernel.DirectionalTargetDerivative` as
             the outermost kernel wrappers, if present.
-        :arg strength_usage: A list of integers indicating which expression
+        :arg source_kernels: list of :class:`~sumpy.kernel.Kernel` instances
+            with :class:`~sumpy.kernel.DirectionalSourceDerivative` as the
+            outermost kernel wrappers, if present.
+        :arg strength_usage: list of integers indicating which expression
             uses which density. This implicitly specifies the
             number of density arrays that need to be passed.
             Default: all kernels use the same density.
@@ -606,6 +625,10 @@ class KernelComputation:
     def nresults(self):
         return len(self.target_kernels)
 
+    @abstractmethod
+    def default_name(self):
+        pass
+
     def get_kernel_scaling_assignments(self):
         from sumpy.symbolic import SympyToPymbolicMapper
         sympy_conv = SympyToPymbolicMapper()
@@ -619,6 +642,10 @@ class KernelComputation:
                     tags=frozenset([ScalingAssignmentTag()]))
                 for i, (kernel, dtype) in enumerate(
                     zip(self.target_kernels, self.value_dtypes))]
+
+    @abstractmethod
+    def get_kernel(self):
+        pass
 
 # }}}
 
@@ -1231,6 +1258,31 @@ def run_opencl_fft(actx: PyOpenCLArrayContext,
             output_vec)
     else:
         raise RuntimeError(f"Unsupported FFT backend {backend}")
+
+# }}}
+
+
+# {{{ deprecations
+
+_depr_name_to_replacement_and_obj = {
+    "KernelCacheWrapper": ("KernelCacheMixin", 2023),
+    }
+
+if sys.version_info >= (3, 7):
+    def __getattr__(name):
+        replacement_and_obj = _depr_name_to_replacement_and_obj.get(name, None)
+        if replacement_and_obj is not None:
+            replacement, obj, year = replacement_and_obj
+            from warnings import warn
+            warn(f"'sumpy.tools.{name}' is deprecated. "
+                    f"Use '{replacement}' instead. "
+                    f"'sumpy.tools.{name}' will continue to work until {year}.",
+                    DeprecationWarning, stacklevel=2)
+            return obj
+        else:
+            raise AttributeError(name)
+else:
+    KernelCacheWrapper = KernelCacheMixin
 
 # }}}
 

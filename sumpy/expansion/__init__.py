@@ -20,14 +20,27 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import logging
+from abc import ABC, abstractmethod
+from typing import Any, ClassVar, Dict, Hashable, List, Optional, Tuple, Type
+
 from pytools import memoize_method
+
 import sumpy.symbolic as sym
+from sumpy.kernel import Kernel
 from sumpy.tools import add_mi
-from typing import List, Tuple
+
+import logging
+logger = logging.getLogger(__name__)
+
 
 __doc__ = """
 .. autoclass:: ExpansionBase
+
+Expansion Wranglers
+^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: ExpansionTermsWrangler
+.. autoclass:: FullExpansionTermsWrangler
 .. autoclass:: LinearPDEBasedExpansionTermsWrangler
 
 Expansion Factories
@@ -38,24 +51,33 @@ Expansion Factories
 .. autoclass:: VolumeTaylorExpansionFactory
 """
 
-logger = logging.getLogger(__name__)
 
+# {{{ expansion base
 
-# {{{ base class
-
-class ExpansionBase:
+class ExpansionBase(ABC):
     """
-    .. automethod:: with_kernel
-    .. automethod:: __len__
+    .. attribute:: kernel
+    .. attribute:: order
+    .. attribute:: use_rscale
+
     .. automethod:: get_coefficient_identifiers
     .. automethod:: coefficients_from_source
-    .. automethod:: translate_from
+    .. automethod:: coefficients_from_source_vec
+    .. automethod:: evaluate
+
+    .. automethod:: with_kernel
+    .. automethod:: copy
+
+    .. automethod:: __len__
     .. automethod:: __eq__
     .. automethod:: __ne__
     """
     init_arg_names = ("kernel", "order", "use_rscale")
 
-    def __init__(self, kernel, order, use_rscale=None):
+    def __init__(self,
+            kernel: Kernel,
+            order: int,
+            use_rscale: Optional[bool] = None) -> None:
         # Don't be tempted to remove target derivatives here.
         # Line Taylor QBX can't do without them, because it can't
         # apply those derivatives to the expanded quantity.
@@ -74,11 +96,11 @@ class ExpansionBase:
     # to make it fit into sumpy.qbx.LayerPotential.
 
     @property
-    def dim(self):
+    def dim(self) -> int:
         return self.kernel.dim
 
     @property
-    def is_complex_valued(self):
+    def is_complex_valued(self) -> bool:
         return self.kernel.is_complex_valued
 
     def get_code_transformer(self):
@@ -95,18 +117,15 @@ class ExpansionBase:
 
     # }}}
 
-    def with_kernel(self, kernel):
-        return type(self)(kernel, self.order, self.use_rscale)
+    # {{{ abstract interface
 
-    def __len__(self):
-        return len(self.get_coefficient_identifiers())
-
-    def get_coefficient_identifiers(self):
+    @abstractmethod
+    def get_coefficient_identifiers(self) -> List[Hashable]:
         """
-        Returns the identifiers of the coefficients that actually get stored.
+        :returns: the identifiers of the coefficients that actually get stored.
         """
-        raise NotImplementedError
 
+    @abstractmethod
     def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
         """Form an expansion from a source point.
 
@@ -119,10 +138,9 @@ class ExpansionBase:
         :returns: a list of :mod:`sympy` expressions representing
             the coefficients of the expansion.
         """
-        raise NotImplementedError
 
-    def coefficients_from_source_vec(self, kernels, avec, bvec, rscale, weights,
-            sac=None):
+    def coefficients_from_source_vec(self,
+            kernels, avec, bvec, rscale, weights, sac=None):
         """Form an expansion with a linear combination of kernels and weights.
 
         :arg avec: vector from source to center.
@@ -141,36 +159,22 @@ class ExpansionBase:
                 result[i] += weight * coeffs[i]
         return result
 
+    @abstractmethod
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         """
-        :return: a :mod:`sympy` expression corresponding
+        :returns: a :mod:`sympy` expression corresponding
             to the evaluated expansion with the coefficients
             in *coeffs*.
         """
 
-        raise NotImplementedError
+    # }}}
 
-    def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale, sac=None):
-        raise NotImplementedError
+    # {{{ copy
 
-    def update_persistent_hash(self, key_hash, key_builder):
-        key_hash.update(type(self).__name__.encode("utf8"))
-        key_builder.rec(key_hash, self.kernel)
-        key_builder.rec(key_hash, self.order)
-        key_builder.rec(key_hash, self.use_rscale)
+    def with_kernel(self, kernel: Kernel) -> "ExpansionBase":
+        return type(self)(kernel, self.order, self.use_rscale)
 
-    def __eq__(self, other):
-        return (
-                type(self) == type(other)
-                and self.kernel == other.kernel
-                and self.order == other.order
-                and self.use_rscale == other.use_rscale)
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    def copy(self, **kwargs):
+    def copy(self, **kwargs) -> "ExpansionBase":
         new_kwargs = {
                 name: getattr(self, name)
                 for name in self.init_arg_names}
@@ -184,34 +188,74 @@ class ExpansionBase:
 
         return type(self)(**new_kwargs)
 
+    # }}}
+
+    def update_persistent_hash(self, key_hash, key_builder):
+        key_hash.update(type(self).__name__.encode("utf8"))
+        key_builder.rec(key_hash, self.kernel)
+        key_builder.rec(key_hash, self.order)
+        key_builder.rec(key_hash, self.use_rscale)
+
+    def __len__(self):
+        return len(self.get_coefficient_identifiers())
+
+    def __eq__(self, other):
+        return (
+                type(self) == type(other)
+                and self.kernel == other.kernel
+                and self.order == other.order
+                and self.use_rscale == other.use_rscale)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
 # }}}
 
 
 # {{{ expansion terms wrangler
 
-class ExpansionTermsWrangler:
+class ExpansionTermsWrangler(ABC):
+    """
+    .. attribute:: order
+    .. attribute:: dim
+    .. attribute:: max_mi
 
+    .. automethod:: get_coefficient_identifiers
+    .. automethod:: get_full_kernel_derivatives_from_stored
+    .. automethod:: get_stored_mpole_coefficients_from_full
+
+    .. automethod:: get_full_coefficient_identifiers
+    """
     init_arg_names = ("order", "dim", "max_mi")
 
-    def __init__(self, order, dim, max_mi=None):
+    def __init__(self,
+            order: int,
+            dim: int,
+            max_mi: Optional[int] = None) -> None:
         self.order = order
         self.dim = dim
         self.max_mi = max_mi
 
-    def get_coefficient_identifiers(self):
-        raise NotImplementedError
+    # {{{ abstract interface
 
-    def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
-            rscale, sac=None):
-        raise NotImplementedError
+    @abstractmethod
+    def get_coefficient_identifiers(self) -> List[Hashable]:
+        pass
 
-    def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients,
-            rscale, sac=None):
-        raise NotImplementedError
+    @abstractmethod
+    def get_full_kernel_derivatives_from_stored(self,
+            stored_kernel_derivatives, rscale, sac=None):
+        pass
+
+    @abstractmethod
+    def get_stored_mpole_coefficients_from_full(self,
+            full_mpole_coefficients, rscale, sac=None):
+        pass
+
+    # }}}
 
     @memoize_method
-    def get_full_coefficient_identifiers(self):
+    def get_full_coefficient_identifiers(self) -> List[Hashable]:
         """
         Returns identifiers for every coefficient in the complete expansion.
         """
@@ -241,6 +285,8 @@ class ExpansionTermsWrangler:
 
         return type(self)(**new_kwargs)
 
+    # {{{ hyperplane helpers
+
     def _get_mi_hyperpplanes(self) -> List[Tuple[int, int]]:
         r"""
         Coefficient storage is organized into "hyperplanes" in multi-index
@@ -261,7 +307,8 @@ class ExpansionTermsWrangler:
         return hyperplanes
 
     @memoize_method
-    def _split_coeffs_into_hyperplanes(self) -> List[Tuple[int, List[Tuple[int]]]]:
+    def _split_coeffs_into_hyperplanes(
+            self) -> List[Tuple[int, List[Tuple[int, ...]]]]:
         r"""
         This splits the coefficients into :math:`O(p)` disjoint sets
         so that for each set, all the identifiers have the form,
@@ -303,18 +350,23 @@ class ExpansionTermsWrangler:
 
         return res
 
+    # }}}
+
 
 class FullExpansionTermsWrangler(ExpansionTermsWrangler):
+    def get_coefficient_identifiers(self):
+        return super().get_full_coefficient_identifiers()
 
-    get_coefficient_identifiers = (
-            ExpansionTermsWrangler.get_full_coefficient_identifiers)
-
-    def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
-            rscale, sac=None):
+    def get_full_kernel_derivatives_from_stored(self,
+            stored_kernel_derivatives, rscale, sac=None):
         return stored_kernel_derivatives
 
-    get_stored_mpole_coefficients_from_full = (
-            get_full_kernel_derivatives_from_stored)
+    def get_stored_mpole_coefficients_from_full(self,
+            full_mpole_coefficients, rscale, sac=None):
+        return self.get_full_kernel_derivatives_from_stored(
+            full_mpole_coefficients, rscale, sac=sac)
+
+# }}}
 
 
 # {{{ sparse matrix-vector multiplication
@@ -392,6 +444,8 @@ class CSEMatVecOperator:
 # }}}
 
 
+# {{{ LinearPDEBasedExpansionTermsWrangler
+
 class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     """
     .. automethod:: __init__
@@ -399,7 +453,9 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
     init_arg_names = ("order", "dim", "knl", "max_mi")
 
-    def __init__(self, order, dim, knl, max_mi=None):
+    def __init__(self,
+            order: int, dim: int, knl: Kernel,
+            max_mi: Optional[int] = None) -> None:
         r"""
         :param order: order of the expansion
         :param dim: number of dimensions
@@ -411,18 +467,18 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     def get_coefficient_identifiers(self):
         return self.stored_identifiers
 
-    def get_full_kernel_derivatives_from_stored(self, stored_kernel_derivatives,
-            rscale, sac=None):
-
+    def get_full_kernel_derivatives_from_stored(self,
+            stored_kernel_derivatives, rscale, sac=None):
         from sumpy.tools import add_to_sac
+
         projection_matrix = self.get_projection_matrix(rscale)
         return projection_matrix.matvec(stored_kernel_derivatives,
                 lambda x: add_to_sac(sac, x))
 
-    def get_stored_mpole_coefficients_from_full(self, full_mpole_coefficients,
-            rscale, sac=None):
-
+    def get_stored_mpole_coefficients_from_full(self,
+            full_mpole_coefficients, rscale, sac=None):
         from sumpy.tools import add_to_sac
+
         projection_matrix = self.get_projection_matrix(rscale)
         return projection_matrix.transpose_matvec(full_mpole_coefficients,
                 lambda x: add_to_sac(sac, x))
@@ -636,9 +692,13 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 # }}}
 
 
-# {{{ volume taylor
+# {{{ volume taylor expansion
 
-class VolumeTaylorExpansionBase:
+# FIXME: This is called an expansion but doesn't inherit from ExpansionBase?
+
+class VolumeTaylorExpansionMixin:
+    expansion_terms_wrangler_class: ClassVar[Type[ExpansionTermsWrangler]]
+    expansion_terms_wrangler_cache: ClassVar[Dict[Hashable, Any]] = {}
 
     @classmethod
     def get_or_make_expansion_terms_wrangler(cls, *key):
@@ -679,23 +739,19 @@ class VolumeTaylorExpansionBase:
         return self._storage_loc_dict[i]
 
 
-class VolumeTaylorExpansion(VolumeTaylorExpansionBase):
-
+class VolumeTaylorExpansion(VolumeTaylorExpansionMixin):
     expansion_terms_wrangler_class = FullExpansionTermsWrangler
-    expansion_terms_wrangler_cache = {}
 
     # not user-facing, be strict about having to pass use_rscale
-    def __init__(self, kernel, order, use_rscale):
+    def __init__(self, kernel: Kernel, order: int, use_rscale: bool) -> None:
         self.expansion_terms_wrangler_key = (order, kernel.dim)
 
 
-class LinearPDEConformingVolumeTaylorExpansion(VolumeTaylorExpansionBase):
-
+class LinearPDEConformingVolumeTaylorExpansion(VolumeTaylorExpansionMixin):
     expansion_terms_wrangler_class = LinearPDEBasedExpansionTermsWrangler
-    expansion_terms_wrangler_cache = {}
 
     # not user-facing, be strict about having to pass use_rscale
-    def __init__(self, kernel, order, use_rscale):
+    def __init__(self, kernel: Kernel, order: int, use_rscale: bool) -> None:
         self.expansion_terms_wrangler_key = (order, kernel.dim, kernel)
 
 
@@ -736,21 +792,23 @@ class BiharmonicConformingVolumeTaylorExpansion(
 
 # {{{ expansion factory
 
-class ExpansionFactoryBase:
-    """An interface
+class ExpansionFactoryBase(ABC):
+    """
     .. automethod:: get_local_expansion_class
     .. automethod:: get_multipole_expansion_class
     """
 
+    @abstractmethod
     def get_local_expansion_class(self, base_kernel):
-        """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
-        raise NotImplementedError()
+        :returns: a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
+        """
 
+    @abstractmethod
     def get_multipole_expansion_class(self, base_kernel):
-        """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
-        raise NotImplementedError()
+        :returns: a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
+        """
 
 
 class VolumeTaylorExpansionFactory(ExpansionFactoryBase):
@@ -759,13 +817,15 @@ class VolumeTaylorExpansionFactory(ExpansionFactoryBase):
     """
 
     def get_local_expansion_class(self, base_kernel):
-        """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
+        """
+        :returns: a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
         from sumpy.expansion.local import VolumeTaylorLocalExpansion
         return VolumeTaylorLocalExpansion
 
     def get_multipole_expansion_class(self, base_kernel):
-        """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
+        """
+        :returns: a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
         from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansion
         return VolumeTaylorMultipoleExpansion
@@ -777,7 +837,8 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
     """
 
     def get_local_expansion_class(self, base_kernel):
-        """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
+        """
+        :returns: a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
         from sumpy.expansion.local import (
                 LinearPDEConformingVolumeTaylorLocalExpansion,
@@ -789,7 +850,8 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
             return VolumeTaylorLocalExpansion
 
     def get_multipole_expansion_class(self, base_kernel):
-        """Returns a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
+        """
+        :returns: a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
         from sumpy.expansion.multipole import (
                 LinearPDEConformingVolumeTaylorMultipoleExpansion,

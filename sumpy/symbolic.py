@@ -41,6 +41,8 @@ import pymbolic.primitives as prim
 import logging
 logger = logging.getLogger(__name__)
 
+USE_SYMENGINE = False
+
 
 # {{{ symbolic backend
 
@@ -48,23 +50,24 @@ def _find_symbolic_backend():
     global USE_SYMENGINE
 
     try:
-        import symengine  # noqa
+        import symengine  # noqa: F401
         symengine_found = True
+        symengine_error = None
     except ImportError as import_error:
         symengine_found = False
         symengine_error = import_error
 
-    ALLOWED_BACKENDS = ("sympy", "symengine")  # noqa
-    BACKEND_ENV_VAR = "SUMPY_FORCE_SYMBOLIC_BACKEND"  # noqa
+    allowed_backends = ("sympy", "symengine")
+    backend_env_var = "SUMPY_FORCE_SYMBOLIC_BACKEND"
 
     import os
-    backend = os.environ.get(BACKEND_ENV_VAR)
+    backend = os.environ.get(backend_env_var)
     if backend is not None:
-        if backend not in ALLOWED_BACKENDS:
+        if backend not in allowed_backends:
             raise RuntimeError(
-                f"{BACKEND_ENV_VAR} value is unrecognized: '{backend}' "
+                f"{backend_env_var} value is unrecognized: '{backend}' "
                 "(allowed values are {})".format(
-                    ", ".join(f"'{val}'" for val in ALLOWED_BACKENDS))
+                    ", ".join(f"'{val}'" for val in allowed_backends))
                 )
 
         if backend == "symengine" and not symengine_found:
@@ -123,17 +126,15 @@ def _coeff_isneg(a):
     return a.is_Number and a.is_negative
 
 
-have_unevaluated_expr = False
-if not USE_SYMENGINE:
+if USE_SYMENGINE:
+    def UnevaluatedExpr(x):  # noqa: F811, N802
+        return x
+else:
     try:
         from sympy import UnevaluatedExpr
-        have_unevaluated_expr = True
     except ImportError:
-        pass
-
-if not have_unevaluated_expr:
-    def UnevaluatedExpr(x):  # noqa
-        return x
+        def UnevaluatedExpr(x):  # noqa: F811, N802
+            return x
 
 
 if USE_SYMENGINE:
@@ -287,7 +288,7 @@ class PymbolicToSympyMapper(PymbolicToSympyMapperBase):
 
 
 class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
-    def map_Symbol(self, expr):  # noqa
+    def map_Symbol(self, expr):  # noqa: N802
         if expr.name.startswith(SpatialConstant.prefix):
             return SpatialConstant.from_sympy(expr)
         return SympyToPymbolicMapperBase.map_Symbol(self, expr)
@@ -334,7 +335,8 @@ class _BesselOrHankel(sympy.Function):
     def fdiff(self, argindex=1):
         if argindex in (1, 3):
             # we are not differentiating w.r.t order or nderivs
-            raise ValueError()
+            raise ValueError(f"invalid argindex: {argindex}")
+
         order, z, nderivs = self.args
         return self.func(order, z, nderivs+1)
 
@@ -351,10 +353,10 @@ _SympyBesselJ = BesselJ
 _SympyHankel1 = Hankel1
 
 if USE_SYMENGINE:
-    def BesselJ(*args):   # noqa: N802
+    def BesselJ(*args):   # noqa: N802  # pylint: disable=function-redefined
         return sym.sympify(_SympyBesselJ(*args))
 
-    def Hankel1(*args):   # noqa: N802
+    def Hankel1(*args):   # noqa: N802  # pylint: disable=function-redefined
         return sym.sympify(_SympyHankel1(*args))
 
 # vim: fdm=marker
