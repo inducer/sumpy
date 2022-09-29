@@ -32,9 +32,10 @@ class DistributedSumpyExpansionWrangler(
             self, actx: PyOpenCLArrayContext,
             comm, tree_indep, local_traversal, global_traversal,
             dtype, fmm_level_to_order, communicate_mpoles_via_allreduce=False,
-            **kwarg):
+            **kwargs):
         SumpyExpansionWrangler.__init__(
-            self, tree_indep, local_traversal, dtype, fmm_level_to_order, **kwarg)
+            self, tree_indep, local_traversal, dtype, fmm_level_to_order,
+            **kwargs)
 
         self.comm = comm
         self.traversal_in_device_memory = True
