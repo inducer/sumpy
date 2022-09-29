@@ -59,8 +59,8 @@ class E2PBase(KernelCacheMixin, ABC):
             SourceTransformationRemover, TargetTransformationRemover)
         sxr = SourceTransformationRemover()
         txr = TargetTransformationRemover()
-
         expansion = expansion.with_kernel(sxr(expansion.kernel))
+
         kernels = [sxr(knl) for knl in kernels]
         for knl in kernels:
             assert txr(knl) == expansion.kernel
@@ -197,7 +197,6 @@ class E2PFromSingleBox(E2PBase):
                 )
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-
         for knl in self.kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
@@ -233,7 +232,6 @@ class E2PFromSingleBox(E2PBase):
             knl,
             centers=centers, rscale=rscale, **kwargs)
 
-        # FIXME: cleaner way to get the names out?
         return make_obj_array([result[f"result_s{i}"] for i in range(self.nresults)])
 
 # }}}
@@ -316,7 +314,6 @@ class E2PFromCSR(E2PBase):
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.prioritize_loops(loopy_knl, "itgt_box,itgt,isrc_box")
-
         for knl in self.kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
@@ -340,7 +337,9 @@ class E2PFromCSR(E2PBase):
         knl = self.get_cached_optimized_kernel()
         result = actx.call_loopy(
             knl,
-            centers=centers, rscale=rscale, **kwargs)
+            centers=centers,
+            rscale=rscale,
+            **kwargs)
 
         return make_obj_array([result[f"result_s{i}"] for i in range(self.nresults)])
 

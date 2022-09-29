@@ -24,7 +24,8 @@ import os
 from sumpy.p2p import P2P, P2PFromCSR
 from sumpy.p2e import P2EFromSingleBox, P2EFromCSR
 from sumpy.e2p import E2PFromSingleBox, E2PFromCSR
-from sumpy.e2e import (E2EFromCSR, E2EFromChildren, E2EFromParent,
+from sumpy.e2e import (
+    E2EFromCSR, E2EFromChildren, E2EFromParent,
     M2LUsingTranslationClassesDependentData,
     M2LGenerateTranslationClassesDependentData, M2LPreprocessMultipole,
     M2LPostprocessLocal)

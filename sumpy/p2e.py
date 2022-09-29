@@ -215,17 +215,16 @@ class P2EFromSingleBox(P2EBase):
                 ] + gather_loopy_source_arguments(
                     self.source_kernels + (self.expansion,)),
                 name=self.name,
-                silenced_warnings="write_race(write_expn*)",
                 assumptions="nsrc_boxes>=1",
+                silenced_warnings="write_race(write_expn*)",
                 fixed_parameters=dict(
                     dim=self.dim,
                     strength_count=self.strength_count),
                 )
 
-        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-
         for knl in self.source_kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
         return loopy_knl
 
@@ -337,8 +336,8 @@ class P2EFromCSR(P2EBase):
                 """],
                 kernel_data=arguments,
                 name=self.name,
-                silenced_warnings="write_race(write_expn*)",
                 assumptions="ntgt_boxes>=1",
+                silenced_warnings="write_race(write_expn*)",
                 fixed_parameters=dict(
                     dim=self.dim,
                     strength_count=self.strength_count),

@@ -280,8 +280,8 @@ class LayerPotential(LayerPotentialBase):
             + ["end"],
             kernel_data=arguments,
             name=self.name,
-            silenced_warnings="write_race(write_lpot*)",
             assumptions="ntargets>=1 and nsources>=1",
+            silenced_warnings="write_race(write_lpot*)",
             fixed_parameters=dict(dim=self.dim),
             )
 
@@ -310,8 +310,11 @@ class LayerPotential(LayerPotentialBase):
 
         result = actx.call_loopy(
             knl,
-            sources=sources, targets=targets, center=centers,
-            expansion_radii=expansion_radii, **kwargs)
+            sources=sources,
+            targets=targets,
+            center=centers,
+            expansion_radii=expansion_radii,
+            **kwargs)
 
         return make_obj_array([result[f"result_{i}"] for i in range(self.nresults)])
 
@@ -383,8 +386,11 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
 
         result = actx.call_loopy(
             knl,
-            sources=sources, targets=targets, center=centers,
-            expansion_radii=expansion_radii, **kwargs)
+            sources=sources,
+            targets=targets,
+            center=centers,
+            expansion_radii=expansion_radii,
+            **kwargs)
 
         return make_obj_array([result[f"result_{i}"] for i in range(self.nresults)])
 
@@ -447,8 +453,8 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
             + ["end"],
             kernel_data=arguments,
             name=self.name,
-            silenced_warnings="write_race(write_lpot*)",
             assumptions="nresult>=1",
+            silenced_warnings="write_race(write_lpot*)",
             fixed_parameters=dict(dim=self.dim),
             )
 

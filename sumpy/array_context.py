@@ -79,14 +79,6 @@ def make_loopy_program(
 
 class PyOpenCLArrayContext(PyOpenCLArrayContextBase):
     def transform_loopy_program(self, t_unit):
-        for name in t_unit.entrypoints:
-            options = t_unit[name].options
-            if not (options.return_dict and options.no_numpy):
-                raise ValueError(
-                    f"loopy kernel '{name}' passed to call_loopy must "
-                    "have 'return_dict' and 'no_numpy' options set. "
-                    "Did you use 'make_loopy_program' to create this kernel?")
-
         return t_unit
 
 

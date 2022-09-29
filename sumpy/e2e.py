@@ -236,17 +236,17 @@ class E2EFromCSR(E2EBase):
                 ] + gather_loopy_arguments([self.src_expansion,
                                             self.tgt_expansion]),
                 name=self.name,
-                silenced_warnings="write_race(write_expn*)",
                 assumptions="ntgt_boxes>=1",
+                silenced_warnings="write_race(write_expn*)",
                 fixed_parameters=dict(dim=self.dim),
                 )
+
+        for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
+            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.set_options(loopy_knl,
                 enforce_variable_access_ordered="no_check")
-
-        for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
-            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
 
@@ -499,7 +499,7 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
 
         return knl
 
-    def __call__(self, actx, **kwargs):
+    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
         """
         :arg src_expansions:
         :arg src_box_starts:
@@ -897,8 +897,8 @@ class E2EFromChildren(E2EBase):
                     ...
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
-                silenced_warnings="write_race(write_expn*)",
                 assumptions="ntgt_boxes>=1",
+                silenced_warnings="write_race(write_expn*)",
                 fixed_parameters=dict(dim=self.dim, nchildren=2**self.dim),
                 )
 
@@ -1004,8 +1004,8 @@ class E2EFromParent(E2EBase):
                     ...
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
-                silenced_warnings="write_race(write_expn*)",
                 assumptions="ntgt_boxes>=1",
+                silenced_warnings="write_race(write_expn*)",
                 fixed_parameters=dict(dim=self.dim, nchildren=2**self.dim),
                 )
 

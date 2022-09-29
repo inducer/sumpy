@@ -1141,6 +1141,7 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
         kernel_data=kernel_data,
         name=name,
         fixed_parameters=fixed_parameters,
+        index_dtype=index_dtype,
     )
 
     if broadcast_dims:

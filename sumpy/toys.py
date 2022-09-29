@@ -137,50 +137,50 @@ class ToyContext:
     def get_p2m(self, order):
         from sumpy import P2EFromSingleBox
         return P2EFromSingleBox(
-            self.mpole_expn_class(self.no_target_deriv_kernel, order),
-            kernels=(self.kernel,))
+                self.mpole_expn_class(self.no_target_deriv_kernel, order),
+                kernels=(self.kernel,))
 
     @memoize_method
     def get_p2l(self, order):
         from sumpy import P2EFromSingleBox
         return P2EFromSingleBox(
-            self.local_expn_class(self.no_target_deriv_kernel, order),
-            kernels=(self.kernel,))
+                self.local_expn_class(self.no_target_deriv_kernel, order),
+                kernels=(self.kernel,))
 
     @memoize_method
     def get_m2p(self, order):
         from sumpy import E2PFromSingleBox
         return E2PFromSingleBox(
-            self.mpole_expn_class(self.no_target_deriv_kernel, order),
-            (self.kernel,))
+                self.mpole_expn_class(self.no_target_deriv_kernel, order),
+                (self.kernel,))
 
     @memoize_method
     def get_l2p(self, order):
         from sumpy import E2PFromSingleBox
         return E2PFromSingleBox(
-            self.local_expn_class(self.no_target_deriv_kernel, order),
-            (self.kernel,))
+                self.local_expn_class(self.no_target_deriv_kernel, order),
+                (self.kernel,))
 
     @memoize_method
     def get_m2m(self, from_order, to_order):
         from sumpy import E2EFromCSR
         return E2EFromCSR(
-            self.mpole_expn_class(self.no_target_deriv_kernel, from_order),
-            self.mpole_expn_class(self.no_target_deriv_kernel, to_order))
+                self.mpole_expn_class(self.no_target_deriv_kernel, from_order),
+                self.mpole_expn_class(self.no_target_deriv_kernel, to_order))
 
     @memoize_method
     def get_m2l(self, from_order, to_order):
         from sumpy import E2EFromCSR
         return E2EFromCSR(
-            self.mpole_expn_class(self.no_target_deriv_kernel, from_order),
-            self.local_expn_class(self.no_target_deriv_kernel, to_order))
+                self.mpole_expn_class(self.no_target_deriv_kernel, from_order),
+                self.local_expn_class(self.no_target_deriv_kernel, to_order))
 
     @memoize_method
     def get_l2l(self, from_order, to_order):
         from sumpy import E2EFromCSR
         return E2EFromCSR(
-            self.local_expn_class(self.no_target_deriv_kernel, from_order),
-            self.local_expn_class(self.no_target_deriv_kernel, to_order))
+                self.local_expn_class(self.no_target_deriv_kernel, from_order),
+                self.local_expn_class(self.no_target_deriv_kernel, to_order))
 
 # }}}
 
