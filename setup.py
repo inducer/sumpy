@@ -96,7 +96,7 @@ setup(
     author_email="inform@tiker.net",
     license="MIT",
     packages=["sumpy", "sumpy.expansion"],
-    python_requires="~=3.6",
+    python_requires="~=3.8",
     install_requires=[
         "pytools>=2021.1.1",
         "loopy>=2021.1",
