@@ -629,7 +629,7 @@ def local_expand(
 
 def logplot(
         actx: PyOpenCLArrayContext,
-        fp: FieldPlotter,
+        fp: "FieldPlotter",
         psource: PotentialSource, **kwargs) -> None:
     fp.show_scalar_in_matplotlib(
             np.log10(np.abs(psource.eval(actx, fp.points) + 1e-15)), **kwargs)
