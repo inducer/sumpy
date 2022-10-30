@@ -23,8 +23,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from numbers import Number
 from functools import partial
-from typing import Any, Optional
+from typing import Any, Sequence, Union, Optional, TYPE_CHECKING
 
 import numpy as np
 
@@ -34,6 +35,10 @@ from sumpy.array_context import PyOpenCLArrayContext
 
 import logging
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from sumpy.kernel import Kernel
+    from sumpy.visualization import FieldPlotter
 
 __doc__ = """
 
@@ -53,6 +58,7 @@ These functions manipulate these potentials:
 .. autofunction:: combine_inner_outer
 .. autofunction:: combine_halfspace
 .. autofunction:: combine_halfspace_and_outer
+.. autofunction:: l_inf
 
 These functions help with plotting:
 
@@ -69,6 +75,7 @@ by users:
 .. autoclass:: ExpansionPotentialSource
 .. autoclass:: MultipoleExpansion
 .. autoclass:: LocalExpansion
+.. autoclass:: PotentialExpressionNode
 .. autoclass:: Sum
 .. autoclass:: Product
 .. autoclass:: SchematicVisitor
@@ -85,7 +92,7 @@ class ToyContext:
     .. automethod:: __init__
     """
 
-    def __init__(self, kernel,
+    def __init__(self, kernel: "Kernel",
             mpole_expn_class=None,
             local_expn_class=None,
             expansion_factory=None,
@@ -310,17 +317,23 @@ class PotentialSource:
     .. automethod:: __rmul__
     """
 
-    def __init__(self, toy_ctx):
+    def __init__(self, toy_ctx: ToyContext):
         self.toy_ctx = toy_ctx
 
-    def eval(self, actx: PyOpenCLArrayContext, targets):
+    def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
+        """
+        :param targets: An array of shape ``(dim, ntargets)``.
+        :returns: an array of shape ``(ntargets,)``.
+        """
         raise NotImplementedError()
 
-    def __neg__(self):
+    def __neg__(self) -> "PotentialSource":
         return -1*self
 
-    def __add__(self, other):
-        from numbers import Number
+    def __add__(
+            self,
+            other: Union[Number, np.number, "PotentialSource"],
+            ) -> "PotentialSource":
         if isinstance(other, (Number, np.number)):
             other = ConstantPotential(self.toy_ctx, other)
         elif not isinstance(other, PotentialSource):
@@ -330,14 +343,22 @@ class PotentialSource:
 
     __radd__ = __add__
 
-    def __sub__(self, other):
+    def __sub__(
+            self,
+            other: Union[Number, np.number, "PotentialSource"],
+            ) -> "PotentialSource":
         return self.__add__(-other)
 
-    def __rsub__(self, other):
+    def __rsub__(
+            self,
+            other: Union[Number, np.number, "PotentialSource"]
+            ) -> "PotentialSource":
         return (-self).__add__(other)
 
-    def __mul__(self, other):
-        from numbers import Number
+    def __mul__(
+            self,
+            other: Union[Number, np.number, "PotentialSource"],
+            ) -> "PotentialSource":
         if isinstance(other, (Number, np.number)):
             other = ConstantPotential(self.toy_ctx, other)
         elif not isinstance(other, PotentialSource):
@@ -350,14 +371,16 @@ class PotentialSource:
 
 class ConstantPotential(PotentialSource):
     """
+    Inherits from :class:`PotentialSource`.
+
     .. automethod:: __init__
     """
 
-    def __init__(self, toy_ctx, value):
+    def __init__(self, toy_ctx: ToyContext, value):
         super().__init__(toy_ctx)
         self.value = np.array(value)
 
-    def eval(self, actx: PyOpenCLArrayContext, targets):
+    def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
         pot = np.empty(targets.shape[-1], dtype=self.value.dtype)
         pot.fill(self.value)
         return pot
@@ -365,29 +388,39 @@ class ConstantPotential(PotentialSource):
 
 class OneOnBallPotential(PotentialSource):
     """
+    A potential that is the characteristic function on a ball.
+
+    Inherits from :class:`PotentialSource`.
+
     .. automethod:: __init__
     """
-    def __init__(self, toy_ctx, center, radius):
+
+    def __init__(self,
+                 toy_ctx: ToyContext, center: np.ndarray, radius: float) -> None:
         super().__init__(toy_ctx)
         self.center = np.asarray(center)
         self.radius = radius
 
-    def eval(self, actx: PyOpenCLArrayContext, targets):
+    def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
         dist_vec = targets - self.center[:, np.newaxis]
         return (np.sum(dist_vec**2, axis=0) < self.radius**2).astype(np.float64)
 
 
 class HalfspaceOnePotential(PotentialSource):
     """
+    A potential that is the characteristic function of a halfspace.
+
     .. automethod:: __init__
     """
-    def __init__(self, toy_ctx, center, axis, side=1):
+
+    def __init__(self, toy_ctx: ToyContext, center: np.ndarray,
+                 axis: int, side: int = 1) -> None:
         super().__init__(toy_ctx)
         self.center = np.asarray(center)
         self.axis = axis
         self.side = side
 
-    def eval(self, actx: PyOpenCLArrayContext, targets):
+    def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
         return (
             (self.side*(targets[self.axis] - self.center[self.axis])) >= 0
             ).astype(np.float64)
@@ -395,6 +428,8 @@ class HalfspaceOnePotential(PotentialSource):
 
 class PointSources(PotentialSource):
     """
+    Inherits from :class:`PotentialSource`.
+
     .. attribute:: points
 
         ``[ndim, npoints]``
@@ -402,14 +437,16 @@ class PointSources(PotentialSource):
     .. automethod:: __init__
     """
 
-    def __init__(self, toy_ctx, points, weights, center=None):
+    def __init__(self,
+                 toy_ctx: ToyContext, points: np.ndarray, weights: np.ndarray,
+                 center: Optional[np.ndarray] = None):
         super().__init__(toy_ctx)
 
         self.points = points
         self.weights = weights
         self._center = center
 
-    def eval(self, actx: PyOpenCLArrayContext, targets):
+    def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
         potential, = self.toy_ctx.get_p2p()(
                 actx,
                 actx.from_numpy(targets),
@@ -429,6 +466,8 @@ class PointSources(PotentialSource):
 
 class ExpansionPotentialSource(PotentialSource):
     """
+    Inherits from :class:`PotentialSource`.
+
     .. attribute:: radius
 
         Not used mathematically. Just for visualization, purely advisory.
@@ -438,7 +477,10 @@ class ExpansionPotentialSource(PotentialSource):
        Passed to :func:`matplotlib.pyplot.annotate`. Used for customizing the
        expansion label. Changing the label text is supported by passing the
        kwarg *s*.  Just for visualization, purely advisory.
+
+    .. automethod:: __init__
     """
+
     def __init__(self, toy_ctx, center, rscale, order, coeffs, derived_from,
             radius=None, expn_style=None, text_kwargs=None):
         super().__init__(toy_ctx)
@@ -459,17 +501,31 @@ class ExpansionPotentialSource(PotentialSource):
 
 
 class MultipoleExpansion(ExpansionPotentialSource):
-    def eval(self, actx: PyOpenCLArrayContext, targets):
+    """
+    Inherits from :class:`ExpansionPotentialSource`.
+    """
+
+    def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
         return _e2p(actx, self, targets, self.toy_ctx.get_m2p(self.order))
 
 
 class LocalExpansion(ExpansionPotentialSource):
-    def eval(self, actx: PyOpenCLArrayContext, targets):
+    """
+    Inherits from :class:`ExpansionPotentialSource`.
+    """
+
+    def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
         return _e2p(actx, self, targets, self.toy_ctx.get_l2p(self.order))
 
 
 class PotentialExpressionNode(PotentialSource):
-    def __init__(self, psources):
+    """
+    Inherits from :class:`PotentialSource`.
+
+    .. automethod:: __init__
+    """
+
+    def __init__(self, psources: Sequence[PotentialSource]) -> None:
         from pytools import single_valued
         super().__init__(
                 single_valued(psource.toy_ctx for psource in psources))
@@ -477,7 +533,7 @@ class PotentialExpressionNode(PotentialSource):
         self.psources = psources
 
     @property
-    def center(self):
+    def center(self) -> np.ndarray:
         for psource in self.psources:
             try:
                 return psource.center
@@ -488,7 +544,11 @@ class PotentialExpressionNode(PotentialSource):
 
 
 class Sum(PotentialExpressionNode):
-    def eval(self, actx: PyOpenCLArrayContext, targets):
+    """
+    Inherits from :class:`PotentialExpressionNode`.
+    """
+
+    def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
         result = 0
         for psource in self.psources:
             result = result + psource.eval(actx, targets)
@@ -497,7 +557,11 @@ class Sum(PotentialExpressionNode):
 
 
 class Product(PotentialExpressionNode):
-    def eval(self, actx: PyOpenCLArrayContext, targets):
+    """
+    Inherits from :class:`PotentialExpressionNode`.
+    """
+
+    def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
         result = 1
         for psource in self.psources:
             result = result * psource.eval(actx, targets)
@@ -508,9 +572,9 @@ class Product(PotentialExpressionNode):
 
 
 def multipole_expand(
-        actx: PyOpenCLArrayContext, psource: PotentialSource, center, *,
+        actx: PyOpenCLArrayContext, psource: PotentialSource, center: np.ndarray, *,
         order: Optional[int] = None, rscale: float = 1,
-        **expn_kwargs: Any):
+        **expn_kwargs: Any) -> MultipoleExpansion:
     if isinstance(psource, PointSources):
         if order is None:
             raise ValueError("order may not be None")
@@ -532,9 +596,9 @@ def multipole_expand(
 
 
 def local_expand(
-        actx: PyOpenCLArrayContext, psource: PotentialSource, center, *,
+        actx: PyOpenCLArrayContext, psource: PotentialSource, center: np.ndarray, *,
         order: Optional[int] = None, rscale: float = 1,
-        **expn_kwargs: Any):
+        **expn_kwargs: Any) -> LocalExpansion:
     if isinstance(psource, PointSources):
         if order is None:
             raise ValueError("order may not be None")
@@ -563,12 +627,19 @@ def local_expand(
         raise TypeError(f"do not know how to expand '{type(psource).__name__}'")
 
 
-def logplot(actx, fp, psource, **kwargs):
+def logplot(
+        actx: PyOpenCLArrayContext,
+        fp: FieldPlotter,
+        psource: PotentialSource, **kwargs) -> None:
     fp.show_scalar_in_matplotlib(
             np.log10(np.abs(psource.eval(actx, fp.points) + 1e-15)), **kwargs)
 
 
-def combine_inner_outer(psource_inner, psource_outer, radius, center=None):
+def combine_inner_outer(
+        psource_inner: PotentialSource,
+        psource_outer: PotentialSource,
+        radius: Optional[float],
+        center: Optional[np.ndarray] = None) -> PotentialSource:
     if center is None:
         center = psource_inner.center
     if radius is None:
@@ -580,7 +651,9 @@ def combine_inner_outer(psource_inner, psource_outer, radius, center=None):
             + psource_outer * (1 - ball_one))
 
 
-def combine_halfspace(psource_pos, psource_neg, axis, center=None):
+def combine_halfspace(psource_pos: PotentialSource,
+                      psource_neg: PotentialSource, axis: int,
+                      center: Optional[np.ndarray] = None) -> PotentialSource:
     if center is None:
         center = psource_pos.center
 
@@ -590,8 +663,12 @@ def combine_halfspace(psource_pos, psource_neg, axis, center=None):
         + psource_neg * (1-halfspace_one))
 
 
-def combine_halfspace_and_outer(psource_pos, psource_neg, psource_outer,
-        axis, radius=None, center=None):
+def combine_halfspace_and_outer(
+        psource_pos: PotentialSource,
+        psource_neg: PotentialSource,
+        psource_outer: PotentialSource,
+        axis: int, radius: Optional[Number] = None,
+        center: Optional[np.ndarray] = None) -> PotentialSource:
 
     if center is None:
         center = psource_pos.center
@@ -603,7 +680,9 @@ def combine_halfspace_and_outer(psource_pos, psource_neg, psource_outer,
             psource_outer, radius, center)
 
 
-def l_inf(actx, psource, radius, center=None, npoints=100, debug=False):
+def l_inf(actx: PyOpenCLArrayContext, psource: PotentialSource, radius: float,
+          center: Optional[np.ndarray] = None, npoints: int = 100,
+          debug: bool = False) -> np.number:
     if center is None:
         center = psource.center
 
