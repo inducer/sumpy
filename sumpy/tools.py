@@ -686,10 +686,7 @@ class KernelComputation(ABC):
 # Author: Raymond Hettinger
 # License: MIT
 
-try:
-    from collections.abc import MutableSet
-except ImportError:
-    from collections import MutableSet
+from collections.abc import MutableSet
 
 
 class OrderedSet(MutableSet):
