@@ -16,7 +16,7 @@ authors:
   given-names: Hao
 
 title: "sumpy"
-version: 2022.
-# doi: 10.5281/zenodo.6533956
-# date-released: 2022-03-10
+version: 2022.1
+doi: 10.5281/zenodo.7349787
+date-released: 2022-11-23
 url: "https://github.com/inducer/sumpy"
