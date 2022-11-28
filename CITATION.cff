@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Kloeckner"
+  given-names: "Andreas"
+  orcid: "https://orcid.org/0000-0003-1228-519X"
+- family-names: Fernando
+  given-names: Isuru
+- family-names: Wala
+  given-names: Matt
+- family-names: Fikl
+  given-names: Alexandru
+- family-names: Beams
+  given-names: Natalie
+- family-names: Gao
+  given-names: Hao
+
+title: "sumpy"
+version: 2022.1
+doi: 10.5281/zenodo.7349787
+date-released: 2022-11-23
+url: "https://github.com/inducer/sumpy"

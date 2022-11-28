@@ -10,6 +10,9 @@ sumpy: n-body kernels and translation operators
 .. image:: https://badge.fury.io/py/sumpy.png
     :alt: Python Package Index Release Page
     :target: https://pypi.org/project/sumpy/
+.. image:: https://zenodo.org/badge/1856097.svg
+    :alt: Zenodo DOI for latest release
+    :target: https://zenodo.org/badge/latestdoi/1856097
 
 Sumpy is mainly a 'scaffolding' package for Fast Multipole and quadrature methods.
 If you're building one of those and need code generation for the required Multipole
