@@ -246,8 +246,11 @@ class M2LTranslationBase(ABC):
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode("utf8"))
 
-# }}} M2LTranslationBase
+    def optimize_loopy_kernel(self, knl, tgt_expansion, src_expansion):
+        return knl
 
+
+# }}} M2LTranslationBase
 
 # {{{ VolumeTaylorM2LTranslation
 
@@ -740,8 +743,18 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
         return super().postprocess_local_exprs(tgt_expansion,
             src_expansion, m2l_result, src_rscale, tgt_rscale, sac)
 
-# }}} VolumeTaylorM2LWithFFT
+    def optimize_loopy_kernel(self, knl, tgt_expansion, src_expansion):
+        knl = lp.split_iname(knl, "e2e_icoeff_tgt", 32, inner_iname="inner",
+                inner_tag="l.0")
+        knl = lp.split_iname(knl, "icoeff_tgt_0", 32, inner_tag="l.0")
+        knl = lp.split_iname(knl, "icoeff_tgt_1", 32, inner_tag="l.0")
+        knl = lp.add_inames_to_insn(knl, "inner", "id:insn*")
+        knl = lp.add_inames_to_insn(knl, "inner", "id:read_src_ibox")
+        knl = lp.add_inames_to_insn(knl, "inner", "id:translation_offset")
+        return knl
 
+
+# }}} VolumeTaylorM2LWithFFT
 
 # {{{ FourierBesselM2LTranslation
 
