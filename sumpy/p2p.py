@@ -656,8 +656,8 @@ class P2PFromCSR(P2PBase):
             knl = lp.tag_inames(knl, {"itgt_box": "g.0", "inner": "l.0"})
             knl = lp.set_temporary_address_space(knl,
                 ["local_isrc", "local_isrc_strength"], lp.AddressSpace.LOCAL)
-            knl = lp.merge_temporary_arrays(knl, "local_isrc,local_isrc_strength",
-                    "local_isrc")
+            knl = lp.concatenate_memory_layout_of_temporaries(knl,
+                ["local_isrc", "local_isrc_strength"], "local_isrc")
             knl = lp.tag_array_axes(knl, "local_isrc", "vec,C")
             knl = lp.add_inames_for_unused_hw_axes(knl)
             # knl = lp.set_options(knl, write_code=True)
