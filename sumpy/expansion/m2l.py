@@ -246,8 +246,11 @@ class M2LTranslationBase(ABC):
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode("utf8"))
 
-# }}} M2LTranslationBase
+    def optimize_loopy_kernel(self, knl, tgt_expansion, src_expansion):
+        return lp.tag_inames(knl, dict(itgt_box="g.0"))
 
+
+# }}} M2LTranslationBase
 
 # {{{ VolumeTaylorM2LTranslation
 
@@ -740,8 +743,26 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
         return super().postprocess_local_exprs(tgt_expansion,
             src_expansion, m2l_result, src_rscale, tgt_rscale, sac)
 
-# }}} VolumeTaylorM2LWithFFT
+    def optimize_loopy_kernel(self, knl, tgt_expansion, src_expansion):
+        # Transform the kernel so that icoeff_tgt and its duplicates
+        # become the outermost iname
+        inames = knl.default_entrypoint.all_inames()
+        knl = lp.rename_inames(knl,
+            [iname for iname in inames if "icoeff_tgt" in iname],
+            "icoeff_tgt", existing_ok=True)
+        knl = lp.add_inames_to_insn(knl, "icoeff_tgt", None)
 
+        # unprivatize icoeff_tgt because it is the outermost iname
+        knl = lp.unprivatize_temporaries_with_inames(knl,
+                {"icoeff_tgt"}, {"tgt_expansion"})
+
+        knl = lp.split_iname(knl, "icoeff_tgt", 32, inner_iname="inner",
+                inner_tag="l.0")
+        knl = lp.tag_inames(knl, dict(itgt_box="g.0"))
+        return knl
+
+
+# }}} VolumeTaylorM2LWithFFT
 
 # {{{ FourierBesselM2LTranslation
 

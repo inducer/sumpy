@@ -458,7 +458,7 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                     end
                     tgt_expansions[tgt_ibox - tgt_base_ibox, icoeff_tgt] = \
                             tgt_expansion[icoeff_tgt] \
-                            {dep=update_coeffs, dup=icoeff_tgt}
+                            {dep=update_coeffs, dup=icoeff_tgt,id=write_e2e}
                 end
                 """],
                 [
@@ -497,7 +497,8 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                             m2l_translation_classes_dependent_ndata),
                         ncoeff_tgt=ncoeff_tgt,
                         ncoeff_src=ncoeff_src),
-                lang_version=MOST_RECENT_LANGUAGE_VERSION
+                lang_version=MOST_RECENT_LANGUAGE_VERSION,
+                silenced_warnings="write_race(write_e2e*)",
                 )
 
         loopy_knl = lp.merge([translation_knl, loopy_knl])
@@ -514,8 +515,8 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
 
     def get_optimized_kernel(self, result_dtype):
         knl = self.get_kernel(result_dtype)
-        # FIXME
-        knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
+        knl = self.tgt_expansion.m2l_translation.optimize_loopy_kernel(
+                knl, self.tgt_expansion, self.src_expansion)
 
         return knl
 
