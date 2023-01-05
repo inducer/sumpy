@@ -516,7 +516,6 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
     def get_optimized_kernel(self, result_dtype):
         knl = self.get_kernel(result_dtype)
         # FIXME
-        knl = lp.tag_inames(knl, dict(itgt_box="g.0"))
         knl = self.tgt_expansion.m2l_translation.optimize_loopy_kernel(
                 knl, self.tgt_expansion, self.src_expansion)
 

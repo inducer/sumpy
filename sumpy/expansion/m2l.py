@@ -247,7 +247,7 @@ class M2LTranslationBase(ABC):
         key_hash.update(type(self).__name__.encode("utf8"))
 
     def optimize_loopy_kernel(self, knl, tgt_expansion, src_expansion):
-        return knl
+        return lp.tag_inames(knl, dict(itgt_box="g.0"))
 
 
 # }}} M2LTranslationBase
@@ -758,6 +758,7 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
 
         knl = lp.split_iname(knl, "icoeff_tgt", 32, inner_iname="inner",
                 inner_tag="l.0")
+        knl = lp.tag_inames(knl, dict(itgt_box="g.0"))
         return knl
 
 
