@@ -664,7 +664,7 @@ class P2PFromCSR(P2PBase):
             # access of 256 bits (assuming double precision) which is
             # optimized for NVIDIA GPUs. On an NVIDIA Titan V, this
             # optimization led to a 8% speedup in the performance.
-            knl = lp.concatenate_memory_layout_of_temporaries(knl,
+            knl = lp.concatenate_arrays(knl,
                 ["local_isrc", "local_isrc_strength"], "local_isrc")
             knl = lp.tag_array_axes(knl, "local_isrc", "vec,C")
 
