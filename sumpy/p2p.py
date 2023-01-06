@@ -656,6 +656,18 @@ class P2PFromCSR(P2PBase):
             knl = lp.tag_inames(knl, {"itgt_box": "g.0", "inner": "l.0"})
             knl = lp.set_temporary_address_space(knl,
                 ["local_isrc", "local_isrc_strength"], lp.AddressSpace.LOCAL)
+
+            # By having a concatenated memory layout of the temporaries
+            # and marking the first axis as vec, we are transposing the
+            # the arrays and also making the access of the source
+            # co-ordinates and the strength for each source a coalesced
+            # access of 256 bits (assuming double precision) which is
+            # optimized for NVIDIA GPUs. On an NVIDIA Titan V, this
+            # optimization led to a 8% speedup in the performance.
+            knl = lp.concatenate_arrays(knl,
+                ["local_isrc", "local_isrc_strength"], "local_isrc")
+            knl = lp.tag_array_axes(knl, "local_isrc", "vec,C")
+
             knl = lp.add_inames_for_unused_hw_axes(knl)
             # knl = lp.set_options(knl, write_code=True)
 
