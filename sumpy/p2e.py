@@ -213,8 +213,8 @@ class P2EFromSingleBox(P2EBase):
                 assumptions="nsrc_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
                 default_offset=lp.auto,
-                fixed_parameters=dict(dim=self.dim,
-                    strength_count=self.strength_count),
+                fixed_parameters={
+                    "dim": self.dim, "strength_count": self.strength_count},
                 lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         for knl in self.source_kernels:
@@ -334,8 +334,8 @@ class P2EFromCSR(P2EBase):
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
                 default_offset=lp.auto,
-                fixed_parameters=dict(dim=self.dim,
-                    strength_count=self.strength_count),
+                fixed_parameters={"dim": self.dim,
+                                  "strength_count": self.strength_count},
                 lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         for knl in self.source_kernels:

@@ -272,7 +272,7 @@ class LayerPotential(LayerPotentialBase):
             assumptions="ntargets>=1 and nsources>=1",
             default_offset=lp.auto,
             silenced_warnings="write_race(write_lpot*)",
-            fixed_parameters=dict(dim=self.dim),
+            fixed_parameters={"dim": self.dim},
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
@@ -349,7 +349,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
             name=self.name,
             assumptions="ntargets>=1 and nsources>=1",
             default_offset=lp.auto,
-            fixed_parameters=dict(dim=self.dim),
+            fixed_parameters={"dim": self.dim},
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
@@ -429,12 +429,12 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
             assumptions="nresult>=1",
             default_offset=lp.auto,
             silenced_warnings="write_race(write_lpot*)",
-            fixed_parameters=dict(dim=self.dim),
+            fixed_parameters={"dim": self.dim},
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-        loopy_knl = lp.add_dtypes(loopy_knl,
-            dict(nsources=np.int32, ntargets=np.int32))
+        loopy_knl = lp.add_dtypes(
+                loopy_knl, {"nsources": np.int32, "ntargets": np.int32})
 
         for knl in self.source_kernels + self.target_kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)

@@ -55,7 +55,7 @@ def find_flops():
         flops = lp.get_op_map(loopy_knl).filter_by(dtype=[flop_type]).sum()
         flop_counts.append(
                 flops.eval_with_dict(
-                    dict(isrc_start=0, isrc_stop=1, ntgt_boxes=1)))
+                    {"isrc_start": 0, "isrc_stop": 1, "ntgt_boxes": 1}))
 
     print(orders)
     print(flop_counts)
