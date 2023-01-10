@@ -1101,8 +1101,8 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
                 expression=exp_table[table_idx % n],
                 id=f"exp_{ilev}",
                 depends_on=frozenset([f"idx_{ilev}"]),
-                within_inames=frozenset(map(lambda x: x.name,
-                    [*broadcast_dims, iN1_sum, iN1, iN2])),
+                within_inames=frozenset({x.name for x in
+                    [*broadcast_dims, iN1_sum, iN1, iN2]}),
                 temp_var_type=lp.Optional(complex_dtype)),
             lp.Assignment(
                 assignee=x[(*broadcast_dims, ifft + nfft * (iN1*N2 + iN2))],

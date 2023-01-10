@@ -262,7 +262,7 @@ class E2EFromCSR(E2EBase):
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
                 default_offset=lp.auto,
-                fixed_parameters=dict(dim=self.dim),
+                fixed_parameters={"dim": self.dim},
                 lang_version=MOST_RECENT_LANGUAGE_VERSION
                 )
 
@@ -492,11 +492,12 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 default_offset=lp.auto,
-                fixed_parameters=dict(dim=self.dim,
-                        m2l_translation_classes_dependent_ndata=(
+                fixed_parameters={
+                        "dim": self.dim,
+                        "m2l_translation_classes_dependent_ndata": (
                             m2l_translation_classes_dependent_ndata),
-                        ncoeff_tgt=ncoeff_tgt,
-                        ncoeff_src=ncoeff_src),
+                        "ncoeff_tgt": ncoeff_tgt,
+                        "ncoeff_src": ncoeff_src},
                 lang_version=MOST_RECENT_LANGUAGE_VERSION,
                 silenced_warnings="write_race(write_e2e*)",
                 )
@@ -600,10 +601,10 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                 name=self.name,
                 assumptions="ntranslation_classes>=1",
                 default_offset=lp.auto,
-                fixed_parameters=dict(
-                    dim=self.dim,
-                    m2l_translation_classes_dependent_ndata=(
-                        m2l_translation_classes_dependent_ndata)),
+                fixed_parameters={
+                    "dim": self.dim,
+                    "m2l_translation_classes_dependent_ndata": (
+                        m2l_translation_classes_dependent_ndata)},
                 lang_version=MOST_RECENT_LANGUAGE_VERSION
                 )
 
@@ -704,9 +705,9 @@ class M2LPreprocessMultipole(E2EBase):
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
                 assumptions="nsrc_boxes>=1",
-                fixed_parameters=dict(
-                    nsrc_coeffs=nsrc_coeffs,
-                    npreprocessed_src_coeffs=npreprocessed_src_coeffs),
+                fixed_parameters={
+                    "nsrc_coeffs": nsrc_coeffs,
+                    "npreprocessed_src_coeffs": npreprocessed_src_coeffs},
                 default_offset=lp.auto,
                 lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
                 )
@@ -793,11 +794,11 @@ class M2LPostprocessLocal(E2EBase):
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 default_offset=lp.auto,
-                fixed_parameters=dict(
-                    dim=self.dim,
-                    nsrc_coeffs=ntgt_coeffs_before_postprocessing,
-                    ntgt_coeffs=ntgt_coeffs,
-                ),
+                fixed_parameters={
+                    "dim": self.dim,
+                    "nsrc_coeffs": ntgt_coeffs_before_postprocessing,
+                    "ntgt_coeffs": ntgt_coeffs,
+                },
                 lang_version=MOST_RECENT_LANGUAGE_VERSION
                 )
 
@@ -913,7 +914,7 @@ class E2EFromChildren(E2EBase):
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
-                fixed_parameters=dict(dim=self.dim, nchildren=2**self.dim),
+                fixed_parameters={"dim": self.dim, "nchildren": 2**self.dim},
                 lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
@@ -1017,7 +1018,7 @@ class E2EFromParent(E2EBase):
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name, assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
-                fixed_parameters=dict(dim=self.dim, nchildren=2**self.dim),
+                fixed_parameters={"dim": self.dim, "nchildren": 2**self.dim},
                 lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
