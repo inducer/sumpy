@@ -1009,7 +1009,7 @@ class AxisSourceDerivative(DerivativeBase):
     def get_derivative_coeff_dict_at_source(self, expr_dict):
         expr_dict = self.inner_kernel.get_derivative_coeff_dict_at_source(
             expr_dict)
-        result = dict()
+        result = {}
         for mi, coeff in expr_dict.items():
             new_mi = list(mi)
             new_mi[self.axis] += 1

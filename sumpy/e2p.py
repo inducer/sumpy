@@ -193,7 +193,7 @@ class E2PFromSingleBox(E2PBase):
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_result*)",
-                fixed_parameters=dict(dim=self.dim, nresults=len(result_names)),
+                fixed_parameters={"dim": self.dim, "nresults": len(result_names)},
                 )
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
@@ -205,7 +205,7 @@ class E2PFromSingleBox(E2PBase):
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
-        knl = lp.tag_inames(knl, dict(itgt_box="g.0"))
+        knl = lp.tag_inames(knl, {"itgt_box": "g.0"})
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
@@ -309,7 +309,9 @@ class E2PFromCSR(E2PBase):
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_result*)",
-                fixed_parameters=dict(dim=self.dim, nresults=len(result_names)),
+                fixed_parameters={
+                        "dim": self.dim,
+                        "nresults": len(result_names)},
                 )
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
@@ -322,7 +324,7 @@ class E2PFromCSR(E2PBase):
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
-        knl = lp.tag_inames(knl, dict(itgt_box="g.0"))
+        knl = lp.tag_inames(knl, {"itgt_box": "g.0"})
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")

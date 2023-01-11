@@ -480,16 +480,16 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     # use a FilteredTargetListsInTreeOrder object.
 
     def box_source_list_kwargs(self):
-        return dict(
-                box_source_starts=self.tree.box_source_starts,
-                box_source_counts_nonchild=self.tree.box_source_counts_nonchild,
-                sources=self.tree.sources)
+        return {
+                "box_source_starts": self.tree.box_source_starts,
+                "box_source_counts_nonchild": self.tree.box_source_counts_nonchild,
+                "sources": self.tree.sources}
 
     def box_target_list_kwargs(self):
-        return dict(
-                box_target_starts=self.tree.box_target_starts,
-                box_target_counts_nonchild=self.tree.box_target_counts_nonchild,
-                targets=self.tree.targets)
+        return {
+                "box_target_starts": self.tree.box_target_starts,
+                "box_target_counts_nonchild": self.tree.box_target_counts_nonchild,
+                "targets": self.tree.targets}
 
     # }}}
 

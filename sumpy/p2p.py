@@ -239,10 +239,10 @@ class P2P(P2PBase):
             kernel_data=arguments,
             assumptions="nsources>=1 and ntargets>=1",
             name=self.name,
-            fixed_parameters=dict(
-                dim=self.dim,
-                nstrengths=self.strength_count,
-                nresults=len(self.target_kernels)),
+            fixed_parameters={
+                "dim": self.dim,
+                "nstrengths": self.strength_count,
+                "nresults": len(self.target_kernels)},
             )
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
@@ -311,7 +311,7 @@ class P2PMatrixGenerator(P2PBase):
             arguments,
             assumptions="nsources>=1 and ntargets>=1",
             name=self.name,
-            fixed_parameters=dict(dim=self.dim),
+            fixed_parameters={"dim": self.dim},
             )
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
@@ -391,12 +391,12 @@ class P2PMatrixSubsetGenerator(P2PBase):
             assumptions="nresult>=1",
             silenced_warnings="write_race(write_p2p*)",
             name=self.name,
-            fixed_parameters=dict(dim=self.dim),
+            fixed_parameters={"dim": self.dim},
             )
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-        loopy_knl = lp.add_dtypes(loopy_knl,
-            dict(nsources=np.int32, ntargets=np.int32))
+        loopy_knl = lp.add_dtypes(
+                loopy_knl, {"nsources": np.int32, "ntargets": np.int32})
 
         for knl in self.target_kernels + self.source_kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
@@ -638,17 +638,17 @@ class P2PFromCSR(P2PBase):
                 "write_race(write_csr*)",
                 "write_race(prefetch_src)",
                 "write_race(prefetch_charge)"],
-            fixed_parameters=dict(
-                dim=self.dim,
-                nstrengths=self.strength_count,
-                nsplit=nsplit,
-                src_outer_limit=src_outer_limit,
-                tgt_outer_limit=tgt_outer_limit,
-                noutputs=len(self.target_kernels)),
+            fixed_parameters={
+                "dim": self.dim,
+                "nstrengths": self.strength_count,
+                "nsplit": nsplit,
+                "src_outer_limit": src_outer_limit,
+                "tgt_outer_limit": tgt_outer_limit,
+                "noutputs": len(self.target_kernels)},
             )
 
-        loopy_knl = lp.add_dtypes(loopy_knl,
-            dict(nsources=np.int32, ntargets=np.int32))
+        loopy_knl = lp.add_dtypes(
+                loopy_knl, {"nsources": np.int32, "ntargets": np.int32})
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, "istrength*:unr")
@@ -674,6 +674,18 @@ class P2PFromCSR(P2PBase):
             knl = lp.tag_inames(knl, {"itgt_box": "g.0", "inner": "l.0"})
             knl = lp.set_temporary_address_space(knl,
                 ["local_isrc", "local_isrc_strength"], lp.AddressSpace.LOCAL)
+
+            # By having a concatenated memory layout of the temporaries
+            # and marking the first axis as vec, we are transposing the
+            # the arrays and also making the access of the source
+            # co-ordinates and the strength for each source a coalesced
+            # access of 256 bits (assuming double precision) which is
+            # optimized for NVIDIA GPUs. On an NVIDIA Titan V, this
+            # optimization led to a 8% speedup in the performance.
+            knl = lp.concatenate_arrays(knl,
+                ["local_isrc", "local_isrc_strength"], "local_isrc")
+            knl = lp.tag_array_axes(knl, "local_isrc", "vec,C")
+
             knl = lp.add_inames_for_unused_hw_axes(knl)
             # knl = lp.set_options(knl, write_code=True)
 

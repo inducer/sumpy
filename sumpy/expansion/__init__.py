@@ -559,7 +559,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     def get_full_coefficient_identifiers(self):
         identifiers = super().get_full_coefficient_identifiers()
         key = self._get_mi_ordering_key()
-        return list(sorted(identifiers, key=key))
+        return sorted(identifiers, key=key)
 
     @memoize_method
     def get_stored_ids_and_unscaled_projection_matrix(self):

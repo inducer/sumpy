@@ -748,10 +748,10 @@ def draw_annotation(to_pt, from_pt, label, arrowprops=None, **kwargs):
 
     import matplotlib.pyplot as plt
 
-    my_arrowprops = dict(
-            facecolor="black",
-            edgecolor="black",
-            arrowstyle="->")
+    my_arrowprops = {
+            "facecolor": "black",
+            "edgecolor": "black",
+            "arrowstyle": "->"}
 
     my_arrowprops.update(arrowprops)
 
@@ -797,9 +797,9 @@ class SchematicVisitor:
         #
         # ------> M
 
-        text_kwargs = dict(
-                verticalalignment="center",
-                horizontalalignment="center")
+        text_kwargs = {
+                "verticalalignment": "center",
+                "horizontalalignment": "center"}
 
         label = "${}_{{{}}}$".format(
                 type(psource).__name__[0].lower().replace("l", "\\ell"),
@@ -818,7 +818,7 @@ class SchematicVisitor:
             font_size = mpl.rcParams["font.size"]
             shrinkB = 7/8 * font_size  # noqa
 
-        arrowprops = dict(shrinkB=shrinkB, arrowstyle="<|-")
+        arrowprops = {"shrinkB": shrinkB, "arrowstyle": "<|-"}
 
         draw_annotation(psource.derived_from.center, psource.center, label,
                         arrowprops, **text_kwargs)

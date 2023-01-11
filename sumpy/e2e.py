@@ -238,7 +238,7 @@ class E2EFromCSR(E2EBase):
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
-                fixed_parameters=dict(dim=self.dim),
+                fixed_parameters={"dim": self.dim},
                 )
 
         for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
@@ -439,7 +439,7 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                     end
                     tgt_expansions[tgt_ibox - tgt_base_ibox, icoeff_tgt] = \
                             tgt_expansion[icoeff_tgt] \
-                            {dep=update_coeffs, dup=icoeff_tgt}
+                            {dep=update_coeffs, dup=icoeff_tgt,id=write_e2e}
                 end
                 """],
                 kernel_data=[
@@ -472,12 +472,13 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                                             self.tgt_expansion]),
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
-                fixed_parameters=dict(
-                    dim=self.dim,
-                    m2l_translation_classes_dependent_ndata=(
-                        m2l_translation_classes_dependent_ndata),
-                    ncoeff_tgt=ncoeff_tgt,
-                    ncoeff_src=ncoeff_src),
+                fixed_parameters={
+                        "dim": self.dim,
+                        "m2l_translation_classes_dependent_ndata": (
+                            m2l_translation_classes_dependent_ndata),
+                        "ncoeff_tgt": ncoeff_tgt,
+                        "ncoeff_src": ncoeff_src},
+                silenced_warnings="write_race(write_e2e*)",
                 )
 
         loopy_knl = lp.merge([translation_knl, loopy_knl])
@@ -494,8 +495,8 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
 
     def get_optimized_kernel(self, result_dtype):
         knl = self.get_kernel(result_dtype)
-        # FIXME
-        knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
+        knl = self.tgt_expansion.m2l_translation.optimize_loopy_kernel(
+                knl, self.tgt_expansion, self.src_expansion)
 
         return knl
 
@@ -583,10 +584,10 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
                 assumptions="ntranslation_classes>=1",
-                fixed_parameters=dict(
-                    dim=self.dim,
-                    m2l_translation_classes_dependent_ndata=(
-                        m2l_translation_classes_dependent_ndata)),
+                fixed_parameters={
+                    "dim": self.dim,
+                    "m2l_translation_classes_dependent_ndata": (
+                        m2l_translation_classes_dependent_ndata)},
                 )
 
         for expr_knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
@@ -688,9 +689,9 @@ class M2LPreprocessMultipole(E2EBase):
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
                 assumptions="nsrc_boxes>=1",
-                fixed_parameters=dict(
-                    nsrc_coeffs=nsrc_coeffs,
-                    npreprocessed_src_coeffs=npreprocessed_src_coeffs),
+                fixed_parameters={
+                    "nsrc_coeffs": nsrc_coeffs,
+                    "npreprocessed_src_coeffs": npreprocessed_src_coeffs},
                 )
 
         for expn in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
@@ -777,10 +778,11 @@ class M2LPostprocessLocal(E2EBase):
                 ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
-                fixed_parameters=dict(
-                    dim=self.dim,
-                    nsrc_coeffs=ntgt_coeffs_before_postprocessing,
-                    ntgt_coeffs=ntgt_coeffs),
+                fixed_parameters={
+                    "dim": self.dim,
+                    "nsrc_coeffs": ntgt_coeffs_before_postprocessing,
+                    "ntgt_coeffs": ntgt_coeffs,
+                },
                 )
 
         for expn in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
@@ -899,7 +901,7 @@ class E2EFromChildren(E2EBase):
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
-                fixed_parameters=dict(dim=self.dim, nchildren=2**self.dim),
+                fixed_parameters={"dim": self.dim, "nchildren": 2**self.dim},
                 )
 
         for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:
@@ -1006,7 +1008,7 @@ class E2EFromParent(E2EBase):
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
-                fixed_parameters=dict(dim=self.dim, nchildren=2**self.dim),
+                fixed_parameters={"dim": self.dim, "nchildren": 2**self.dim},
                 )
 
         for knl in [self.src_expansion.kernel, self.tgt_expansion.kernel]:

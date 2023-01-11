@@ -691,10 +691,13 @@ def test_sumpy_target_point_multiplier(actx_factory, deriv_axes, visualize=False
 # }}}
 
 
-# You can test individual routines by typing
-# $ python test_fmm.py 'test_sumpy_fmm(_acf, LaplaceKernel(2),
-#       VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion, False, False,
-#       visualize=True)'
+"""
+You can test individual routines by typing
+$ python test/test_fmm.py 'test_sumpy_fmm(_acf, LaplaceKernel(2),
+      VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
+      order_varies_with_level=False, use_translation_classes=True, use_fft=True,
+      fft_backend="pyvkfft", visualize=True)'
+"""
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

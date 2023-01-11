@@ -227,8 +227,7 @@ class FuncArgTracker:
         """
         iarg = iter(argset)
 
-        indices = {
-            fi for fi in self.arg_to_funcset[next(iarg)]}
+        indices = set(self.arg_to_funcset[next(iarg)])
 
         if restrict_to_funcset is not None:
             indices &= restrict_to_funcset
@@ -366,7 +365,7 @@ def opt_cse(exprs):
     :arg exprs: A list of sympy expressions: the expressions to optimize.
     :return: A dictionary of expression substitutions
     """
-    opt_subs = dict()
+    opt_subs = {}
 
     from sumpy.tools import OrderedSet
     adds = OrderedSet()
@@ -446,7 +445,7 @@ def tree_cse(exprs, symbols, opt_subs=None):
     :return: A pair (replacements, reduced exprs)
     """
     if opt_subs is None:
-        opt_subs = dict()
+        opt_subs = {}
 
     # {{{ find repeated sub-expressions and used symbols
 
@@ -498,7 +497,7 @@ def tree_cse(exprs, symbols, opt_subs=None):
 
     replacements = []
 
-    subs = dict()
+    subs = {}
 
     def rebuild(expr):
         if not isinstance(expr, (Basic, Unevaluated)):

@@ -170,7 +170,7 @@ class M2LTranslationBase(ABC):
         When FFT is turned on, the output expressions are assumed to be
         transformed into Fourier space at the end by the caller.
         """
-        return tuple()
+        return ()
 
     def translation_classes_dependent_ndata(self, tgt_expansion, src_expansion):
         """Return the number of expressions returned by
@@ -246,8 +246,11 @@ class M2LTranslationBase(ABC):
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode("utf8"))
 
-# }}} M2LTranslationBase
+    def optimize_loopy_kernel(self, knl, tgt_expansion, src_expansion):
+        return lp.tag_inames(knl, {"itgt_box": "g.0"})
 
+
+# }}} M2LTranslationBase
 
 # {{{ VolumeTaylorM2LTranslation
 
@@ -440,8 +443,8 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         circulant_matrix_mis, _, _ = \
             self._translation_classes_dependent_data_mis(tgt_expansion,
                 src_expansion)
-        circulant_matrix_ident_to_index = dict((ident, i) for i, ident in
-            enumerate(circulant_matrix_mis))
+        circulant_matrix_ident_to_index = {
+                ident: i for i, ident in enumerate(circulant_matrix_mis)}
 
         ncoeff_src = len(src_expansion.get_coefficient_identifiers())
         ncoeff_preprocessed = self.preprocess_multipole_nexprs(tgt_expansion,
@@ -492,7 +495,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
                 ...],
             name="m2l_preprocess_inner",
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
-            fixed_parameters=dict(noutput_coeffs=ncoeff_preprocessed),
+            fixed_parameters={"noutput_coeffs": ncoeff_preprocessed},
         )
 
     def postprocess_local_exprs(self, tgt_expansion, src_expansion, m2l_result,
@@ -521,8 +524,8 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         circulant_matrix_mis, needed_vector_terms, _ = \
             self._translation_classes_dependent_data_mis(tgt_expansion,
                 src_expansion)
-        circulant_matrix_ident_to_index = dict((ident, i) for i, ident in
-                            enumerate(circulant_matrix_mis))
+        circulant_matrix_ident_to_index = {ident: i for i, ident in
+                            enumerate(circulant_matrix_mis)}
 
         ncoeff_tgt = len(tgt_expansion.get_coefficient_identifiers())
         ncoeff_before_postprocessed = self.postprocess_local_nexprs(tgt_expansion,
@@ -740,8 +743,26 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
         return super().postprocess_local_exprs(tgt_expansion,
             src_expansion, m2l_result, src_rscale, tgt_rscale, sac)
 
-# }}} VolumeTaylorM2LWithFFT
+    def optimize_loopy_kernel(self, knl, tgt_expansion, src_expansion):
+        # Transform the kernel so that icoeff_tgt and its duplicates
+        # become the outermost iname
+        inames = knl.default_entrypoint.all_inames()
+        knl = lp.rename_inames(knl,
+            [iname for iname in inames if "icoeff_tgt" in iname],
+            "icoeff_tgt", existing_ok=True)
+        knl = lp.add_inames_to_insn(knl, "icoeff_tgt", None)
 
+        # unprivatize icoeff_tgt because it is the outermost iname
+        knl = lp.unprivatize_temporaries_with_inames(knl,
+                {"icoeff_tgt"}, {"tgt_expansion"})
+
+        knl = lp.split_iname(knl, "icoeff_tgt", 32, inner_iname="inner",
+                inner_tag="l.0")
+        knl = lp.tag_inames(knl, {"itgt_box": "g.0"})
+        return knl
+
+
+# }}} VolumeTaylorM2LWithFFT
 
 # {{{ FourierBesselM2LTranslation
 
@@ -991,7 +1012,7 @@ def translation_classes_dependent_data_loopy_knl(tgt_expansion, src_expansion,
     from sumpy.tools import to_complex_dtype
     insns = to_loopy_insns(
             sac.assignments.items(),
-            vector_names=set(["d"]),
+            vector_names=frozenset({"d"}),
             pymbolic_expr_maps=[tgt_expansion.get_code_transformer()],
             retain_names=tgt_coeff_names,
             complex_dtype=to_complex_dtype(result_dtype),
