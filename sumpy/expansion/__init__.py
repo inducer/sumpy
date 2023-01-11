@@ -167,6 +167,14 @@ class ExpansionBase(ABC):
             in *coeffs*.
         """
 
+    def loopy_evaluate(self, kernels):
+        """
+        :returns: a :mod:`loopy` kernel that returns the evaluated
+            target transforms of the potential given by *kernels*.
+        """
+        from sumpy.expansion.loopy import e2p_loopy_knl_expr
+        return e2p_loopy_knl_expr(self, kernels)
+
     # }}}
 
     # {{{ copy
