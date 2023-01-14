@@ -299,8 +299,8 @@ class E2PFromCSR(E2PBase):
         loopy_knl = lp.prioritize_loops(loopy_knl, "itgt_box,itgt,isrc_box")
         loopy_knl = self.set_inner_knl(loopy_knl)
         loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
-        #loopy_knl = lp.set_options(loopy_knl,
-        #        disable_implemented_domains_check=False)
+        loopy_knl = lp.set_options(loopy_knl,
+                disable_implemented_domains_check=False)
 
         return loopy_knl
 

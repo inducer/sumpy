@@ -11,6 +11,6 @@ git+https://github.com/inducer/pymbolic.git#egg=pymbolic
 git+https://github.com/inducer/islpy.git#egg=islpy
 git+https://github.com/inducer/pyopencl.git#egg=pyopencl
 git+https://github.com/inducer/boxtree.git#egg=boxtree
-git+https://github.com/inducer/loopy.git#egg=loopy
+git+https://github.com/isuruf/loopy.git@sumpy#egg=loopy
 git+https://github.com/inducer/arraycontext.git#egg=arraycontext
 git+https://github.com/inducer/pyfmmlib.git#egg=pyfmmlib
