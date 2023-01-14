@@ -37,6 +37,7 @@ __doc__ = """
 import numpy as np
 from pymbolic.mapper import IdentityMapper as IdentityMapperBase
 import pymbolic.primitives as prim
+import math
 
 import logging
 logger = logging.getLogger(__name__)
@@ -111,6 +112,7 @@ Function = sym.Function
 Symbol = sym.Symbol
 Derivative = sym.Derivative
 Integer = sym.Integer
+Rational = sym.Rational
 Matrix = sym.Matrix
 Subs = sym.Subs
 I = sym.I  # noqa: E741
@@ -292,6 +294,27 @@ class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
         if expr.name.startswith(SpatialConstant.prefix):
             return SpatialConstant.from_sympy(expr)
         return SympyToPymbolicMapperBase.map_Symbol(self, expr)
+
+    def map_Pow(self, expr):  # noqa: N802
+        if expr.exp == -1:
+            return 1/self.rec(expr.base)
+        else:
+            return SympyToPymbolicMapperBase.map_Pow(self, expr)
+
+    def map_Mul(self, expr):  # noqa: N802
+        num_args = []
+        den_args = []
+        for child in expr.args:
+            if isinstance(child, Pow) and isinstance(child.exp, Integer) \
+                    and child.exp < 0:
+                den_args.append(self.rec(child.base)**(-self.rec(child.exp)))
+            elif isinstance(child, Rational) and not isinstance(child, Integer):
+                num_args.append(self.rec(child.p))
+                den_args.append(self.rec(child.q))
+            else:
+                num_args.append(self.rec(child))
+
+        return math.prod(num_args) / math.prod(den_args)
 
 
 class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):
