@@ -67,11 +67,12 @@ def e2p_loopy_knl_expr(expansion, kernels):
     kernel_scaling = sym.Symbol("kernel_scaling")
     insns.append(
         lp.Assignment(
-        id=None,
-        assignee="kernel_scaling",
-        expression=sympy_conv(expansion.kernel.get_global_scaling_const()),
-        temp_var_type=lp.Optional(None),
-    ))
+            id=None,
+            assignee="kernel_scaling",
+            expression=sympy_conv(expansion.kernel.get_global_scaling_const()),
+            temp_var_type=lp.Optional(None),
+        )
+    )
 
     coeff_exprs = sym.make_sym_vector("coeffs", ncoeffs)
     coeff_names = [
