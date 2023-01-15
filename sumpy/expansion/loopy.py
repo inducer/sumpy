@@ -132,5 +132,7 @@ def e2p_loopy_knl_expr(expansion, kernels):
             )
 
     loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+    for kernel in kernels:
+        loopy_knl = kernel.prepare_loopy_kernel(loopy_knl)
 
     return loopy_knl

@@ -176,6 +176,8 @@ class E2PFromSingleBox(E2PBase):
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, "iknl*:unr")
         loopy_knl = self.set_inner_knl(loopy_knl)
+        loopy_knl = lp.set_options(loopy_knl,
+                disable_implemented_domains_check=True)
 
         return loopy_knl
 
@@ -300,7 +302,7 @@ class E2PFromCSR(E2PBase):
         loopy_knl = self.set_inner_knl(loopy_knl)
         loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
         loopy_knl = lp.set_options(loopy_knl,
-                disable_implemented_domains_check=False)
+                disable_implemented_domains_check=True)
 
         return loopy_knl
 
