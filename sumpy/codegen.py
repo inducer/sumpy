@@ -200,9 +200,11 @@ class Hankel1_01(lp.ScalarCallable):  # noqa: N801
 
 def register_bessel_callables(loopy_knl):
     from sumpy.codegen import BesselJvvp1, Hankel1_01
-    loopy_knl = lp.register_callable(loopy_knl, "bessel_jvvp1",
+    if "bessel_jvvp1" not in loopy_knl.callables_table:
+        loopy_knl = lp.register_callable(loopy_knl, "bessel_jvvp1",
             BesselJvvp1("bessel_jvvp1"))
-    loopy_knl = lp.register_callable(loopy_knl, "hank1_01",
+    if "hank1_01" not in loopy_knl.callables_table:
+        loopy_knl = lp.register_callable(loopy_knl, "hank1_01",
             Hankel1_01("hank1_01"))
     return loopy_knl
 
