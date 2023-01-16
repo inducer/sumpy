@@ -308,9 +308,6 @@ class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
             if isinstance(child, Pow) and isinstance(child.exp, Integer) \
                     and child.exp < 0:
                 den_args.append(self.rec(child.base)**(-self.rec(child.exp)))
-            elif isinstance(child, Rational) and not isinstance(child, Integer):
-                num_args.append(self.rec(child.p))
-                den_args.append(self.rec(child.q))
             else:
                 num_args.append(self.rec(child))
 
