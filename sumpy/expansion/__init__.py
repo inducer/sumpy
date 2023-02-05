@@ -533,7 +533,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     # the axes so that the axis with the on-axis coefficient comes first in the
     # multi-index tuple.
     @memoize_method
-    def _get_mi_ordering_key(self):
+    def _get_mi_ordering_key_and_axis_permutation(self):
         """
         A degree lexicographic order with the slowest varying index depending on
         the PDE is used, returned as a callable that can be used as a
@@ -567,7 +567,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 key.append(mi[axis_permutation[i]])
             return tuple(key)
 
-        return mi_key
+        return mi_key, axis_permutation
 
     def _get_mi_hyperpplanes(self) -> List[Tuple[int, int]]:
         mis = self.get_full_coefficient_identifiers()
@@ -583,8 +583,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         else:
             # Calculate the multi-index that appears last in in the PDE in
             # the degree lexicographic order given by
-            # _get_mi_ordering_key.
-            ordering_key = self._get_mi_ordering_key()
+            # _get_mi_ordering_key_and_axis_permutation.
+            ordering_key, _ = self._get_mi_ordering_key_and_axis_permutation()
             max_mi = max(deriv_id_to_coeff, key=ordering_key).mi
             hyperplanes = [(d, const)
                 for d in range(self.dim)
@@ -594,7 +594,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
     def get_full_coefficient_identifiers(self):
         identifiers = super().get_full_coefficient_identifiers()
-        key = self._get_mi_ordering_key()
+        key, _ = self._get_mi_ordering_key_and_axis_permutation()
         return sorted(identifiers, key=key)
 
     def get_storage_index(self, mi, order=None):
@@ -666,7 +666,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                                        from_output_coeffs_by_row, shape)
                 return mis, op
 
-        ordering_key = self._get_mi_ordering_key()
+        ordering_key, _ = self._get_mi_ordering_key_and_axis_permutation()
         max_mi = max((ident for ident in mi_to_coeff.keys()), key=ordering_key)
         max_mi_coeff = mi_to_coeff[max_mi]
         max_mi_mult = -1/sym.sympify(max_mi_coeff)
