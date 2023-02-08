@@ -30,6 +30,7 @@ import loopy as lp
 import sumpy.symbolic as sym
 from sumpy.kernel import Kernel
 from sumpy.tools import add_mi
+import pymbolic.primitives as prim
 
 import logging
 logger = logging.getLogger(__name__)
@@ -377,6 +378,18 @@ class ExpansionTermsWrangler(ABC):
 
 
 class FullExpansionTermsWrangler(ExpansionTermsWrangler):
+
+    def get_storage_index(self, mi, order=None):
+        if not order:
+            order = sum(mi)
+        if self.dim == 3:
+            return (order*(order + 1)*(order + 2))//6 + \
+                    (order + 2)*mi[2] - (mi[2]*(mi[2] + 1))//2 + mi[1]
+        elif self.dim == 2:
+            return (order*(order + 1))//2 + mi[1]
+        else:
+            raise NotImplementedError
+
     def get_coefficient_identifiers(self):
         return super().get_full_coefficient_identifiers()
 
@@ -583,6 +596,51 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         identifiers = super().get_full_coefficient_identifiers()
         key = self._get_mi_ordering_key()
         return sorted(identifiers, key=key)
+
+    def get_storage_index(self, mi, order=None):
+        if not order:
+            order = sum(mi)
+
+        ordering_key, axis_permutation = \
+                self._get_mi_ordering_key_and_axis_permutation()
+        deriv_id_to_coeff, = self.knl.get_pde_as_diff_op().eqs
+        max_mi = max(deriv_id_to_coeff, key=ordering_key).mi
+
+        if all(m != 0 for m in max_mi):
+            raise NotImplementedError("non-elliptic PDEs")
+
+        c = max_mi[axis_permutation[0]]
+
+        mi = list(mi)
+        mi[axis_permutation[0]], mi[0] = mi[0], mi[axis_permutation[0]]
+
+        if self.dim == 3:
+            if all(isinstance(axis, int) for axis in mi):
+                if order < c - 1:
+                    return (order*(order + 1)*(order + 2))//6 + \
+                        (order + 2)*mi[0] - (mi[0]*(mi[0] + 1))//2 + mi[1]
+                else:
+                    return (c*(c-1)*(c-2))//6 + (c * order * (2 + order - c)
+                        + mi[0]*(3 - mi[0]+2*order))//2 + mi[1]
+            else:
+                return prim.If(prim.Comparison(order, "<", c - 1),
+                    (order*(order + 1)*(order + 2))//6
+                        + (order + 2)*mi[0] - (mi[0]*(mi[0] + 1))//2 + mi[1],
+                    (c*(c-1)*(c-2))//6 + (c * order * (2 + order - c)
+                        + mi[0]*(3 - mi[0]+2*order))//2 + mi[1]
+                )
+        elif self.dim == 2:
+            if all(isinstance(axis, int) for axis in mi):
+                if order < c - 1:
+                    return (order*(order + 1))//2 + mi[0]
+                else:
+                    return (c*(c-1))//2 + c*(order - c + 1) + mi[0]
+            else:
+                return prim.If(prim.Comparison(order, "<", c - 1),
+                    (order*(order + 1))//2 + mi[0],
+                    (c*(c-1))//2 + c*(order - c + 1) + mi[0])
+        else:
+            raise NotImplementedError
 
     @memoize_method
     def get_stored_ids_and_unscaled_projection_matrix(self):
