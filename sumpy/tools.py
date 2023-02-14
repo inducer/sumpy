@@ -1194,12 +1194,13 @@ def _get_fft_backend(queue) -> FFTBackend:
     try:
         import pyvkfft.opencl  # noqa: F401
     except ImportError:
-        warnings.warn("VkFFT not found. FFT runs will be slower.")
+        warnings.warn("VkFFT not found. FFT runs will be slower.", stacklevel=3)
         return FFTBackend.loopy
 
     if queue.properties & cl.command_queue_properties.OUT_OF_ORDER_EXEC_MODE_ENABLE:
-        warnings.warn("VkFFT does not support out of order queues yet. "
-            "Falling back to slower implementation.")
+        warnings.warn(
+            "VkFFT does not support out of order queues yet. "
+            "Falling back to slower implementation.", stacklevel=3)
         return FFTBackend.loopy
 
     import platform
@@ -1207,9 +1208,10 @@ def _get_fft_backend(queue) -> FFTBackend:
             and platform.machine() == "x86_64"
             and queue.context.devices[0].platform.name
             == "Portable Computing Language"):
-        warnings.warn("Pocl miscompiles some VkFFT kernels. "
+        warnings.warn(
+            "PoCL miscompiles some VkFFT kernels. "
             "See https://github.com/inducer/sumpy/issues/129. "
-            "Falling back to slower implementation.")
+            "Falling back to slower implementation.", stacklevel=3)
         return FFTBackend.loopy
 
     return FFTBackend.pyvkfft
