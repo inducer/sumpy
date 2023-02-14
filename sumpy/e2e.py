@@ -728,7 +728,7 @@ class M2LPreprocessMultipole(E2EBase):
 
     def get_optimized_kernel(self, result_dtype):
         knl = self.get_kernel(result_dtype)
-        knl = lp.tag_iname(knl, "isrc_box:g.0")
+        knl = lp.tag_inames(knl, "isrc_box:g.0")
         _, optimizations = self.get_inner_knl_and_optimizations(result_dtype)
         for optimization in optimizations:
             knl = optimization(knl)
@@ -827,7 +827,7 @@ class M2LPostprocessLocal(E2EBase):
 
     def get_optimized_kernel(self, result_dtype):
         knl = self.get_kernel(result_dtype)
-        knl = lp.tag_iname(knl, "itgt_box:g.0")
+        knl = lp.tag_inames(knl, "itgt_box:g.0")
         _, optimizations = self.get_inner_knl_and_optimizations(result_dtype)
         for optimization in optimizations:
             knl = optimization(knl)
