@@ -668,14 +668,20 @@ class M2LPreprocessMultipole(E2EBase):
     def default_name(self):
         return "m2l_preprocess_multipole"
 
+    @memoize_method
+    def get_inner_knl_and_optimizations(self, result_dtype):
+        m2l_translation = self.tgt_expansion.m2l_translation
+        return m2l_translation.preprocess_multipole_loopy_knl(
+            self.tgt_expansion, self.src_expansion, result_dtype)
+
     def get_kernel(self, result_dtype):
         m2l_translation = self.tgt_expansion.m2l_translation
         nsrc_coeffs = len(self.src_expansion)
         npreprocessed_src_coeffs = \
             m2l_translation.preprocess_multipole_nexprs(self.tgt_expansion,
                 self.src_expansion)
-        single_box_preprocess_knl = m2l_translation.preprocess_multipole_loopy_knl(
-            self.tgt_expansion, self.src_expansion, result_dtype)
+        single_box_preprocess_knl, _ = self.get_inner_knl_and_optimizations(
+                result_dtype)
 
         from sumpy.tools import gather_loopy_arguments
         loopy_knl = lp.make_kernel(
@@ -721,10 +727,11 @@ class M2LPreprocessMultipole(E2EBase):
         return loopy_knl
 
     def get_optimized_kernel(self, result_dtype):
-        # FIXME
         knl = self.get_kernel(result_dtype)
-        knl = lp.split_iname(knl, "isrc_box", 64, outer_tag="g.0",
-                             within=f"in_kernel:{self.name}")
+        knl = lp.tag_iname(knl, "isrc_box:g.0")
+        _, optimizations = self.get_inner_knl_and_optimizations(result_dtype)
+        for optimization in optimizations:
+            knl = optimization(knl)
         knl = lp.add_inames_for_unused_hw_axes(knl)
         return knl
 

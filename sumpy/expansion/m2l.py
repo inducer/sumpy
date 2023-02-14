@@ -482,7 +482,12 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
             new_icoeff_src = circulant_matrix_ident_to_index[term]
             srcidx[new_icoeff_src] = icoeff_src
 
-        return lp.make_function(domains, insns,
+        optimizations = [
+            lambda knl: lp.split_iname(knl, f"m2l__{output_icoeff}",
+                32, inner_tag="l.0")
+        ]
+
+        return (lp.make_function(domains, insns,
             kernel_data=[
                 lp.ValueArg("src_rscale", None),
                 lp.GlobalArg("output_coeffs", None, shape=ncoeff_preprocessed,
@@ -496,7 +501,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
             name="m2l_preprocess_inner",
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
             fixed_parameters={"noutput_coeffs": ncoeff_preprocessed},
-        )
+        ), optimizations)
 
     def postprocess_local_exprs(self, tgt_expansion, src_expansion, m2l_result,
             src_rscale, tgt_rscale, sac):
