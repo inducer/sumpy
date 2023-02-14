@@ -483,7 +483,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
             srcidx[new_icoeff_src] = icoeff_src
 
         optimizations = [
-            lambda knl: lp.split_iname(knl, f"m2l__{output_icoeff}",
+            lambda knl: lp.split_iname(knl, "m2l__output_icoeff",
                 32, inner_tag="l.0")
         ]
 
@@ -612,7 +612,12 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
             "{[output_icoeff]: 0<=output_icoeff<ncoeff_tgt}"
         ]
 
-        return lp.make_function(domains, insns,
+        optimizations = [
+            lambda knl: lp.split_iname(knl, "m2l__output_icoeff",
+                32, inner_tag="l.0")
+        ]
+
+        return (lp.make_function(domains, insns,
             kernel_data=[
                 lp.ValueArg("src_rscale", None),
                 lp.ValueArg("tgt_rscale", None),
@@ -635,7 +640,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
             name="m2l_postprocess_inner",
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
             fixed_parameters=fixed_parameters,
-        )
+        ), optimizations)
 
 # }}} VolumeTaylorM2LTranslation
 
