@@ -440,68 +440,94 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
     def preprocess_multipole_loopy_knl(self, tgt_expansion, src_expansion,
             result_dtype):
 
-        circulant_matrix_mis, _, _ = \
+        circulant_matrix_mis, _, max_mi = \
             self._translation_classes_dependent_data_mis(tgt_expansion,
                 src_expansion)
-        circulant_matrix_ident_to_index = {
-                ident: i for i, ident in enumerate(circulant_matrix_mis)}
 
         ncoeff_src = len(src_expansion.get_coefficient_identifiers())
         ncoeff_preprocessed = self.preprocess_multipole_nexprs(tgt_expansion,
             src_expansion)
+        order = src_expansion.order
 
         output_coeffs = pymbolic.var("output_coeffs")
         input_coeffs = pymbolic.var("input_coeffs")
-        srcidx_sym = pymbolic.var("srcidx")
         output_icoeff = pymbolic.var("output_icoeff")
         input_icoeff = pymbolic.var("input_icoeff")
+        input_coeffs_copy = pymbolic.var("input_coeffs_copy")
+
+        dim = tgt_expansion.dim
+        v = [pymbolic.var(f"x{i}") for i in range(dim)]
+
+        # max_mi is (2*c - 1, 2*order+1, 2*order+1) or a permutation
+        # of it. recover `c` and the index from it
+        slowest_idx = [i for i in range(dim) if max_mi[i] != 2 * order][0]
+        c = max_mi[slowest_idx] // 2 + 1
+        noutput_coeffs = c * order ** (dim - 1)
 
         domains = [
             "{[output_icoeff]: 0<=output_icoeff<noutput_coeffs}",
+            "{[input_icoeff]: 0<=input_icoeff<ninput_coeffs}",
         ]
+
         insns = [
             lp.Assignment(
-                assignee=input_icoeff,
-                expression=srcidx_sym[output_icoeff],
-                id="input_icoeff",
+                assignee=input_coeffs_copy[input_icoeff],
+                expression=input_coeffs[input_icoeff],
+                id="input_copy",
+                temp_var_type=lp.Optional(None),
             ),
+        ]
+
+        idx = output_icoeff
+        for i in range(dim - 1, -1, -1):
+            new_idx = idx % (max_mi[i] + 1) if i > 0 else idx
+            insns.append(lp.Assignment(
+                    assignee=v[i],
+                    expression=new_idx,
+                    id=f"set_x{i}",
+                    temp_var_type=lp.Optional(None),
+            ))
+            idx = idx // (max_mi[i] + 1)
+
+        input_idx = src_expansion.expansion_terms_wrangler.get_storage_index(v)
+        output_idx = 0
+        mult = 1
+        for i in range(dim - 1, -1, -1):
+            output_idx += mult*v[i]
+            mult *= (max_mi[i] + 1)
+
+        insns += [
             lp.Assignment(
                 assignee=output_coeffs[output_icoeff],
-                expression=pymbolic.primitives.If(
-                    pymbolic.primitives.Comparison(input_icoeff, ">=", 0),
-                    input_coeffs[input_icoeff],
-                    0,
-                ),
-                depends_on=frozenset(["input_icoeff"]),
+                expression=input_coeffs_copy[input_idx],
+                predicates=frozenset([
+                    pymbolic.primitives.Comparison(sum(v), "<=", order),
+                    pymbolic.primitives.Comparison(v[slowest_idx], "<", c),
+                ]),
+                depends_on=frozenset([f"set_x{i}" for i in range(dim)]
+                    + ["input_copy"]),
             )
         ]
 
-        srcidx = np.full(ncoeff_preprocessed, -1, dtype=np.int32)
-        for icoeff_src, term in enumerate(
-                src_expansion.get_coefficient_identifiers()):
-            new_icoeff_src = circulant_matrix_ident_to_index[term]
-            srcidx[new_icoeff_src] = icoeff_src
+        knl = lp.make_function(domains, insns,
+            kernel_data=[
+                lp.ValueArg("src_rscale", None),
+                lp.GlobalArg("output_coeffs", None, shape=ncoeff_preprocessed,
+                    is_input=False, is_output=True),
+                lp.GlobalArg("input_coeffs", None, shape=ncoeff_src),
+                ...],
+            name="m2l_preprocess_inner",
+            lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
+            fixed_parameters={"noutput_coeffs": noutput_coeffs,
+                              "ninput_coeffs": ncoeff_src},
+        )
 
         optimizations = [
             lambda knl: lp.split_iname(knl, "m2l__output_icoeff",
                 32, inner_tag="l.0")
         ]
 
-        return (lp.make_function(domains, insns,
-            kernel_data=[
-                lp.ValueArg("src_rscale", None),
-                lp.GlobalArg("output_coeffs", None, shape=ncoeff_preprocessed,
-                    is_input=False, is_output=True),
-                lp.GlobalArg("input_coeffs", None, shape=ncoeff_src),
-                lp.TemporaryVariable(input_icoeff.name, dtype=np.int32),
-                lp.TemporaryVariable(
-                    srcidx_sym.name, initializer=srcidx,
-                    address_space=lp.AddressSpace.GLOBAL, read_only=True),
-                ...],
-            name="m2l_preprocess_inner",
-            lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
-            fixed_parameters={"noutput_coeffs": ncoeff_preprocessed},
-        ), optimizations)
+        return (knl, optimizations)
 
     def postprocess_local_exprs(self, tgt_expansion, src_expansion, m2l_result,
             src_rscale, tgt_rscale, sac):
