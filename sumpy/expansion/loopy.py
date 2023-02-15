@@ -24,7 +24,6 @@ import pymbolic
 import loopy as lp
 import numpy as np
 import sumpy.symbolic as sym
-from sumpy.symbolic import SympyToPymbolicMapper
 from sumpy.assignment_collection import SymbolicAssignmentCollection
 from sumpy.tools import gather_loopy_arguments
 
@@ -63,22 +62,10 @@ def e2p_loopy_knl_expr(expansion, kernels):
         ))
     target_args = gather_loopy_arguments((expansion,) + tuple(kernels))
 
-    sympy_conv = SympyToPymbolicMapper()
-    kernel_scaling = sym.Symbol("kernel_scaling")
-    insns.append(
-        lp.Assignment(
-            id=None,
-            assignee="kernel_scaling",
-            expression=sympy_conv(expansion.kernel.get_global_scaling_const()),
-            temp_var_type=lp.Optional(None),
-        )
-    )
-
     coeff_exprs = sym.make_sym_vector("coeffs", ncoeffs)
     coeff_names = [
         sac.add_assignment(f"result{i}",
-            expansion.evaluate(knl, coeff_exprs, bvec, rscale, sac=sac)
-                    * kernel_scaling)
+            expansion.evaluate(knl, coeff_exprs, bvec, rscale, sac=sac))
         for i, knl in enumerate(kernels)]
 
     sac.run_global_cse()

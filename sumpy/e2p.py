@@ -96,6 +96,16 @@ class E2PBase(KernelCacheMixin, ABC):
 
     def get_loopy_args(self):
         return gather_loopy_arguments((self.expansion,) + tuple(self.kernels))
+
+    def get_kernel_scaling_assignment(self):
+        from sumpy.symbolic import SympyToPymbolicMapper
+        sympy_conv = SympyToPymbolicMapper()
+        return [lp.Assignment(id="kernel_scaling",
+                    assignee="kernel_scaling",
+                    expression=sympy_conv(
+                        self.expansion.kernel.get_global_scaling_const()),
+                    temp_var_type=lp.Optional(None),
+                    )]
 # }}}
 
 
@@ -117,7 +127,8 @@ class E2PFromSingleBox(E2PBase):
                     "{[icoeff]: 0<=icoeff<ncoeffs}",
                     "{[iknl]: 0<=iknl<nresults}",
                 ],
-                ["""
+                self.get_kernel_scaling_assignment()
+                + ["""
                 for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
                     <> itgt_start = box_target_starts[tgt_ibox]
@@ -144,7 +155,7 @@ class E2PFromSingleBox(E2PBase):
                 """ + ",".join(arg.name for arg in loopy_args) + """
                         )  {dep=fetch_coeffs:fetch_center:init_result:fetch_tgt,\
                                 id=update_result}
-                        result[iknl, itgt] = result_temp[iknl] \
+                        result[iknl, itgt] = result_temp[iknl] * kernel_scaling \
                             {id=write_result,dep=update_result}
                     end
                 end
@@ -185,6 +196,7 @@ class E2PFromSingleBox(E2PBase):
         # FIXME
         knl = self.get_kernel()
         knl = lp.tag_inames(knl, {"itgt_box": "g.0"})
+        knl = lp.add_inames_to_insn(knl, "itgt_box", "id:kernel_scaling")
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
 
@@ -231,7 +243,8 @@ class E2PFromCSR(E2PBase):
                     "{[icoeff]: 0<=icoeff<ncoeffs}",
                     "{[iknl]: 0<=iknl<nresults}",
                 ],
-                ["""
+                self.get_kernel_scaling_assignment()
+                + ["""
                 for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
                     <> itgt_start = box_target_starts[tgt_ibox]
@@ -265,6 +278,7 @@ class E2PFromCSR(E2PBase):
                               dep=fetch_coeffs:fetch_center:fetch_tgt:init_result}
                         end
                         result[iknl, itgt] = result[iknl, itgt] + result_temp[iknl] \
+                                * kernel_scaling \
                                 {dep=update_result:init_result,id=write_result,dup=iknl}
                     end
                 end
@@ -310,6 +324,7 @@ class E2PFromCSR(E2PBase):
         # FIXME
         knl = self.get_kernel()
         knl = lp.tag_inames(knl, {"itgt_box": "g.0"})
+        knl = lp.add_inames_to_insn(knl, "itgt_box", "id:kernel_scaling")
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
         return knl
