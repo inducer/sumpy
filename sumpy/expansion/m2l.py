@@ -458,9 +458,10 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         dim = tgt_expansion.dim
         v = [pymbolic.var(f"x{i}") for i in range(dim)]
 
-        # max_mi is (2*c - 1, 2*order+1, 2*order+1) or a permutation
-        # of it. recover `c` and the index from it
-        slowest_idx = [i for i in range(dim) if max_mi[i] != 2 * order][0]
+        wrangler = src_expansion.expansion_terms_wrangler
+        _, axis_permutation = wrangler._get_mi_ordering_key_and_axis_permutation()
+        slowest_idx = axis_permutation[0]
+        # max_mi[slowest_idx] = 2*(c - 1)
         c = max_mi[slowest_idx] // 2 + 1
         noutput_coeffs = c * order ** (dim - 1)
 
@@ -489,7 +490,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
             ))
             idx = idx // (max_mi[i] + 1)
 
-        input_idx = src_expansion.expansion_terms_wrangler.get_storage_index(v)
+        input_idx = wrangler.get_storage_index(v)
         output_idx = 0
         mult = 1
         for i in range(dim - 1, -1, -1):
