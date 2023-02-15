@@ -96,8 +96,8 @@ class CacheMode:
         set_caching_enabled(self.new_flag, self.new_no_cache_kernels)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        set_caching_enabled(self.previous_mode, self.previous_kernels)
-        del self.previous_mode
+        set_caching_enabled(self.previous_flag, self.previous_kernels)
+        del self.previous_flag
         del self.previous_kernels
 
 # }}}
