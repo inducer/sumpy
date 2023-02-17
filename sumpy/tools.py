@@ -753,9 +753,11 @@ class OrderedSet(MutableSet):
 class KernelCacheMixin:
     @memoize_method
     def get_cached_optimized_kernel(self, **kwargs):
-        from sumpy import code_cache, CACHING_ENABLED, OPT_ENABLED
+        from sumpy import (code_cache, CACHING_ENABLED, OPT_ENABLED,
+            NO_CACHE_KERNELS)
 
-        if CACHING_ENABLED:
+        if CACHING_ENABLED and not (
+                NO_CACHE_KERNELS and self.name in NO_CACHE_KERNELS):
             import loopy.version
             from sumpy.version import KERNEL_VERSION
             cache_key = (
@@ -774,7 +776,8 @@ class KernelCacheMixin:
                 pass
 
         logger.info("%s: kernel cache miss", self.name)
-        if CACHING_ENABLED:
+        if CACHING_ENABLED and not (
+                NO_CACHE_KERNELS and self.name in NO_CACHE_KERNELS):
             logger.info("{}: kernel cache miss [key={}]".format(
                 self.name, cache_key))
 
@@ -785,7 +788,8 @@ class KernelCacheMixin:
             else:
                 knl = self.get_kernel()
 
-        if CACHING_ENABLED:
+        if CACHING_ENABLED and not (
+                NO_CACHE_KERNELS and self.name in NO_CACHE_KERNELS):
             code_cache.store_if_not_present(cache_key, knl)
 
         return knl
