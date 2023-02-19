@@ -159,6 +159,15 @@ class ExpansionBase(ABC):
                 result[i] += weight * coeffs[i]
         return result
 
+    def loopy_coefficients_from_source(self, kernels, strength_usage, nstrengths):
+        """
+        :returns: a :mod:`loopy` kernel that returns the coefficients
+            for the expansion given by *kernels* with each kernel using
+            the strength given by *strength_usage*.
+        """
+        from sumpy.expansion.loopy import p2e_loopy_knl_expr
+        return p2e_loopy_knl_expr(self, kernels, strength_usage, nstrengths)
+
     @abstractmethod
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         """
