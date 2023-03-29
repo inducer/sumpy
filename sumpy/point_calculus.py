@@ -261,7 +261,7 @@ class CalculusPatch:
 
     def norm(self, arg, p):
         if p == np.inf:
-            if arg.dtype == np.object:
+            if arg.dtype == object:
                 return max(
                         la.norm(x_i, p)
                         for x_i in arg)
