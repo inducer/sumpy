@@ -68,12 +68,16 @@ CACHING_ENABLED = (
     "SUMPY_NO_CACHE" not in os.environ
     and "CG_NO_CACHE" not in os.environ)
 
+NO_CACHE_KERNELS = tuple(os.environ.get("SUMPY_NO_CACHE_KERNELS",
+                                        "").split(","))
 
-def set_caching_enabled(flag):
+
+def set_caching_enabled(flag, no_cache_kernels=()):
     """Set whether :mod:`loopy` is allowed to use disk caching for its various
     code generation stages.
     """
-    global CACHING_ENABLED
+    global CACHING_ENABLED, NO_CACHE_KERNELS
+    NO_CACHE_KERNELS = no_cache_kernels
     CACHING_ENABLED = flag
 
 
@@ -82,17 +86,19 @@ class CacheMode:
     disk caches.
     """
 
-    def __init__(self, new_flag):
+    def __init__(self, new_flag, new_no_cache_kernels=()):
         self.new_flag = new_flag
+        self.new_no_cache_kernels = new_no_cache_kernels
 
     def __enter__(self):
-        global CACHING_ENABLED
-        self.previous_mode = CACHING_ENABLED
-        CACHING_ENABLED = self.new_flag
+        global CACHING_ENABLED, NO_CACHE_KERNELS
+        self.previous_flag = CACHING_ENABLED
+        self.previous_kernels = NO_CACHE_KERNELS
+        set_caching_enabled(self.new_flag, self.new_no_cache_kernels)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        global CACHING_ENABLED
-        CACHING_ENABLED = self.previous_mode
-        del self.previous_mode
+        set_caching_enabled(self.previous_flag, self.previous_kernels)
+        del self.previous_flag
+        del self.previous_kernels
 
 # }}}

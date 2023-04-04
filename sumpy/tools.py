@@ -723,9 +723,11 @@ class OrderedSet(MutableSet):
 class KernelCacheMixin:
     @memoize_method
     def get_cached_optimized_kernel(self, **kwargs):
-        from sumpy import code_cache, CACHING_ENABLED, OPT_ENABLED
+        from sumpy import (code_cache, CACHING_ENABLED, OPT_ENABLED,
+            NO_CACHE_KERNELS)
 
-        if CACHING_ENABLED:
+        if CACHING_ENABLED and not (
+                NO_CACHE_KERNELS and self.name in NO_CACHE_KERNELS):
             import loopy.version
             from sumpy.version import KERNEL_VERSION
             cache_key = (
@@ -743,7 +745,8 @@ class KernelCacheMixin:
                 pass
 
         logger.info("%s: kernel cache miss", self.name)
-        if CACHING_ENABLED:
+        if CACHING_ENABLED and not (
+                NO_CACHE_KERNELS and self.name in NO_CACHE_KERNELS):
             logger.info("{}: kernel cache miss [key={}]".format(
                 self.name, cache_key))
 
@@ -754,7 +757,8 @@ class KernelCacheMixin:
             else:
                 knl = self.get_kernel()
 
-        if CACHING_ENABLED:
+        if CACHING_ENABLED and not (
+                NO_CACHE_KERNELS and self.name in NO_CACHE_KERNELS):
             code_cache.store_if_not_present(cache_key, knl)
 
         return knl
@@ -1164,15 +1168,16 @@ def _get_fft_backend(actx: PyOpenCLArrayContext) -> FFTBackend:
     try:
         import pyvkfft.opencl  # noqa: F401
     except ImportError:
-        warnings.warn("VkFFT not found. FFT runs will be slower.")
+        warnings.warn("VkFFT not found. FFT runs will be slower.", stacklevel=3)
         return FFTBackend.loopy
 
     import pyopencl as cl
     queue = actx.queue
 
     if queue.properties & cl.command_queue_properties.OUT_OF_ORDER_EXEC_MODE_ENABLE:
-        warnings.warn("VkFFT does not support out of order queues yet. "
-            "Falling back to slower implementation.")
+        warnings.warn(
+            "VkFFT does not support out of order queues yet. "
+            "Falling back to slower implementation.", stacklevel=3)
         return FFTBackend.loopy
 
     import platform
@@ -1180,9 +1185,10 @@ def _get_fft_backend(actx: PyOpenCLArrayContext) -> FFTBackend:
             and platform.machine() == "x86_64"
             and queue.context.devices[0].platform.name
             == "Portable Computing Language"):
-        warnings.warn("Pocl miscompiles some VkFFT kernels. "
+        warnings.warn(
+            "PoCL miscompiles some VkFFT kernels. "
             "See https://github.com/inducer/sumpy/issues/129. "
-            "Falling back to slower implementation.")
+            "Falling back to slower implementation.", stacklevel=3)
         return FFTBackend.loopy
 
     return FFTBackend.pyvkfft
