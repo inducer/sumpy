@@ -48,6 +48,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# {{{ ExprDerivativeTaker
+
 class ExprDerivativeTaker:
     """Facilitates the efficient computation of (potentially) high-order
     derivatives of a given :mod:`sympy` expression *expr* while attempting
@@ -152,6 +154,10 @@ class ExprDerivativeTaker:
             key=lambda other_mi: sum(self.mi_dist(mi, other_mi)))
 
 
+# }}}
+
+# {{{ LaplaceDerivativeTaker
+
 class LaplaceDerivativeTaker(ExprDerivativeTaker):
     """Specialized derivative taker for Laplace potential.
     """
@@ -215,6 +221,10 @@ class LaplaceDerivativeTaker(ExprDerivativeTaker):
         self.cache_by_mi[mi] = expr
         return expr
 
+
+# }}}
+
+# {{{ RadialDerivativeTaker
 
 class RadialDerivativeTaker(ExprDerivativeTaker):
     """Specialized derivative taker for radial expressions.
@@ -288,6 +298,10 @@ class RadialDerivativeTaker(ExprDerivativeTaker):
         return expr
 
 
+# }}}
+
+# {{{ HelmholtzDerivativeTaker
+
 class HelmholtzDerivativeTaker(RadialDerivativeTaker):
     """Specialized derivative taker for Helmholtz potential.
     """
@@ -318,6 +332,10 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
         self.cache_by_mi_q[(mi, q)] = expr
         return expr
 
+
+# }}}
+
+# {{{ DifferentiatedExprDerivativeTaker
 
 DerivativeCoeffDict = Dict[Tuple[int], Any]
 
@@ -358,6 +376,10 @@ class DifferentiatedExprDerivativeTaker:
         return result * save_intermediate(1 / self.taker.rscale ** max_order)
 
 
+# }}}
+
+# {{{ Helper functions
+
 def diff_derivative_coeff_dict(derivative_coeff_dict: DerivativeCoeffDict,
         variable_idx, variables):
     """Differentiate a derivative transformation dictionary given by
@@ -379,5 +401,7 @@ def diff_derivative_coeff_dict(derivative_coeff_dict: DerivativeCoeffDict,
         new_derivative_coeff_dict[tuple(new_mi)] += coeff
     return {derivative: coeff for derivative, coeff in
             new_derivative_coeff_dict.items() if coeff != 0}
+
+# }}}
 
 # vim: fdm=marker
