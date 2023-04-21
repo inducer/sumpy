@@ -346,8 +346,10 @@ class DifferentiatedExprDerivativeTaker:
     for an expression that is itself a linear combination of
     derivatives of a base expression. To take the actual derivatives,
     it makes use of an underlying derivative taker *taker*.
+
     .. attribute:: taker
         A :class:`ExprDerivativeTaker` for the base expression.
+
     .. attribute:: derivative_coeff_dict
         A dictionary mapping a derivative multi-index to a coefficient.
         The expression represented by this derivative taker is the linear
