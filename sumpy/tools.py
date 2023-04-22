@@ -528,6 +528,11 @@ def nullspace(m, atol=0):
                     vec[piv_col] -= int(mat[piv_row, pos])
                 else:
                     vec[piv_col] -= mat[piv_row, pos]
+        for i in range(len(vec)):
+            if isinstance(vec[i], sym.Basic) and vec[i].is_number and \
+                    abs(vec[i]) < atol:
+                vec[i] = 0
+
         n.append(vec)
     return np.array(n, dtype=object).T
 

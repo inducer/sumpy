@@ -44,10 +44,12 @@ from sumpy.kernel import (
     StressletKernel,
     ElasticityKernel,
     LineOfCompressionKernel,
+    AxisTargetDerivative,
     ExpressionKernel)
 from sumpy.expansion.diff_op import (
     make_identity_diff_op, concat, as_scalar_pde, diff,
     gradient, divergence, laplacian, curl)
+from sumpy.derivative_taker import get_pde_operators
 
 import logging
 logger = logging.getLogger(__name__)
@@ -513,6 +515,28 @@ def test_weird_kernel(pde):
 
     assert fft_size == order
 
+# }}}
+
+
+# {{{ test_get_pde_operators
+
+def test_get_pde_operators():
+    for dim in (2, 3):
+        dim = 3
+        laplace = LaplaceKernel(dim)
+        biharmonic = BiharmonicKernel(dim)
+        id_op = make_identity_diff_op(dim, 1)
+
+        op1, op2 = get_pde_operators([laplace, biharmonic], 2, {})
+        assert op1 == laplacian(id_op) * sym.Rational(1, 2)
+        assert op2 == id_op
+
+        d_biharmonic = AxisTargetDerivative(1, biharmonic)
+        op1, op2, op3 = get_pde_operators(
+                [laplace, biharmonic, d_biharmonic], 2, {})
+        assert op1 == laplacian(id_op) * sym.Rational(1, 2)
+        assert op2 == id_op
+        assert op3 == diff(id_op, [0, 1, 0][:dim])
 # }}}
 
 
