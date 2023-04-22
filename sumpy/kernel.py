@@ -226,7 +226,7 @@ class Kernel:
         The typical use of this function is to apply source-variable
         derivatives to the kernel.
         """
-        from sumpy.tools import (ExprDerivativeTaker,
+        from sumpy.derivative_taker import (ExprDerivativeTaker,
             DifferentiatedExprDerivativeTaker)
         expr_dict = {(0,)*self.dim: 1}
         expr_dict = self.get_derivative_coeff_dict_at_source(expr_dict)
@@ -247,7 +247,7 @@ class Kernel:
         derivatives to the kernel.
 
         :arg expr: may be a :class:`sympy.core.expr.Expr` or a
-            :class:`sumpy.tools.DifferentiatedExprDerivativeTaker`.
+            :class:`sumpy.derivative_taker.DifferentiatedExprDerivativeTaker`.
         """
         return expr
 
@@ -378,10 +378,10 @@ class ExpressionKernel(Kernel):
     mapper_method = "map_expression_kernel"
 
     def get_derivative_taker(self, dvec, rscale, sac):
-        """Return a :class:`sumpy.tools.ExprDerivativeTaker` instance that supports
-        taking derivatives of the base kernel with respect to dvec.
+        """Return a :class:`sumpy.derivative_taker.ExprDerivativeTaker` instance
+        that supports taking derivatives of the base kernel with respect to dvec.
         """
-        from sumpy.tools import ExprDerivativeTaker
+        from sumpy.derivative_taker import ExprDerivativeTaker
         return ExprDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
     def get_pde_as_diff_op(self):
@@ -438,10 +438,10 @@ class LaplaceKernel(ExpressionKernel):
     mapper_method = "map_laplace_kernel"
 
     def get_derivative_taker(self, dvec, rscale, sac):
-        """Return a :class:`sumpy.tools.ExprDerivativeTaker` instance that supports
-        taking derivatives of the base kernel with respect to dvec.
+        """Return a :class:`sumpy.derivative_taker.ExprDerivativeTaker` instance
+        that supports taking derivatives of the base kernel with respect to dvec.
         """
-        from sumpy.tools import LaplaceDerivativeTaker
+        from sumpy.derivative_taker import LaplaceDerivativeTaker
         return LaplaceDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
     def get_pde_as_diff_op(self):
@@ -486,10 +486,10 @@ class BiharmonicKernel(ExpressionKernel):
     mapper_method = "map_biharmonic_kernel"
 
     def get_derivative_taker(self, dvec, rscale, sac):
-        """Return a :class:`sumpy.tools.ExprDerivativeTaker` instance that supports
-        taking derivatives of the base kernel with respect to dvec.
+        """Return a :class:`sumpy.derivative_taker.ExprDerivativeTaker` instance
+        that supports taking derivatives of the base kernel with respect to dvec.
         """
-        from sumpy.tools import RadialDerivativeTaker
+        from sumpy.derivative_taker import RadialDerivativeTaker
         return RadialDerivativeTaker(self.get_expression(dvec), dvec, rscale,
                 sac)
 
@@ -563,10 +563,10 @@ class HelmholtzKernel(ExpressionKernel):
     mapper_method = "map_helmholtz_kernel"
 
     def get_derivative_taker(self, dvec, rscale, sac):
-        """Return a :class:`sumpy.tools.ExprDerivativeTaker` instance that supports
-        taking derivatives of the base kernel with respect to dvec.
+        """Return a :class:`sumpy.derivative_taker.ExprDerivativeTaker` instance
+        that supports taking derivatives of the base kernel with respect to dvec.
         """
-        from sumpy.tools import HelmholtzDerivativeTaker
+        from sumpy.derivative_taker import HelmholtzDerivativeTaker
         return HelmholtzDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
     def get_pde_as_diff_op(self):
@@ -645,10 +645,10 @@ class YukawaKernel(ExpressionKernel):
     mapper_method = "map_yukawa_kernel"
 
     def get_derivative_taker(self, dvec, rscale, sac):
-        """Return a :class:`sumpy.tools.ExprDerivativeTaker` instance that supports
-        taking derivatives of the base kernel with respect to dvec.
+        """Return a :class:`sumpy.derivative_taker.ExprDerivativeTaker` instance
+        that supports taking derivatives of the base kernel with respect to dvec.
         """
-        from sumpy.tools import HelmholtzDerivativeTaker
+        from sumpy.derivative_taker import HelmholtzDerivativeTaker
         return HelmholtzDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
     def get_pde_as_diff_op(self):
@@ -1044,7 +1044,7 @@ class AxisTargetDerivative(DerivativeBase):
         return f"AxisTargetDerivative({self.axis}, {self.inner_kernel!r})"
 
     def postprocess_at_target(self, expr, bvec):
-        from sumpy.tools import (DifferentiatedExprDerivativeTaker,
+        from sumpy.derivative_taker import (DifferentiatedExprDerivativeTaker,
                 diff_derivative_coeff_dict)
         from sumpy.symbolic import make_sym_vector as make_sympy_vector
 
@@ -1142,7 +1142,7 @@ class DirectionalTargetDerivative(DirectionalDerivative):
         return transform
 
     def postprocess_at_target(self, expr, bvec):
-        from sumpy.tools import (DifferentiatedExprDerivativeTaker,
+        from sumpy.derivative_taker import (DifferentiatedExprDerivativeTaker,
                 diff_derivative_coeff_dict)
 
         from sumpy.symbolic import make_sym_vector as make_sympy_vector
@@ -1262,7 +1262,7 @@ class TargetPointMultiplier(KernelWrapper):
 
     def postprocess_at_target(self, expr, avec):
         from sumpy.symbolic import make_sym_vector as make_sympy_vector
-        from sumpy.tools import (ExprDerivativeTaker,
+        from sumpy.derivative_taker import (ExprDerivativeTaker,
             DifferentiatedExprDerivativeTaker)
 
         expr = self.inner_kernel.postprocess_at_target(expr, avec)
