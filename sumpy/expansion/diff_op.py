@@ -60,7 +60,8 @@ class LinearPDESystemOperator:
                   to a coefficient.
         """
         self.dim = dim
-        self.eqs = tuple(eqs)
+        self.eqs = [pmap(dict(filter(lambda p: p[1] != 0, eq.items())))
+                for eq in tuple(eqs)]
 
     def __eq__(self, other):
         return self.dim == other.dim and self.eqs == other.eqs
@@ -104,6 +105,9 @@ class LinearPDESystemOperator:
 
     def __sub__(self, other_diff_op):
         return self + (-1)*other_diff_op
+
+    def __neg__(self):
+        return self*(-1)
 
     def __repr__(self):
         return f"LinearPDESystemOperator({self.dim}, {repr(self.eqs)})"
