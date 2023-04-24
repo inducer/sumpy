@@ -520,23 +520,37 @@ def test_weird_kernel(pde):
 
 # {{{ test_get_pde_operators
 
-def test_get_pde_operators():
+def test_get_pde_operators_laplace_biharmonic():
+    dim = 3
+    laplace = LaplaceKernel(dim)
+    biharmonic = BiharmonicKernel(dim)
+    id_op = make_identity_diff_op(dim, 1)
+
+    op1, op2 = get_pde_operators([laplace, biharmonic], 2, {})
+    assert op1 == laplacian(id_op) * sym.Rational(1, 2)
+    assert op2 == id_op
+
+    d_biharmonic = AxisTargetDerivative(1, biharmonic)
+    op1, op2, op3 = get_pde_operators(
+            [laplace, biharmonic, d_biharmonic], 2, {})
+    assert op1 == laplacian(id_op) * sym.Rational(1, 2)
+    assert op2 == id_op
+    assert op3 == diff(id_op, [0, 1, 0][:dim])
+
+
+def test_get_pde_operators_stokes():
     for dim in (2, 3):
-        dim = 3
-        laplace = LaplaceKernel(dim)
-        biharmonic = BiharmonicKernel(dim)
+        stokes00 = StokesletKernel(dim, 0, 0)
+        stokes01 = StokesletKernel(dim, 0, 1)
+        stokes11 = StokesletKernel(dim, 1, 1)
+
         id_op = make_identity_diff_op(dim, 1)
 
-        op1, op2 = get_pde_operators([laplace, biharmonic], 2, {})
-        assert op1 == laplacian(id_op) * sym.Rational(1, 2)
-        assert op2 == id_op
+        op1, op2, op3 = get_pde_operators([stokes00, stokes01, stokes11], 2, {})
 
-        d_biharmonic = AxisTargetDerivative(1, biharmonic)
-        op1, op2, op3 = get_pde_operators(
-                [laplace, biharmonic, d_biharmonic], 2, {})
-        assert op1 == laplacian(id_op) * sym.Rational(1, 2)
-        assert op2 == id_op
-        assert op3 == diff(id_op, [0, 1, 0][:dim])
+        assert op1 == laplacian(id_op) - diff(id_op, [2, 0, 0][:dim])
+        assert op2 == -diff(id_op, [1, 1, 0][:dim])
+        assert op3 == laplacian(id_op) - diff(id_op, [0, 2, 0][:dim])
 # }}}
 
 

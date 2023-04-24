@@ -572,6 +572,8 @@ def get_pde_operators(kernels, order, kernel_arguments, atol=1e-30):
                 diff_ops.append(diff_op)
             return diff_ops
 
+    raise RuntimeError("Could not find PDE operators")
+
 # }}}
 
 # vim: fdm=marker
