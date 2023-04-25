@@ -535,7 +535,7 @@ def get_pde_operators(kernels, order, kernel_arguments, atol=1e-30):
         get_deriv_sample(kernel, order, rand, kernel_arguments, atol)[0]
         for kernel in kernels]
 
-    for i, mat in enumerate(derivs_evaluated):
+    for mat in derivs_evaluated:
         dep_cols = get_dependent_columns(mat, atol * 1e10)
         zeros = [0]*mat.shape[0]
         for col in dep_cols:
