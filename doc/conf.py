@@ -16,16 +16,16 @@ version = ".".join(str(x) for x in ver_dic["VERSION"])
 release = ver_dic["VERSION_TEXT"]
 
 intersphinx_mapping = {
-    "https://docs.python.org/3/": None,
-    "https://numpy.org/doc/stable/": None,
-    "https://documen.tician.de/modepy/": None,
-    "https://documen.tician.de/pyopencl/": None,
-    "https://documen.tician.de/pymbolic/": None,
-    "https://documen.tician.de/loopy/": None,
-    "https://documen.tician.de/pytential/": None,
-    "https://documen.tician.de/boxtree/": None,
-    "https://docs.sympy.org/latest/": None,
-    "https://matplotlib.org/stable/": None,
+    "python": ("https://docs.python.org/3/", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+    "modepy": ("https://documen.tician.de/modepy/", None),
+    "pyopencl": ("https://documen.tician.de/pyopencl/", None),
+    "pymbolic": ("https://documen.tician.de/pymbolic/", None),
+    "loopy": ("https://documen.tician.de/loopy/", None),
+    "pytential": ("https://documen.tician.de/pytential/", None),
+    "boxtree": ("https://documen.tician.de/boxtree/", None),
+    "sympy": ("https://docs.sympy.org/latest/", None),
+    "matplotlib": ("https://matplotlib.org/stable/", None),
 }
 
 nitpick_ignore_regex = [
