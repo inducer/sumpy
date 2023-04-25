@@ -60,8 +60,8 @@ class LinearPDESystemOperator:
                   to a coefficient.
         """
         self.dim = dim
-        self.eqs = [pmap(dict(filter(lambda p: p[1] != 0, eq.items())))
-                for eq in tuple(eqs)]
+        self.eqs = tuple([pmap(dict(filter(lambda p: p[1] != 0, eq.items())))
+                for eq in tuple(eqs)])
 
     def __eq__(self, other):
         return self.dim == other.dim and self.eqs == other.eqs
