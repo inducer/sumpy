@@ -123,7 +123,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
         from sumpy.symbolic import USE_SYMENGINE
 
         if USE_SYMENGINE:
-            from sumpy.tools import ExprDerivativeTaker
+            from sumpy.derivative_taker import ExprDerivativeTaker
             deriv_taker = ExprDerivativeTaker(line_kernel, (tau,), sac=sac, rscale=1)
 
             return [kernel.postprocess_at_source(
@@ -381,7 +381,7 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
             # to compensate for differentiating which is done at the end.
             # This moves the two cancelling "rscales" closer to each other at
             # the end in the hope of helping rscale magnitude.
-            from sumpy.tools import ExprDerivativeTaker
+            from sumpy.derivative_taker import ExprDerivativeTaker
             dvec_scaled = [d*src_rscale for d in dvec]
             expr = src_expansion.evaluate(src_expansion.kernel, src_coeff_exprs,
                         dvec_scaled, rscale=src_rscale, sac=sac)

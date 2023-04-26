@@ -684,7 +684,9 @@ class P2PFromCSR(P2PBase):
             # optimization led to a 8% speedup in the performance.
             knl = lp.concatenate_arrays(knl,
                 ["local_isrc", "local_isrc_strength"], "local_isrc")
-            knl = lp.tag_array_axes(knl, "local_isrc", "vec,C")
+            count = self.strength_count + self.dim
+            if count in [2, 3, 4, 8, 16]:
+                knl = lp.tag_array_axes(knl, "local_isrc", "vec,C")
 
             knl = lp.add_inames_for_unused_hw_axes(knl)
             # knl = lp.set_options(knl, write_code=True)
