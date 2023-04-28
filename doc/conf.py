@@ -19,6 +19,7 @@ intersphinx_mapping = {
     "arraycontext": ("https://documen.tician.de/arraycontext/", None),
     "python": ("https://docs.python.org/3/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
+    "pytools": ("https://documen.tician.de/pytools/", None),
     "modepy": ("https://documen.tician.de/modepy/", None),
     "pyopencl": ("https://documen.tician.de/pyopencl/", None),
     "pymbolic": ("https://documen.tician.de/pymbolic/", None),
