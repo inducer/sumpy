@@ -1034,9 +1034,10 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
             assert local_exps_res is target_local_exps_view
 
-        local_exps.add_event(evt)
+        for evt in events:
+            local_exps.add_event(evt)
 
-        return (local_exps, SumpyTimingFuture(queue, [evt]))
+        return (local_exps, SumpyTimingFuture(queue, events))
 
     def eval_locals(self, level_start_target_box_nrs, target_boxes, local_exps):
         pot = self.output_zeros(local_exps)
