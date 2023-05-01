@@ -95,6 +95,13 @@ setup(
     author="Andreas Kloeckner",
     author_email="inform@tiker.net",
     license="MIT",
+    url="https://github.com/inducer/sumpy",
+    download_url="https://pypi.python.org/pypi/sumpy",
+    project_urls={
+        "Bug Tracker": "https://github.com/inducer/sumpy/issues",
+        "Documentation": "https://documen.tician.de/sumpy",
+        "Source Code": "https://github.com/inducer/sumpy",
+    },
     packages=["sumpy", "sumpy.expansion"],
     python_requires="~=3.8",
     install_requires=[
