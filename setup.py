@@ -2,6 +2,7 @@
 
 import os
 from setuptools import setup
+from pathlib import Path
 
 ver_dic = {}
 version_file = open("sumpy/version.py")
@@ -74,9 +75,8 @@ setup(
     name="sumpy",
     version=ver_dic["VERSION_TEXT"],
     description="Fast summation in Python",
-    long_description="""
-      Code-generating FMM etc.
-      """,
+    long_description=Path("README.rst").read_text(encoding="utf-8"),
+    long_description_content_type="text/x-rst",
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
