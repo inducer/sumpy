@@ -732,7 +732,6 @@ class M2LPreprocessMultipole(E2EBase):
         _, optimizations = self.get_inner_knl_and_optimizations(result_dtype)
         for optimization in optimizations:
             knl = optimization(knl)
-        knl = lp.add_inames_for_unused_hw_axes(knl)
         return knl
 
     def __call__(self, queue, **kwargs):
