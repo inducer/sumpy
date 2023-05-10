@@ -524,8 +524,10 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         )
 
         optimizations = [
+            lambda knl: lp.split_iname(knl, "m2l__input_icoeff",
+                32, inner_tag="l.0"),
             lambda knl: lp.split_iname(knl, "m2l__output_icoeff",
-                32, inner_tag="l.0")
+                32, inner_tag="l.0"),
         ]
 
         return (knl, optimizations)
