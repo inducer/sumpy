@@ -463,7 +463,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         slowest_idx = axis_permutation[0]
         # max_mi[slowest_idx] = 2*(c - 1)
         c = max_mi[slowest_idx] // 2 + 1
-        noutput_coeffs = c * order ** (dim - 1)
+        noutput_coeffs = c * (order + 1) ** (dim - 1)
 
         domains = [
             "{[output_icoeff]: 0<=output_icoeff<noutput_coeffs}",
