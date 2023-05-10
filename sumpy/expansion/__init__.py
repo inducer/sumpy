@@ -402,6 +402,26 @@ class FullExpansionTermsWrangler(ExpansionTermsWrangler):
         return self.get_full_kernel_derivatives_from_stored(
             full_mpole_coefficients, rscale, sac=sac)
 
+    @memoize_method
+    def _get_mi_ordering_key_and_axis_permutation(self):
+        """
+        Returns a degree lexicographic order as a callable that can be used as a
+        ``sort`` key on multi-indices and a permutation of the axis ordered
+        from the slowest varying axis to the fastest varying axis of the
+        multi-indices when sorted.
+        """
+        from sumpy.expansion.diff_op import DerivativeIdentifier
+
+        axis_permutation = list(reversed(list(range(self.dim))))
+
+        def mi_key(ident):
+            if isinstance(ident, DerivativeIdentifier):
+                mi = ident.mi
+            else:
+                mi = ident
+            return tuple([sum(mi)] + list(reversed(mi)))
+
+        return mi_key, axis_permutation
 # }}}
 
 
@@ -542,6 +562,9 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         multipole-to-multipole translation to get lower error bounds.
         The slowest varying index is chosen such that the multipole-to-local
         translation cost is optimized.
+
+        Also returns a permutation of the axis ordered from the slowest varying
+        axis to the fastest varying axis of the multi-indices when sorted.
         """
         dim = self.dim
         deriv_id_to_coeff, = self.knl.get_pde_as_diff_op().eqs
