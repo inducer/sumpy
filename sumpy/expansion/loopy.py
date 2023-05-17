@@ -20,9 +20,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from typing import Sequence
 import pymbolic
 import loopy as lp
 import numpy as np
+from sumpy.expansion import ExpansionBase
+from sumpy.kernel import Kernel
 import sumpy.symbolic as sym
 from sumpy.assignment_collection import SymbolicAssignmentCollection
 from sumpy.tools import gather_loopy_arguments, gather_loopy_source_arguments
@@ -31,7 +34,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def e2p_loopy_knl_expr(expansion, kernels):
+def make_e2p_loopy_kernel(
+        expansion: ExpansionBase, kernels: Sequence[Kernel]) -> lp.TranslationUnit:
     """
     This is a helper function to create a loopy kernel for multipole/local
     evaluation. This function uses symbolic expressions given by the expansion class,
@@ -125,7 +129,9 @@ def e2p_loopy_knl_expr(expansion, kernels):
     return loopy_knl
 
 
-def p2e_loopy_knl_expr(expansion, kernels, strength_usage, nstrengths):
+def make_p2e_loopy_kernel(
+        expansion: ExpansionBase, kernels: Sequence[Kernel],
+        strength_usage: Sequence[int], nstrengths: int) -> lp.TranslationUnit:
     """
     This is a helper function to create a loopy kernel for multipole/local
     expression. This function uses symbolic expressions given by the expansion

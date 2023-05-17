@@ -86,8 +86,9 @@ class P2EBase(KernelCacheMixin, KernelComputation):
         self.expansion = expansion
         self.dim = expansion.dim
 
-    def set_inner_knl(self, loopy_knl):
-        inner_knl = self.expansion.loopy_coefficients_from_source(
+    def add_loopy_form_callable(
+            self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
+        inner_knl = self.expansion.get_loopy_expansion_formation(
             self.source_kernels, self.strength_usage, self.strength_count)
         loopy_knl = lp.merge([loopy_knl, inner_knl])
         loopy_knl = lp.inline_callable_kernel(loopy_knl, "p2e")
@@ -217,7 +218,7 @@ class P2EFromSingleBox(P2EBase):
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, "istrength*:unr")
-        loopy_knl = self.set_inner_knl(loopy_knl)
+        loopy_knl = self.add_loopy_form_callable(loopy_knl)
 
         return loopy_knl
 
@@ -350,7 +351,7 @@ class P2EFromCSR(P2EBase):
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, "istrength*:unr")
-        loopy_knl = self.set_inner_knl(loopy_knl)
+        loopy_knl = self.add_loopy_form_callable(loopy_knl)
 
         return loopy_knl
 

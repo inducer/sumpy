@@ -84,8 +84,9 @@ class E2PBase(KernelCacheMixin, ABC):
     def get_cache_key(self):
         return (type(self).__name__, self.expansion, tuple(self.kernels))
 
-    def set_inner_knl(self, loopy_knl):
-        inner_knl = self.expansion.loopy_evaluate(self.kernels)
+    def add_loopy_eval_callable(
+            self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
+        inner_knl = self.expansion.get_loopy_evaluator(self.kernels)
         loopy_knl = lp.merge([loopy_knl, inner_knl])
         loopy_knl = lp.inline_callable_kernel(loopy_knl, "e2p")
         loopy_knl = lp.remove_unused_inames(loopy_knl)
@@ -186,7 +187,7 @@ class E2PFromSingleBox(E2PBase):
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, "iknl*:unr")
-        loopy_knl = self.set_inner_knl(loopy_knl)
+        loopy_knl = self.add_loopy_eval_callable(loopy_knl)
 
         return loopy_knl
 
@@ -311,7 +312,7 @@ class E2PFromCSR(E2PBase):
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, "iknl*:unr")
         loopy_knl = lp.prioritize_loops(loopy_knl, "itgt_box,itgt,isrc_box")
-        loopy_knl = self.set_inner_knl(loopy_knl)
+        loopy_knl = self.add_loopy_eval_callable(loopy_knl)
         loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
 
         return loopy_knl

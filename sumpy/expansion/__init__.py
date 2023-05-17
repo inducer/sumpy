@@ -21,9 +21,11 @@ THE SOFTWARE.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar, Dict, Hashable, List, Optional, Tuple, Type
+from typing import (
+        Any, ClassVar, Dict, Hashable, List, Optional, Sequence, Tuple, Type)
 
 from pytools import memoize_method
+import loopy as lp
 
 import sumpy.symbolic as sym
 from sumpy.kernel import Kernel
@@ -63,7 +65,9 @@ class ExpansionBase(ABC):
     .. automethod:: get_coefficient_identifiers
     .. automethod:: coefficients_from_source
     .. automethod:: coefficients_from_source_vec
+    .. automethod:: get_loopy_expansion_formation
     .. automethod:: evaluate
+    .. automethod:: get_loopy_evaluator
 
     .. automethod:: with_kernel
     .. automethod:: copy
@@ -159,14 +163,16 @@ class ExpansionBase(ABC):
                 result[i] += weight * coeffs[i]
         return result
 
-    def loopy_coefficients_from_source(self, kernels, strength_usage, nstrengths):
+    def get_loopy_expansion_formation(
+            self, kernels: Sequence[Kernel],
+            strength_usage: Sequence[int], nstrengths: int) -> lp.TranslationUnit:
         """
         :returns: a :mod:`loopy` kernel that returns the coefficients
             for the expansion given by *kernels* with each kernel using
             the strength given by *strength_usage*.
         """
-        from sumpy.expansion.loopy import p2e_loopy_knl_expr
-        return p2e_loopy_knl_expr(self, kernels, strength_usage, nstrengths)
+        from sumpy.expansion.loopy import make_p2e_loopy_kernel
+        return make_p2e_loopy_kernel(self, kernels, strength_usage, nstrengths)
 
     @abstractmethod
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
@@ -176,13 +182,13 @@ class ExpansionBase(ABC):
             in *coeffs*.
         """
 
-    def loopy_evaluate(self, kernels):
+    def get_loopy_evaluator(self, kernels: Sequence[Kernel]) -> lp.TranslationUnit:
         """
         :returns: a :mod:`loopy` kernel that returns the evaluated
             target transforms of the potential given by *kernels*.
         """
-        from sumpy.expansion.loopy import e2p_loopy_knl_expr
-        return e2p_loopy_knl_expr(self, kernels)
+        from sumpy.expansion.loopy import make_e2p_loopy_kernel
+        return make_e2p_loopy_kernel(self, kernels)
 
     # }}}
 
