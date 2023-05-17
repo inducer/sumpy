@@ -86,37 +86,22 @@ class P2EBase(KernelCacheMixin, KernelComputation):
         self.expansion = expansion
         self.dim = expansion.dim
 
-    def get_loopy_instructions(self):
-        from sumpy.symbolic import make_sym_vector
-        avec = make_sym_vector("a", self.dim)
+    def add_loopy_form_callable(
+            self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
+        inner_knl = self.expansion.get_loopy_expansion_formation(
+            self.source_kernels, self.strength_usage, self.strength_count)
+        loopy_knl = lp.merge([loopy_knl, inner_knl])
+        loopy_knl = lp.inline_callable_kernel(loopy_knl, "p2e")
+        loopy_knl = lp.remove_unused_inames(loopy_knl)
+        for kernel in self.source_kernels:
+            loopy_knl = kernel.prepare_loopy_kernel(loopy_knl)
+        loopy_knl = lp.tag_array_axes(loopy_knl, "strengths", "sep,C")
+        return loopy_knl
 
-        import sumpy.symbolic as sp
-        rscale = sp.Symbol("rscale")
-
-        from sumpy.assignment_collection import SymbolicAssignmentCollection
-        sac = SymbolicAssignmentCollection()
-
-        strengths = [sp.Symbol(f"strength_{i}") for i in self.strength_usage]
-        coeffs = self.expansion.coefficients_from_source_vec(self.source_kernels,
-                    avec, None, rscale, strengths, sac=sac)
-
-        coeff_names = []
-        for i, coeff in enumerate(coeffs):
-            sac.add_assignment(f"coeff{i}", coeff)
-            coeff_names.append(f"coeff{i}")
-
-        sac.run_global_cse()
-
-        code_transformers = [self.expansion.get_code_transformer()] \
-            + [kernel.get_code_transformer() for kernel in self.source_kernels]
-
-        from sumpy.codegen import to_loopy_insns
-        return to_loopy_insns(
-                sac.assignments.items(),
-                vector_names={"a"},
-                pymbolic_expr_maps=code_transformers,
-                retain_names=coeff_names,
-                )
+    def get_loopy_args(self):
+        from sumpy.tools import gather_loopy_source_arguments
+        return gather_loopy_source_arguments(
+                (self.expansion,) + tuple(self.source_kernels))
 
     def get_cache_key(self):
         return (type(self).__name__, self.name, self.expansion,
@@ -166,11 +151,14 @@ class P2EFromSingleBox(P2EBase):
 
     def get_kernel(self):
         ncoeffs = len(self.expansion)
+        loopy_args = self.get_loopy_args()
 
-        from sumpy.tools import gather_loopy_source_arguments
         loopy_knl = lp.make_kernel([
                 "{[isrc_box]: 0 <= isrc_box < nsrc_boxes}",
-                "{[isrc, idim]: isrc_start <= isrc < isrc_end and 0 <= idim < dim}",
+                "{[isrc]: isrc_start <= isrc < isrc_end}",
+                "{[idim]: 0 <= idim < dim}",
+                "{[icoeff]: 0 <= icoeff < ncoeffs}",
+                "{[istrength]: 0 <= istrength < nstrengths}",
                 ], ["""
                 for isrc_box
                     <> src_ibox = source_boxes[isrc_box]
@@ -179,25 +167,35 @@ class P2EFromSingleBox(P2EBase):
 
                     <> center[idim] = centers[idim, src_ibox] {id=fetch_center}
 
+                    <> coeffs[icoeff] = 0  {id=init_coeffs,dup=icoeff}
                     for isrc
-                        <> a[idim] = center[idim] - sources[idim, isrc] {dup=idim}
-                        """] + [
-                        f"<> strength_{i} = strengths[{i}, isrc]"
-                        for i in set(self.strength_usage)
-                        ] + self.get_loopy_instructions() + ["""
+                        <> source[idim] = sources[idim, isrc] \
+                                {dup=idim,id=fetch_src}
+                        <> strength[istrength] = strengths[istrength, isrc] \
+                                {dup=istrength,id=fetch_strength}
+                        [icoeff]: coeffs[icoeff] = p2e(
+                                [icoeff]: coeffs[icoeff],
+                                [idim]: center[idim],
+                                [idim]: source[idim],
+                                [istrength]: strength[istrength],
+                                rscale,
+                                isrc,
+                                nsources,
+                                sources,
+                """ + ",".join(arg.name for arg in loopy_args) + """
+                            )  {id=update_result, \
+                              dep=fetch_center:fetch_src:init_coeffs}
                     end
-                    """] + [f"""
-                    tgt_expansions[src_ibox - tgt_base_ibox, {coeffidx}] = \
-                        simul_reduce(sum, isrc, coeff{coeffidx}) \
-                            {{id_prefix=write_expn}}
-                    """ for coeffidx in range(ncoeffs)] + ["""
+                    tgt_expansions[src_ibox - tgt_base_ibox, icoeff] = \
+                        coeffs[icoeff] {id=write_expn,dup=icoeff,\
+                        dep=update_result:init_coeffs}
                 end
                 """],
                 [
                     lp.GlobalArg("sources", None,
                         shape=(self.dim, "nsources"), order="C"),
                     lp.GlobalArg("strengths", None,
-                        shape=("strength_count", "nsources"), dim_tags="sep,C"),
+                        shape=(self.strength_count, "nsources")),
                     lp.GlobalArg("box_source_starts, box_source_counts_nonchild",
                         None, shape=None),
                     lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
@@ -206,20 +204,21 @@ class P2EFromSingleBox(P2EBase):
                         shape=("nboxes", ncoeffs), offset=lp.auto),
                     lp.ValueArg("nboxes, aligned_nboxes, tgt_base_ibox", np.int32),
                     lp.ValueArg("nsources", np.int32),
+                    *loopy_args,
                     ...
-                ] + gather_loopy_source_arguments(
-                    self.source_kernels + (self.expansion,)),
+                ],
                 name=self.name,
                 assumptions="nsrc_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
                 default_offset=lp.auto,
                 fixed_parameters={
-                    "dim": self.dim, "strength_count": self.strength_count},
+                    "dim": self.dim, "nstrengths": self.strength_count,
+                    "ncoeffs": ncoeffs},
                 lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
-        for knl in self.source_kernels:
-            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+        loopy_knl = lp.tag_inames(loopy_knl, "istrength*:unr")
+        loopy_knl = self.add_loopy_form_callable(loopy_knl)
 
         return loopy_knl
 
@@ -270,14 +269,14 @@ class P2EFromCSR(P2EBase):
 
     def get_kernel(self):
         ncoeffs = len(self.expansion)
+        loopy_args = self.get_loopy_args()
 
-        from sumpy.tools import gather_loopy_source_arguments
         arguments = (
                 [
                     lp.GlobalArg("sources", None,
                         shape=(self.dim, "nsources"), order="C"),
                     lp.GlobalArg("strengths", None,
-                        shape=("strength_count", "nsources"), dim_tags="sep,C"),
+                        shape=(self.strength_count, "nsources")),
                     lp.GlobalArg("source_box_starts,source_box_lists",
                         None, shape=None, offset=lp.auto),
                     lp.GlobalArg("box_source_starts,box_source_counts_nonchild",
@@ -288,9 +287,9 @@ class P2EFromCSR(P2EBase):
                     lp.ValueArg("naligned_boxes,ntgt_level_boxes,tgt_base_ibox",
                         np.int32),
                     lp.ValueArg("nsources", np.int32),
+                    *loopy_args,
                     ...
-                ] + gather_loopy_source_arguments(
-                    self.source_kernels + (self.expansion,)))
+                ])
 
         loopy_knl = lp.make_kernel(
                 [
@@ -298,6 +297,8 @@ class P2EFromCSR(P2EBase):
                     "{[isrc_box]: isrc_box_start <= isrc_box < isrc_box_stop}",
                     "{[isrc]: isrc_start <= isrc < isrc_end}",
                     "{[idim]: 0 <= idim < dim}",
+                    "{[icoeff]: 0 <= icoeff < ncoeffs}",
+                    "{[istrength]: 0 <= istrength < nstrengths}",
                     ],
                 ["""
                 for itgt_box
@@ -307,6 +308,7 @@ class P2EFromCSR(P2EBase):
                     <> isrc_box_start = source_box_starts[itgt_box]
                     <> isrc_box_stop = source_box_starts[itgt_box + 1]
 
+                    <> coeffs[icoeff] = 0  {id=init_coeffs,dup=icoeff}
                     for isrc_box
                         <> src_ibox = source_box_lists[isrc_box]
                         <> isrc_start = box_source_starts[src_ibox]
@@ -314,19 +316,27 @@ class P2EFromCSR(P2EBase):
                                 + box_source_counts_nonchild[src_ibox]
 
                         for isrc
-                            <> a[idim] = center[idim] - sources[idim, isrc] \
-                                    {dup=idim}
-                    """] + [
-                        f"""
-                             <> strength_{i} = strengths[{i}, isrc]
-                             """ for i in set(self.strength_usage)
-                             ] + self.get_loopy_instructions() + ["""
+                            <> source[idim] = sources[idim, isrc] \
+                                    {dup=idim,id=fetch_src}
+                            <> strength[istrength] = strengths[istrength, isrc] \
+                                    {dup=istrength,id=fetch_strength}
+                            [icoeff]: coeffs[icoeff] = p2e(
+                                    [icoeff]: coeffs[icoeff],
+                                    [idim]: center[idim],
+                                    [idim]: source[idim],
+                                    [istrength]: strength[istrength],
+                                    rscale,
+                                    isrc,
+                                    nsources,
+                                    sources,
+                    """ + ",".join(arg.name for arg in loopy_args) + """
+                                )  {id=update_result, \
+                                  dep=fetch_center:fetch_src:init_coeffs}
                         end
-                    end"""] + [f"""
-                    tgt_expansions[tgt_ibox - tgt_base_ibox, {coeffidx}] = \
-                            simul_reduce(sum, (isrc_box, isrc), coeff{coeffidx}) \
-                            {{id_prefix=write_expn}}
-                    """ for coeffidx in range(ncoeffs)] + ["""
+                    end
+                    tgt_expansions[tgt_ibox - tgt_base_ibox, icoeff] = \
+                            coeffs[icoeff] {id=write_expn,dup=icoeff, \
+                            dep=update_result:init_coeffs}
                 end
                 """],
                 arguments,
@@ -335,12 +345,13 @@ class P2EFromCSR(P2EBase):
                 silenced_warnings="write_race(write_expn*)",
                 default_offset=lp.auto,
                 fixed_parameters={"dim": self.dim,
-                                  "strength_count": self.strength_count},
+                                  "nstrengths": self.strength_count,
+                                  "ncoeffs": ncoeffs},
                 lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
-        for knl in self.source_kernels:
-            loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+        loopy_knl = lp.tag_inames(loopy_knl, "istrength*:unr")
+        loopy_knl = self.add_loopy_form_callable(loopy_knl)
 
         return loopy_knl
 

@@ -1171,17 +1171,22 @@ class DirectionalTargetDerivative(DirectionalDerivative):
         return DifferentiatedExprDerivativeTaker(expr.taker,
                 dict(new_transformation))
 
-    def get_source_args(self):
+    def get_args(self):
         return [
-                KernelArgument(
-                    loopy_arg=lp.GlobalArg(
-                        self.dir_vec_name,
-                        None,
-                        shape=(self.dim, "ntargets"),
-                        dim_tags="sep,C",
-                        offset=lp.auto),
-                    )
-                    ] + self.inner_kernel.get_source_args()
+            KernelArgument(
+                loopy_arg=lp.GlobalArg(
+                    self.dir_vec_name,
+                    None,
+                    shape=(self.dim, "ntargets"),
+                    offset=lp.auto
+                ),
+            ),
+            *self.inner_kernel.get_args()
+        ]
+
+    def prepare_loopy_kernel(self, loopy_knl):
+        loopy_knl = self.inner_kernel.prepare_loopy_kernel(loopy_knl)
+        return lp.tag_array_axes(loopy_knl, self.dir_vec_name, "sep,C")
 
     mapper_method = "map_directional_target_derivative"
 
@@ -1224,10 +1229,13 @@ class DirectionalSourceDerivative(DirectionalDerivative):
                         self.dir_vec_name,
                         None,
                         shape=(self.dim, "nsources"),
-                        dim_tags="sep,C",
                         offset=lp.auto),
                     )
                     ] + self.inner_kernel.get_source_args()
+
+    def prepare_loopy_kernel(self, loopy_knl):
+        loopy_knl = self.inner_kernel.prepare_loopy_kernel(loopy_knl)
+        return lp.tag_array_axes(loopy_knl, self.dir_vec_name, "sep,C")
 
     mapper_method = "map_directional_source_derivative"
 
