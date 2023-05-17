@@ -933,6 +933,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     result=pot,
 
                     rscale=self.level_to_rscale(isrc_level),
+                    max_ntargets_in_one_box=self.max_ntargets_in_one_box,
 
                     wait_for=wait_for,
 
@@ -1069,6 +1070,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     result=pot,
 
                     rscale=self.level_to_rscale(lev),
+                    max_ntargets_in_one_box=self.max_ntargets_in_one_box,
 
                     **kwargs)
             events.append(evt)

@@ -120,6 +120,7 @@ pi = sym.pi
 functions = sym.functions
 Number = sym.Number
 Float = sym.Float
+diff = sym.diff
 
 
 def _coeff_isneg(a):
