@@ -250,6 +250,7 @@ def _e2p(psource, targets, e2p):
             target_boxes=boxes,
             box_target_starts=box_target_starts,
             box_target_counts_nonchild=box_target_counts_nonchild,
+            max_ntargets_in_one_box=ntargets,
             centers=centers,
             rscale=psource.rscale,
             targets=targets,

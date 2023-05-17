@@ -405,6 +405,14 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
             f"A direct loopy kernel for translation from "
             f"{src_expansion} to {self} is not implemented.")
 
+    def loopy_evaluate(self, kernels):
+        from sumpy.expansion.loopy import (make_l2p_loopy_kernel_for_volume_taylor,
+            make_e2p_loopy_kernel)
+        try:
+            return make_l2p_loopy_kernel_for_volume_taylor(self, kernels)
+        except NotImplementedError:
+            return make_e2p_loopy_kernel(self, kernels)
+
 
 class VolumeTaylorLocalExpansion(
         VolumeTaylorExpansion,
