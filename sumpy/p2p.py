@@ -88,7 +88,6 @@ class P2PBase(KernelCacheMixin, KernelComputation):
 
         import pyopencl as cl
         self.is_gpu = not (self.device.type & cl.device_type.CPU)
-        self.is_gpu = True
 
         self.exclude_self = exclude_self
 
