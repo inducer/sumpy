@@ -553,7 +553,7 @@ class P2PFromCSR(P2PBase):
                     """ if self.exclude_self else ""]
               + [f"""
                           <> strength_{i} = local_isrc_strength[{i}, isrc_offset] \
-                            {{id=set_strength,dep=prefetch_charge}}
+                            {{id=set_strength{i},dep=prefetch_charge}}
                 """ for
                 i in set(self.strength_usage)]
               + loopy_insns
