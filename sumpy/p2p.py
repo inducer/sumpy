@@ -447,7 +447,7 @@ class P2PFromCSR(P2PBase):
         return "p2p_from_csr"
 
     def get_kernel(self, max_nsources_in_one_box, max_ntargets_in_one_box,
-            work_items_per_group=32, nprefetch=1):
+            work_items_per_group=32):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
         arguments = self.get_default_src_tgt_arguments() \
             + [
@@ -672,8 +672,7 @@ class P2PFromCSR(P2PBase):
 
             knl = self.get_kernel(max_nsources_in_one_box,
                     max_ntargets_in_one_box,
-                    work_items_per_group=work_items_per_group,
-                    nprefetch=nprefetch)
+                    work_items_per_group=work_items_per_group)
             knl = lp.tag_inames(knl, {"itgt_box": "g.0", "inner": "l.0"})
             knl = lp.set_temporary_address_space(knl,
                 ["local_isrc", "local_isrc_strength"], lp.AddressSpace.LOCAL)
