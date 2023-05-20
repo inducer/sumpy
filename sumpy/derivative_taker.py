@@ -36,12 +36,16 @@ __doc__ = """
 """
 
 from pytools.tag import tag_dataclass
+from pytools import (single_valued,
+    generate_nonnegative_integer_tuples_summing_to_at_most as gnitstam)
+from math import floor
 
 import numpy as np
 import sumpy.symbolic as sym
-from sumpy.tools import add_to_sac, add_mi
+from sumpy.tools import add_to_sac, add_mi, nullspace
+from sumpy.kernel import Kernel
 
-from typing import Dict, Tuple, Any
+from typing import Dict, Tuple, Any, Mapping, Text
 
 import logging
 
@@ -403,6 +407,172 @@ def diff_derivative_coeff_dict(derivative_coeff_dict: DerivativeCoeffDict,
         new_derivative_coeff_dict[tuple(new_mi)] += coeff
     return {derivative: coeff for derivative, coeff in
             new_derivative_coeff_dict.items() if coeff != 0}
+
+
+def _get_sympy_kernel_expression(kernel: Kernel,
+        kernel_arguments: Mapping[Text, Any]) -> sym.Basic:
+    """Convert a :mod:`pymbolic` expression to :mod:`sympy` expression
+    after substituting kernel arguments.
+    For eg: `exp(I*k*r)/r` with `{k: 1}` is converted to the sympy expression
+    `exp(I*r)/r`
+    """
+    from pymbolic.mapper.substitutor import substitute
+    from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
+
+    expr = substitute(kernel.get_base_kernel().expression, kernel_arguments)
+    expr = PymbolicToSympyMapperWithSymbols()(expr)
+
+    dvec = sym.make_sym_vector("d", kernel.dim)
+    res = kernel.postprocess_at_target(kernel.postprocess_at_source(
+        expr, dvec), dvec)
+    return res
+
+
+def evalf(expr: sym.Basic, dps: float):
+    """evaluate an expression numerically using ``dps``
+    number of digits.
+    """
+    from sumpy.symbolic import USE_SYMENGINE
+    if USE_SYMENGINE:
+        import symengine
+        prec = int(symengine.log(10**dps, 2))
+        return expr.n(prec=prec)
+    else:
+        return expr.n(n=dps)
+
+
+def chop(expr: sym.Basic, tol: float) -> sym.Basic:
+    """Given a symbolic expression, remove all occurences of numbers
+    with absolute value less than a given tolerance and replace floating
+    point numbers that are close to an integer up to a given relative
+    tolerance by the integer.
+    """
+    nums = expr.atoms(sym.Number)
+    replace_dict = {}
+    for num in nums:
+        if float(abs(num)) < tol:
+            replace_dict[num] = 0
+        else:
+            new_num = float(num)
+            if abs((int(new_num) - new_num)/new_num) < tol:
+                new_num = int(new_num)
+            replace_dict[num] = new_num
+    return expr.xreplace(replace_dict)
+
+
+def get_deriv_sample(kernel, order, samples, kernel_arguments, atol):
+    dim = kernel.dim
+    sym_vec = sym.make_sym_vector("d", dim)
+    base_expr = _get_sympy_kernel_expression(kernel,
+        dict(kernel_arguments))
+
+    mis = sorted(gnitstam(order, dim), key=sum)
+    assert samples.shape[0] == dim
+
+    exprs = []
+    for mi in mis:
+        expr = base_expr
+        for var_idx, nderivs in enumerate(mi):
+            if nderivs == 0:
+                continue
+            expr = expr.diff(sym_vec[var_idx], nderivs)
+        exprs.append(expr)
+
+    dps = -sym.log(atol, 10)
+    mat = []
+    for isample in range(samples.shape[1]):
+        row = []
+        for ideriv in range(len(mis)):
+            expr = exprs[ideriv]
+            replace_dict = dict(zip(sym_vec, samples[:, isample]))
+            eval_expr = evalf(expr.xreplace(replace_dict), dps)
+            row.append(eval_expr)
+        mat.append(row)
+    mat = sym.Matrix(mat)
+
+    return mat, mis
+
+
+def get_dependent_columns(matrix, atol):
+    import sympy
+    m = matrix.T
+    l, u, p = sympy.Matrix(m).LUdecomposition(
+            iszerofunc=lambda x: abs(x) < atol)
+    nrows = m.shape[0]
+    idxs = list(range(nrows))
+    for i, j in p:
+        idxs[i], idxs[j] = idxs[j], idxs[i]
+
+    nonzero_rows = 0
+    for i in range(nrows - 1, -1, -1):
+        if not all(abs(elem) < atol for elem in u[i, :]):
+            nonzero_rows = i + 1
+            break
+
+    return idxs[nonzero_rows:]
+
+
+def get_pde_operators(kernels, order, kernel_arguments, atol=1e-30):
+    import sympy
+    from sumpy.expansion.diff_op import diff, make_identity_diff_op
+    dim = single_valued(kernel.dim for kernel in kernels)
+
+    mis = sorted(gnitstam(order, dim), key=sum)
+
+    # (-1, -1, -1) represents a constant
+    # ((0,0,0) would be "function with no derivatives")
+    # mis.append((-1,)*dim)
+
+    n = len(kernels)
+    nsamples = int(floor(len(mis) * n / (n-1))) + n + 1
+    rand = np.random.randint(1, 10**15, (dim, nsamples))
+    rand = rand.astype(object)
+    for i in range(rand.shape[0]):
+        for j in range(rand.shape[1]):
+            rand[i, j] = sym.sympify(rand[i, j])/10**15
+
+    derivs_evaluated = [
+        get_deriv_sample(kernel, order, rand, kernel_arguments, atol)[0]
+        for kernel in kernels]
+
+    for mat in derivs_evaluated:
+        dep_cols = get_dependent_columns(mat, atol * 1e10)
+        zeros = [0]*mat.shape[0]
+        for col in dep_cols:
+            mat[:, col] = zeros
+
+    full_mat = sym.zeros((n - 1) * nsamples, len(mis) * n)
+    assert full_mat.shape[0] > full_mat.shape[1]
+    for i in range(1, n):
+        full_mat[(i - 1)*nsamples:i*nsamples, :len(mis)] = derivs_evaluated[i]
+        full_mat[(i - 1)*nsamples:i*nsamples, i*len(mis):(i + 1)*len(mis)] = \
+                -derivs_evaluated[0]
+
+    ns = nullspace(full_mat.tolist(), atol * 1e10)
+    for col in range(ns.shape[1]):
+        for i in range(n):
+            if all(abs(elem) < atol * 1e10 for elem in
+                    ns[i*len(mis):(i + 1)*len(mis), col]):
+                break
+        else:
+            ops = sym.Matrix(ns[:, col].tolist()).reshape(n, len(mis))
+            ops = ops.applyfunc(lambda x: sympy.nsimplify(x, tolerance=atol*1e10))
+            id_op = make_identity_diff_op(dim, 1)
+            diff_ops = []
+            for i in range(n):
+                diff_op = None
+                for mi_idx, coeff in enumerate(ops[i, :]):
+                    if coeff == 0:
+                        continue
+                    mi = mis[mi_idx]
+                    if not diff_op:
+                        diff_op = coeff * diff(id_op, mi)
+                    else:
+                        diff_op += coeff * diff(id_op, mi)
+                diff_ops.append(diff_op)
+            return diff_ops
+
+    raise RuntimeError("Could not find PDE operators")
 
 # }}}
 
