@@ -128,7 +128,7 @@ class P2PBase(KernelCacheMixin, KernelComputation):
         else:
             result_name_prefix = "pair_result"
 
-        result_names = [
+        temp_result_names = [
             sac.add_assignment(f"{result_name_prefix}_{i}", expr)
             for i, expr in enumerate(exprs)
         ]
@@ -141,7 +141,7 @@ class P2PBase(KernelCacheMixin, KernelComputation):
                 pymbolic_expr_maps=(
                     [knl.get_code_transformer() for knl in self.source_kernels]
                     + [knl.get_code_transformer() for knl in self.target_kernels]),
-                retain_names=result_names,
+                retain_names=temp_result_names,
                 )
 
         from pymbolic import var
@@ -149,7 +149,7 @@ class P2PBase(KernelCacheMixin, KernelComputation):
             assignments = [lp.Assignment(id=None,
                     assignee=f"pair_result_{i}", expression=var(name),
                     temp_var_type=lp.Optional(None))
-                for i, name in enumerate(result_names)]
+                for i, name in enumerate(temp_result_names)]
 
             from pymbolic.primitives import If, Variable
             assignments = [assign.copy(expression=If(Variable("is_self"), 0,
@@ -157,6 +157,7 @@ class P2PBase(KernelCacheMixin, KernelComputation):
         else:
             assignments = []
 
+        result_names = [f"pair_result_{i}" for i in range(len(temp_result_names))]
         return assignments + loopy_insns, result_names
 
     def get_strength_or_not(self, isrc, kernel_idx):
@@ -448,7 +449,36 @@ class P2PFromCSR(P2PBase):
 
     def get_kernel(self, max_nsources_in_one_box, max_ntargets_in_one_box,
             work_items_per_group=32):
-        loopy_insns, result_names = self.get_loopy_insns_and_result_names()
+        import pymbolic.primitives as prim
+        loopy_insns_no_acc, _ = self.get_loopy_insns_and_result_names()
+
+        acc = prim.Variable("acc")
+        loopy_insns = []
+
+        # We have instructions like
+        #
+        #   pair_result_0 = expr_0 * strength_0
+        #   acc[0] = acc[0] + pair_result_0
+        #
+        # and NVIDIA OpenCL generates an FMA, but PoCL does not.
+        # Help pocl generate an FMA, by rewriting as
+        #
+        #   acc[0] = acc[0] + expr_0 * strength_0
+        #
+        # which enables PoCL to generate an FMA
+        for insn in loopy_insns_no_acc:
+            if isinstance(insn.assignee, prim.Variable) and \
+                    insn.assignee.name.startswith("pair_result_"):
+                i = int(insn.assignee.name[len("pair_result_"):])
+                insn = insn.copy(
+                    id=f"update_acc_{i}",
+                    assignee=acc[i],
+                    expression=acc[i] + insn.expression,
+                    depends_on="init_acc",
+                    temp_var_type=None,
+                )
+            loopy_insns.append(insn)
+
         arguments = self.get_default_src_tgt_arguments() \
             + [
                 lp.GlobalArg("box_target_starts",
@@ -555,11 +585,6 @@ class P2PFromCSR(P2PBase):
                 """ for
                 i in set(self.strength_usage)]
               + loopy_insns
-              + [f"""
-                          acc[{iknl}] = acc[{iknl}] + \
-                            pair_result_{iknl} \
-                            {{id=update_acc_{iknl}, dep=init_acc}}
-                """ for iknl in range(len(self.target_kernels))]
               + ["""
                         end
                       end
