@@ -124,7 +124,7 @@ class P2PBase(KernelCacheMixin, KernelComputation):
             exprs.append(expr_sum)
 
         if self.exclude_self:
-            result_name_prefix = "pair_result_tmp"
+            result_name_prefix = "tmp_pair_result"
         else:
             result_name_prefix = "pair_result"
 
@@ -467,7 +467,8 @@ class P2PFromCSR(P2PBase):
         #
         # which enables PoCL to generate an FMA
         for insn in loopy_insns_no_acc:
-            if isinstance(insn.assignee, prim.Variable) and \
+            if isinstance(insn, lp.Assignment) and \
+                    isinstance(insn.assignee, prim.Variable) and \
                     insn.assignee.name.startswith("pair_result_"):
                 i = int(insn.assignee.name[len("pair_result_"):])
                 insn = insn.copy(
@@ -477,7 +478,9 @@ class P2PFromCSR(P2PBase):
                     depends_on="init_acc",
                     temp_var_type=None,
                 )
+            print(insn)
             loopy_insns.append(insn)
+        print("asd")
 
         arguments = self.get_default_src_tgt_arguments() \
             + [
@@ -631,11 +634,6 @@ class P2PFromCSR(P2PBase):
               + [f"<> strength_{i} = strength[{i}, isrc]" for
                 i in set(self.strength_usage)]
               + loopy_insns
-              + [f"""
-                        acc[{iknl}] = acc[{iknl}] + \
-                          pair_result_{iknl} \
-                          {{id=update_acc_{iknl}, dep=init_acc}}
-                """ for iknl in range(len(self.target_kernels))]
               + ["""
                     end
                   end
@@ -649,6 +647,8 @@ class P2PFromCSR(P2PBase):
                 end
               """])
 
+        for insn in instructions:
+            print(insn)
         loopy_knl = lp.make_kernel(
             domains,
             instructions,
