@@ -208,6 +208,20 @@ def register_bessel_callables(loopy_knl):
             Hankel1_01("hank1_01"))
     return loopy_knl
 
+
+def _fp_contract_fast_preamble(preamble_info):
+    yield ("fp_contract_fast_pocl", "#pragma clang fp contract(fast)")
+
+
+def register_optimization_preambles(loopy_knl, device):
+    if isinstance(loopy_knl.target, lp.PyOpenCLTarget):
+        import pyopencl as cl
+        if device.platform.name == "Portable Computing Language" and \
+                (device.type & cl.device_type.GPU):
+            loopy_knl = lp.register_preamble_generators(loopy_knl,
+                [_fp_contract_fast_preamble])
+    return loopy_knl
+
 # }}}
 
 

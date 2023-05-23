@@ -190,6 +190,9 @@ class P2PBase(KernelCacheMixin, KernelComputation):
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
 
+        from sumpy.codegen import register_optimization_preambles
+        knl = register_optimization_preambles(knl, self.device)
+
         return knl
 
 
@@ -713,6 +716,9 @@ class P2PFromCSR(P2PBase):
 
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
+
+        from sumpy.codegen import register_optimization_preambles
+        knl = register_optimization_preambles(knl, self.device)
 
         return knl
 
