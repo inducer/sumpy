@@ -886,7 +886,7 @@ def run_opencl_fft(fft_app, queue, input_vec, inverse=False, wait_for=None):
             wait_for = []
 
         if queue.device.platform.name == "NVIDIA CUDA":
-            # NVIDIA OpenCL gives wrong answers with wait_for
+            # NVIDIA OpenCL gives wrong event profile values with wait_for
             # Not passing wait_for will wait for all events queued before
             # and therefore correctness is preserved.
             start_evt = cl.enqueue_marker(queue)
