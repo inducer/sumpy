@@ -885,7 +885,13 @@ def run_opencl_fft(fft_app, queue, input_vec, inverse=False, wait_for=None):
         if wait_for is None:
             wait_for = []
 
-        start_evt = cl.enqueue_marker(queue, wait_for=wait_for[:])
+        if queue.device.platform.name == "NVIDIA CUDA":
+            # NVIDIA OpenCL gives wrong answers with wait_for
+            # Not passing wait_for will wait for all events queued before
+            # and therefore correctness is preserved.
+            start_evt = cl.enqueue_marker(queue)
+        else:
+            start_evt = cl.enqueue_marker(queue, wait_for=wait_for[:])
 
         if app.inplace:
             raise RuntimeError("inplace fft is not supported")
@@ -903,7 +909,11 @@ def run_opencl_fft(fft_app, queue, input_vec, inverse=False, wait_for=None):
         meth(app.app, int(input_vec.data.int_ptr),
             int(output_vec.data.int_ptr), int(queue.int_ptr))
 
-        end_evt = cl.enqueue_marker(queue, wait_for=[start_evt])
+        if queue.device.platform.name == "NVIDIA CUDA":
+            end_evt = cl.enqueue_marker(queue)
+        else:
+            end_evt = cl.enqueue_marker(queue, wait_for=[start_evt])
+
         output_vec.add_event(end_evt)
 
         return (MarkerBasedProfilingEvent(end_event=end_evt, start_event=start_evt),
