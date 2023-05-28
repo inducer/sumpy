@@ -515,11 +515,13 @@ def make_l2p_loopy_kernel_for_volume_taylor(expansion, kernels):
         if c != sync_split:
             tags["e2p_iorder3"] = "l.0"
 
+        nsplit = min(256, ncoeffs)
+
         optimizations += [
             lambda knl: lp.tag_inames(knl, tags),
             lambda knl: lp.set_temporary_address_space(knl, "e2p_coeffs_copy",
                 lp.AddressSpace.LOCAL),
-            lambda knl: lp.split_iname(knl, "e2p_icoeff", 32, inner_tag="l.0"),
+            lambda knl: lp.split_iname(knl, "e2p_icoeff", nsplit, inner_tag="l.0"),
         ]
 
     target_args = gather_loopy_arguments((expansion,) + tuple(kernels))
