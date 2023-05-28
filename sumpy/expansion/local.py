@@ -32,6 +32,11 @@ from sumpy.expansion import (
         VolumeTaylorExpansionMixin,
         LinearPDEConformingVolumeTaylorExpansion)
 from sumpy.tools import add_to_sac, mi_increment_axis
+from sumpy.kernel import Kernel
+
+import loopy as lp
+
+from typing import Sequence
 
 import logging
 logger = logging.getLogger(__name__)
@@ -405,7 +410,7 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
             f"A direct loopy kernel for translation from "
             f"{src_expansion} to {self} is not implemented.")
 
-    def loopy_evaluate(self, kernels):
+    def get_loopy_evaluator(self, kernels: Sequence[Kernel]) -> lp.TranslationUnit:
         from sumpy.expansion.loopy import (make_l2p_loopy_kernel_for_volume_taylor,
             make_e2p_loopy_kernel)
         try:

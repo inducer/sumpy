@@ -126,7 +126,7 @@ class E2PFromSingleBox(E2PBase):
     def get_kernel(self, max_ntargets_in_one_box):
         ncoeffs = len(self.expansion)
         loopy_args = self.get_loopy_args()
-        max_work_items = min(32, max(ncoeffs, max_ntargets_in_one_box))
+        max_work_items = min(256, max(ncoeffs, max_ntargets_in_one_box))
 
         loopy_knl = lp.make_kernel(
                 [
@@ -211,8 +211,8 @@ class E2PFromSingleBox(E2PBase):
         inner_knl, optimizations = self.get_cached_loopy_knl_and_optimizations()
         knl = self.get_kernel(max_ntargets_in_one_box=max_ntargets_in_one_box)
         knl = lp.tag_inames(knl, {"itgt_box": "g.0"})
-        knl = lp.split_iname(knl, "itgt_offset", 32, inner_tag="l.0")
-        knl = lp.split_iname(knl, "icoeff", 32, inner_tag="l.0")
+        knl = lp.split_iname(knl, "itgt_offset", 256, inner_tag="l.0")
+        knl = lp.split_iname(knl, "icoeff", 256, inner_tag="l.0")
         knl = lp.add_inames_to_insn(knl, "dummy",
             "id:fetch_init* or id:fetch_center or id:kernel_scaling")
         knl = lp.add_inames_to_insn(knl, "itgt_box", "id:kernel_scaling")
@@ -276,7 +276,7 @@ class E2PFromCSR(E2PBase):
     def get_kernel(self, max_ntargets_in_one_box):
         ncoeffs = len(self.expansion)
         loopy_args = self.get_loopy_args()
-        max_work_items = min(32, max(ncoeffs, max_ntargets_in_one_box))
+        max_work_items = min(256, max(ncoeffs, max_ntargets_in_one_box))
 
         loopy_knl = lp.make_kernel(
                 [
@@ -383,8 +383,8 @@ class E2PFromCSR(E2PBase):
         knl = lp.tag_inames(knl, {"itgt_box": "g.0", "dummy": "l.0"})
         knl = lp.unprivatize_temporaries_with_inames(knl,
             "itgt_offset", "result_temp")
-        knl = lp.split_iname(knl, "itgt_offset", 32, inner_tag="l.0")
-        knl = lp.split_iname(knl, "icoeff", 32, inner_tag="l.0")
+        knl = lp.split_iname(knl, "itgt_offset", 256, inner_tag="l.0")
+        knl = lp.split_iname(knl, "icoeff", 256, inner_tag="l.0")
         knl = lp.privatize_temporaries_with_inames(knl,
             "itgt_offset_outer", "result_temp")
         knl = lp.duplicate_inames(knl, "itgt_offset_outer", "id:init_result")
