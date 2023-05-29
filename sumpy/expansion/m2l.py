@@ -795,8 +795,8 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
         knl = lp.unprivatize_temporaries_with_inames(knl,
                 {"icoeff_tgt"}, {"tgt_expansion"})
 
-        knl = lp.split_iname(knl, "icoeff_tgt", 32, inner_iname="inner",
-                inner_tag="l.0")
+        knl = lp.split_iname(knl, "icoeff_tgt", 64, inner_iname="inner",
+                inner_tag="l.0", outer_tag="g.1")
         knl = lp.tag_inames(knl, {"itgt_box": "g.0"})
         return knl
 
