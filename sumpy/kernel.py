@@ -519,6 +519,10 @@ class HelmholtzKernel(ExpressionKernel):
             scaling = var("I")/4
         elif dim == 3:
             r = pymbolic_real_norm_2(make_sym_vector("d", dim))
+            if allow_evanescent:
+                expr = var("exp")(var("I")*k*r)/r
+            else:
+                expr = (var("cos")(k*r) + var("I")*var("sin")(k*r))/r
             expr = var("exp")(var("I")*k*r)/r
             scaling = 1/(4*var("pi"))
         else:
