@@ -704,7 +704,7 @@ class P2PFromCSR(P2PBase):
             for i, (array_name, array_size, array_dtype) in \
                     enumerate(zip(local_arrays, local_array_sizes,
                                   local_array_dtypes)):
-                if not array_dtype in [np.float, np.double]:
+                if array_dtype not in [np.float, np.double]:
                     # pyopencl does not support complex data type vectors
                     continue
                 if array_size in [2, 3, 4, 8, 16]:
