@@ -523,7 +523,6 @@ class HelmholtzKernel(ExpressionKernel):
                 expr = var("exp")(var("I")*k*r)/r
             else:
                 expr = (var("cos")(k*r) + var("I")*var("sin")(k*r))/r
-            expr = var("exp")(var("I")*k*r)/r
             scaling = 1/(4*var("pi"))
         else:
             raise RuntimeError("unsupported dimensionality")
