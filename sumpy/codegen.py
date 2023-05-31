@@ -592,6 +592,39 @@ class SumSignGrouper(CSECachingIdentityMapper, CallExternalRecMapper):
 # }}}
 
 
+# {{{ helmholtz rewrite
+class HelmholtzRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
+    def __init__(self, k, ik):
+        self.k = k
+        self.ik = ik
+
+    def map_variable(self, expr, *args):
+        if expr.name == self.ik.name:
+            return 1j*self.k
+        else:
+            return expr
+
+    def map_call(self, expr, *args):
+        if isinstance(expr.function, prim.Variable) \
+                and expr.function.name == "exp":
+            params = expr.parameters
+            assert len(params) == 1
+            param = self.rec(params[0])
+            if isinstance(param, prim.Product) and 1j in param.children:
+                children = list(param.children)
+                del children[children.index(1j)]
+                params = (prim.Product(tuple(children)),)
+                return prim.Call(prim.Variable("cos"), params) + \
+                        1j * prim.Call(prim.Variable("sin"), params)
+
+        return super().map_call(expr, *args)
+
+    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+
+
+# }}}
+
+
 class MathConstantRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
     def map_variable(self, expr, *args):
         if expr.name == "pi":
