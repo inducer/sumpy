@@ -313,12 +313,16 @@ class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
 
         return math.prod(num_args) / math.prod(den_args)
 
-    def map_FunctionSymbol(self, expr):
-        if expr.get_name() == "ExpI":
-            arg = self.rec(expr.args[0])
-            return prim.Variable("cos")(arg) + 1j * prim.Variable("sin")(arg)
+    def not_supported(self, expr):
+        if getattr(expr, "is_Function", False):
+            if self.function_name(expr) == "ExpI":
+                arg = self.rec(expr.args[0])
+                return prim.Variable("cos")(arg) + 1j * prim.Variable("sin")(arg)
+            else:
+                return prim.Variable(self.function_name(expr))(
+                    *[self.rec(arg) for arg in expr.args])
         else:
-            return SympyToPymbolicMapperBase.map_FunctionSymbol(self, expr)
+            return SympyToPymbolicMapperBase.not_supported(self, expr)
 
 
 class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):
