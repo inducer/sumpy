@@ -522,7 +522,12 @@ class HelmholtzKernel(ExpressionKernel):
             if allow_evanescent:
                 expr = var("exp")(var("I")*k*r)/r
             else:
-                expr = var("exp")(var("Ik")*r)/r
+                # expi is a function that takes in a real and returns a
+                # complex number such that
+                # expi(x) = exp(I * x)
+                # Retaining the information that the input is real leads
+                # to better code generation
+                expr = var("expi")(k*r)/r
             scaling = 1/(4*var("pi"))
         else:
             raise RuntimeError("unsupported dimensionality")
@@ -578,15 +583,6 @@ class HelmholtzKernel(ExpressionKernel):
         w = make_identity_diff_op(self.dim)
         k = sym.Symbol(self.helmholtz_k_name)
         return (laplacian(w) + k**2 * w)
-
-    def get_code_transformer(self):
-        k = SpatialConstant(self.helmholtz_k_name)
-
-        if self.allow_evanescent:
-            return lambda expr: expr
-        else:
-            from sumpy.codegen import HelmholtzRewriter
-            return HelmholtzRewriter(k, var("Ik"))
 
 
 class YukawaKernel(ExpressionKernel):
