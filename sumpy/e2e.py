@@ -562,7 +562,7 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                 self.tgt_expansion, self.src_expansion)
 
         translation_classes_data_knl = \
-            m2l_translation.translation_classes_dependent_data_loopy_knl(
+            m2l_translation.loopy_translation_classes_dependent_data(
                 self.tgt_expansion, self.src_expansion, result_dtype)
 
         from sumpy.tools import gather_loopy_arguments
@@ -671,7 +671,7 @@ class M2LPreprocessMultipole(E2EBase):
     @memoize_method
     def get_inner_knl_and_optimizations(self, result_dtype):
         m2l_translation = self.tgt_expansion.m2l_translation
-        return m2l_translation.preprocess_multipole_loopy_knl(
+        return m2l_translation.loopy_preprocess_multipole(
             self.tgt_expansion, self.src_expansion, result_dtype)
 
     def get_kernel(self, result_dtype):
@@ -761,7 +761,7 @@ class M2LPostprocessLocal(E2EBase):
     @memoize_method
     def get_inner_knl_and_optimizations(self, result_dtype):
         m2l_translation = self.tgt_expansion.m2l_translation
-        return m2l_translation.postprocess_local_loopy_knl(
+        return m2l_translation.loopy_postprocess_local(
             self.tgt_expansion, self.src_expansion, result_dtype)
 
     def get_kernel(self, result_dtype):

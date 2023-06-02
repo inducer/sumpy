@@ -86,7 +86,7 @@ class E2PBase(KernelCacheMixin, ABC):
 
     def add_loopy_eval_callable(
             self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
-        inner_knl = self.expansion.get_loopy_evaluator(self.kernels)
+        inner_knl = self.expansion.loopy_evaluator(self.kernels)
         loopy_knl = lp.merge([loopy_knl, inner_knl])
         loopy_knl = lp.inline_callable_kernel(loopy_knl, "e2p")
         loopy_knl = lp.remove_unused_inames(loopy_knl)

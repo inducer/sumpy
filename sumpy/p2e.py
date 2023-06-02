@@ -88,7 +88,7 @@ class P2EBase(KernelCacheMixin, KernelComputation):
 
     def add_loopy_form_callable(
             self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
-        inner_knl = self.expansion.get_loopy_expansion_formation(
+        inner_knl = self.expansion.loopy_expansion_formation(
             self.source_kernels, self.strength_usage, self.strength_count)
         loopy_knl = lp.merge([loopy_knl, inner_knl])
         loopy_knl = lp.inline_callable_kernel(loopy_knl, "p2e")
