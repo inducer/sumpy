@@ -20,7 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Sequence
+from typing import Sequence, Callable, Tuple
 import pymbolic
 import pymbolic.primitives as prim
 import loopy as lp
@@ -36,8 +36,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def make_e2p_loopy_kernel(
-        expansion: ExpansionBase, kernels: Sequence[Kernel]) -> lp.TranslationUnit:
+def make_e2p_loopy_kernel(expansion: ExpansionBase, kernels: Sequence[Kernel]) \
+        -> Tuple[lp.TranslationUnit, Sequence[
+            Callable[[lp.TranslationUnit], lp.TranslationUnit]]]:
     """
     This is a helper function to create a loopy kernel for multipole/local
     evaluation. This function uses symbolic expressions given by the expansion class,

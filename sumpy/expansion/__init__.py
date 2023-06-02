@@ -22,7 +22,8 @@ THE SOFTWARE.
 
 from abc import ABC, abstractmethod
 from typing import (
-        Any, ClassVar, Dict, Hashable, List, Optional, Sequence, Tuple, Type)
+        Any, ClassVar, Dict, Hashable, List, Optional, Sequence, Tuple, Type,
+        Callable)
 
 from pytools import memoize_method
 import loopy as lp
@@ -66,9 +67,9 @@ class ExpansionBase(ABC):
     .. automethod:: get_coefficient_identifiers
     .. automethod:: coefficients_from_source
     .. automethod:: coefficients_from_source_vec
-    .. automethod:: loopy_expansion_formation
     .. automethod:: evaluate
-    .. automethod:: loopy_evaluator
+    .. automethod:: loopy_expansion_formation
+    .. automethod:: loopy_evaluator_and_optimizations
 
     .. automethod:: with_kernel
     .. automethod:: copy
@@ -183,7 +184,9 @@ class ExpansionBase(ABC):
             in *coeffs*.
         """
 
-    def loopy_evaluator(self, kernels: Sequence[Kernel]) -> lp.TranslationUnit:
+    def loopy_evaluator_and_optimizations(self, kernels: Sequence[Kernel]) \
+            -> Tuple[lp.TranslationUnit, Sequence[
+                Callable[[lp.TranslationUnit], lp.TranslationUnit]]]:
         """
         :returns: a :mod:`loopy` kernel that returns the evaluated
             target transforms of the potential given by *kernels*.

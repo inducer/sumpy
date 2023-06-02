@@ -86,15 +86,15 @@ class E2PBase(KernelCacheMixin, ABC):
         pass
 
     @memoize_method
-    def get_cached_loopy_knl_and_optimizations(self):
-        return self.expansion.loopy_evaluator(self.kernels)
+    def get_loopy_evaluator_and_optimizations(self):
+        return self.expansion.loopy_evaluator_and_optimizations(self.kernels)
 
     def get_cache_key(self):
         return (type(self).__name__, self.expansion, tuple(self.kernels))
 
     def add_loopy_eval_callable(
             self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
-        inner_knl, _ = self.get_cached_loopy_knl_and_optimizations()
+        inner_knl, _ = self.get_loopy_evaluator_and_optimizations()
         loopy_knl = lp.merge([loopy_knl, inner_knl])
         loopy_knl = lp.inline_callable_kernel(loopy_knl, "e2p")
         for kernel in self.kernels:
@@ -209,7 +209,7 @@ class E2PFromSingleBox(E2PBase):
         return loopy_knl
 
     def get_optimized_kernel(self, max_ntargets_in_one_box):
-        inner_knl, optimizations = self.get_cached_loopy_knl_and_optimizations()
+        inner_knl, optimizations = self.get_loopy_evaluator_and_optimizations()
         knl = self.get_kernel(max_ntargets_in_one_box=max_ntargets_in_one_box)
         knl = lp.tag_inames(knl, {"itgt_box": "g.0"})
         knl = lp.split_iname(knl, "itgt_offset", 256, inner_tag="l.0")
@@ -380,7 +380,7 @@ class E2PFromCSR(E2PBase):
         return loopy_knl
 
     def get_optimized_kernel(self, max_ntargets_in_one_box):
-        _, optimizations = self.get_cached_loopy_knl_and_optimizations()
+        _, optimizations = self.get_loopy_evaluator_and_optimizations()
         knl = self.get_kernel(max_ntargets_in_one_box=max_ntargets_in_one_box)
         knl = lp.tag_inames(knl, {"itgt_box": "g.0", "dummy": "l.0"})
         knl = lp.unprivatize_temporaries_with_inames(knl,
