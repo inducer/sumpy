@@ -36,7 +36,7 @@ from sumpy.kernel import Kernel
 
 import loopy as lp
 
-from typing import Sequence
+from typing import Sequence, Callable, Tuple
 
 import logging
 logger = logging.getLogger(__name__)
@@ -410,7 +410,9 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
             f"A direct loopy kernel for translation from "
             f"{src_expansion} to {self} is not implemented.")
 
-    def get_loopy_evaluator(self, kernels: Sequence[Kernel]) -> lp.TranslationUnit:
+    def loopy_evaluator_and_optimizations(self, kernels: Sequence[Kernel]) \
+            -> Tuple[lp.TranslationUnit, Sequence[
+                Callable[[lp.TranslationUnit], lp.TranslationUnit]]]:
         from sumpy.expansion.loopy import (make_l2p_loopy_kernel_for_volume_taylor,
             make_e2p_loopy_kernel)
         try:
