@@ -66,9 +66,9 @@ class ExpansionBase(ABC):
     .. automethod:: get_coefficient_identifiers
     .. automethod:: coefficients_from_source
     .. automethod:: coefficients_from_source_vec
-    .. automethod:: get_loopy_expansion_formation
+    .. automethod:: loopy_expansion_formation
     .. automethod:: evaluate
-    .. automethod:: get_loopy_evaluator
+    .. automethod:: loopy_evaluator
 
     .. automethod:: with_kernel
     .. automethod:: copy
@@ -164,7 +164,7 @@ class ExpansionBase(ABC):
                 result[i] += weight * coeffs[i]
         return result
 
-    def get_loopy_expansion_formation(
+    def loopy_expansion_formation(
             self, kernels: Sequence[Kernel],
             strength_usage: Sequence[int], nstrengths: int) -> lp.TranslationUnit:
         """
@@ -183,7 +183,7 @@ class ExpansionBase(ABC):
             in *coeffs*.
         """
 
-    def get_loopy_evaluator(self, kernels: Sequence[Kernel]) -> lp.TranslationUnit:
+    def loopy_evaluator(self, kernels: Sequence[Kernel]) -> lp.TranslationUnit:
         """
         :returns: a :mod:`loopy` kernel that returns the evaluated
             target transforms of the potential given by *kernels*.
