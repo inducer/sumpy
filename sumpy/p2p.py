@@ -91,9 +91,6 @@ class P2PBase(KernelCacheMixin, KernelComputation):
             source_kernels=source_kernels, strength_usage=strength_usage,
             value_dtypes=value_dtypes, name=name)
 
-        import pyopencl as cl
-        self.is_gpu = not (self.device.type & cl.device_type.CPU)
-
         self.exclude_self = exclude_self
         self.dim = single_valued([
             knl.dim for knl in self.target_kernels + self.source_kernels
@@ -194,9 +191,6 @@ class P2PBase(KernelCacheMixin, KernelComputation):
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
 
-        from sumpy.codegen import register_optimization_preambles
-        knl = register_optimization_preambles(knl, self.device)
-
         return knl
 
 
@@ -263,6 +257,9 @@ class P2P(P2PBase):
         knl = self.get_cached_optimized_kernel(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
+
+        from sumpy.codegen import register_optimization_preambles
+        knl = register_optimization_preambles(knl, actx.queue.device)
 
         result = actx.call_loopy(
             knl,
@@ -331,6 +328,9 @@ class P2PMatrixGenerator(P2PBase):
         knl = self.get_cached_optimized_kernel(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
+
+        from sumpy.codegen import register_optimization_preambles
+        knl = register_optimization_preambles(knl, actx.queue.device)
 
         result = actx.call_loopy(knl, sources=sources, targets=targets, **kwargs)
         return make_obj_array([result[f"result_{i}"] for i in range(self.nresults)])
@@ -444,6 +444,9 @@ class P2PMatrixSubsetGenerator(P2PBase):
         knl = self.get_cached_optimized_kernel(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
+
+        from sumpy.codegen import register_optimization_preambles
+        knl = register_optimization_preambles(knl, actx.queue.device)
 
         result = actx.call_loopy(
             knl,
@@ -680,8 +683,9 @@ class P2PFromCSR(P2PBase):
             max_nsources_in_one_box: int,
             max_ntargets_in_one_box: int,
             dtype_size: int,
+            local_mem_size: int,
             is_gpu: bool):
-        if not self.is_gpu:
+        if not is_gpu:
             knl = self.get_kernel(max_nsources_in_one_box,
                     max_ntargets_in_one_box, is_gpu=is_gpu)
             knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
@@ -692,7 +696,7 @@ class P2PFromCSR(P2PBase):
                     (self.dim + self.strength_count) * dtype_size
             # multiplying by 2 here to make sure at least 2 work groups
             # can be scheduled at the same time for latency hiding
-            nprefetch = (2 * total_local_mem - 1) // self.device.local_mem_size + 1
+            nprefetch = (2 * total_local_mem - 1) // local_mem_size + 1
 
             knl = self.get_kernel(max_nsources_in_one_box,
                     max_ntargets_in_one_box,
@@ -739,9 +743,6 @@ class P2PFromCSR(P2PBase):
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
 
-        from sumpy.codegen import register_optimization_preambles
-        knl = register_optimization_preambles(knl, self.device)
-
         return knl
 
     def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
@@ -759,7 +760,11 @@ class P2PFromCSR(P2PBase):
                 max_nsources_in_one_box=max_nsources_in_one_box,
                 max_ntargets_in_one_box=max_ntargets_in_one_box,
                 dtype_size=dtype_size,
+                local_mem_size=actx.queue.device.local_mem_size,
                 is_gpu=is_gpu)
+
+        from sumpy.codegen import register_optimization_preambles
+        knl = register_optimization_preambles(knl, actx.queue.device)
 
         result = actx.call_loopy(knl, **kwargs)
         return make_obj_array([result[f"result_s{i}"] for i in range(self.nresults)])
