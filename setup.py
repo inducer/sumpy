@@ -2,6 +2,7 @@
 
 import os
 from setuptools import setup
+from pathlib import Path
 
 ver_dic = {}
 version_file = open("sumpy/version.py")
@@ -74,9 +75,8 @@ setup(
     name="sumpy",
     version=ver_dic["VERSION_TEXT"],
     description="Fast summation in Python",
-    long_description="""
-      Code-generating FMM etc.
-      """,
+    long_description=Path("README.rst").read_text(encoding="utf-8"),
+    long_description_content_type="text/x-rst",
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
@@ -95,6 +95,13 @@ setup(
     author="Andreas Kloeckner",
     author_email="inform@tiker.net",
     license="MIT",
+    url="https://github.com/inducer/sumpy",
+    download_url="https://pypi.python.org/pypi/sumpy",
+    project_urls={
+        "Bug Tracker": "https://github.com/inducer/sumpy/issues",
+        "Documentation": "https://documen.tician.de/sumpy",
+        "Source Code": "https://github.com/inducer/sumpy",
+    },
     packages=["sumpy", "sumpy.expansion"],
     python_requires="~=3.8",
     install_requires=[

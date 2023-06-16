@@ -49,6 +49,9 @@ from sumpy.expansion.diff_op import (
     make_identity_diff_op, concat, as_scalar_pde, diff,
     gradient, divergence, laplacian, curl)
 
+from sumpy.expansion import (FullExpansionTermsWrangler,
+    LinearPDEBasedExpansionTermsWrangler)
+
 import logging
 logger = logging.getLogger(__name__)
 
@@ -512,6 +515,45 @@ def test_weird_kernel(pde):
     fft_size = reduce(mul, map(max, *coeffs), 1)
 
     assert fft_size == order
+
+# }}}
+
+
+# {{{ test_get_storage_index
+
+class TestKernel(ExpressionKernel):
+    def __init__(self, dim, max_mi):
+        super().__init__(dim=dim, expression=1, global_scaling_const=1,
+                is_complex_valued=False)
+        self._max_mi = max_mi
+
+    def get_pde_as_diff_op(self):
+        w = make_identity_diff_op(self.dim)
+        pde = diff(w, tuple(self._max_mi))
+        return pde
+
+
+@pytest.mark.parametrize("order", [6])
+@pytest.mark.parametrize("knl", [
+    LaplaceKernel(2),
+    LaplaceKernel(3),
+    TestKernel(2, (3, 0)),
+    TestKernel(2, (0, 3)),
+    TestKernel(3, (3, 0, 0)),
+    TestKernel(3, (0, 3, 0)),
+    TestKernel(3, (0, 0, 3)),
+    BiharmonicKernel(2),
+    BiharmonicKernel(3),
+])
+@pytest.mark.parametrize("compressed", (True, False))
+def test_get_storage_index(order, knl, compressed):
+    dim = knl.dim
+    if compressed:
+        wrangler = LinearPDEBasedExpansionTermsWrangler(order, dim, knl=knl)
+    else:
+        wrangler = FullExpansionTermsWrangler(order, dim)
+    for i, mi in enumerate(wrangler.get_coefficient_identifiers()):
+        assert i == wrangler.get_storage_index(mi)
 
 # }}}
 

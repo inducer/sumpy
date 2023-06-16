@@ -265,7 +265,7 @@ class KernelComputation(ABC):
 
         import loopy as lp
         return [
-                lp.Assignment(id=None,
+                lp.Assignment(id=f"knl_{i}_scaling",
                     assignee=f"knl_{i}_scaling",
                     expression=sympy_conv(kernel.get_global_scaling_const()),
                     temp_var_type=lp.Optional(dtype),

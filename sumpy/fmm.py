@@ -104,20 +104,20 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
         return P2EFromSingleBox(
                 kernels=self.source_kernels,
                 expansion=self.multipole_expansion(tgt_order),
-                strength_usage=self.strength_usage)
+                strength_usage=self.strength_usage, name="p2m")
 
     @memoize_method
     def p2l(self, tgt_order):
         return P2EFromCSR(
                 kernels=self.source_kernels,
                 expansion=self.local_expansion(tgt_order),
-                strength_usage=self.strength_usage)
+                strength_usage=self.strength_usage, name="p2l")
 
     @memoize_method
     def m2m(self, src_order, tgt_order):
         return E2EFromChildren(
                 self.multipole_expansion(src_order),
-                self.multipole_expansion(tgt_order))
+                self.multipole_expansion(tgt_order), name="m2m")
 
     @memoize_method
     def m2l(self, src_order, tgt_order,
@@ -128,7 +128,7 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
             m2l_class = E2EFromCSR
         return m2l_class(
                 self.multipole_expansion(src_order),
-                self.local_expansion(tgt_order))
+                self.local_expansion(tgt_order), name="m2l")
 
     @memoize_method
     def m2l_translation_class_dependent_data_kernel(self, src_order, tgt_order):
@@ -152,26 +152,26 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
     def l2l(self, src_order, tgt_order):
         return E2EFromParent(
                 self.local_expansion(src_order),
-                self.local_expansion(tgt_order))
+                self.local_expansion(tgt_order), name="l2l")
 
     @memoize_method
     def m2p(self, src_order):
         return E2PFromCSR(
                 self.multipole_expansion(src_order),
-                self.target_kernels)
+                self.target_kernels, name="m2p")
 
     @memoize_method
     def l2p(self, src_order):
         return E2PFromSingleBox(
                 self.local_expansion(src_order),
-                self.target_kernels)
+                self.target_kernels, name="l2p")
 
     @memoize_method
     def p2p(self):
         return P2PFromCSR(target_kernels=self.target_kernels,
                           source_kernels=self.source_kernels,
                           exclude_self=self.exclude_self,
-                          strength_usage=self.strength_usage)
+                          strength_usage=self.strength_usage, name="p2p")
 
     @memoize_method
     def opencl_fft_app(self, shape, dtype, inverse):

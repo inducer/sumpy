@@ -91,6 +91,9 @@ class P2PBase(KernelCacheMixin, KernelComputation):
             source_kernels=source_kernels, strength_usage=strength_usage,
             value_dtypes=value_dtypes, name=name)
 
+        import pyopencl as cl
+        self.is_gpu = not (self.device.type & cl.device_type.CPU)
+
         self.exclude_self = exclude_self
         self.dim = single_valued([
             knl.dim for knl in self.target_kernels + self.source_kernels
@@ -190,6 +193,9 @@ class P2PBase(KernelCacheMixin, KernelComputation):
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
+
+        from sumpy.codegen import register_optimization_preambles
+        knl = register_optimization_preambles(knl, self.device)
 
         return knl
 
@@ -460,7 +466,7 @@ class P2PFromCSR(P2PBase):
 
     def get_kernel(self,
             max_nsources_in_one_box: int, max_ntargets_in_one_box: int, *,
-            gpu: bool = False, nsplit: int = 32):
+            work_items_per_group: int = 32, is_gpu: bool = False):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
         arguments = self.get_default_src_tgt_arguments() \
             + [
@@ -489,13 +495,11 @@ class P2PFromCSR(P2PBase):
             "{[iknl]: 0 <= iknl < noutputs}",
             "{[isrc_box]: isrc_box_start <= isrc_box < isrc_box_end}",
             "{[idim]: 0 <= idim < dim}",
-            "{[isrc]: isrc_start <= isrc < isrc_end}"
         ]
 
-        src_outer_limit = (max_nsources_in_one_box - 1) // nsplit
-        tgt_outer_limit = (max_ntargets_in_one_box - 1) // nsplit
+        tgt_outer_limit = (max_ntargets_in_one_box - 1) // work_items_per_group
 
-        if gpu:
+        if is_gpu:
             arguments += [
                 lp.TemporaryVariable("local_isrc",
                     shape=(self.dim, max_nsources_in_one_box)),
@@ -504,78 +508,89 @@ class P2PFromCSR(P2PBase):
             ]
             domains += [
                 "{[istrength]: 0 <= istrength < nstrengths}",
-                "{[inner]: 0 <= inner < nsplit}",
+                "{[inner]: 0 <= inner < work_items_per_group}",
                 "{[itgt_offset_outer]: 0 <= itgt_offset_outer <= tgt_outer_limit}",
-                "{[isrc_offset_outer]: 0 <= isrc_offset_outer <= src_outer_limit}",
+                "{[isrc_prefetch]: 0 <= isrc_prefetch < max_nsources_in_one_box}",
+                "{[isrc_offset]: 0 <= isrc_offset < max_nsources_in_one_box"
+                " and isrc_offset < isrc_end - isrc_start}",
             ]
         else:
             domains += [
                 "{[itgt]: itgt_start <= itgt < itgt_end}",
+                "{[isrc]: isrc_start <= isrc < isrc_end}"
             ]
 
         # There are two algorithms here because pocl-pthread 1.9 miscompiles
         # the "gpu" kernel with prefetching.
-        if gpu:
+        if is_gpu:
             instructions = (self.get_kernel_scaling_assignments()
               + ["""
                 for itgt_box
-                <> tgt_ibox = target_boxes[itgt_box]
-                <> itgt_start = box_target_starts[tgt_ibox]
-                <> itgt_end = itgt_start + box_target_counts_nonchild[tgt_ibox]
-
-                <> isrc_box_start = source_box_starts[itgt_box]
-                <> isrc_box_end = source_box_starts[itgt_box+1]
+                <> tgt_ibox = target_boxes[itgt_box]  {id=init_0}
+                <> itgt_start = box_target_starts[tgt_ibox]  {id=init_1}
+                <> itgt_end = itgt_start + box_target_counts_nonchild[tgt_ibox] \
+                        {id=init_2}
+                <> isrc_box_start = source_box_starts[itgt_box]  {id=init_3}
+                <> isrc_box_end = source_box_starts[itgt_box+1]  {id=init_4}
 
                 for itgt_offset_outer
-                  <> itgt_offset = itgt_offset_outer * nsplit + inner
-                  <> itgt = itgt_offset + itgt_start
-                  <> cond_itgt = itgt < itgt_end
-                  <> acc[iknl] = 0 {id=init_acc}
-                  if cond_itgt
-                    tgt_center[idim] = targets[idim, itgt] {id=prefetch_tgt,dup=idim}
+                  for inner
+                    <> itgt_offset = itgt_offset_outer * work_items_per_group + inner
+                    <> itgt = itgt_offset + itgt_start
+                    <> cond_itgt = itgt < itgt_end
+                    <> acc[iknl] = 0  {id=init_acc}
+                    if cond_itgt
+                      tgt_center[idim] = targets[idim, itgt] {id=set_tgt,dup=idim}
+                    end
                   end
                   for isrc_box
                     <> src_ibox = source_box_lists[isrc_box]  {id=src_box_insn_0}
                     <> isrc_start = box_source_starts[src_ibox]  {id=src_box_insn_1}
                     <> isrc_end = isrc_start + box_source_counts_nonchild[src_ibox] \
                         {id=src_box_insn_2}
-                    for isrc_offset_outer
-                      <> isrc_offset = isrc_offset_outer * nsplit + inner
-                      <> cond_isrc = isrc_offset < isrc_end - isrc_start
-                      if cond_isrc
-                        local_isrc[idim, isrc_offset] = sources[idim,
-                          isrc_offset + isrc_start]  {id=prefetch_src, dup=idim}
-                        local_isrc_strength[istrength, isrc_offset] = strength[
-                          istrength, isrc_offset + isrc_start]  {id=prefetch_charge}
+                    for isrc_prefetch
+                      <> cond_isrc_prefetch = isrc_prefetch < isrc_end - isrc_start \
+                              {id=cond_isrc_prefetch}
+                      if cond_isrc_prefetch
+                        local_isrc[idim, isrc_prefetch] = sources[idim,
+                          isrc_prefetch + isrc_start]  {id=prefetch_src, dup=idim}
+                        local_isrc_strength[istrength, isrc_prefetch] = strength[
+                          istrength, isrc_prefetch + isrc_start] {id=prefetch_charge}
                       end
                     end
-                    if cond_itgt
-                      for isrc
-                        <> d[idim] = (tgt_center[idim] - local_isrc[idim,
-                          isrc - isrc_start]) {dep=prefetch_src:prefetch_tgt}
+                    for inner
+                      if cond_itgt
+                        for isrc_offset
+                          <> isrc = isrc_offset + isrc_start
+                          <> d[idim] = (tgt_center[idim] - local_isrc[idim,
+                            isrc_offset]) \
+                            {id=set_d,dep=prefetch_src:set_tgt}
               """] + ["""
-                        <> is_self = (isrc == target_to_source[itgt])
+                          <> is_self = (isrc == target_to_source[itgt])
                     """ if self.exclude_self else ""]
               + [f"""
-                <> strength_{i} = local_isrc_strength[{i}, isrc - isrc_start] \
-                   {{dep=prefetch_charge}}
+                          <> strength_{i} = local_isrc_strength[{i}, isrc_offset] \
+                            {{id=set_strength{i},dep=prefetch_charge}}
                 """ for
                 i in set(self.strength_usage)]
               + loopy_insns
               + [f"""
-                        acc[{iknl}] = acc[{iknl}] + \
-                          pair_result_{iknl} \
-                          {{id=update_acc_{iknl}, dep=init_acc}}
+                          acc[{iknl}] = acc[{iknl}] + \
+                            pair_result_{iknl} \
+                            {{id=update_acc_{iknl}, dep=init_acc}}
                 """ for iknl in range(len(self.target_kernels))]
               + ["""
+                        end
                       end
                     end
                   end
                  """]
               + [f"""
+                  for inner
                   if cond_itgt
                     result[{iknl}, itgt] = knl_{iknl}_scaling * acc[{iknl}] \
                             {{id_prefix=write_csr,dep=update_acc_{iknl} }}
+                  end
                   end
                 """ for iknl in range(len(self.target_kernels))]
               + ["""
@@ -641,8 +656,9 @@ class P2PFromCSR(P2PBase):
             fixed_parameters={
                 "dim": self.dim,
                 "nstrengths": self.strength_count,
-                "nsplit": nsplit,
-                "src_outer_limit": src_outer_limit,
+                "max_nsources_in_one_box": max_nsources_in_one_box,
+                "max_ntargets_in_one_box": max_ntargets_in_one_box,
+                "work_items_per_group": work_items_per_group,
                 "tgt_outer_limit": tgt_outer_limit,
                 "noutputs": len(self.target_kernels)},
             )
@@ -663,14 +679,25 @@ class P2PFromCSR(P2PBase):
     def get_optimized_kernel(self,
             max_nsources_in_one_box: int,
             max_ntargets_in_one_box: int,
-            is_cpu: bool):
-        if is_cpu:
+            dtype_size: int,
+            is_gpu: bool):
+        if not self.is_gpu:
             knl = self.get_kernel(max_nsources_in_one_box,
-                    max_ntargets_in_one_box, gpu=False)
+                    max_ntargets_in_one_box, is_gpu=is_gpu)
             knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
+            knl = self._allow_redundant_execution_of_knl_scaling(knl)
         else:
+            work_items_per_group = min(256, max_ntargets_in_one_box)
+            total_local_mem = max_nsources_in_one_box * \
+                    (self.dim + self.strength_count) * dtype_size
+            # multiplying by 2 here to make sure at least 2 work groups
+            # can be scheduled at the same time for latency hiding
+            nprefetch = (2 * total_local_mem - 1) // self.device.local_mem_size + 1
+
             knl = self.get_kernel(max_nsources_in_one_box,
-                    max_ntargets_in_one_box, gpu=True, nsplit=32)
+                    max_ntargets_in_one_box,
+                    work_items_per_group=work_items_per_group,
+                    is_gpu=is_gpu)
             knl = lp.tag_inames(knl, {"itgt_box": "g.0", "inner": "l.0"})
             knl = lp.set_temporary_address_space(knl,
                 ["local_isrc", "local_isrc_strength"], lp.AddressSpace.LOCAL)
@@ -688,12 +715,32 @@ class P2PFromCSR(P2PBase):
             if count in [2, 3, 4, 8, 16]:
                 knl = lp.tag_array_axes(knl, "local_isrc", "vec,C")
 
-            knl = lp.add_inames_for_unused_hw_axes(knl)
+            # We need to split isrc_prefetch and isrc_offset into chunks.
+            nsources = (max_nsources_in_one_box + nprefetch - 1) // nprefetch
+            knl = lp.split_array_axis(knl, "local_isrc", 1, nsources)
+            knl = lp.split_iname(knl, "isrc_prefetch", nsources,
+                    outer_iname="iprefetch")
+            knl = lp.split_iname(knl, "isrc_prefetch_inner", work_items_per_group)
+            knl = lp.tag_inames(knl, {"isrc_prefetch_inner_inner": "l.0"})
+            knl = lp.split_iname(knl, "isrc_offset", nsources,
+                    outer_iname="iprefetch")
+
+            # After splitting, the temporary array local_isrc need not
+            # be as large as before. Need to simplify before unprivatizing
+            knl = lp.simplify_indices(knl)
+            knl = lp.unprivatize_temporaries_with_inames(knl,
+                    "iprefetch", only_var_names="local_isrc")
+
+            knl = lp.add_inames_to_insn(knl,
+                    "inner", "id:init_* or id:*_scaling or id:src_box_insn_*")
+            knl = lp.add_inames_to_insn(knl, "itgt_box", "id:*_scaling")
             # knl = lp.set_options(knl, write_code=True)
 
-        knl = self._allow_redundant_execution_of_knl_scaling(knl)
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
+
+        from sumpy.codegen import register_optimization_preambles
+        knl = register_optimization_preambles(knl, self.device)
 
         return knl
 
@@ -701,10 +748,18 @@ class P2PFromCSR(P2PBase):
         from sumpy.array_context import is_cl_cpu
         max_nsources_in_one_box = kwargs.pop("max_nsources_in_one_box")
         max_ntargets_in_one_box = kwargs.pop("max_ntargets_in_one_box")
+
+        is_gpu = not is_cl_cpu(actx)
+        if is_gpu:
+            dtype_size = kwargs.get("sources")[0].dtype.alignment
+        else:
+            dtype_size = None
+
         knl = self.get_cached_optimized_kernel(
                 max_nsources_in_one_box=max_nsources_in_one_box,
                 max_ntargets_in_one_box=max_ntargets_in_one_box,
-                is_cpu=is_cl_cpu(actx))
+                dtype_size=dtype_size,
+                is_gpu=is_gpu)
 
         result = actx.call_loopy(knl, **kwargs)
         return make_obj_array([result[f"result_s{i}"] for i in range(self.nresults)])

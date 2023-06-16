@@ -200,10 +200,26 @@ class Hankel1_01(lp.ScalarCallable):  # noqa: N801
 
 def register_bessel_callables(loopy_knl):
     from sumpy.codegen import BesselJvvp1, Hankel1_01
-    loopy_knl = lp.register_callable(loopy_knl, "bessel_jvvp1",
+    if "bessel_jvvp1" not in loopy_knl.callables_table:
+        loopy_knl = lp.register_callable(loopy_knl, "bessel_jvvp1",
             BesselJvvp1("bessel_jvvp1"))
-    loopy_knl = lp.register_callable(loopy_knl, "hank1_01",
+    if "hank1_01" not in loopy_knl.callables_table:
+        loopy_knl = lp.register_callable(loopy_knl, "hank1_01",
             Hankel1_01("hank1_01"))
+    return loopy_knl
+
+
+def _fp_contract_fast_preamble(preamble_info):
+    yield ("fp_contract_fast_pocl", "#pragma clang fp contract(fast)")
+
+
+def register_optimization_preambles(loopy_knl, device):
+    if isinstance(loopy_knl.target, lp.PyOpenCLTarget):
+        import pyopencl as cl
+        if device.platform.name == "Portable Computing Language" and \
+                (device.type & cl.device_type.GPU):
+            loopy_knl = lp.register_preamble_generators(loopy_knl,
+                [_fp_contract_fast_preamble])
     return loopy_knl
 
 # }}}

@@ -21,13 +21,16 @@ THE SOFTWARE.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar, Dict, Hashable, List, Optional, Tuple, Type
+from typing import (
+        Any, ClassVar, Dict, Hashable, List, Optional, Sequence, Tuple, Type)
 
 from pytools import memoize_method
+import loopy as lp
 
 import sumpy.symbolic as sym
 from sumpy.kernel import Kernel
 from sumpy.tools import add_mi
+import pymbolic.primitives as prim
 
 import logging
 logger = logging.getLogger(__name__)
@@ -63,7 +66,9 @@ class ExpansionBase(ABC):
     .. automethod:: get_coefficient_identifiers
     .. automethod:: coefficients_from_source
     .. automethod:: coefficients_from_source_vec
+    .. automethod:: loopy_expansion_formation
     .. automethod:: evaluate
+    .. automethod:: loopy_evaluator
 
     .. automethod:: with_kernel
     .. automethod:: copy
@@ -159,6 +164,17 @@ class ExpansionBase(ABC):
                 result[i] += weight * coeffs[i]
         return result
 
+    def loopy_expansion_formation(
+            self, kernels: Sequence[Kernel],
+            strength_usage: Sequence[int], nstrengths: int) -> lp.TranslationUnit:
+        """
+        :returns: a :mod:`loopy` kernel that returns the coefficients
+            for the expansion given by *kernels* with each kernel using
+            the strength given by *strength_usage*.
+        """
+        from sumpy.expansion.loopy import make_p2e_loopy_kernel
+        return make_p2e_loopy_kernel(self, kernels, strength_usage, nstrengths)
+
     @abstractmethod
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         """
@@ -166,6 +182,14 @@ class ExpansionBase(ABC):
             to the evaluated expansion with the coefficients
             in *coeffs*.
         """
+
+    def loopy_evaluator(self, kernels: Sequence[Kernel]) -> lp.TranslationUnit:
+        """
+        :returns: a :mod:`loopy` kernel that returns the evaluated
+            target transforms of the potential given by *kernels*.
+        """
+        from sumpy.expansion.loopy import make_e2p_loopy_kernel
+        return make_e2p_loopy_kernel(self, kernels)
 
     # }}}
 
@@ -354,6 +378,18 @@ class ExpansionTermsWrangler(ABC):
 
 
 class FullExpansionTermsWrangler(ExpansionTermsWrangler):
+
+    def get_storage_index(self, mi, order=None):
+        if not order:
+            order = sum(mi)
+        if self.dim == 3:
+            return (order*(order + 1)*(order + 2))//6 + \
+                    (order + 2)*mi[2] - (mi[2]*(mi[2] + 1))//2 + mi[1]
+        elif self.dim == 2:
+            return (order*(order + 1))//2 + mi[1]
+        else:
+            raise NotImplementedError
+
     def get_coefficient_identifiers(self):
         return super().get_full_coefficient_identifiers()
 
@@ -366,6 +402,26 @@ class FullExpansionTermsWrangler(ExpansionTermsWrangler):
         return self.get_full_kernel_derivatives_from_stored(
             full_mpole_coefficients, rscale, sac=sac)
 
+    @memoize_method
+    def _get_mi_ordering_key_and_axis_permutation(self):
+        """
+        Returns a degree lexicographic order as a callable that can be used as a
+        ``sort`` key on multi-indices and a permutation of the axis ordered
+        from the slowest varying axis to the fastest varying axis of the
+        multi-indices when sorted.
+        """
+        from sumpy.expansion.diff_op import DerivativeIdentifier
+
+        axis_permutation = list(reversed(list(range(self.dim))))
+
+        def mi_key(ident):
+            if isinstance(ident, DerivativeIdentifier):
+                mi = ident.mi
+            else:
+                mi = ident
+            return tuple([sum(mi)] + list(reversed(mi)))
+
+        return mi_key, axis_permutation
 # }}}
 
 
@@ -497,7 +553,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     # the axes so that the axis with the on-axis coefficient comes first in the
     # multi-index tuple.
     @memoize_method
-    def _get_mi_ordering_key(self):
+    def _get_mi_ordering_key_and_axis_permutation(self):
         """
         A degree lexicographic order with the slowest varying index depending on
         the PDE is used, returned as a callable that can be used as a
@@ -506,6 +562,9 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         multipole-to-multipole translation to get lower error bounds.
         The slowest varying index is chosen such that the multipole-to-local
         translation cost is optimized.
+
+        Also returns a permutation of the axis ordered from the slowest varying
+        axis to the fastest varying axis of the multi-indices when sorted.
         """
         dim = self.dim
         deriv_id_to_coeff, = self.knl.get_pde_as_diff_op().eqs
@@ -531,7 +590,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 key.append(mi[axis_permutation[i]])
             return tuple(key)
 
-        return mi_key
+        return mi_key, axis_permutation
 
     def _get_mi_hyperpplanes(self) -> List[Tuple[int, int]]:
         mis = self.get_full_coefficient_identifiers()
@@ -547,8 +606,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         else:
             # Calculate the multi-index that appears last in in the PDE in
             # the degree lexicographic order given by
-            # _get_mi_ordering_key.
-            ordering_key = self._get_mi_ordering_key()
+            # _get_mi_ordering_key_and_axis_permutation.
+            ordering_key, _ = self._get_mi_ordering_key_and_axis_permutation()
             max_mi = max(deriv_id_to_coeff, key=ordering_key).mi
             hyperplanes = [(d, const)
                 for d in range(self.dim)
@@ -558,8 +617,53 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
     def get_full_coefficient_identifiers(self):
         identifiers = super().get_full_coefficient_identifiers()
-        key = self._get_mi_ordering_key()
+        key, _ = self._get_mi_ordering_key_and_axis_permutation()
         return sorted(identifiers, key=key)
+
+    def get_storage_index(self, mi, order=None):
+        if not order:
+            order = sum(mi)
+
+        ordering_key, axis_permutation = \
+                self._get_mi_ordering_key_and_axis_permutation()
+        deriv_id_to_coeff, = self.knl.get_pde_as_diff_op().eqs
+        max_mi = max(deriv_id_to_coeff, key=ordering_key).mi
+
+        if all(m != 0 for m in max_mi):
+            raise NotImplementedError("non-elliptic PDEs")
+
+        c = max_mi[axis_permutation[0]]
+
+        mi = list(mi)
+        mi[axis_permutation[0]], mi[0] = mi[0], mi[axis_permutation[0]]
+
+        if self.dim == 3:
+            if all(isinstance(axis, int) for axis in mi):
+                if order < c - 1:
+                    return (order*(order + 1)*(order + 2))//6 + \
+                        (order + 2)*mi[0] - (mi[0]*(mi[0] + 1))//2 + mi[1]
+                else:
+                    return (c*(c-1)*(c-2))//6 + (c * order * (2 + order - c)
+                        + mi[0]*(3 - mi[0]+2*order))//2 + mi[1]
+            else:
+                return prim.If(prim.Comparison(order, "<", c - 1),
+                    (order*(order + 1)*(order + 2))//6
+                        + (order + 2)*mi[0] - (mi[0]*(mi[0] + 1))//2 + mi[1],
+                    (c*(c-1)*(c-2))//6 + (c * order * (2 + order - c)
+                        + mi[0]*(3 - mi[0]+2*order))//2 + mi[1]
+                )
+        elif self.dim == 2:
+            if all(isinstance(axis, int) for axis in mi):
+                if order < c - 1:
+                    return (order*(order + 1))//2 + mi[0]
+                else:
+                    return (c*(c-1))//2 + c*(order - c + 1) + mi[0]
+            else:
+                return prim.If(prim.Comparison(order, "<", c - 1),
+                    (order*(order + 1))//2 + mi[0],
+                    (c*(c-1))//2 + c*(order - c + 1) + mi[0])
+        else:
+            raise NotImplementedError
 
     @memoize_method
     def get_stored_ids_and_unscaled_projection_matrix(self):
@@ -585,7 +689,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                                        from_output_coeffs_by_row, shape)
                 return mis, op
 
-        ordering_key = self._get_mi_ordering_key()
+        ordering_key, _ = self._get_mi_ordering_key_and_axis_permutation()
         max_mi = max((ident for ident in mi_to_coeff.keys()), key=ordering_key)
         max_mi_coeff = mi_to_coeff[max_mi]
         max_mi_mult = -1/sym.sympify(max_mi_coeff)
