@@ -687,6 +687,9 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 shape = (len(mis), len(mis))
                 op = CSEMatVecOperator(from_input_coeffs_by_row,
                                        from_output_coeffs_by_row, shape)
+
+                plog.done()
+
                 return mis, op
 
         ordering_key, _ = self._get_mi_ordering_key_and_axis_permutation()
