@@ -124,7 +124,7 @@ class P2EBase(KernelCacheMixin, KernelComputation):
         from sumpy.tools import is_obj_array_like
         sources = kwargs.pop("sources")
         centers = kwargs.pop("centers")
-        knl = self.get_cached_optimized_kernel(
+        knl = self.get_cached_kernel_executor(
                 sources_is_obj_array=is_obj_array_like(sources),
                 centers_is_obj_array=is_obj_array_like(centers))
 
