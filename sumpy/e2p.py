@@ -68,7 +68,7 @@ class E2PBase(KernelCacheMixin, ABC):
         for knl in kernels:
             assert txr(knl) == expansion.kernel
 
-        self.ctx = ctx
+        self.context = ctx
         self.expansion = expansion
         self.kernels = kernels
         self.name = name or self.default_name
@@ -210,7 +210,7 @@ class E2PFromSingleBox(E2PBase):
         :arg centers:
         :arg targets:
         """
-        knl = self.get_cached_optimized_kernel()
+        knl = self.get_cached_kernel_executor()
 
         centers = kwargs.pop("centers")
         # "1" may be passed for rscale, which won't have its type
@@ -327,7 +327,7 @@ class E2PFromCSR(E2PBase):
         return knl
 
     def __call__(self, queue, **kwargs):
-        knl = self.get_cached_optimized_kernel()
+        knl = self.get_cached_kernel_executor()
 
         centers = kwargs.pop("centers")
         # "1" may be passed for rscale, which won't have its type

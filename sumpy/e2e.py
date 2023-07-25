@@ -82,7 +82,7 @@ class E2EBase(KernelCacheMixin, ABC):
                     SourceTransformationRemover()(
                         TargetTransformationRemover()(tgt_expansion.kernel)))
 
-        self.ctx = ctx
+        self.context = ctx
         self.src_expansion = src_expansion
         self.tgt_expansion = tgt_expansion
         self.name = name or self.default_name
@@ -297,7 +297,7 @@ class E2EFromCSR(E2EBase):
         src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
 
-        knl = self.get_cached_optimized_kernel()
+        knl = self.get_cached_kernel_executor()
 
         return knl(queue,
                 centers=centers,
@@ -537,7 +537,7 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
         src_expansions = kwargs.pop("src_expansions")
 
-        knl = self.get_cached_optimized_kernel(result_dtype=src_expansions.dtype)
+        knl = self.get_cached_kernel_executor(result_dtype=src_expansions.dtype)
 
         return knl(queue,
                 src_expansions=src_expansions,
@@ -647,7 +647,7 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                 "m2l_translation_classes_dependent_data")
         result_dtype = m2l_translation_classes_dependent_data.dtype
 
-        knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
+        knl = self.get_cached_kernel_executor(result_dtype=result_dtype)
 
         return knl(queue,
                 src_rscale=src_rscale,
@@ -741,7 +741,7 @@ class M2LPreprocessMultipole(E2EBase):
         """
         preprocessed_src_expansions = kwargs.pop("preprocessed_src_expansions")
         result_dtype = preprocessed_src_expansions.dtype
-        knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
+        knl = self.get_cached_kernel_executor(result_dtype=result_dtype)
 
         return knl(queue,
                 preprocessed_src_expansions=preprocessed_src_expansions, **kwargs)
@@ -840,7 +840,7 @@ class M2LPostprocessLocal(E2EBase):
         """
         tgt_expansions = kwargs.pop("tgt_expansions")
         result_dtype = tgt_expansions.dtype
-        knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
+        knl = self.get_cached_kernel_executor(result_dtype=result_dtype)
 
         return knl(queue, tgt_expansions=tgt_expansions, **kwargs)
 
@@ -950,7 +950,7 @@ class E2EFromChildren(E2EBase):
         :arg tgt_rscale:
         :arg centers:
         """
-        knl = self.get_cached_optimized_kernel()
+        knl = self.get_cached_kernel_executor()
 
         centers = kwargs.pop("centers")
         # "1" may be passed for rscale, which won't have its type
@@ -1054,7 +1054,7 @@ class E2EFromParent(E2EBase):
         :arg tgt_rscale:
         :arg centers:
         """
-        knl = self.get_cached_optimized_kernel()
+        knl = self.get_cached_kernel_executor()
 
         centers = kwargs.pop("centers")
         # "1" may be passed for rscale, which won't have its type
