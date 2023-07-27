@@ -144,7 +144,7 @@ class E2EBase(KernelCacheMixin, ABC):
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
-        knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
+        knl = lp.split_iname(knl, "itgt_box", 64, outer_tag="g.0", inner_tag="l.0")
 
         return knl
 
@@ -278,7 +278,7 @@ class E2EFromCSR(E2EBase):
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
-        knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
+        knl = lp.split_iname(knl, "itgt_box", 64, outer_tag="g.0", inner_tag="l.0")
 
         return knl
 
