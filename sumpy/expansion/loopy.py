@@ -26,7 +26,7 @@ import pymbolic.primitives as prim
 import loopy as lp
 import numpy as np
 from sumpy.expansion import ExpansionBase
-from sumpy.kernel import Kernel
+from sumpy.kernel import Kernel, LaplaceKernel
 import sumpy.symbolic as sym
 from sumpy.assignment_collection import SymbolicAssignmentCollection
 from sumpy.tools import gather_loopy_arguments, gather_loopy_source_arguments
@@ -128,6 +128,335 @@ def make_e2p_loopy_kernel(expansion: ExpansionBase, kernels: Sequence[Kernel]) \
     loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
     for kernel in kernels:
         loopy_knl = kernel.prepare_loopy_kernel(loopy_knl)
+
+    optimizations = []
+
+    return loopy_knl, optimizations
+
+
+def make_m2p_loopy_kernel_for_volume_taylor(
+        expansion: ExpansionBase, kernels: Sequence[Kernel]) -> lp.TranslationUnit:
+
+    dim = expansion.dim
+    if dim == 3:
+        return make_m2p_loopy_kernel_for_volume_taylor_3d(expansion, kernels)
+    elif dim == 2:
+        return make_m2p_loopy_kernel_for_volume_taylor_2d(expansion, kernels)
+    else:
+        raise NotImplementedError()
+
+
+def make_m2p_loopy_kernel_for_volume_taylor_3d(
+        expansion: ExpansionBase, kernels: Sequence[Kernel]) -> lp.TranslationUnit:
+
+    if len(kernels) > 1:
+        raise NotImplementedError()
+
+    kernel = kernels[0]
+    if not isinstance(kernel, LaplaceKernel):
+        raise NotImplementedError()
+
+    dim = expansion.dim
+    order = expansion.order
+
+    if order < 2:
+        raise NotImplementedError()
+
+    b = pymbolic.var("b")
+    ncoeffs = len(expansion.get_coefficient_identifiers())
+
+    temp = pymbolic.var("temp")
+    inv_r = pymbolic.var("inv_r")
+    inv_r2 = pymbolic.var("inv_r2")
+
+    domains = [
+        "{[idim]: 0<=idim<dim}",
+    ]
+    insns = [
+        lp.Assignment(
+            assignee="b[idim]",
+            expression="(target[idim]-center[idim])/rscale",
+            temp_var_type=lp.Optional(None),
+        ),
+        lp.Assignment(
+            assignee=inv_r,
+            expression=pymbolic.var("rsqrt")(sum(b[i]*b[i] for i in range(dim))),
+            temp_var_type=lp.Optional(None),
+        ),
+        lp.Assignment(
+            id="inv_r2",
+            assignee=inv_r2,
+            expression=inv_r*inv_r,
+            temp_var_type=lp.Optional(None),
+        )
+    ]
+
+    init_exprs = {(0, 0, 0): inv_r}
+
+    # Order 1 expressions
+    for i in range(dim):
+        mi = [0]*dim
+        mi[i] = 1
+        init_exprs[tuple(mi)] = -inv_r * b[i]
+
+    # Order 2 expressions
+    for i in range(dim):
+        for j in range(i + 1, dim):
+            mi = [0]*dim
+            mi[i] = 1
+            mi[j] = 1
+            init_exprs[tuple(mi)] = inv_r*inv_r2*inv_r2*3*b[i]*b[j]
+
+    # Order 3 expressions
+    init_exprs[(1, 1, 1)] = -15 * inv_r * inv_r2 * inv_r2 * inv_r2 \
+            * b[0] * b[1] * b[2]
+
+    depends_on = frozenset(["inv_r2"])
+    for i in range(2):
+        for j in range(2):
+            for k in range(2):
+                insn = lp.Assignment(
+                    id=f"init_{i}_{j}_{k}",
+                    assignee=temp[i, j, k],
+                    expression=init_exprs[(i, j, k)],
+                    depends_on=depends_on,
+                )
+                depends_on = frozenset([f"init_{i}_{j}_{k}"])
+                insns.append(insn)
+
+    wrangler = expansion.expansion_terms_wrangler
+    result = pymbolic.var("result")
+    coeffs = pymbolic.var("coeffs")
+
+    # For x1 == 0, 1
+    x2 = pymbolic.var("x2")
+    x1 = pymbolic.var("x1")
+    x0 = pymbolic.var("x0")
+    domains += [
+        f"{{[{x1}]: 0<={x1}<=1}}",
+        f"{{[{x0}]: 0<={x0}<=1 and {x0}<order-{x1} }}",
+        f"{{[{x2}]: 0<={x2}<=order-{x0}-{x1} }}",
+    ]
+    expr = (2*x2 - 1) * b[2] * temp[x0, x1, x2 - 1] + (x2 - 1)*(x2 - 1) \
+            * temp[x0, x1, x2 - 2]
+    expr += prim.If(prim.Comparison(x0, ">=", 1),
+                    2*x0*b[0]*temp[x0 - 1, x1, x2], 0)
+    expr += prim.If(prim.Comparison(x1, ">=", 1),
+                    2*x1*b[1]*temp[x0, x1 - 1, x2], 0)
+    expr *= -inv_r2
+    insns += [
+        lp.Assignment(
+            id=f"temp_{x0}_{x1}_{x2}",
+            assignee=temp[x0, x1, x2],
+            expression=expr,
+            depends_on=depends_on,
+            predicates=frozenset([prim.Comparison(x2, ">=", 2)]),
+        ),
+        lp.Assignment(
+            id=f"update_{x0}_{x1}_{x2}",
+            assignee=result[0],
+            expression=(result[0] + coeffs[wrangler.get_storage_index([x0, x1, x2])]
+                    * temp[x0, x1, x2]),
+            depends_on=frozenset([f"temp_{x0}_{x1}_{x2}"])
+        )
+    ]
+    depends_on = frozenset([f"update_{x0}_{x1}_{x2}"])
+
+    # For x1 >=2
+    x2 = pymbolic.var("y2")
+    x1 = pymbolic.var("y1")
+    x0 = pymbolic.var("y0")
+    domains += [
+        f"{{[{x1}]: 2<={x1}<=order}}",
+        f"{{[{x0}]: 0<={x0}<=1 and {x0}<order-{x1} }}",
+        f"{{[{x2}]: 0<={x2}<=order-{x0}-{x1} }}",
+    ]
+    expr = ((2*x1 - 1) * b[1] * temp[x0, (x1 - 1) % 2, x2] + (x1 - 1)*(x1 - 1)
+            * temp[x0, (x1 - 2) % 2, x2])
+    expr += prim.If(prim.Comparison(x0, ">=", 1),
+                    2*x0*b[0]*temp[x0 - 1, x1 % 2, x2], 0)
+    expr += prim.If(prim.Comparison(x2, ">=", 1),
+                    2*x2*b[2]*temp[x0, x1 % 2, x2 - 1], 0)
+    expr += prim.If(prim.Comparison(x2, ">=", 2),
+                    2*b[2]*temp[x0, x1 % 2, x2 - 1], 0)
+    expr *= -inv_r2
+    insns += [
+        lp.Assignment(
+            id=f"temp_{x0}_{x1}_{x2}",
+            assignee=temp[x0, x1 % 2, x2],
+            expression=expr,
+            depends_on=depends_on,
+        ),
+        lp.Assignment(
+            id=f"update_{x0}_{x1}_{x2}",
+            assignee=result[0],
+            expression=(result[0] + coeffs[wrangler.get_storage_index([x0, x1, x2])]
+                    * temp[x0, x1 % 2, x2]),
+            depends_on=frozenset([f"temp_{x0}_{x1}_{x2}"])
+        )
+    ]
+    depends_on = frozenset([f"update_{x0}_{x1}_{x2}"])
+
+    loopy_knl = lp.make_function(domains, insns,
+            kernel_data=[
+                lp.GlobalArg("result", shape=(len(kernels),), is_input=True,
+                    is_output=True),
+                lp.GlobalArg("coeffs",
+                    shape=(ncoeffs,), is_input=True, is_output=False),
+                lp.GlobalArg("center, target",
+                    shape=(dim,), is_input=True, is_output=False),
+                lp.ValueArg("rscale", is_input=True),
+                lp.ValueArg("itgt", is_input=True),
+                lp.ValueArg("ntargets", is_input=True),
+                lp.GlobalArg("targets",
+                    shape=(dim, "ntargets"), is_input=True, is_output=False),
+                lp.TemporaryVariable("temp"),
+                ...],
+            name="e2p",
+            lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
+            fixed_parameters={"dim": dim, "order": order},
+            )
+
+    loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+    loopy_knl = lp.tag_inames(loopy_knl, "x0*:unr")
+    loopy_knl = lp.tag_inames(loopy_knl, "x1*:unr")
+    loopy_knl = lp.tag_inames(loopy_knl, "y0*:unr")
+    for kernel in kernels:
+        loopy_knl = kernel.prepare_loopy_kernel(loopy_knl)
+
+    loopy_knl = lp.simplify_indices(loopy_knl)
+
+    optimizations = []
+
+    return loopy_knl, optimizations
+
+
+def make_m2p_loopy_kernel_for_volume_taylor_2d(
+        expansion: ExpansionBase, kernels: Sequence[Kernel]) -> lp.TranslationUnit:
+
+    if len(kernels) > 1:
+        raise NotImplementedError()
+
+    kernel = kernels[0]
+    if not isinstance(kernel, LaplaceKernel):
+        raise NotImplementedError()
+
+    dim = expansion.dim
+    order = expansion.order
+
+    if order < 2:
+        raise NotImplementedError()
+
+    b = pymbolic.var("b")
+    ncoeffs = len(expansion.get_coefficient_identifiers())
+
+    temp = pymbolic.var("temp")
+    r = pymbolic.var("r")
+    inv_r2 = pymbolic.var("inv_r2")
+    log = pymbolic.var("log")
+
+    domains = [
+        "{[idim]: 0<=idim<dim}",
+    ]
+    insns = [
+        lp.Assignment(
+            assignee="b[idim]",
+            expression="(target[idim]-center[idim])/rscale",
+            temp_var_type=lp.Optional(None),
+        ),
+        lp.Assignment(
+            assignee=r,
+            expression=pymbolic.var("sqrt")(sum(b[i]*b[i] for i in range(dim))),
+            temp_var_type=lp.Optional(None),
+        ),
+        lp.Assignment(
+            id="inv_r2",
+            assignee=inv_r2,
+            expression=1/sum(b[i]*b[i] for i in range(dim)),
+            temp_var_type=lp.Optional(None),
+        )
+    ]
+
+    init_exprs = {(0, 0): log(r)}
+
+    # Order 1 expressions
+    for i in range(dim):
+        mi = [0]*dim
+        mi[i] = 1
+        init_exprs[tuple(mi)] = inv_r2 * b[i]
+
+    # Order 2 expressions
+    init_exprs[(1, 1)] = -2*inv_r2*inv_r2*b[0]*b[1]
+
+    depends_on = frozenset(["inv_r2"])
+    for i in range(2):
+        for j in range(2):
+            insn = lp.Assignment(
+                id=f"init_{i}_{j}",
+                assignee=temp[i, j],
+                expression=init_exprs[(i, j)],
+                depends_on=depends_on,
+            )
+            depends_on = frozenset([f"init_{i}_{j}"])
+            insns.append(insn)
+
+    wrangler = expansion.expansion_terms_wrangler
+    result = pymbolic.var("result")
+    coeffs = pymbolic.var("coeffs")
+
+    x0 = pymbolic.var("x0")
+    x1 = pymbolic.var("x1")
+    domains += [
+        f"{{[{x0}]: 0<={x0}<=1}}",
+        f"{{[{x1}]: 0<={x1}<=order-{x0} }}",
+    ]
+    expr = 2*(x1 + x0 - 1) * b[0] * temp[x0 - 1, x1] + (x1 + x0 - 1)*(x1 + x0 - 2) \
+            * temp[x0 - 2, x1]
+    expr *= -inv_r2
+    insns += [
+        lp.Assignment(
+            id=f"temp_{x0}_{x1}",
+            assignee=temp[x0, x1],
+            expression=expr,
+            depends_on=depends_on,
+            predicates=frozenset([prim.Comparison(x1, ">=", 2)]),
+        ),
+        lp.Assignment(
+            id=f"update_{x0}_{x1}",
+            assignee=result[0],
+            expression=(result[0] + coeffs[wrangler.get_storage_index([x0, x1])]
+                    * temp[x0, x1]),
+            depends_on=frozenset([f"temp_{x0}_{x1}"])
+        )
+    ]
+    depends_on = frozenset([f"update_{x0}_{x1}"])
+
+    loopy_knl = lp.make_function(domains, insns,
+            kernel_data=[
+                lp.GlobalArg("result", shape=(len(kernels),), is_input=True,
+                    is_output=True),
+                lp.GlobalArg("coeffs",
+                    shape=(ncoeffs,), is_input=True, is_output=False),
+                lp.GlobalArg("center, target",
+                    shape=(dim,), is_input=True, is_output=False),
+                lp.ValueArg("rscale", is_input=True),
+                lp.ValueArg("itgt", is_input=True),
+                lp.ValueArg("ntargets", is_input=True),
+                lp.GlobalArg("targets",
+                    shape=(dim, "ntargets"), is_input=True, is_output=False),
+                lp.TemporaryVariable("temp"),
+                ...],
+            name="e2p",
+            lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
+            fixed_parameters={"dim": dim, "order": order},
+            )
+
+    loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+    loopy_knl = lp.tag_inames(loopy_knl, "x0*:unr")
+    for kernel in kernels:
+        loopy_knl = kernel.prepare_loopy_kernel(loopy_knl)
+
+    loopy_knl = lp.simplify_indices(loopy_knl)
 
     optimizations = []
 

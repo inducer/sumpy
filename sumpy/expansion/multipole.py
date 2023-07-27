@@ -30,6 +30,11 @@ from sumpy.expansion import (
     VolumeTaylorExpansionMixin,
     LinearPDEConformingVolumeTaylorExpansion)
 from sumpy.tools import mi_set_axis, add_to_sac, mi_power, mi_factorial
+from sumpy.kernel import Kernel
+
+import loopy as lp
+
+from typing import Sequence
 
 import logging
 logger = logging.getLogger(__name__)
@@ -102,6 +107,18 @@ class VolumeTaylorMultipoleExpansionBase(
 
         result = sym.Add(*tuple(result))
         return result
+
+    def get_loopy_evaluator(self, kernels: Sequence[Kernel]) -> lp.TranslationUnit:
+        """
+        :returns: a :mod:`loopy` kernel that returns the evaluated
+            target transforms of the potential given by *kernels*.
+        """
+        from sumpy.expansion.loopy import (make_e2p_loopy_kernel,
+            make_m2p_loopy_kernel_for_volume_taylor)
+        try:
+            return make_m2p_loopy_kernel_for_volume_taylor(self, kernels)
+        except NotImplementedError:
+            return make_e2p_loopy_kernel(self, kernels)
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, _fast_version=True):
