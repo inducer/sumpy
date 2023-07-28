@@ -358,6 +358,8 @@ def make_m2p_loopy_kernel_for_volume_taylor_2d(
 
     temp = pymbolic.var("temp")
     r = pymbolic.var("r")
+    rscale = pymbolic.var("rscale")
+    no_scale_r = pymbolic.var("no_scale_r")
     inv_r2 = pymbolic.var("inv_r2")
     log = pymbolic.var("log")
 
@@ -376,6 +378,11 @@ def make_m2p_loopy_kernel_for_volume_taylor_2d(
             temp_var_type=lp.Optional(None),
         ),
         lp.Assignment(
+            assignee=no_scale_r,
+            expression=r * rscale,
+            temp_var_type=lp.Optional(None),
+        ),
+        lp.Assignment(
             id="inv_r2",
             assignee=inv_r2,
             expression=1/sum(b[i]*b[i] for i in range(dim)),
@@ -383,7 +390,7 @@ def make_m2p_loopy_kernel_for_volume_taylor_2d(
         )
     ]
 
-    init_exprs = {(0, 0): log(r)}
+    init_exprs = {(0, 0): log(no_scale_r)}
     init_exprs[(1, 0)] = inv_r2 * b[0]
     init_exprs[(0, 1)] = inv_r2 * b[1]
     init_exprs[(1, 1)] = -2*inv_r2*inv_r2*b[0]*b[1]
