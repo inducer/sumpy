@@ -378,19 +378,15 @@ def make_m2p_loopy_kernel_for_volume_taylor_2d(
     ]
 
     init_exprs = {(0, 0): log(r)}
-
-    # Order 1 expressions
-    for i in range(dim):
-        mi = [0]*dim
-        mi[i] = 1
-        init_exprs[tuple(mi)] = inv_r2 * b[i]
-
-    # Order 2 expressions
+    init_exprs[(1, 0)] = inv_r2 * b[0]
+    init_exprs[(0, 1)] = inv_r2 * b[1]
     init_exprs[(1, 1)] = -2*inv_r2*inv_r2*b[0]*b[1]
+    init_exprs[(0, 2)] = inv_r2*inv_r2*(b[0]*b[0] - b[1]*b[1])
+    init_exprs[(1, 2)] = inv_r2*inv_r2*inv_r2*(2*b[0]*(3*b[1]*b[1] - b[0]*b[0]))
 
     depends_on = frozenset(["inv_r2"])
     for i in range(2):
-        for j in range(2):
+        for j in range(3):
             insn = lp.Assignment(
                 id=f"init_{i}_{j}",
                 assignee=temp[i, j],
@@ -410,8 +406,8 @@ def make_m2p_loopy_kernel_for_volume_taylor_2d(
         f"{{[{x0}]: 0<={x0}<=1}}",
         f"{{[{x1}]: 0<={x1}<=order-{x0} }}",
     ]
-    expr = 2*(x1 + x0 - 1) * b[0] * temp[x0 - 1, x1] + (x1 + x0 - 1)*(x1 + x0 - 2) \
-            * temp[x0 - 2, x1]
+    expr = 2*(x1 + x0 - 1) * b[1] * temp[x0, x1 - 1] + (x1 + x0 - 1)*(x1 + x0 - 2) \
+            * temp[x0, x1 - 2]
     expr *= -inv_r2
     insns += [
         lp.Assignment(
@@ -419,7 +415,7 @@ def make_m2p_loopy_kernel_for_volume_taylor_2d(
             assignee=temp[x0, x1],
             expression=expr,
             depends_on=depends_on,
-            predicates=frozenset([prim.Comparison(x1, ">=", 2)]),
+            predicates=frozenset([prim.Comparison(x1, ">=", 3)]),
         ),
         lp.Assignment(
             id=f"update_{x0}_{x1}",
