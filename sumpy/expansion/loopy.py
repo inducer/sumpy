@@ -25,7 +25,7 @@ import pymbolic
 import pymbolic.primitives as prim
 import loopy as lp
 import numpy as np
-from sumpy.expansion import ExpansionBase
+from sumpy.expansion import ExpansionBase, LinearPDEConformingVolumeTaylorExpansion
 from sumpy.kernel import Kernel, LaplaceKernel
 import sumpy.symbolic as sym
 from sumpy.assignment_collection import SymbolicAssignmentCollection
@@ -154,6 +154,9 @@ def make_m2p_loopy_kernel_for_volume_taylor_3d(
 
     kernel = kernels[0]
     if not isinstance(kernel, LaplaceKernel):
+        raise NotImplementedError()
+
+    if not isinstance(expansion, LinearPDEConformingVolumeTaylorExpansion):
         raise NotImplementedError()
 
     dim = expansion.dim
@@ -339,6 +342,9 @@ def make_m2p_loopy_kernel_for_volume_taylor_2d(
 
     kernel = kernels[0]
     if not isinstance(kernel, LaplaceKernel):
+        raise NotImplementedError()
+
+    if not isinstance(expansion, LinearPDEConformingVolumeTaylorExpansion):
         raise NotImplementedError()
 
     dim = expansion.dim
