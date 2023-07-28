@@ -234,7 +234,7 @@ def make_m2p_loopy_kernel_for_volume_taylor_3d(
     x0 = pymbolic.var("x0")
     domains += [
         f"{{[{x1}]: 0<={x1}<=1}}",
-        f"{{[{x0}]: 0<={x0}<=1 and {x0}<order-{x1} }}",
+        f"{{[{x0}]: 0<={x0}<=1 and {x0}<=order-{x1} }}",
         f"{{[{x2}]: 0<={x2}<=order-{x0}-{x1} }}",
     ]
     expr = (2*x2 - 1) * b[2] * temp[x0, x1, x2 - 1] + (x2 - 1)*(x2 - 1) \
@@ -268,7 +268,7 @@ def make_m2p_loopy_kernel_for_volume_taylor_3d(
     x0 = pymbolic.var("y0")
     domains += [
         f"{{[{x1}]: 2<={x1}<=order}}",
-        f"{{[{x0}]: 0<={x0}<=1 and {x0}<order-{x1} }}",
+        f"{{[{x0}]: 0<={x0}<=1 and {x0}<=order-{x1} }}",
         f"{{[{x2}]: 0<={x2}<=order-{x0}-{x1} }}",
     ]
     expr = ((2*x1 - 1) * b[1] * temp[x0, (x1 - 1) % 2, x2] + (x1 - 1)*(x1 - 1)
