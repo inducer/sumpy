@@ -34,7 +34,7 @@ from sumpy.kernel import Kernel
 
 import loopy as lp
 
-from typing import Sequence
+from typing import Sequence, Tuple, Callable
 
 import logging
 logger = logging.getLogger(__name__)
