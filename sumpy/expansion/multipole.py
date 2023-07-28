@@ -108,7 +108,9 @@ class VolumeTaylorMultipoleExpansionBase(
         result = sym.Add(*tuple(result))
         return result
 
-    def get_loopy_evaluator(self, kernels: Sequence[Kernel]) -> lp.TranslationUnit:
+    def loopy_evaluator_and_optimizations(self, kernels: Sequence[Kernel]) \
+            -> Tuple[lp.TranslationUnit, Sequence[
+                Callable[[lp.TranslationUnit], lp.TranslationUnit]]]:
         """
         :returns: a :mod:`loopy` kernel that returns the evaluated
             target transforms of the potential given by *kernels*.
