@@ -171,6 +171,7 @@ def make_m2p_loopy_kernel_for_volume_taylor_3d(
     temp = pymbolic.var("temp")
     inv_r = pymbolic.var("inv_r")
     inv_r2 = pymbolic.var("inv_r2")
+    rscale = pymbolic.var("rscale")
 
     domains = [
         "{[idim]: 0<=idim<dim}",
@@ -200,7 +201,7 @@ def make_m2p_loopy_kernel_for_volume_taylor_3d(
     for i in range(dim):
         mi = [0]*dim
         mi[i] = 1
-        init_exprs[tuple(mi)] = -inv_r * b[i]
+        init_exprs[tuple(mi)] = -inv_r * inv_r2 * b[i]
 
     # Order 2 expressions
     for i in range(dim):
@@ -221,7 +222,7 @@ def make_m2p_loopy_kernel_for_volume_taylor_3d(
                 insn = lp.Assignment(
                     id=f"init_{i}_{j}_{k}",
                     assignee=temp[i, j, k],
-                    expression=init_exprs[(i, j, k)],
+                    expression=init_exprs[(i, j, k)]/rscale,
                     depends_on=depends_on,
                 )
                 depends_on = frozenset([f"init_{i}_{j}_{k}"])
@@ -281,7 +282,7 @@ def make_m2p_loopy_kernel_for_volume_taylor_3d(
     expr += prim.If(prim.Comparison(x2, ">=", 1),
                     2*x2*b[2]*temp[x0, x1 % 2, x2 - 1], 0)
     expr += prim.If(prim.Comparison(x2, ">=", 2),
-                    2*b[2]*temp[x0, x1 % 2, x2 - 1], 0)
+                    x2*(x2-1)*temp[x0, x1 % 2, x2 - 2], 0)
     expr *= -inv_r2
     insns += [
         lp.Assignment(
