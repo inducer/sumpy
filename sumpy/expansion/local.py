@@ -70,7 +70,7 @@ class LocalExpansionBase(ExpansionBase):
 
     def __eq__(self, other):
         return (
-            type(self) == type(other)
+            type(self) is type(other)
             and self.kernel == other.kernel
             and self.order == other.order
             and self.use_rscale == other.use_rscale
