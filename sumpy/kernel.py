@@ -102,9 +102,9 @@ class KernelArgument:
     def __eq__(self, other):
         if id(self) == id(other):
             return True
-        if not type(self) == KernelArgument:
+        if type(self) is not KernelArgument:
             return NotImplemented
-        if not type(other) == KernelArgument:
+        if type(other) is not KernelArgument:
             return NotImplemented
         return self.loopy_arg == other.loopy_arg
 
