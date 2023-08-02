@@ -1,12 +1,13 @@
 Misc Tools
 ==========
 
-.. automodule:: sumpy.tools
-
 .. automodule:: sumpy.derivative_taker
 
 .. automodule:: sumpy.symbolic
 
+.. automodule:: sumpy.tools
+
+.. automodule:: sumpy.array_context
 
 Installation
 ============
