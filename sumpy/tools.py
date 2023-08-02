@@ -33,15 +33,15 @@ from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple
 
 import loopy as lp
 import numpy as np
-from arraycontext import Array
 from pymbolic.mapper import WalkMapper
-from pytools import T, memoize_method
+from pytools import memoize_method
 from pytools.tag import Tag, tag_dataclass
 
 import sumpy.symbolic as sym
 
 if TYPE_CHECKING:
-    import pyopencl as cl
+    import numpy
+    import pyopencl
 
     from sumpy.kernel import Kernel
 
@@ -91,6 +91,7 @@ FFT
 .. autofunction:: matvec_toeplitz_upper_triangular
 
 .. autoclass:: FFTBackend
+    :members:
 .. autofunction:: loopy_fft
 .. autofunction:: get_opencl_fft_app
 .. autofunction:: run_opencl_fft
@@ -134,8 +135,8 @@ def mi_set_axis(mi: Sequence[int], axis: int, value: int) -> Tuple[int, ...]:
 
 
 def mi_power(
-        vector: Sequence[T], mi: Sequence[int],
-        evaluate: bool = True) -> T:
+        vector: Sequence[Any], mi: Sequence[int],
+        evaluate: bool = True) -> Any:
     result = 1
     for mi_i, vec_i in zip(mi, vector):
         if mi_i == 1:
@@ -283,7 +284,7 @@ class KernelComputation(ABC):
             target_kernels: List["Kernel"],
             source_kernels: List["Kernel"],
             strength_usage: Optional[List[int]] = None,
-            value_dtypes: Optional[List["np.dtype[Any]"]] = None,
+            value_dtypes: Optional[List["numpy.dtype[Any]"]] = None,
             name: Optional[str] = None,
             device: Optional[Any] = None) -> None:
         """
@@ -886,7 +887,7 @@ class FFTBackend(enum.Enum):
     loopy = 2
 
 
-def _get_fft_backend(queue: "cl.CommandQueue") -> FFTBackend:
+def _get_fft_backend(queue: "pyopencl.CommandQueue") -> FFTBackend:
     import os
 
     env_val = os.environ.get("SUMPY_FFT_BACKEND")
@@ -927,9 +928,9 @@ def _get_fft_backend(queue: "cl.CommandQueue") -> FFTBackend:
 
 
 def get_opencl_fft_app(
-        queue: "cl.CommandQueue",
+        queue: "pyopencl.CommandQueue",
         shape: Tuple[int, ...],
-        dtype: "np.dtype[Any]",
+        dtype: "numpy.dtype[Any]",
         inverse: bool) -> Any:
     """Setup an object for out-of-place FFT on with given shape and dtype
     on given queue.
@@ -951,10 +952,10 @@ def get_opencl_fft_app(
 
 def run_opencl_fft(
         fft_app: Tuple[Any, FFTBackend],
-        queue: "cl.CommandQueue",
-        input_vec: Array,
+        queue: "pyopencl.CommandQueue",
+        input_vec: Any,
         inverse: bool = False,
-        wait_for: List["cl.Event"] = None) -> Tuple["cl.Event", Array]:
+        wait_for: List["pyopencl.Event"] = None) -> Tuple["pyopencl.Event", Any]:
     """Runs an FFT on input_vec and returns a :class:`MarkerBasedProfilingEvent`
     that indicate the end and start of the operations carried out and the output
     vector.
