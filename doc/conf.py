@@ -18,14 +18,16 @@ release = ver_dic["VERSION_TEXT"]
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
-    "modepy": ("https://documen.tician.de/modepy/", None),
+    "sympy": ("https://docs.sympy.org/latest/", None),
+    "matplotlib": ("https://matplotlib.org/stable/", None),
     "pyopencl": ("https://documen.tician.de/pyopencl/", None),
+    "pytools": ("https://documen.tician.de/pytools/", None),
+    "modepy": ("https://documen.tician.de/modepy/", None),
     "pymbolic": ("https://documen.tician.de/pymbolic/", None),
     "loopy": ("https://documen.tician.de/loopy/", None),
     "pytential": ("https://documen.tician.de/pytential/", None),
     "boxtree": ("https://documen.tician.de/boxtree/", None),
-    "sympy": ("https://docs.sympy.org/latest/", None),
-    "matplotlib": ("https://matplotlib.org/stable/", None),
+    "arraycontext": ("https://documen.tician.de/arraycontext/", None),
 }
 
 nitpick_ignore_regex = [
