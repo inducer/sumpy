@@ -212,7 +212,7 @@ class E2PFromSingleBox(E2PBase):
         # meaningfully inferred. Make the type of rscale explicit.
         rscale = centers.dtype.type(kwargs.pop("rscale"))
 
-        knl = self.get_cached_optimized_kernel()
+        knl = self.get_cached_kernel_executor()
         result = actx.call_loopy(
             knl,
             centers=centers, rscale=rscale, **kwargs)
@@ -330,7 +330,7 @@ class E2PFromCSR(E2PBase):
         # meaningfully inferred. Make the type of rscale explicit.
         rscale = centers.dtype.type(kwargs.pop("rscale"))
 
-        knl = self.get_cached_optimized_kernel()
+        knl = self.get_cached_kernel_executor()
         result = actx.call_loopy(
             knl,
             centers=centers,

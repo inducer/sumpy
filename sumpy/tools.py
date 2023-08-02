@@ -351,8 +351,17 @@ class OrderedSet(MutableSet):
 
 
 class KernelCacheMixin:
-    @memoize_method
     def get_cached_optimized_kernel(self, **kwargs):
+        from warnings import warn
+        warn("get_cached_optimized_kernel is deprecated. "
+             "Use get_cached_kernel_executor instead. "
+             "This will stop working in October 2023.",
+             DeprecationWarning, stacklevel=2)
+
+        return self.get_cached_kernel_executor(**kwargs)
+
+    @memoize_method
+    def get_cached_kernel_executor(self, **kwargs) -> lp.ExecutorBase:
         from sumpy import (code_cache, CACHING_ENABLED, OPT_ENABLED,
             NO_CACHE_KERNELS)
 
@@ -370,7 +379,7 @@ class KernelCacheMixin:
             try:
                 result = code_cache[cache_key]
                 logger.debug("%s: kernel cache hit [key=%s]", self.name, cache_key)
-                return result
+                return result.executor(self.context)
             except KeyError:
                 pass
 
@@ -391,7 +400,7 @@ class KernelCacheMixin:
                 NO_CACHE_KERNELS and self.name in NO_CACHE_KERNELS):
             code_cache.store_if_not_present(cache_key, knl)
 
-        return knl
+        return knl.executor(self.context)
 
     @staticmethod
     def _allow_redundant_execution_of_knl_scaling(knl):

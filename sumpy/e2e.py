@@ -127,7 +127,7 @@ class E2EBase(KernelCacheMixin, ABC):
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
-        knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
+        knl = lp.split_iname(knl, "itgt_box", 64, outer_tag="g.0", inner_tag="l.0")
 
         return knl
 
@@ -253,7 +253,7 @@ class E2EFromCSR(E2EBase):
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
-        knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
+        knl = lp.split_iname(knl, "itgt_box", 64, outer_tag="g.0", inner_tag="l.0")
 
         return knl
 
@@ -272,7 +272,7 @@ class E2EFromCSR(E2EBase):
         src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
 
-        knl = self.get_cached_optimized_kernel()
+        knl = self.get_cached_kernel_executor()
         result = actx.call_loopy(
             knl,
             centers=centers,
@@ -516,7 +516,7 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
         src_expansions = kwargs.pop("src_expansions")
 
-        knl = self.get_cached_optimized_kernel(result_dtype=src_expansions.dtype)
+        knl = self.get_cached_kernel_executor(result_dtype=src_expansions.dtype)
         result = actx.call_loopy(
             knl,
             src_expansions=src_expansions,
@@ -629,7 +629,7 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                 "m2l_translation_classes_dependent_data")
         result_dtype = m2l_translation_classes_dependent_data.dtype
 
-        knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
+        knl = self.get_cached_kernel_executor(result_dtype=result_dtype)
         result = actx.call_loopy(
             knl,
             src_rscale=src_rscale,
@@ -724,7 +724,7 @@ class M2LPreprocessMultipole(E2EBase):
         preprocessed_src_expansions = kwargs.pop("preprocessed_src_expansions")
         result_dtype = preprocessed_src_expansions.dtype
 
-        knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
+        knl = self.get_cached_kernel_executor(result_dtype=result_dtype)
         result = actx.call_loopy(
             knl,
             preprocessed_src_expansions=preprocessed_src_expansions,
@@ -824,7 +824,7 @@ class M2LPostprocessLocal(E2EBase):
         tgt_expansions = kwargs.pop("tgt_expansions")
         result_dtype = tgt_expansions.dtype
 
-        knl = self.get_cached_optimized_kernel(result_dtype=result_dtype)
+        knl = self.get_cached_kernel_executor(result_dtype=result_dtype)
         result = actx.call_loopy(
             knl,
             tgt_expansions=tgt_expansions,
@@ -937,14 +937,13 @@ class E2EFromChildren(E2EBase):
         :arg tgt_rscale:
         :arg centers:
         """
-
         centers = kwargs.pop("centers")
         # "1" may be passed for rscale, which won't have its type
         # meaningfully inferred. Make the type of rscale explicit.
         src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
 
-        knl = self.get_cached_optimized_kernel()
+        knl = self.get_cached_kernel_executor()
         result = actx.call_loopy(
             knl,
             centers=centers,
@@ -1044,14 +1043,13 @@ class E2EFromParent(E2EBase):
         :arg tgt_rscale:
         :arg centers:
         """
-
         centers = kwargs.pop("centers")
         # "1" may be passed for rscale, which won't have its type
         # meaningfully inferred. Make the type of rscale explicit.
         src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
 
-        knl = self.get_cached_optimized_kernel()
+        knl = self.get_cached_kernel_executor()
         result = actx.call_loopy(
             knl,
             centers=centers,

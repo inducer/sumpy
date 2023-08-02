@@ -299,7 +299,7 @@ class LayerPotential(LayerPotentialBase):
             already multiplied in.
         """
 
-        knl = self.get_cached_optimized_kernel(
+        knl = self.get_cached_kernel_executor(
                 is_cpu=is_cl_cpu(actx),
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources),
@@ -378,7 +378,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
 
     def __call__(self, actx: PyOpenCLArrayContext,
             targets, sources, centers, expansion_radii, **kwargs):
-        knl = self.get_cached_optimized_kernel(
+        knl = self.get_cached_kernel_executor(
                 is_cpu=is_cl_cpu(actx),
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources),
@@ -506,7 +506,7 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
             in (*srcindices*, *tgtindices*)
         """
 
-        knl = self.get_cached_optimized_kernel(
+        knl = self.get_cached_kernel_executor(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources),
                 centers_is_obj_array=is_obj_array_like(centers))

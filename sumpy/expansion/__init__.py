@@ -225,7 +225,7 @@ class ExpansionBase(ABC):
 
     def __eq__(self, other):
         return (
-                type(self) == type(other)
+                type(self) is type(other)
                 and self.kernel == other.kernel
                 and self.order == other.order
                 and self.use_rscale == other.use_rscale)
@@ -687,6 +687,9 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 shape = (len(mis), len(mis))
                 op = CSEMatVecOperator(from_input_coeffs_by_row,
                                        from_output_coeffs_by_row, shape)
+
+                plog.done()
+
                 return mis, op
 
         ordering_key, _ = self._get_mi_ordering_key_and_axis_permutation()

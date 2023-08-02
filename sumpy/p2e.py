@@ -129,7 +129,7 @@ class P2EBase(KernelCacheMixin, KernelComputation):
         dtype = centers[0].dtype if is_obj_array_like(centers) else centers.dtype
         rscale = dtype.type(kwargs.pop("rscale"))
 
-        knl = self.get_cached_optimized_kernel(
+        knl = self.get_cached_kernel_executor(
                 sources_is_obj_array=is_obj_array_like(sources),
                 centers_is_obj_array=is_obj_array_like(centers))
 

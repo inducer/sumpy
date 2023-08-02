@@ -254,7 +254,7 @@ class P2P(P2PBase):
 
     def __call__(self, actx: PyOpenCLArrayContext,
             targets, sources, strength, **kwargs):
-        knl = self.get_cached_optimized_kernel(
+        knl = self.get_cached_kernel_executor(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
 
@@ -325,7 +325,7 @@ class P2PMatrixGenerator(P2PBase):
         return loopy_knl
 
     def __call__(self, actx: PyOpenCLArrayContext, targets, sources, **kwargs):
-        knl = self.get_cached_optimized_kernel(
+        knl = self.get_cached_kernel_executor(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
 
@@ -441,7 +441,7 @@ class P2PMatrixSubsetGenerator(P2PBase):
         :returns: a one-dimensional array of interactions, for each index pair
             in (*srcindices*, *tgtindices*)
         """
-        knl = self.get_cached_optimized_kernel(
+        knl = self.get_cached_kernel_executor(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
 
@@ -756,7 +756,7 @@ class P2PFromCSR(P2PBase):
         else:
             dtype_size = None
 
-        knl = self.get_cached_optimized_kernel(
+        knl = self.get_cached_kernel_executor(
                 max_nsources_in_one_box=max_nsources_in_one_box,
                 max_ntargets_in_one_box=max_ntargets_in_one_box,
                 dtype_size=dtype_size,
