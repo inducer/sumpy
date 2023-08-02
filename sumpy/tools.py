@@ -24,31 +24,25 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from pytools import memoize_method
-from pytools.tag import Tag, tag_dataclass
-import numbers
-import warnings
-import os
-import sys
 import enum
+import logging
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-
-from pymbolic.mapper import WalkMapper
-import pymbolic
-
-import numpy as np
-import sumpy.symbolic as sym
-import pyopencl as cl
-import pyopencl.array as cla
+from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple
 
 import loopy as lp
-from typing import Any, List, Optional, TYPE_CHECKING
+import numpy as np
+from arraycontext import Array
+from pymbolic.mapper import WalkMapper
+from pytools import T, memoize_method
+from pytools.tag import Tag, tag_dataclass
 
-import logging
-logger = logging.getLogger(__name__)
+import sumpy.symbolic as sym
 
 if TYPE_CHECKING:
+    import pyopencl as cl
+
     from sumpy.kernel import Kernel
 
 
