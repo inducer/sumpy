@@ -45,6 +45,65 @@ if TYPE_CHECKING:
 
     from sumpy.kernel import Kernel
 
+logger = logging.getLogger(__name__)
+
+
+__doc__ = """
+Tools
+=====
+
+.. autofunction:: to_complex_dtype
+.. autofunction:: is_obj_array_like
+.. autofunction:: vector_to_device
+.. autofunction:: vector_from_device
+.. autoclass:: OrderedSet
+
+Multi-index Helpers
+-------------------
+
+.. autofunction:: add_mi
+.. autofunction:: mi_factorial
+.. autofunction:: mi_increment_axis
+.. autofunction:: mi_set_axis
+.. autofunction:: mi_power
+
+Symbolic Helpers
+----------------
+
+.. autofunction:: add_to_sac
+.. autofunction:: gather_arguments
+.. autofunction:: gather_source_arguments
+.. autofunction:: gather_loopy_arguments
+.. autofunction:: gather_loopy_source_arguments
+
+.. autoclass:: ScalingAssignmentTag
+.. autoclass:: KernelComputation
+.. autoclass:: KernelCacheMixin
+
+.. autofunction:: reduced_row_echelon_form
+.. autofunction:: nullspace
+
+FFT
+---
+
+.. autofunction:: fft
+.. autofunction:: fft_toeplitz_upper_triangular
+.. autofunction:: matvec_toeplitz_upper_triangular
+
+.. autoclass:: FFTBackend
+.. autofunction:: loopy_fft
+.. autofunction:: get_opencl_fft_app
+.. autofunction:: run_opencl_fft
+
+Profiling
+---------
+
+.. autofunction:: get_native_event
+.. autoclass:: ProfileGetter
+.. autoclass:: AggregateProfilingEvent
+.. autoclass:: MarkerBasedProfilingEvent
+"""
+
 
 # {{{ multi_index helpers
 
