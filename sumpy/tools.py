@@ -1007,21 +1007,19 @@ _depr_name_to_replacement_and_obj = {
     "KernelCacheWrapper": ("KernelCacheMixin", 2023),
     }
 
-if sys.version_info >= (3, 7):
-    def __getattr__(name):
-        replacement_and_obj = _depr_name_to_replacement_and_obj.get(name, None)
-        if replacement_and_obj is not None:
-            replacement, obj, year = replacement_and_obj
-            from warnings import warn
-            warn(f"'sumpy.tools.{name}' is deprecated. "
-                    f"Use '{replacement}' instead. "
-                    f"'sumpy.tools.{name}' will continue to work until {year}.",
-                    DeprecationWarning, stacklevel=2)
-            return obj
-        else:
-            raise AttributeError(name)
-else:
-    KernelCacheWrapper = KernelCacheMixin
+
+def __getattr__(name):
+    replacement_and_obj = _depr_name_to_replacement_and_obj.get(name, None)
+    if replacement_and_obj is not None:
+        replacement, obj, year = replacement_and_obj
+        from warnings import warn
+        warn(f"'sumpy.tools.{name}' is deprecated. "
+                f"Use '{replacement}' instead. "
+                f"'sumpy.tools.{name}' will continue to work until {year}.",
+                DeprecationWarning, stacklevel=2)
+        return obj
+    else:
+        raise AttributeError(name)
 
 # }}}
 
