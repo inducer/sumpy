@@ -1,6 +1,8 @@
 Misc Tools
 ==========
 
+.. automodule:: sumpy.tools
+
 .. automodule:: sumpy.derivative_taker
 
 .. automodule:: sumpy.symbolic
