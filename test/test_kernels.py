@@ -90,7 +90,7 @@ def test_p2p(actx_factory, exclude_self):
             actx.from_numpy(targets),
             actx.from_numpy(sources),
             [actx.from_numpy(strengths)],
-            out_host=True, **extra_kwargs)
+            **extra_kwargs)
     potential = actx.to_numpy(potential)
 
     potential_ref = np.empty_like(potential)
@@ -194,8 +194,6 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
             nboxes=1,
             tgt_base_ibox=0,
             rscale=rscale,
-
-            out_host=True,
             dir_vec=dir_vec,
             **extra_kwargs)
 
@@ -221,8 +219,7 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
             nboxes=1,
             tgt_base_ibox=0,
             rscale=rscale,
-
-            out_host=True, **extra_source_kwargs)
+            **extra_source_kwargs)
         mpoles = actx.to_numpy(mpoles)
 
         expected_result += mpoles
@@ -358,8 +355,7 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
                 nboxes=1,
                 tgt_base_ibox=0,
                 rscale=rscale,
-
-                out_host=True, **extra_source_kwargs)
+                **extra_source_kwargs)
 
         # }}}
 
@@ -381,8 +377,7 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
                 centers=centers,
                 targets=targets,
                 rscale=rscale,
-
-                out_host=True, **extra_kwargs)
+                **extra_kwargs)
         pot = actx.to_numpy(pot)
         grad_x = actx.to_numpy(grad_x)
 
@@ -393,7 +388,6 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
         evt, (pot_direct, grad_x_direct, ) = p2p(
                 actx.queue,
                 targets, sources, (strengths,),
-                out_host=True,
                 **extra_source_kwargs)
         pot_direct = actx.to_numpy(pot_direct)
         grad_x_direct = actx.to_numpy(grad_x_direct)
@@ -581,8 +575,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
                 targets=targets,
 
                 rscale=rscale,
-
-                out_host=True, **extra_kwargs
+                **extra_kwargs
                 )
         pot = actx.to_numpy(pot)
 
@@ -611,7 +604,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
         evt, (pot_direct,) = p2p(
                 actx.queue,
                 targets, sources, (strengths,),
-                out_host=True, **extra_kwargs)
+                **extra_kwargs)
         pot_direct = actx.to_numpy(pot_direct)
 
         # }}}
@@ -642,8 +635,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
                 rscale=m1_rscale,
 
                 tgt_base_ibox=0,
-
-                out_host=True, **extra_kwargs)
+                **extra_kwargs)
 
         # }}}
 
@@ -674,8 +666,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
                 src_rscale=m1_rscale,
                 tgt_rscale=m2_rscale,
-
-                out_host=True, **extra_kwargs)
+                **extra_kwargs)
 
         # }}}
 
@@ -705,8 +696,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
                 src_rscale=m2_rscale,
                 tgt_rscale=l1_rscale,
-
-                out_host=True, **extra_kwargs)
+                **extra_kwargs)
 
         # }}}
 
@@ -736,8 +726,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
                 src_rscale=l1_rscale,
                 tgt_rscale=l2_rscale,
-
-                out_host=True, **extra_kwargs)
+                **extra_kwargs)
 
         # }}}
 

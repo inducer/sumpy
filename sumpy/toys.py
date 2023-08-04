@@ -226,8 +226,6 @@ def _p2e(psource, center, rscale, order, p2e, expn_class, expn_kwargs):
             rscale=rscale,
             nboxes=1,
             tgt_base_ibox=0,
-
-            out_host=True,
             **toy_ctx.extra_source_and_kernel_kwargs)
 
     return expn_class(toy_ctx, center, rscale, order, coeffs[0].get(queue),
@@ -264,8 +262,6 @@ def _e2p(psource, targets, e2p):
             centers=centers,
             rscale=psource.rscale,
             targets=vector_to_device(queue, make_obj_array(targets)),
-
-            out_host=True,
             **toy_ctx.extra_kernel_kwargs)
 
     return pot.get(queue)
@@ -311,8 +307,7 @@ def _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs):
 
             src_rscale=psource.rscale,
             tgt_rscale=to_rscale,
-
-            out_host=True, **toy_ctx.extra_kernel_kwargs)
+            **toy_ctx.extra_kernel_kwargs)
 
     return expn_class(
             toy_ctx, to_center, to_rscale, to_order, to_coeffs[1].get(queue),
@@ -467,7 +462,6 @@ class PointSources(PotentialSource):
                 cl.array.to_device(queue, targets),
                 cl.array.to_device(queue, self.points),
                 [cl.array.to_device(queue, self.weights)],
-                out_host=True,
                 **self.toy_ctx.extra_source_and_kernel_kwargs)
 
         return potential.get(queue)
