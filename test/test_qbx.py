@@ -86,19 +86,19 @@ def test_direct_qbx_vs_eigval(actx_factory, expn_class, visualize=False):
 
         h = 2 * np.pi / n
 
-        targets = unit_circle
-        sources = unit_circle
+        targets = actx.from_numpy(unit_circle)
+        sources = actx.from_numpy(unit_circle)
 
         radius = 7 * h
-        centers = unit_circle * (1 - radius)
+        centers = actx.from_numpy((1 - radius) * unit_circle)
+        expansion_radii = actx.from_numpy(radius * np.ones(n))
+        strengths = (actx.from_numpy(sigma * h),)
 
-        expansion_radii = np.ones(n) * radius
-
-        strengths = (sigma * h,)
         evt, (result_qbx,) = lpot(
                 actx.queue,
                 targets, sources, centers, strengths,
                 expansion_radii=expansion_radii)
+        result_qbx = actx.to_numpy(result_qbx)
 
         eocrec.add_data_point(h, np.max(np.abs(result_ref - result_qbx)))
 
@@ -157,22 +157,25 @@ def test_direct_qbx_vs_eigval_with_tgt_deriv(
 
         h = 2 * np.pi / n
 
-        targets = unit_circle
-        sources = unit_circle
+        targets = actx.from_numpy(unit_circle)
+        sources = actx.from_numpy(unit_circle)
 
         radius = 7 * h
-        centers = unit_circle * (1 - radius)
+        centers = actx.from_numpy((1 - radius) * unit_circle)
+        expansion_radii = actx.from_numpy(radius * np.ones(n))
+        strengths = (actx.from_numpy(sigma * h),)
 
-        expansion_radii = np.ones(n) * radius
-
-        strengths = (sigma * h,)
-
-        evt, (result_qbx_dx,) = lpot_dx(actx.queue,
+        evt, (result_qbx_dx,) = lpot_dx(
+                actx.queue,
                 targets, sources, centers, strengths,
                 expansion_radii=expansion_radii)
-        evt, (result_qbx_dy,) = lpot_dy(actx.queue,
+        evt, (result_qbx_dy,) = lpot_dy(
+                actx.queue,
                 targets, sources, centers, strengths,
                 expansion_radii=expansion_radii)
+
+        result_qbx_dx = actx.to_numpy(result_qbx_dx)
+        result_qbx_dy = actx.to_numpy(result_qbx_dy)
 
         normals = unit_circle
         result_qbx = normals[0] * result_qbx_dx + normals[1] * result_qbx_dy
