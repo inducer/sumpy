@@ -32,7 +32,7 @@ from pytools.tag import ToTagSetConvertible
 
 __doc__ = """
 Array Context
-=============
+-------------
 
 .. autofunction:: make_loopy_program
 .. autoclass:: PyOpenCLArrayContext

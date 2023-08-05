@@ -23,6 +23,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from __future__ import annotations
+
 from numbers import Number
 from functools import partial
 from typing import Any, Sequence, Union, Optional, TYPE_CHECKING
@@ -194,20 +196,22 @@ class ToyContext:
 
 # {{{ helpers
 
-def _p2e(actx: PyOpenCLArrayContext,
-        psource, center, rscale, order, p2e, expn_class, expn_kwargs):
-    source_boxes = actx.zeros(1, dtype=np.int32)
-    box_source_starts = actx.zeros(1, dtype=np.int32)
-    box_source_counts_nonchild = actx.from_numpy(
-        np.array([psource.points.shape[-1]], dtype=np.int32)
-        )
-
+def _p2e(actx, psource, center, rscale, order, p2e, expn_class, expn_kwargs):
     toy_ctx = psource.toy_ctx
-    centers = actx.from_numpy(
-        np.asarray(center, dtype=np.float64).reshape(-1, 1)
-        )
 
-    coeffs = p2e(actx,
+    source_boxes = actx.from_numpy(
+        np.array([0], dtype=np.int32))
+    box_source_starts = actx.from_numpy(
+        np.array([0], dtype=np.int32))
+    box_source_counts_nonchild = actx.from_numpy(
+        np.array([psource.points.shape[-1]], dtype=np.int32))
+
+    center = np.asarray(center)
+    centers = actx.from_numpy(
+        np.array(center, dtype=np.float64).reshape(toy_ctx.kernel.dim, 1))
+
+    coeffs, = p2e(
+            actx,
             source_boxes=source_boxes,
             box_source_starts=box_source_starts,
             box_source_counts_nonchild=box_source_counts_nonchild,
@@ -217,29 +221,32 @@ def _p2e(actx: PyOpenCLArrayContext,
             rscale=rscale,
             nboxes=1,
             tgt_base_ibox=0,
-
             **toy_ctx.extra_source_and_kernel_kwargs)
 
     return expn_class(
-        toy_ctx, center, rscale, order, actx.to_numpy(coeffs[0]),
-        derived_from=psource, **expn_kwargs)
+            toy_ctx, center, rscale, order,
+            actx.to_numpy(coeffs[0]),
+            derived_from=psource, **expn_kwargs)
 
 
-def _e2p(actx: PyOpenCLArrayContext, psource, targets, e2p):
+def _e2p(actx, psource, targets, e2p):
+    toy_ctx = psource.toy_ctx
+
     ntargets = targets.shape[-1]
-
-    boxes = actx.zeros(1, dtype=np.int32)
-    box_target_starts = actx.zeros(1, dtype=np.int32)
+    boxes = actx.from_numpy(
+        np.array([0], dtype=np.int32))
+    box_target_starts = actx.from_numpy(
+        np.array([0], dtype=np.int32))
     box_target_counts_nonchild = actx.from_numpy(
         np.array([ntargets], dtype=np.int32))
 
-    toy_ctx = psource.toy_ctx
     centers = actx.from_numpy(
-        np.asarray(psource.center, dtype=np.float64).reshape(-1, 1)
-        )
-    coeffs = actx.from_numpy(np.array([psource.coeffs]))
+        np.array(psource.center, dtype=np.float64).reshape(toy_ctx.kernel.dim, 1))
 
     from pytools.obj_array import make_obj_array
+    from sumpy.tools import vector_to_device
+
+    coeffs = actx.from_numpy(np.array([psource.coeffs]))
     pot, = e2p(
             actx,
             src_expansions=coeffs,
@@ -250,30 +257,36 @@ def _e2p(actx: PyOpenCLArrayContext, psource, targets, e2p):
             centers=centers,
             rscale=psource.rscale,
             targets=actx.from_numpy(make_obj_array(targets)),
-
             **toy_ctx.extra_kernel_kwargs)
 
     return actx.to_numpy(pot)
 
 
 def _e2e(actx: PyOpenCLArrayContext,
-        psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs):
+         psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs):
     toy_ctx = psource.toy_ctx
 
-    target_boxes = actx.from_numpy(np.array([1], dtype=np.int32))
-    src_box_starts = actx.from_numpy(np.array([0, 1], dtype=np.int32))
-    src_box_lists = actx.zeros(1, dtype=np.int32)
+    target_boxes = actx.from_numpy(
+        np.array([1], dtype=np.int32))
+    src_box_starts = actx.from_numpy(
+        np.array([0, 1], dtype=np.int32))
+    src_box_lists = actx.from_numpy(
+        np.array([0], dtype=np.int32))
 
-    centers = np.array([
-        # box 0: source
-        psource.center,
-        # box 1: target
-        to_center,
-        ], dtype=np.float64)
-    centers = actx.from_numpy(centers.T.copy())
+    centers = actx.from_numpy(
+        np.array(
+            [
+                # box 0: source
+                psource.center,
+
+                # box 1: target
+                to_center,
+            ],
+            dtype=np.float64).T.copy()
+        )
     coeffs = actx.from_numpy(np.array([psource.coeffs]))
 
-    to_coeffs = e2e(
+    to_coeffs, = e2e(
             actx,
             src_expansions=coeffs,
             src_base_ibox=0,
@@ -288,12 +301,12 @@ def _e2e(actx: PyOpenCLArrayContext,
 
             src_rscale=psource.rscale,
             tgt_rscale=to_rscale,
-
             **toy_ctx.extra_kernel_kwargs)
 
     return expn_class(
-        toy_ctx, to_center, to_rscale, to_order, actx.to_numpy(to_coeffs[1]),
-        derived_from=psource, **expn_kwargs)
+            toy_ctx, to_center, to_rscale, to_order,
+            actx.to_numpy(to_coeffs[1]),
+            derived_from=psource, **expn_kwargs)
 
 # }}}
 
@@ -327,13 +340,11 @@ class PotentialSource:
         """
         raise NotImplementedError()
 
-    def __neg__(self) -> "PotentialSource":
+    def __neg__(self) -> PotentialSource:
         return -1*self
 
-    def __add__(
-            self,
-            other: Union[Number, np.number, "PotentialSource"],
-            ) -> "PotentialSource":
+    def __add__(self, other: Union[Number, np.number, PotentialSource]
+                ) -> PotentialSource:
         if isinstance(other, (Number, np.number)):
             other = ConstantPotential(self.toy_ctx, other)
         elif not isinstance(other, PotentialSource):
@@ -343,22 +354,16 @@ class PotentialSource:
 
     __radd__ = __add__
 
-    def __sub__(
-            self,
-            other: Union[Number, np.number, "PotentialSource"],
-            ) -> "PotentialSource":
+    def __sub__(self,
+                other: Union[Number, np.number, PotentialSource]) -> PotentialSource:
         return self.__add__(-other)
 
-    def __rsub__(
-            self,
-            other: Union[Number, np.number, "PotentialSource"]
-            ) -> "PotentialSource":
+    def __rsub__(self, other: Union[Number, np.number, PotentialSource]
+                 ) -> PotentialSource:
         return (-self).__add__(other)
 
-    def __mul__(
-            self,
-            other: Union[Number, np.number, "PotentialSource"],
-            ) -> "PotentialSource":
+    def __mul__(self,
+                other: Union[Number, np.number, PotentialSource]) -> PotentialSource:
         if isinstance(other, (Number, np.number)):
             other = ConstantPotential(self.toy_ctx, other)
         elif not isinstance(other, PotentialSource):
@@ -572,16 +577,19 @@ class Product(PotentialExpressionNode):
 
 
 def multipole_expand(
-        actx: PyOpenCLArrayContext, psource: PotentialSource, center: np.ndarray, *,
-        order: Optional[int] = None, rscale: float = 1,
+        actx: PyOpenCLArrayContext,
+        psource: PotentialSource,
+        center: np.ndarray, *,
+        order: Optional[int] = None,
+        rscale: float = 1,
         **expn_kwargs: Any) -> MultipoleExpansion:
     if isinstance(psource, PointSources):
         if order is None:
             raise ValueError("order may not be None")
 
         return _p2e(actx,
-            psource, center, rscale, order, psource.toy_ctx.get_p2m(order),
-            MultipoleExpansion, expn_kwargs)
+                psource, center, rscale, order, psource.toy_ctx.get_p2m(order),
+                MultipoleExpansion, expn_kwargs)
 
     elif isinstance(psource, MultipoleExpansion):
         if order is None:
@@ -596,32 +604,35 @@ def multipole_expand(
 
 
 def local_expand(
-        actx: PyOpenCLArrayContext, psource: PotentialSource, center: np.ndarray, *,
-        order: Optional[int] = None, rscale: float = 1,
+        actx: PyOpenCLArrayContext,
+        psource: PotentialSource,
+        center: np.ndarray, *,
+        order: Optional[int] = None,
+        rscale: float = 1,
         **expn_kwargs: Any) -> LocalExpansion:
     if isinstance(psource, PointSources):
         if order is None:
             raise ValueError("order may not be None")
 
         return _p2e(actx,
-            psource, center, rscale, order, psource.toy_ctx.get_p2l(order),
-            LocalExpansion, expn_kwargs)
+                psource, center, rscale, order, psource.toy_ctx.get_p2l(order),
+                LocalExpansion, expn_kwargs)
 
     elif isinstance(psource, MultipoleExpansion):
         if order is None:
             order = psource.order
 
         return _e2e(actx, psource, center, rscale, order,
-            psource.toy_ctx.get_m2l(psource.order, order),
-            LocalExpansion, expn_kwargs)
+                psource.toy_ctx.get_m2l(psource.order, order),
+                LocalExpansion, expn_kwargs)
 
     elif isinstance(psource, LocalExpansion):
         if order is None:
             order = psource.order
 
         return _e2e(actx, psource, center, rscale, order,
-            psource.toy_ctx.get_l2l(psource.order, order),
-            LocalExpansion, expn_kwargs)
+                psource.toy_ctx.get_l2l(psource.order, order),
+                LocalExpansion, expn_kwargs)
 
     else:
         raise TypeError(f"do not know how to expand '{type(psource).__name__}'")
@@ -705,8 +716,8 @@ def l_inf(actx: PyOpenCLArrayContext, psource: PotentialSource, radius: float,
 # {{{ schematic visualization
 
 def draw_box(el, eh, **kwargs):
-    import matplotlib.pyplot as pt
     import matplotlib.patches as mpatches
+    import matplotlib.pyplot as pt
     from matplotlib.path import Path
 
     pathdata = [

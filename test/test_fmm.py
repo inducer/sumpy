@@ -62,9 +62,13 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts([
 
 # {{{ test_sumpy_fmm
 
-@pytest.mark.parametrize("use_translation_classes, use_fft, fft_backend",
-    [(False, False, None), (True, False, None), (True, True, "loopy"),
-     (True, True, "pyvkfft")])
+@pytest.mark.parametrize(
+    ("use_translation_classes", "use_fft", "fft_backend"), [
+        (False, False, None),
+        (True, False, None),
+        (True, True, "loopy"),
+        (True, True, "pyvkfft"),
+    ])
 @pytest.mark.parametrize(
         ("knl", "local_expn_class", "mpole_expn_class",
         "order_varies_with_level"), [
@@ -92,6 +96,9 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts([
 def test_sumpy_fmm(actx_factory, knl, local_expn_class, mpole_expn_class,
         order_varies_with_level, use_translation_classes, use_fft,
         fft_backend, visualize=False):
+    if fft_backend == "pyvkfft":
+        pytest.importorskip("pyvkfft")
+
     if visualize:
         logging.basicConfig(level=logging.INFO)
 
@@ -394,7 +401,7 @@ def test_unified_single_and_double(actx_factory, visualize=False):
     strength_usages = [[0], [1], [0, 1]]
 
     alpha = np.linspace(0, 2*np.pi, nsources, np.float64)
-    dir_vec = np.vstack([np.cos(alpha), np.sin(alpha)])
+    dir_vec = actx.from_numpy(np.vstack([np.cos(alpha), np.sin(alpha)]))
 
     results = []
     for source_kernels, strength_usage in zip(source_kernel_vecs, strength_usages):
@@ -518,8 +525,8 @@ def test_sumpy_fmm_exclude_self(actx_factory, visualize=False):
     rng = np.random.default_rng(44)
     weights = actx.from_numpy(rng.random(nsources, dtype=np.float64))
 
-    target_to_source = np.arange(tree.ntargets, dtype=np.int32)
-    self_extra_kwargs = {"target_to_source": actx.from_numpy(target_to_source)}
+    target_to_source = actx.from_numpy(np.arange(tree.ntargets, dtype=np.int32))
+    self_extra_kwargs = {"target_to_source": target_to_source}
 
     target_kernels = [knl]
 
@@ -584,8 +591,8 @@ def test_sumpy_axis_source_derivative(actx_factory, visualize=False):
     rng = np.random.default_rng(12)
     weights = actx.from_numpy(rng.random(nsources, dtype=np.float64))
 
-    target_to_source = np.arange(tree.ntargets, dtype=np.int32)
-    self_extra_kwargs = {"target_to_source": actx.from_numpy(target_to_source)}
+    target_to_source = actx.from_numpy(np.arange(tree.ntargets, dtype=np.int32))
+    self_extra_kwargs = {"target_to_source": target_to_source}
 
     from sumpy.kernel import AxisTargetDerivative, AxisSourceDerivative
 
@@ -652,8 +659,8 @@ def test_sumpy_target_point_multiplier(actx_factory, deriv_axes, visualize=False
     rng = np.random.default_rng(12)
     weights = actx.from_numpy(rng.random(nsources, dtype=np.float64))
 
-    target_to_source = np.arange(tree.ntargets, dtype=np.int32)
-    self_extra_kwargs = {"target_to_source": actx.from_numpy(target_to_source)}
+    target_to_source = actx.from_numpy(np.arange(tree.ntargets, dtype=np.int32))
+    self_extra_kwargs = {"target_to_source": target_to_source}
 
     from sumpy.kernel import TargetPointMultiplier, AxisTargetDerivative
 
