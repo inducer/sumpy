@@ -926,8 +926,8 @@ def get_opencl_fft_app(
 
 def run_opencl_fft(
         actx: PyOpenCLArrayContext,
-        fft_app: Tuple[Any, FFTBackend], *,
-        input_vec: Any,
+        fft_app: Tuple[Any, FFTBackend],
+        input_vec: Any, *,
         inverse: bool = False,
         wait_for: List["pyopencl.Event"] = None) -> Tuple["pyopencl.Event", Any]:
     """Runs an FFT on input_vec and returns a :class:`MarkerBasedProfilingEvent`

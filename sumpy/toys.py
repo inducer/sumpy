@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 __copyright__ = """
 Copyright (C) 2017 Andreas Kloeckner
 Copyright (C) 2017 Matt Wala
@@ -22,8 +24,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
-from __future__ import annotations
 
 from numbers import Number
 from functools import partial
@@ -244,8 +244,6 @@ def _e2p(actx, psource, targets, e2p):
         np.array(psource.center, dtype=np.float64).reshape(toy_ctx.kernel.dim, 1))
 
     from pytools.obj_array import make_obj_array
-    from sumpy.tools import vector_to_device
-
     coeffs = actx.from_numpy(np.array([psource.coeffs]))
     pot, = e2p(
             actx,

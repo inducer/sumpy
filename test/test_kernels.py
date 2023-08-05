@@ -32,7 +32,6 @@ from arraycontext import pytest_generate_tests_for_array_contexts
 from sumpy.array_context import (                                 # noqa: F401
         PytestPyOpenCLArrayContextFactory, _acf)
 
-from pytools.obj_array import make_obj_array
 import sumpy.symbolic as sym
 from sumpy.expansion.multipole import (
     VolumeTaylorMultipoleExpansion,
