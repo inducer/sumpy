@@ -30,6 +30,11 @@ from sumpy.expansion import (
     VolumeTaylorExpansionMixin,
     LinearPDEConformingVolumeTaylorExpansion)
 from sumpy.tools import mi_set_axis, add_to_sac, mi_power, mi_factorial
+from sumpy.kernel import Kernel
+
+import loopy as lp
+
+from typing import Sequence, Tuple, Callable
 
 import logging
 logger = logging.getLogger(__name__)
@@ -90,17 +95,10 @@ class VolumeTaylorMultipoleExpansionBase(
                 rscale, (1,), sac=sac)
 
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
-        from sumpy.derivative_taker import DifferentiatedExprDerivativeTaker
         if not self.use_rscale:
             rscale = 1
 
         base_taker = kernel.get_derivative_taker(bvec, rscale, sac)
-        # Following is a no-op, but AxisTargetDerivative.postprocess_at_target and
-        # DirectionalTargetDerivative.postprocess_at_target only handles
-        # DifferentiatedExprDerivativeTaker and sympy expressions, so we need to
-        # make the taker a DifferentitatedExprDerivativeTaker instance.
-        base_taker = DifferentiatedExprDerivativeTaker(base_taker,
-                {tuple([0]*self.dim): 1})
         taker = kernel.postprocess_at_target(base_taker, bvec)
 
         result = []
@@ -109,6 +107,20 @@ class VolumeTaylorMultipoleExpansionBase(
 
         result = sym.Add(*tuple(result))
         return result
+
+    def loopy_evaluator_and_optimizations(self, kernels: Sequence[Kernel]) \
+            -> Tuple[lp.TranslationUnit, Sequence[
+                Callable[[lp.TranslationUnit], lp.TranslationUnit]]]:
+        """
+        :returns: a :mod:`loopy` kernel that returns the evaluated
+            target transforms of the potential given by *kernels*.
+        """
+        from sumpy.expansion.loopy import (make_e2p_loopy_kernel,
+            make_m2p_loopy_kernel_for_volume_taylor)
+        try:
+            return make_m2p_loopy_kernel_for_volume_taylor(self, kernels)
+        except NotImplementedError:
+            return make_e2p_loopy_kernel(self, kernels)
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, _fast_version=True):

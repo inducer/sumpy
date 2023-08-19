@@ -21,9 +21,12 @@ THE SOFTWARE.
 """
 
 from abc import ABC, abstractmethod
+from pytools import memoize_method
 
 import numpy as np
 import loopy as lp
+from loopy.kernel.data import LocalInameTag
+import pymbolic.primitives as prim
 
 from sumpy.tools import KernelCacheMixin, gather_loopy_arguments
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
@@ -70,7 +73,7 @@ class E2PBase(KernelCacheMixin, ABC):
 
         self.context = ctx
         self.expansion = expansion
-        self.kernels = kernels
+        self.kernels = tuple(kernels)
         self.name = name or self.default_name
         self.device = device
 
@@ -81,15 +84,18 @@ class E2PBase(KernelCacheMixin, ABC):
     def default_name(self):
         pass
 
+    @memoize_method
+    def get_loopy_evaluator_and_optimizations(self):
+        return self.expansion.loopy_evaluator_and_optimizations(self.kernels)
+
     def get_cache_key(self):
         return (type(self).__name__, self.expansion, tuple(self.kernels))
 
     def add_loopy_eval_callable(
             self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
-        inner_knl = self.expansion.loopy_evaluator(self.kernels)
+        inner_knl, _ = self.get_loopy_evaluator_and_optimizations()
         loopy_knl = lp.merge([loopy_knl, inner_knl])
         loopy_knl = lp.inline_callable_kernel(loopy_knl, "e2p")
-        loopy_knl = lp.remove_unused_inames(loopy_knl)
         for kernel in self.kernels:
             loopy_knl = kernel.prepare_loopy_kernel(loopy_knl)
         loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
@@ -117,23 +123,26 @@ class E2PFromSingleBox(E2PBase):
     def default_name(self):
         return "e2p_from_single_box"
 
-    def get_kernel(self):
+    def get_kernel(self, max_ntargets_in_one_box, max_work_items):
         ncoeffs = len(self.expansion)
         loopy_args = self.get_loopy_args()
 
         loopy_knl = lp.make_kernel(
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
-                    "{[itgt,idim]: itgt_start<=itgt<itgt_end and 0<=idim<dim}",
+                    "{[idim]: 0<=idim<dim}",
+                    "{[itgt_offset]: 0<=itgt_offset<max_ntargets_in_one_box}",
                     "{[icoeff]: 0<=icoeff<ncoeffs}",
                     "{[iknl]: 0<=iknl<nresults}",
+                    "{[dummy]: 0<=dummy<max_work_items}",
                 ],
                 self.get_kernel_scaling_assignment()
                 + ["""
                 for itgt_box
-                    <> tgt_ibox = target_boxes[itgt_box]
-                    <> itgt_start = box_target_starts[tgt_ibox]
-                    <> itgt_end = itgt_start+box_target_counts_nonchild[tgt_ibox]
+                    <> tgt_ibox = target_boxes[itgt_box]   {id=fetch_init0}
+                    <> itgt_start = box_target_starts[tgt_ibox]  {id=fetch_init1}
+                    <> itgt_end = itgt_start+box_target_counts_nonchild[tgt_ibox] \
+                            {id=fetch_init2}
 
                     <> center[idim] = centers[idim, tgt_ibox] {id=fetch_center}
 
@@ -141,9 +150,13 @@ class E2PFromSingleBox(E2PBase):
                             src_expansions[tgt_ibox - src_base_ibox, icoeff] \
                             {id=fetch_coeffs}
 
-                    for itgt
-                        <> tgt[idim] = targets[idim, itgt] {id=fetch_tgt,dup=idim}
-                        <> result_temp[iknl] = 0  {id=init_result,dup=iknl}
+                    for itgt_offset
+                        <> itgt = itgt_start + itgt_offset
+                        <> run_itgt = itgt<itgt_end
+                        <> tgt[idim] = targets[idim, itgt] {id=fetch_tgt, \
+                            dup=idim,if=run_itgt}
+                        <> result_temp[iknl] = 0  {id=init_result,dup=iknl, \
+                            if=run_itgt}
                         [iknl]: result_temp[iknl] = e2p(
                             [iknl]: result_temp[iknl],
                             [icoeff]: coeffs[icoeff],
@@ -155,9 +168,9 @@ class E2PFromSingleBox(E2PBase):
                             targets,
                 """ + ",".join(arg.name for arg in loopy_args) + """
                         )  {dep=fetch_coeffs:fetch_center:init_result:fetch_tgt,\
-                                id=update_result}
+                                id=update_result,if=run_itgt}
                         result[iknl, itgt] = result_temp[iknl] * kernel_scaling \
-                            {id=write_result,dep=update_result}
+                            {id=write_result,dep=update_result,if=run_itgt}
                     end
                 end
                 """],
@@ -182,7 +195,9 @@ class E2PFromSingleBox(E2PBase):
                 silenced_warnings="write_race(*_result)",
                 default_offset=lp.auto,
                 fixed_parameters={"dim": self.dim, "nresults": len(self.kernels),
-                        "ncoeffs": ncoeffs},
+                    "ncoeffs": ncoeffs,
+                    "max_work_items": max_work_items,
+                    "max_ntargets_in_one_box": max_ntargets_in_one_box},
                 lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
@@ -191,13 +206,44 @@ class E2PFromSingleBox(E2PBase):
 
         return loopy_knl
 
-    def get_optimized_kernel(self):
-        # FIXME
-        knl = self.get_kernel()
+    def get_optimized_kernel(self, max_ntargets_in_one_box):
+        _, optimizations = self.get_loopy_evaluator_and_optimizations()
+
+        ncoeffs = len(self.expansion)
+        max_work_items = min(256, max(ncoeffs, max_ntargets_in_one_box))
+        knl = self.get_kernel(max_ntargets_in_one_box=max_ntargets_in_one_box,
+                              max_work_items=max_work_items)
+
         knl = lp.tag_inames(knl, {"itgt_box": "g.0"})
+        knl = lp.split_iname(knl, "itgt_offset", max_work_items, inner_tag="l.0")
+        knl = lp.split_iname(knl, "icoeff", max_work_items, inner_tag="l.0")
+        knl = lp.add_inames_to_insn(knl, "dummy",
+            "id:fetch_init* or id:fetch_center or id:kernel_scaling")
         knl = lp.add_inames_to_insn(knl, "itgt_box", "id:kernel_scaling")
+        knl = lp.tag_inames(knl, {"dummy": "l.0"})
+        knl = lp.set_temporary_address_space(knl, "coeffs", lp.AddressSpace.LOCAL)
         knl = lp.set_options(knl,
-                enforce_variable_access_ordered="no_check")
+            enforce_variable_access_ordered="no_check", write_code=False)
+
+        for transform in optimizations:
+            knl = transform(knl)
+
+        # If there are inames tagged as local in the inner kernel
+        # we need to remove the iname itgt_offset_inner from instructions
+        # within those inames and also remove the predicate run_itgt
+        # which depends on itgt_offset_inner
+        tagged_inames = [iname.name for iname in
+            knl.default_entrypoint.inames.values() if
+            iname.name.startswith("e2p_") and any(
+                isinstance(tag, LocalInameTag) for tag in iname.tags)]
+        if tagged_inames:
+            insn_ids = [insn.id for insn in knl.default_entrypoint.instructions
+                if any(iname in tagged_inames for iname in insn.within_inames)]
+            match = " or ".join(f"id:{insn_id}" for insn_id in insn_ids)
+            knl = lp.remove_inames_from_insn(knl,
+                frozenset(["itgt_offset_inner"]), match)
+            knl = lp.remove_predicates_from_insn(knl,
+                frozenset([prim.Variable("run_itgt")]), match)
 
         return knl
 
@@ -210,7 +256,9 @@ class E2PFromSingleBox(E2PBase):
         :arg centers:
         :arg targets:
         """
-        knl = self.get_cached_kernel_executor()
+        max_ntargets_in_one_box = kwargs.pop("max_ntargets_in_one_box")
+        knl = self.get_cached_kernel_executor(
+                max_ntargets_in_one_box=max_ntargets_in_one_box)
 
         centers = kwargs.pop("centers")
         # "1" may be passed for rscale, which won't have its type
@@ -229,42 +277,48 @@ class E2PFromCSR(E2PBase):
     def default_name(self):
         return "e2p_from_csr"
 
-    def get_kernel(self):
+    def get_kernel(self, max_ntargets_in_one_box, max_work_items):
         ncoeffs = len(self.expansion)
         loopy_args = self.get_loopy_args()
 
         loopy_knl = lp.make_kernel(
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
-                    "{[itgt]: itgt_start<=itgt<itgt_end}",
+                    "{[itgt_offset]: 0<=itgt_offset<max_ntargets_in_one_box}",
                     "{[isrc_box]: isrc_box_start<=isrc_box<isrc_box_end }",
                     "{[idim]: 0<=idim<dim}",
                     "{[icoeff]: 0<=icoeff<ncoeffs}",
                     "{[iknl]: 0<=iknl<nresults}",
+                    "{[dummy]: 0<=dummy<max_work_items}",
                 ],
                 self.get_kernel_scaling_assignment()
                 + ["""
                 for itgt_box
-                    <> tgt_ibox = target_boxes[itgt_box]
-                    <> itgt_start = box_target_starts[tgt_ibox]
-                    <> itgt_end = itgt_start+box_target_counts_nonchild[tgt_ibox]
+                    <> tgt_ibox = target_boxes[itgt_box] {id=init_box0}
+                    <> itgt_start = box_target_starts[tgt_ibox] {id=init_box1}
+                    <> itgt_end = itgt_start+box_target_counts_nonchild[tgt_ibox] \
+                            {id=init_box2}
+                    <> isrc_box_start = source_box_starts[itgt_box] {id=init_box3}
+                    <> isrc_box_end = source_box_starts[itgt_box+1] {id=init_box4}
 
-                    for itgt
-                        <> tgt[idim] = targets[idim,itgt]  {id=fetch_tgt,dup=idim}
-
-                        <> isrc_box_start = source_box_starts[itgt_box]
-                        <> isrc_box_end = source_box_starts[itgt_box+1]
-
-                        <> result_temp[iknl] = 0 {id=init_result,dup=iknl}
-                        for isrc_box
-                            <> src_ibox = source_box_lists[isrc_box]
-                            <> coeffs[icoeff] = \
+                    <> result_temp[itgt_offset, iknl] = 0 \
+                                {id=init_result,dup=iknl}
+                    for isrc_box
+                        <> src_ibox = source_box_lists[isrc_box] {id=fetch_src_box}
+                        <> coeffs[icoeff] = \
                                 src_expansions[src_ibox - src_base_ibox, icoeff] \
-                                {id=fetch_coeffs,dup=icoeff}
-                            <> center[idim] = centers[idim, src_ibox] \
+                                {id=fetch_coeffs}
+                        <> center[idim] = centers[idim, src_ibox] \
                                 {dup=idim,id=fetch_center}
-                            [iknl]: result_temp[iknl] = e2p(
-                                [iknl]: result_temp[iknl],
+
+                        for itgt_offset
+                            <> itgt = itgt_start + itgt_offset
+                            <> run_itgt = itgt<itgt_end
+                            <> tgt[idim] = targets[idim,itgt]  \
+                                {id=fetch_tgt,dup=idim,if=run_itgt}
+
+                            [iknl]: result_temp[itgt_offset, iknl] = e2p(
+                                [iknl]: result_temp[itgt_offset, iknl],
                                 [icoeff]: coeffs[icoeff],
                                 [idim]: center[idim],
                                 [idim]: tgt[idim],
@@ -274,11 +328,18 @@ class E2PFromCSR(E2PBase):
                                 targets,
                 """ + ",".join(arg.name for arg in loopy_args) + """
                             )  {id=update_result, \
-                              dep=fetch_coeffs:fetch_center:fetch_tgt:init_result}
+                              dep=fetch_coeffs:fetch_center:fetch_tgt:init_result, \
+                              if=run_itgt}
                         end
-                        result[iknl, itgt] = result[iknl, itgt] + result_temp[iknl] \
-                                * kernel_scaling \
-                                {dep=update_result:init_result,id=write_result,dup=iknl}
+                    end
+                    for itgt_offset
+                        <> itgt2 = itgt_start + itgt_offset {id=init_itgt_for_write}
+                        <> run_itgt2 = itgt_start + itgt_offset < itgt_end  \
+                                {id=init_cond_for_write}
+                        result[iknl, itgt2] = result[iknl, itgt2] + result_temp[ \
+                            itgt_offset, iknl] * kernel_scaling \
+                            {dep=update_result:init_result,id=write_result, \
+                             dup=iknl,if=run_itgt2}
                     end
                 end
                 """],
@@ -306,28 +367,52 @@ class E2PFromCSR(E2PBase):
                 fixed_parameters={
                         "ncoeffs": ncoeffs,
                         "dim": self.dim,
+                        "max_work_items": max_work_items,
+                        "max_ntargets_in_one_box": max_ntargets_in_one_box,
                         "nresults": len(self.kernels)},
                 lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, "iknl*:unr")
-        loopy_knl = lp.prioritize_loops(loopy_knl, "itgt_box,itgt,isrc_box")
+        loopy_knl = lp.prioritize_loops(loopy_knl, "itgt_box,isrc_box,itgt_offset")
         loopy_knl = self.add_loopy_eval_callable(loopy_knl)
         loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
 
         return loopy_knl
 
-    def get_optimized_kernel(self):
-        # FIXME
-        knl = self.get_kernel()
-        knl = lp.tag_inames(knl, {"itgt_box": "g.0"})
+    def get_optimized_kernel(self, max_ntargets_in_one_box):
+        _, optimizations = self.get_loopy_evaluator_and_optimizations()
+        ncoeffs = len(self.expansion)
+        max_work_items = min(256, max(ncoeffs, max_ntargets_in_one_box))
+
+        knl = self.get_kernel(max_ntargets_in_one_box=max_ntargets_in_one_box,
+                              max_work_items=max_work_items)
+        knl = lp.tag_inames(knl, {"itgt_box": "g.0", "dummy": "l.0"})
+        knl = lp.unprivatize_temporaries_with_inames(knl,
+            "itgt_offset", "result_temp")
+        knl = lp.split_iname(knl, "itgt_offset", max_work_items, inner_tag="l.0")
+        knl = lp.split_iname(knl, "icoeff", max_work_items, inner_tag="l.0")
+        knl = lp.privatize_temporaries_with_inames(knl,
+            "itgt_offset_outer", "result_temp")
+        knl = lp.duplicate_inames(knl, "itgt_offset_outer", "id:init_result")
+        knl = lp.duplicate_inames(knl, "itgt_offset_outer",
+            "id:write_result or id:init_itgt_for_write or id:init_cond_for_write")
+        knl = lp.add_inames_to_insn(knl, "dummy",
+            "id:init_box* or id:fetch_src_box or id:fetch_center "
+            "or id:kernel_scaling")
         knl = lp.add_inames_to_insn(knl, "itgt_box", "id:kernel_scaling")
+        knl = lp.add_inames_to_insn(knl, "itgt_offset_inner", "id:fetch_init*")
+        knl = lp.set_temporary_address_space(knl, "coeffs", lp.AddressSpace.LOCAL)
         knl = lp.set_options(knl,
-                enforce_variable_access_ordered="no_check")
+                enforce_variable_access_ordered="no_check", write_code=False)
+        for transform in optimizations:
+            knl = transform(knl)
         return knl
 
     def __call__(self, queue, **kwargs):
-        knl = self.get_cached_kernel_executor()
+        max_ntargets_in_one_box = kwargs.pop("max_ntargets_in_one_box")
+        knl = self.get_cached_kernel_executor(
+                max_ntargets_in_one_box=max_ntargets_in_one_box)
 
         centers = kwargs.pop("centers")
         # "1" may be passed for rscale, which won't have its type
