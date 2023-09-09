@@ -29,6 +29,7 @@ from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 
 from sumpy.tools import (
         KernelComputation, KernelCacheMixin, is_obj_array_like)
+from sumpy.codegen import register_optimization_preambles
 
 
 __doc__ = """
@@ -190,7 +191,6 @@ class P2PBase(KernelCacheMixin, KernelComputation):
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
 
-        from sumpy.codegen import register_optimization_preambles
         knl = register_optimization_preambles(knl, self.device)
 
         return knl
@@ -411,6 +411,8 @@ class P2PMatrixSubsetGenerator(P2PBase):
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
+        knl = register_optimization_preambles(knl, self.device)
+
         return knl
 
     def __call__(self, queue, targets, sources, tgtindices, srcindices, **kwargs):
@@ -717,7 +719,6 @@ class P2PFromCSR(P2PBase):
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
 
-        from sumpy.codegen import register_optimization_preambles
         knl = register_optimization_preambles(knl, self.device)
 
         return knl
