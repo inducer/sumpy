@@ -29,6 +29,7 @@ import pymbolic
 
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 from sumpy.tools import KernelCacheMixin, to_complex_dtype
+from sumpy.codegen import register_optimization_preambles
 from pytools import memoize_method
 
 import logging
@@ -145,6 +146,7 @@ class E2EBase(KernelCacheMixin, ABC):
         # FIXME
         knl = self.get_kernel()
         knl = lp.split_iname(knl, "itgt_box", 64, outer_tag="g.0", inner_tag="l.0")
+        knl = register_optimization_preambles(knl, self.device)
 
         return knl
 
@@ -279,6 +281,7 @@ class E2EFromCSR(E2EBase):
         # FIXME
         knl = self.get_kernel()
         knl = lp.split_iname(knl, "itgt_box", 64, outer_tag="g.0", inner_tag="l.0")
+        knl = register_optimization_preambles(knl, self.device)
 
         return knl
 
@@ -518,6 +521,7 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
         knl = self.get_kernel(result_dtype)
         knl = self.tgt_expansion.m2l_translation.optimize_loopy_kernel(
                 knl, self.tgt_expansion, self.src_expansion)
+        knl = register_optimization_preambles(knl, self.device)
 
         return knl
 
@@ -627,6 +631,7 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
         knl = self.get_kernel(result_dtype)
         knl = lp.tag_inames(knl, "idim*:unr")
         knl = lp.tag_inames(knl, {"itr_class": "g.0"})
+        knl = register_optimization_preambles(knl, self.device)
 
         return knl
 
@@ -732,6 +737,7 @@ class M2LPreprocessMultipole(E2EBase):
         _, optimizations = self.get_inner_knl_and_optimizations(result_dtype)
         for optimization in optimizations:
             knl = optimization(knl)
+        knl = register_optimization_preambles(knl, self.device)
         return knl
 
     def __call__(self, queue, **kwargs):
@@ -831,6 +837,7 @@ class M2LPostprocessLocal(E2EBase):
         for optimization in optimizations:
             knl = optimization(knl)
         knl = lp.add_inames_for_unused_hw_axes(knl)
+        knl = register_optimization_preambles(knl, self.device)
         return knl
 
     def __call__(self, queue, **kwargs):
