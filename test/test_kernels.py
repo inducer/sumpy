@@ -316,11 +316,15 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
         sources = (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64)
             + center[:, np.newaxis])
         loc_center = np.array([0.0, 0.0, 0.0, 6.0][-knl.dim:]) + center
+        varying_axis = -1
     else:
-        center = np.array([0, 1, 2][-knl.dim:], np.float64)
+        # The error behaviour is very specific to the point distribution.
+        # Even flipping the axis will lead to test failures
+        center = np.array([2, 1, 0][:knl.dim], np.float64)
         sources = 0.7 * (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64)
             + center[:, np.newaxis])
-        loc_center = np.array([0.0, 0.0, 5.5][-knl.dim:]) + center
+        loc_center = np.array([5.5, 0.0, 0.0][:knl.dim]) + center
+        varying_axis = 1
 
     strengths = actx.from_numpy(np.ones(nsources, dtype=np.float64) / nsources)
     sources = actx.from_numpy(sources)
@@ -343,7 +347,8 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
             centers = np.array(loc_center, dtype=np.float64).reshape(knl.dim, 1)
             fp = FieldPlotter(loc_center, extent=h, npoints=res)
         else:
-            eval_center = np.array([0.0, 0.0, 0.0, 1/h][-knl.dim:]) + center
+            eval_center = center.copy()
+            eval_center[varying_axis] = 1/h
             fp = FieldPlotter(eval_center, extent=0.1, npoints=res)
             centers = center[:, np.newaxis]
 
