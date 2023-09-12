@@ -244,8 +244,10 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
     (HeatKernel(1), LinearPDEConformingVolumeTaylorMultipoleExpansion),
     (HeatKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion),
     (HeatKernel(2), LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (HeatKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion),
-    (HeatKernel(3), LinearPDEConformingVolumeTaylorMultipoleExpansion),
+    pytest.param(HeatKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
+        marks=pytest.mark.slowtest),
+    pytest.param(HeatKernel(3), LinearPDEConformingVolumeTaylorMultipoleExpansion,
+        marks=pytest.mark.slowtest),
 
     (HelmholtzKernel(2), VolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), VolumeTaylorLocalExpansion),
