@@ -55,6 +55,7 @@ PDE kernels
 .. autoclass:: StressletKernel
 .. autoclass:: ElasticityKernel
 .. autoclass:: LineOfCompressionKernel
+.. autoclass:: HeatKernel
 
 Derivatives
 -----------
@@ -934,7 +935,15 @@ class LineOfCompressionKernel(ExpressionKernel):
 
 
 class HeatKernel(ExpressionKernel):
-    init_arg_names = ("dim",)
+    r"""The Green's function for the heat equation given by
+    :math:`e^{-r^2/{4 \alpha t^d}}/\sqrt{(4 \pi \alpha)^d}`
+    where :math:`d` is the number of spatial dimensions.
+
+    NOTE: This kernel cannot be used in an FMM yet and can only
+    be used in expansions and evaluations that occur forward
+    in the time dimension.
+    """
+    init_arg_names = ("spatial_dims", "heat_alpha_name")
 
     def __init__(self, spatial_dims, heat_alpha_name="alpha"):
         dim = spatial_dims + 1
@@ -954,7 +963,7 @@ class HeatKernel(ExpressionKernel):
         self.heat_alpha_name = heat_alpha_name
 
     def __getinitargs__(self):
-        return (self.dim, self.heat_alpha_name)
+        return (self.dim - 1, self.heat_alpha_name)
 
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode("utf8"))
