@@ -240,6 +240,13 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
     (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion),
     (LaplaceKernel(2), LinearPDEConformingVolumeTaylorMultipoleExpansion),
 
+    (HeatKernel(1), LinearPDEConformingVolumeTaylorLocalExpansion),
+    (HeatKernel(1), LinearPDEConformingVolumeTaylorMultipoleExpansion),
+    (HeatKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion),
+    (HeatKernel(2), LinearPDEConformingVolumeTaylorMultipoleExpansion),
+    (HeatKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion),
+    (HeatKernel(3), LinearPDEConformingVolumeTaylorMultipoleExpansion),
+
     (HelmholtzKernel(2), VolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), VolumeTaylorLocalExpansion),
     (HelmholtzKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion),
