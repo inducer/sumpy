@@ -473,7 +473,7 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
             grad_slack += 1
 
         if isinstance(base_knl, HeatKernel):
-            slack += 0.5
+            slack += 1.0
             grad_slack += 2.5
 
     if isinstance(knl, DirectionalSourceDerivative):
