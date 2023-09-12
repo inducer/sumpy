@@ -317,10 +317,10 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
             + center[:, np.newaxis])
         loc_center = np.array([0.0, 0.0, 0.0, 6.0][-knl.dim:]) + center
     else:
-        center = np.array([2, 1, 0][-knl.dim:], np.float64)
+        center = np.array([0, 1, 2][-knl.dim:], np.float64)
         sources = 0.7 * (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64)
             + center[:, np.newaxis])
-        loc_center = np.array([5.5, 0.0, 0.0][-knl.dim:]) + center
+        loc_center = np.array([0.0, 0.0, 5.5][-knl.dim:]) + center
 
     strengths = actx.from_numpy(np.ones(nsources, dtype=np.float64) / nsources)
     sources = actx.from_numpy(sources)
