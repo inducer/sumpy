@@ -44,6 +44,7 @@ from sumpy.kernel import (
     StressletKernel,
     ElasticityKernel,
     LineOfCompressionKernel,
+    HeatKernel,
     ExpressionKernel)
 from sumpy.expansion.diff_op import (
     make_identity_diff_op, concat, as_scalar_pde, diff,
@@ -110,6 +111,9 @@ class KernelInfo:
     KernelInfo(ElasticityKernel(3, 0, 0), mu=5, nu=0.2),
     KernelInfo(LineOfCompressionKernel(3, 0), mu=5, nu=0.2),
     KernelInfo(LineOfCompressionKernel(3, 1), mu=5, nu=0.2),
+    KernelInfo(HeatKernel(1), alpha=0.1),
+    KernelInfo(HeatKernel(2), alpha=0.1),
+    KernelInfo(HeatKernel(3), alpha=0.1),
     ])
 def test_pde_check_kernels(actx_factory, knl_info, order=5):
     actx = actx_factory()
@@ -129,7 +133,7 @@ def test_pde_check_kernels(actx_factory, knl_info, order=5):
     eoc_rec = EOCRecorder()
 
     for h in [0.1, 0.05, 0.025]:
-        cp = CalculusPatch(np.array([1, 0, 0])[:dim], h=h, order=order)
+        cp = CalculusPatch(np.array([0, 0, 0, 1])[-dim:], h=h, order=order)
         pot = pt_src.eval(cp.points)
 
         pde = knl_info.pde_func(cp, pot)
