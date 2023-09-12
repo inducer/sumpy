@@ -337,7 +337,8 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
     extra_source_kwargs = extra_kwargs.copy()
     if isinstance(knl, DirectionalSourceDerivative):
         alpha = np.linspace(0, 2*np.pi, nsources, np.float64)
-        dir_vec = np.vstack([np.cos(alpha), np.sin(alpha)])
+        dir_vec = np.vstack(
+                [np.cos(alpha), np.sin(alpha), alpha, alpha**2][:knl.dim])
         extra_source_kwargs["dir_vec"] = actx.from_numpy(dir_vec)
 
     from sumpy.visualization import FieldPlotter
@@ -463,8 +464,8 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
             grad_slack += 1
 
         if isinstance(base_knl, HeatKernel):
-             slack += 0.5
-             grad_slack += 1.5
+            slack += 0.5
+            grad_slack += 1.5
 
     if isinstance(knl, DirectionalSourceDerivative):
         slack += 1
