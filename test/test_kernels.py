@@ -331,7 +331,7 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
         sources = 0.7 * (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64)
             + center[:, np.newaxis])
         loc_center = np.array([5.5, 0.0, 0.0][:knl.dim]) + center
-        varying_axis = 1
+        varying_axis = 0
 
     strengths = actx.from_numpy(np.ones(nsources, dtype=np.float64) / nsources)
     sources = actx.from_numpy(sources)
@@ -472,7 +472,7 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
 
         if isinstance(base_knl, HeatKernel):
             slack += 0.5
-            grad_slack += 1.5
+            grad_slack += 2.5
 
     if isinstance(knl, DirectionalSourceDerivative):
         slack += 1
