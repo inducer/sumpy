@@ -48,6 +48,7 @@ from sumpy.kernel import (
     HelmholtzKernel,
     BiharmonicKernel,
     StokesletKernel,
+    HeatKernel,
     AxisTargetDerivative,
     DirectionalSourceDerivative)
 
@@ -278,6 +279,8 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
             extra_kwargs["k"] = 0.2
     if isinstance(base_knl, StokesletKernel):
         extra_kwargs["mu"] = 0.2
+    if isinstance(base_knl, HeatKernel):
+        extra_kwargs["alpha"] = 1.0
 
     if with_source_derivative:
         knl = DirectionalSourceDerivative(base_knl, "dir_vec")
@@ -306,12 +309,21 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
         h_values = [1/2, 1/3, 1/5]
 
     rng = np.random.default_rng(19)
-    center = np.array([2, 1, 0][:knl.dim], np.float64)
-    sources = actx.from_numpy(
-        0.7 * (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64))
-        + center[:, np.newaxis])
+
+    if isinstance(base_knl, HeatKernel):
+        # Setup sources so that there are no negative time intervals
+        center = np.array([0, 0, 0, 0.5][-knl.dim:], np.float64)
+        sources = (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64)
+            + center[:, np.newaxis])
+        loc_center = np.array([0.0, 0.0, 0.0, 6.0][-knl.dim:]) + center
+    else:
+        center = np.array([2, 1, 0][-knl.dim:], np.float64)
+        sources = 0.7 * (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64)
+            + center[:, np.newaxis])
+        loc_center = np.array([5.5, 0.0, 0.0][-knl.dim:]) + center
 
     strengths = actx.from_numpy(np.ones(nsources, dtype=np.float64) / nsources)
+    sources = actx.from_numpy(sources)
 
     source_boxes = actx.from_numpy(np.array([0], dtype=np.int32))
     box_source_starts = actx.from_numpy(np.array([0], dtype=np.int32))
@@ -328,15 +340,12 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
 
     for h in h_values:
         if issubclass(expn_class, LocalExpansionBase):
-            loc_center = np.array([5.5, 0.0, 0.0][:knl.dim]) + center
             centers = np.array(loc_center, dtype=np.float64).reshape(knl.dim, 1)
             fp = FieldPlotter(loc_center, extent=h, npoints=res)
         else:
-            eval_center = np.array([1/h, 0.0, 0.0][:knl.dim]) + center
+            eval_center = np.array([0.0, 0.0, 0.0, 1/h][-knl.dim:]) + center
             fp = FieldPlotter(eval_center, extent=0.1, npoints=res)
-            centers = (np.array([0.0, 0.0, 0.0][:knl.dim],
-                                dtype=np.float64).reshape(knl.dim, 1)
-                        + center[:, np.newaxis])
+            centers = center[:, np.newaxis]
 
         centers = actx.from_numpy(centers)
         targets = actx.from_numpy(make_obj_array(fp.points))
@@ -434,7 +443,10 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
     if issubclass(expn_class, LocalExpansionBase):
         tgt_order_grad = tgt_order - 1
         slack = 0.7
-        grad_slack = 0.5
+        if isinstance(base_knl, HeatKernel):
+            grad_slack = 0.8
+        else:
+            grad_slack = 0.5
     else:
         tgt_order_grad = tgt_order + 1
 
@@ -444,6 +456,10 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
         if order <= 2:
             slack += 1
             grad_slack += 1
+
+        if isinstance(base_knl, HeatKernel):
+             slack += 0.5
+             grad_slack += 1.5
 
     if isinstance(knl, DirectionalSourceDerivative):
         slack += 1

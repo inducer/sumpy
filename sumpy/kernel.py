@@ -933,6 +933,61 @@ class LineOfCompressionKernel(ExpressionKernel):
         return laplacian(w)
 
 
+class HeatKernel(ExpressionKernel):
+    init_arg_names = ("dim",)
+
+    def __init__(self, spatial_dims, heat_alpha_name="alpha"):
+        dim = spatial_dims + 1
+        d = make_sym_vector("d", dim)
+        t = d[-1]
+        r = pymbolic_real_norm_2(d[:-1])
+        alpha = SpatialConstant(heat_alpha_name)
+        expr = var("exp")(-r**2/(4 * alpha * t)) / var("sqrt")(t**(dim - 1))
+        scaling = 1/var("sqrt")((4*var("pi")*alpha)**(dim - 1))
+
+        super().__init__(
+                dim,
+                expression=expr,
+                global_scaling_const=scaling,
+                is_complex_valued=False)
+
+        self.heat_alpha_name = heat_alpha_name
+
+    def __getinitargs__(self):
+        return (self.dim, self.heat_alpha_name)
+
+    def update_persistent_hash(self, key_hash, key_builder):
+        key_hash.update(type(self).__name__.encode("utf8"))
+        key_builder.rec(key_hash, (self.dim, self.heat_alpha_name))
+
+    def __repr__(self):
+        return f"HeatKnl{self.dim - 1}D"
+
+    def get_args(self):
+        return [
+                KernelArgument(
+                    loopy_arg=lp.ValueArg(self.heat_alpha_name, np.float64),
+                    )]
+
+    mapper_method = "map_heat_kernel"
+
+    def get_derivative_taker(self, dvec, rscale, sac):
+        """Return a :class:`sumpy.derivative_taker.ExprDerivativeTaker` instance
+        that supports taking derivatives of the base kernel with respect to dvec.
+        """
+        from sumpy.derivative_taker import ExprDerivativeTaker
+        return ExprDerivativeTaker(self.get_expression(dvec), dvec, rscale,
+                sac)
+
+    def get_pde_as_diff_op(self):
+        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian, diff
+        alpha = sym.Symbol(self.heat_alpha_name)
+        w = make_identity_diff_op(self.dim - 1, time_dependent=True)
+        time_diff = [0]*self.dim
+        time_diff[-1] = 1
+        return diff(w, tuple(time_diff)) - alpha * laplacian(w)
+
+
 # }}}
 
 
@@ -1350,6 +1405,7 @@ class KernelIdentityMapper(KernelMapper):
     map_elasticity_kernel = map_expression_kernel
     map_line_of_compression_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
+    map_heat_kernel = map_expression_kernel
 
     def map_axis_target_derivative(self, kernel):
         return type(kernel)(kernel.axis, self.rec(kernel.inner_kernel))
@@ -1406,6 +1462,7 @@ class DerivativeCounter(KernelCombineMapper):
     map_yukawa_kernel = map_expression_kernel
     map_line_of_compression_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
+    map_heat_kernel = map_expression_kernel
 
     def map_axis_target_derivative(self, kernel):
         return 1 + self.rec(kernel.inner_kernel)
