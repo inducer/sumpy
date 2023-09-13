@@ -939,9 +939,11 @@ class HeatKernel(ExpressionKernel):
     :math:`e^{-r^2/{4 \alpha t^d}}/\sqrt{(4 \pi \alpha)^d}`
     where :math:`d` is the number of spatial dimensions.
 
-    NOTE: This kernel cannot be used in an FMM yet and can only
-    be used in expansions and evaluations that occur forward
-    in the time dimension.
+    .. note::
+    
+        This kernel cannot be used in an FMM yet and can only
+        be used in expansions and evaluations that occur forward
+        in the time dimension.
     """
     init_arg_names = ("spatial_dims", "heat_alpha_name")
 
