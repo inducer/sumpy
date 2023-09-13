@@ -306,7 +306,7 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
         h_values = [1/2, 1/3, 1/5]
 
     rng = np.random.default_rng(19)
-    center = np.array([2, 1, 0][:knl.dim], np.float64)
+    center = np.array([0, 1, 2][-knl.dim:], np.float64)
     sources = actx.from_numpy(
         0.7 * (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64))
         + center[:, np.newaxis])
@@ -328,11 +328,11 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
 
     for h in h_values:
         if issubclass(expn_class, LocalExpansionBase):
-            loc_center = np.array([5.5, 0.0, 0.0][:knl.dim]) + center
+            loc_center = np.array([0.0, 0.0, 5.5][-knl.dim:]) + center
             centers = np.array(loc_center, dtype=np.float64).reshape(knl.dim, 1)
             fp = FieldPlotter(loc_center, extent=h, npoints=res)
         else:
-            eval_center = np.array([1/h, 0.0, 0.0][:knl.dim]) + center
+            eval_center = np.array([0.0, 0.0, 1/h][-knl.dim:]) + center
             fp = FieldPlotter(eval_center, extent=0.1, npoints=res)
             centers = (np.array([0.0, 0.0, 0.0][:knl.dim],
                                 dtype=np.float64).reshape(knl.dim, 1)
