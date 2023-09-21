@@ -327,8 +327,6 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
         loc_center = np.array([0.0, 0.0, 0.0, 6.0][-knl.dim:]) + center
         varying_axis = -1
     else:
-        # The error behaviour is very specific to the point distribution.
-        # Even flipping the axis will lead to test failures
         center = np.array([2, 1, 0][:knl.dim], np.float64)
         sources = 0.7 * (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64)
             + center[:, np.newaxis])
