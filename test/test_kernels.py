@@ -538,7 +538,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
     # Just to make sure things also work away from the origin
     rng = np.random.default_rng(18)
-    origin = np.array([2, 1, 0][:knl.dim], np.float64)
+    origin = np.array([0, 1, 2][-knl.dim:], np.float64)
     sources = actx.from_numpy(
         0.7 * (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64))
         + origin[:, np.newaxis])
@@ -552,19 +552,19 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
     from sumpy.visualization import FieldPlotter
 
-    eval_offset = np.array([5.5, 0.0, 0][:knl.dim])
+    eval_offset = np.array([0.0, 0.0, 5.5][-knl.dim:])
     fp = FieldPlotter(eval_offset + origin, extent=0.3, npoints=res)
 
     centers = actx.from_numpy((np.array(
             [
                 # box 0: particles, first mpole here
-                [0, 0, 0][:knl.dim],
+                [0, 0, 0][-knl.dim:],
 
                 # box 1: second mpole here
-                np.array([-0.2, 0.1, 0][:knl.dim], np.float64),
+                np.array([0, 0.1, -0.2][-knl.dim:], np.float64),
 
                 # box 2: first local here
-                eval_offset + np.array([0.3, -0.2, 0][:knl.dim], np.float64),
+                eval_offset + np.array([0, -0.2, 0.3][-knl.dim:], np.float64),
 
                 # box 3: second local and eval here
                 eval_offset
