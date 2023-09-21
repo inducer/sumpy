@@ -940,7 +940,7 @@ class HeatKernel(ExpressionKernel):
     where :math:`d` is the number of spatial dimensions.
 
     .. note::
-    
+
         This kernel cannot be used in an FMM yet and can only
         be used in expansions and evaluations that occur forward
         in the time dimension.
