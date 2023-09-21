@@ -500,6 +500,8 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
 # {{{ test_translations
 
 @pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class", [
+    (HeatKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+      LinearPDEConformingVolumeTaylorMultipoleExpansion),
     (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
     (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
      LinearPDEConformingVolumeTaylorMultipoleExpansion),
@@ -535,6 +537,8 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
         extra_kwargs["k"] = 0.05
     if isinstance(knl, StokesletKernel):
         extra_kwargs["mu"] = 0.05
+    if isinstance(knl, HeatKernel):
+        extra_kwargs["alpha"] = 0.1
 
     # Just to make sure things also work away from the origin
     rng = np.random.default_rng(18)
