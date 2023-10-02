@@ -936,7 +936,7 @@ class LineOfCompressionKernel(ExpressionKernel):
 
 class HeatKernel(ExpressionKernel):
     r"""The Green's function for the heat equation given by
-    :math:`e^{-r^2/{4 \alpha t^d}}/\sqrt{(4 \pi \alpha)^d}`
+    :math:`e^{-r^2/{4 \alpha t}}/\sqrt{(4 \pi \alpha t)^d}`
     where :math:`d` is the number of spatial dimensions.
 
     .. note::
