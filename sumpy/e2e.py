@@ -332,7 +332,12 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                 [sym.Symbol(f"data{i}")
             for i in range(m2l_translation_classes_dependent_ndata)]
 
-        ncoeff_src = len(self.src_expansion)
+        m2l_translation = self.tgt_expansion.m2l_translation
+        if m2l_translation.use_preprocessing:
+            ncoeff_src = m2l_translation.preprocess_multipole_nexprs(
+                self.tgt_expansion, self.src_expansion)
+        else:
+            ncoeff_src = len(self.src_expansion)
 
         src_coeff_exprs = [sym.Symbol(f"src_coeffs{i}") for i in range(ncoeff_src)]
 
