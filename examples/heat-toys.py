@@ -2,7 +2,7 @@ import numpy as np
 
 import pyopencl as cl
 
-import sumpy.toys as t
+from sumpy import toys
 from sumpy.visualization import FieldPlotter
 from sumpy.kernel import (      # noqa: F401
         YukawaKernel,
@@ -23,7 +23,7 @@ def main():
     queue = cl.CommandQueue(ctx)
     actx = PyOpenCLArrayContext(queue, force_device_scalars=True)
 
-    tctx = t.ToyContext(
+    tctx = toys.ToyContext(
             actx.context,
             # LaplaceKernel(2),
             #YukawaKernel(2), extra_kernel_kwargs={"lam": 5},
@@ -32,7 +32,7 @@ def main():
             )
 
     src_size = 1
-    pt_src = t.PointSources(
+    pt_src = toys.PointSources(
             tctx,
             np.array([
                 src_size*(np.random.rand(50) - 0.5),
@@ -42,18 +42,18 @@ def main():
     fp = FieldPlotter([0, 0.5], extent=np.array([8, 1]))
 
     if 0 and USE_MATPLOTLIB:
-        t.logplot(fp, pt_src, cmap="jet", aspect=8)
+        toys.logplot(fp, pt_src, cmap="jet", aspect=8)
         plt.colorbar()
         plt.show()
 
 
     p = 5
-    mexp = t.multipole_expand(pt_src, [0, 0], p)
+    mexp = toys.multipole_expand(pt_src, [0, 0], p)
     diff = mexp - pt_src
 
     x, t = fp.points
 
-    r = np.sqrt(x**2+y**2)
+    r = np.sqrt(x**2+t**2)
 
     conv_factor = (src_size/r)**(p+1)
 
@@ -65,15 +65,15 @@ def main():
         plt.colorbar()
         plt.show()
     1/0
-    mexp2 = t.multipole_expand(mexp, [0, 0.25])  # noqa: F841
-    lexp = t.local_expand(mexp, [3, 0])
-    lexp2 = t.local_expand(lexp, [3, 1], 3)
+    mexp2 = toys.multipole_expand(mexp, [0, 0.25])  # noqa: F841
+    lexp = toys.local_expand(mexp, [3, 0])
+    lexp2 = toys.local_expand(lexp, [3, 1], 3)
 
     # diff = mexp - pt_src
     # diff = mexp2 - pt_src
     diff = lexp2 - pt_src
 
-    print(t.l_inf(diff, 1.2, center=lexp2.center))
+    print(toys.l_inf(diff, 1.2, center=lexp2.center))
 
 
 if __name__ == "__main__":

@@ -313,13 +313,14 @@ def test_toy_p2e2e2p(actx_factory, case):
         raise ValueError(
             f"convergence factor not in valid range: {case_conv_factor}")
 
-    from sumpy.expansion import VolumeTaylorExpansionFactory
+    from sumpy.expansion import DefaultExpansionFactory
 
     actx = actx_factory()
     ctx = t.ToyContext(actx.context,
-             LaplaceKernel(dim),
-             expansion_factory=VolumeTaylorExpansionFactory(),
-             m2l_use_fft=case.m2l_use_fft)
+             HeatKernel(dim - 1),
+             expansion_factory=DefaultExpansionFactory(),
+             m2l_use_fft=case.m2l_use_fft,
+             extra_kernel_kwargs={"alpha": 0.1})
 
     errors = []
 
