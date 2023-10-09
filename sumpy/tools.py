@@ -970,6 +970,9 @@ def run_opencl_fft(
         if wait_for is None:
             wait_for = []
 
+        import pyopencl as cl
+        import pyopencl.array as cla
+
         if queue.device.platform.name == "NVIDIA CUDA":
             # NVIDIA OpenCL gives wrong event profile values with wait_for
             # Not passing wait_for will wait for all events queued before
@@ -981,9 +984,6 @@ def run_opencl_fft(
             start_evt = cl.enqueue_marker(queue)
         else:
             start_evt = cl.enqueue_marker(queue, wait_for=wait_for[:])
-
-        import pyopencl as cl
-        import pyopencl.array as cla
 
         if app.inplace:
             raise RuntimeError("inplace fft is not supported")
