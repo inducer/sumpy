@@ -31,7 +31,7 @@ def main():
             HeatKernel(1), extra_kernel_kwargs={"alpha": 1},
             )
 
-    src_size = 1
+    src_size = 0.1
     pt_src = toys.PointSources(
             tctx,
             np.array([
@@ -53,15 +53,22 @@ def main():
 
     x, t = fp.points
 
-    r = np.sqrt(x**2+t**2)
+    delta = 4 * t
+    conv_factor = src_size / np.sqrt(2*delta)
 
-    conv_factor = (src_size/r)**(p+1)
+    error_model = conv_factor**(p+1)*np.exp(-(x/np.sqrt(delta))**2/2)
+    #error_model = conv_factor**(p+1)/(1-conv_factor)*np.exp(-(x/np.sqrt(delta))**2)
 
     def logplot_fp(fp: FieldPlotter, values, **kwargs) -> None:
         fp.show_scalar_in_matplotlib(
                 np.log10(np.abs(values + 1e-15)), **kwargs)
     if USE_MATPLOTLIB:
-        logplot_fp(fp, diff.eval(fp.points)/conv_factor, cmap="jet", vmin=-5, vmax=0, aspect=8)
+        plt.subplot(131)
+        logplot_fp(fp, error_model, cmap="jet", vmin=-5, vmax=0, aspect=8)
+        plt.subplot(132)
+        logplot_fp(fp, diff.eval(fp.points), cmap="jet", vmin=-5, vmax=0, aspect=8)
+        plt.subplot(133)
+        logplot_fp(fp, diff.eval(fp.points)/error_model, cmap="jet", vmin=-5, vmax=0, aspect=8)
         plt.colorbar()
         plt.show()
     1/0
