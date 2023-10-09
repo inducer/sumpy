@@ -44,6 +44,7 @@ from sumpy.kernel import (
     StressletKernel,
     ElasticityKernel,
     LineOfCompressionKernel,
+    HeatKernel,
     ExpressionKernel)
 from sumpy.expansion.diff_op import (
     make_identity_diff_op, concat, as_scalar_pde, diff,
@@ -110,6 +111,9 @@ class KernelInfo:
     KernelInfo(ElasticityKernel(3, 0, 0), mu=5, nu=0.2),
     KernelInfo(LineOfCompressionKernel(3, 0), mu=5, nu=0.2),
     KernelInfo(LineOfCompressionKernel(3, 1), mu=5, nu=0.2),
+    KernelInfo(HeatKernel(1), alpha=0.1),
+    KernelInfo(HeatKernel(2), alpha=0.1),
+    KernelInfo(HeatKernel(3), alpha=0.1),
     ])
 def test_pde_check_kernels(actx_factory, knl_info, order=5):
     actx = actx_factory()
@@ -129,7 +133,7 @@ def test_pde_check_kernels(actx_factory, knl_info, order=5):
     eoc_rec = EOCRecorder()
 
     for h in [0.1, 0.05, 0.025]:
-        cp = CalculusPatch(np.array([1, 0, 0])[:dim], h=h, order=order)
+        cp = CalculusPatch(np.array([0, 0, 0, 1])[-dim:], h=h, order=order)
         pot = pt_src.eval(cp.points)
 
         pde = knl_info.pde_func(cp, pot)
@@ -230,6 +234,7 @@ class P2E2E2PTestCase:
     expansion1: Callable[..., Any]
     expansion2: Callable[..., Any]
     conv_factor: str
+    m2l_use_fft: bool = False
 
     @property
     def dim(self):
@@ -266,6 +271,17 @@ P2E2E2P_TEST_CASES = (
             expansion1=t.multipole_expand,
             expansion2=t.local_expand,
             conv_factor="norm(t-c2)/(norm(c2-c1)-norm(c1-s))"),
+
+        # multipole to local, 3D with FFT
+        P2E2E2PTestCase(
+            source=np.array([-2., 2., 1.]),
+            center1=np.array([-2., 5., 3.]),
+            center2=np.array([0., 0., 0.]),
+            target=np.array([0., 0., -1]),
+            expansion1=t.multipole_expand,
+            expansion2=t.local_expand,
+            m2l_use_fft=True,
+            conv_factor="norm(t-c2)/(norm(c2-c1)-norm(c1-s))"),
 )
 
 # }}}
@@ -297,12 +313,14 @@ def test_toy_p2e2e2p(actx_factory, case):
         raise ValueError(
             f"convergence factor not in valid range: {case_conv_factor}")
 
-    from sumpy.expansion import VolumeTaylorExpansionFactory
+    from sumpy.expansion import DefaultExpansionFactory
 
     actx = actx_factory()
     ctx = t.ToyContext(actx.context,
-             LaplaceKernel(dim),
-             expansion_factory=VolumeTaylorExpansionFactory())
+             HeatKernel(dim - 1),
+             expansion_factory=DefaultExpansionFactory(),
+             m2l_use_fft=case.m2l_use_fft,
+             extra_kernel_kwargs={"alpha": 0.1})
 
     errors = []
 
