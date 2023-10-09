@@ -133,7 +133,6 @@ class ToyContext:
             raise ValueError("local_expn_class and m2l_use_fft are both supplied. "
                              "Use only one of these arguments")
 
-
         self.mpole_expn_class = mpole_expn_class
         self.local_expn_class = local_expn_class
 
@@ -357,7 +356,7 @@ def _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
         **extra_kernel_kwargs,
         **toy_ctx.extra_kernel_kwargs,
     }
-    
+
     evt, (to_coeffs,) = e2e(**args)
 
     return expn_class(
@@ -386,12 +385,13 @@ def _m2l(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
                 dtype=np.complex128)
         evt, _ = preprocess_kernel(queue,
                 src_expansions=coeffs,
-                preprocessed_src_expansions = preprocessed_src_expansions,
+                preprocessed_src_expansions=preprocessed_src_expansions,
                 src_rscale=np.float64(psource.rscale),
                 **toy_ctx.extra_kernel_kwargs)
 
         if toy_ctx.use_fft:
-            from sumpy.tools import run_opencl_fft, get_opencl_fft_app, get_native_event
+            from sumpy.tools import (run_opencl_fft, get_opencl_fft_app,
+                get_native_event)
             fft_app = get_opencl_fft_app(queue, (expn_size,),
                 dtype=preprocessed_src_expansions.dtype, inverse=False)
             ifft_app = get_opencl_fft_app(queue, (expn_size,),
@@ -401,7 +401,8 @@ def _m2l(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
                     preprocessed_src_expansions, inverse=False, wait_for=[evt])
 
         # Compute translation classes data
-        m2l_translation_classes_lists = cl.array.to_device(queue, np.array([0], dtype=np.int32))
+        m2l_translation_classes_lists = cl.array.to_device(queue,
+                np.array([0], dtype=np.int32))
         dist = np.array(to_center - psource.center, dtype=np.float64)
         dim = toy_ctx.kernel.dim
         m2l_translation_vectors = cl.array.to_device(queue, dist.reshape(dim, 1))
@@ -421,16 +422,20 @@ def _m2l(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
                 **toy_ctx.extra_kernel_kwargs)
 
         if toy_ctx.use_fft:
-            evt, m2l_translation_classes_dependent_data = run_opencl_fft(fft_app, queue,
-                m2l_translation_classes_dependent_data, inverse=False, wait_for=[evt])
+            evt, m2l_translation_classes_dependent_data = run_opencl_fft(fft_app,
+                queue, m2l_translation_classes_dependent_data, inverse=False,
+                wait_for=[evt])
 
-        ret = _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
-            {"src_expansions": preprocessed_src_expansions,
-             "m2l_translation_classes_lists": m2l_translation_classes_lists,
-             "m2l_translation_classes_dependent_data":
-                m2l_translation_classes_dependent_data,
-             "translation_classes_level_start": 0,
-            })
+        ret = _e2e(psource, to_center, to_rscale, to_order,
+            e2e, expn_class, expn_kwargs,
+            {
+                "src_expansions": preprocessed_src_expansions,
+                "m2l_translation_classes_lists": m2l_translation_classes_lists,
+                "m2l_translation_classes_dependent_data": (
+                    m2l_translation_classes_dependent_data),
+                "translation_classes_level_start": 0,
+            }
+        )
 
         # Postprocess the local expansion
         local_before = cl.array.to_device(queue, np.array([ret.coeffs]))
@@ -453,9 +458,11 @@ def _m2l(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
             toy_ctx, to_center, to_rscale, to_order, to_coeffs.get(queue)[0],
             derived_from=psource, **expn_kwargs)
     else:
-        ret = _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs, {})
+        ret = _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class,
+                expn_kwargs, {})
 
     return ret
+
 
 # }}}
 
