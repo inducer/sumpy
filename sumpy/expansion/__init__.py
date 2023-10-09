@@ -66,9 +66,9 @@ class ExpansionBase(ABC):
     .. automethod:: get_coefficient_identifiers
     .. automethod:: coefficients_from_source
     .. automethod:: coefficients_from_source_vec
-    .. automethod:: get_loopy_expansion_formation
+    .. automethod:: loopy_expansion_formation
     .. automethod:: evaluate
-    .. automethod:: get_loopy_evaluator
+    .. automethod:: loopy_evaluator
 
     .. automethod:: with_kernel
     .. automethod:: copy
@@ -164,7 +164,7 @@ class ExpansionBase(ABC):
                 result[i] += weight * coeffs[i]
         return result
 
-    def get_loopy_expansion_formation(
+    def loopy_expansion_formation(
             self, kernels: Sequence[Kernel],
             strength_usage: Sequence[int], nstrengths: int) -> lp.TranslationUnit:
         """
@@ -183,7 +183,7 @@ class ExpansionBase(ABC):
             in *coeffs*.
         """
 
-    def get_loopy_evaluator(self, kernels: Sequence[Kernel]) -> lp.TranslationUnit:
+    def loopy_evaluator(self, kernels: Sequence[Kernel]) -> lp.TranslationUnit:
         """
         :returns: a :mod:`loopy` kernel that returns the evaluated
             target transforms of the potential given by *kernels*.
@@ -225,7 +225,7 @@ class ExpansionBase(ABC):
 
     def __eq__(self, other):
         return (
-                type(self) == type(other)
+                type(self) is type(other)
                 and self.kernel == other.kernel
                 and self.order == other.order
                 and self.use_rscale == other.use_rscale)
@@ -687,6 +687,9 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 shape = (len(mis), len(mis))
                 op = CSEMatVecOperator(from_input_coeffs_by_row,
                                        from_output_coeffs_by_row, shape)
+
+                plog.done()
+
                 return mis, op
 
         ordering_key, _ = self._get_mi_ordering_key_and_axis_permutation()

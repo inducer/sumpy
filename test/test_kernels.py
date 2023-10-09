@@ -26,6 +26,7 @@ import sys
 import numpy as np
 import numpy.linalg as la
 
+from pytools.obj_array import make_obj_array
 from pytools.convergence import PConvergenceVerifier
 from arraycontext import pytest_generate_tests_for_array_contexts
 from sumpy.array_context import (                                 # noqa: F401
@@ -76,20 +77,23 @@ def test_p2p(actx_factory, exclude_self):
     rng = np.random.default_rng(42)
     targets = rng.random(size=(dimensions, n))
     sources = targets if exclude_self else rng.random(size=(dimensions, n))
-
     strengths = np.ones(n, dtype=np.float64)
 
     extra_kwargs = {}
 
     if exclude_self:
-        extra_kwargs["target_to_source"] = np.arange(n, dtype=np.int32)
+        extra_kwargs["target_to_source"] = (
+            actx.from_numpy(np.arange(n, dtype=np.int32)))
 
     evt, (potential, x_derivative) = knl(
-            actx.queue, targets, sources, [strengths],
-            out_host=True, **extra_kwargs)
+            actx.queue,
+            actx.from_numpy(targets),
+            actx.from_numpy(sources),
+            [actx.from_numpy(strengths)],
+            **extra_kwargs)
+    potential = actx.to_numpy(potential)
 
     potential_ref = np.empty_like(potential)
-
     targets = targets.T
     sources = sources.T
     for itarg in range(n):
@@ -146,21 +150,22 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
 
     rng = np.random.default_rng(14)
     center = np.array([2, 1, 0][:knl.dim], np.float64)
-    sources = (
+    sources = actx.from_numpy(
         0.7 * (-0.5 + rng.random(size=(knl.dim, nsources), dtype=np.float64))
         + center[:, np.newaxis])
 
     strengths = [
-        np.ones(nsources, dtype=np.float64) * (1/nsources),
-        np.ones(nsources, dtype=np.float64) * (2/nsources)
+        actx.from_numpy(np.ones(nsources, dtype=np.float64) * (1/nsources)),
+        actx.from_numpy(np.ones(nsources, dtype=np.float64) * (2/nsources))
     ]
 
-    source_boxes = np.array([0], dtype=np.int32)
-    box_source_starts = np.array([0], dtype=np.int32)
-    box_source_counts_nonchild = np.array([nsources], dtype=np.int32)
+    source_boxes = actx.from_numpy(np.array([0], dtype=np.int32))
+    box_source_starts = actx.from_numpy(np.array([0], dtype=np.int32))
+    box_source_counts_nonchild = (
+        actx.from_numpy(np.array([nsources], dtype=np.int32)))
 
     alpha = np.linspace(0, 2*np.pi, nsources, np.float64)
-    dir_vec = np.vstack([np.cos(alpha), np.sin(alpha)])
+    dir_vec = actx.from_numpy(np.vstack([np.cos(alpha), np.sin(alpha)]))
 
     from sumpy.expansion.local import LocalExpansionBase
     if issubclass(expn_class, LocalExpansionBase):
@@ -170,6 +175,7 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
         centers = (np.array([0.0, 0.0, 0.0][:knl.dim],
                             dtype=np.float64).reshape(knl.dim, 1)
                     + center[:, np.newaxis])
+    centers = actx.from_numpy(centers)
 
     rscale = 0.5  # pick something non-1
 
@@ -188,12 +194,10 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
             nboxes=1,
             tgt_base_ibox=0,
             rscale=rscale,
-
-            out_host=True,
             dir_vec=dir_vec,
             **extra_kwargs)
 
-    actual_result = mpoles
+    actual_result = actx.to_numpy(mpoles)
 
     # apply p2e separately
     expected_result = np.zeros_like(actual_result)
@@ -215,8 +219,9 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
             nboxes=1,
             tgt_base_ibox=0,
             rscale=rscale,
+            **extra_source_kwargs)
+        mpoles = actx.to_numpy(mpoles)
 
-            out_host=True, **extra_source_kwargs)
         expected_result += mpoles
 
     norm = la.norm(actual_result - expected_result)/la.norm(expected_result)
@@ -302,21 +307,22 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
 
     rng = np.random.default_rng(19)
     center = np.array([2, 1, 0][:knl.dim], np.float64)
-    sources = (
+    sources = actx.from_numpy(
         0.7 * (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64))
         + center[:, np.newaxis])
 
-    strengths = np.ones(nsources, dtype=np.float64) / nsources
+    strengths = actx.from_numpy(np.ones(nsources, dtype=np.float64) / nsources)
 
-    source_boxes = np.array([0], dtype=np.int32)
-    box_source_starts = np.array([0], dtype=np.int32)
-    box_source_counts_nonchild = np.array([nsources], dtype=np.int32)
+    source_boxes = actx.from_numpy(np.array([0], dtype=np.int32))
+    box_source_starts = actx.from_numpy(np.array([0], dtype=np.int32))
+    box_source_counts_nonchild = (
+        actx.from_numpy(np.array([nsources], dtype=np.int32)))
 
     extra_source_kwargs = extra_kwargs.copy()
     if isinstance(knl, DirectionalSourceDerivative):
         alpha = np.linspace(0, 2*np.pi, nsources, np.float64)
         dir_vec = np.vstack([np.cos(alpha), np.sin(alpha)])
-        extra_source_kwargs["dir_vec"] = dir_vec
+        extra_source_kwargs["dir_vec"] = actx.from_numpy(dir_vec)
 
     from sumpy.visualization import FieldPlotter
 
@@ -332,7 +338,8 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
                                 dtype=np.float64).reshape(knl.dim, 1)
                         + center[:, np.newaxis])
 
-        targets = fp.points
+        centers = actx.from_numpy(centers)
+        targets = actx.from_numpy(make_obj_array(fp.points))
 
         rscale = 0.5  # pick something non-1
 
@@ -348,17 +355,17 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
                 nboxes=1,
                 tgt_base_ibox=0,
                 rscale=rscale,
-
-                out_host=True, **extra_source_kwargs)
+                **extra_source_kwargs)
 
         # }}}
 
         # {{{ apply e2p
 
-        ntargets = targets.shape[-1]
+        ntargets = fp.points.shape[-1]
 
-        box_target_starts = np.array([0], dtype=np.int32)
-        box_target_counts_nonchild = np.array([ntargets], dtype=np.int32)
+        box_target_starts = actx.from_numpy(np.array([0], dtype=np.int32))
+        box_target_counts_nonchild = (
+            actx.from_numpy(np.array([ntargets], dtype=np.int32)))
 
         evt, (pot, grad_x, ) = e2p(
                 actx.queue,
@@ -370,8 +377,9 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
                 centers=centers,
                 targets=targets,
                 rscale=rscale,
-
-                out_host=True, **extra_kwargs)
+                **extra_kwargs)
+        pot = actx.to_numpy(pot)
+        grad_x = actx.to_numpy(grad_x)
 
         # }}}
 
@@ -380,8 +388,9 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
         evt, (pot_direct, grad_x_direct, ) = p2p(
                 actx.queue,
                 targets, sources, (strengths,),
-                out_host=True,
                 **extra_source_kwargs)
+        pot_direct = actx.to_numpy(pot_direct)
+        grad_x_direct = actx.to_numpy(grad_x_direct)
 
         err_pot = la.norm((pot - pot_direct)/res**2)
         err_grad_x = la.norm((grad_x - grad_x_direct)/res**2)
@@ -501,10 +510,11 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
     # Just to make sure things also work away from the origin
     rng = np.random.default_rng(18)
     origin = np.array([2, 1, 0][:knl.dim], np.float64)
-    sources = (
+    sources = actx.from_numpy(
         0.7 * (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64))
         + origin[:, np.newaxis])
-    strengths = np.ones(nsources, dtype=np.float64) * (1/nsources)
+    strengths = actx.from_numpy(
+        np.ones(nsources, dtype=np.float64) * (1/nsources))
 
     pconv_verifier_p2m2p = PConvergenceVerifier()
     pconv_verifier_p2m2m2p = PConvergenceVerifier()
@@ -514,8 +524,9 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
     from sumpy.visualization import FieldPlotter
 
     eval_offset = np.array([5.5, 0.0, 0][:knl.dim])
+    fp = FieldPlotter(eval_offset + origin, extent=0.3, npoints=res)
 
-    centers = (np.array(
+    centers = actx.from_numpy((np.array(
             [
                 # box 0: particles, first mpole here
                 [0, 0, 0][:knl.dim],
@@ -529,7 +540,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
                 # box 3: second local and eval here
                 eval_offset
                 ],
-            dtype=np.float64) + origin).T.copy()
+            dtype=np.float64) + origin).T.copy())
 
     del eval_offset
 
@@ -541,13 +552,15 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
     nboxes = centers.shape[-1]
 
     def eval_at(e2p, source_box_nr, rscale):
-        e2p_target_boxes = np.array([source_box_nr], dtype=np.int32)
+        e2p_target_boxes = actx.from_numpy(
+            np.array([source_box_nr], dtype=np.int32))
 
         # These are indexed by global box numbers.
-        e2p_box_target_starts = np.array([0, 0, 0, 0], dtype=np.int32)
-        e2p_box_target_counts_nonchild = np.array([0, 0, 0, 0],
-                dtype=np.int32)
-        e2p_box_target_counts_nonchild[source_box_nr] = ntargets
+        e2p_box_target_starts = actx.from_numpy(
+            np.array([0, 0, 0, 0], dtype=np.int32))
+        e2p_box_target_counts_nonchild = actx.from_numpy(
+            np.array([0, 0, 0, 0], dtype=np.int32))
+        e2p_box_target_counts_nonchild[source_box_nr] = fp.points.shape[-1]
 
         evt, (pot,) = e2p(
                 actx.queue,
@@ -562,9 +575,9 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
                 targets=targets,
 
                 rscale=rscale,
-
-                out_host=True, **extra_kwargs
+                **extra_kwargs
                 )
+        pot = actx.to_numpy(pot)
 
         return pot
 
@@ -584,15 +597,15 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
         l2p = E2PFromSingleBox(actx.context, l_expn, target_kernels)
         p2p = P2P(actx.context, target_kernels, exclude_self=False)
 
-        fp = FieldPlotter(centers[:, -1], extent=0.3, npoints=res)
-        targets = fp.points
+        targets = actx.from_numpy(make_obj_array(fp.points))
 
         # {{{ compute (direct) reference solution
 
         evt, (pot_direct,) = p2p(
                 actx.queue,
                 targets, sources, (strengths,),
-                out_host=True, **extra_kwargs)
+                **extra_kwargs)
+        pot_direct = actx.to_numpy(pot_direct)
 
         # }}}
 
@@ -603,12 +616,13 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
         # {{{ apply P2M
 
-        p2m_source_boxes = np.array([0], dtype=np.int32)
+        p2m_source_boxes = actx.from_numpy(np.array([0], dtype=np.int32))
 
         # These are indexed by global box numbers.
-        p2m_box_source_starts = np.array([0, 0, 0, 0], dtype=np.int32)
-        p2m_box_source_counts_nonchild = np.array([nsources, 0, 0, 0],
-                dtype=np.int32)
+        p2m_box_source_starts = actx.from_numpy(
+            np.array([0, 0, 0, 0], dtype=np.int32))
+        p2m_box_source_counts_nonchild = actx.from_numpy(
+            np.array([nsources, 0, 0, 0], dtype=np.int32))
 
         evt, (mpoles,) = p2m(actx.queue,
                 source_boxes=p2m_source_boxes,
@@ -621,25 +635,22 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
                 rscale=m1_rscale,
 
                 tgt_base_ibox=0,
-
-                out_host=True, **extra_kwargs)
+                **extra_kwargs)
 
         # }}}
 
-        ntargets = targets.shape[-1]
-
         pot = eval_at(m2p, 0, m1_rscale)
 
-        err = la.norm((pot - pot_direct)/res**2)
+        err = la.norm((pot - pot_direct) / res**2)
         err = err / (la.norm(pot_direct) / res**2)
 
         pconv_verifier_p2m2p.add_data_point(order, err)
 
         # {{{ apply M2M
 
-        m2m_target_boxes = np.array([1], dtype=np.int32)
-        m2m_src_box_starts = np.array([0, 1], dtype=np.int32)
-        m2m_src_box_lists = np.array([0], dtype=np.int32)
+        m2m_target_boxes = actx.from_numpy(np.array([1], dtype=np.int32))
+        m2m_src_box_starts = actx.from_numpy(np.array([0, 1], dtype=np.int32))
+        m2m_src_box_lists = actx.from_numpy(np.array([0], dtype=np.int32))
 
         evt, (mpoles,) = m2m(actx.queue,
                 src_expansions=mpoles,
@@ -655,8 +666,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
                 src_rscale=m1_rscale,
                 tgt_rscale=m2_rscale,
-
-                out_host=True, **extra_kwargs)
+                **extra_kwargs)
 
         # }}}
 
@@ -669,9 +679,9 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
         # {{{ apply M2L
 
-        m2l_target_boxes = np.array([2], dtype=np.int32)
-        m2l_src_box_starts = np.array([0, 1], dtype=np.int32)
-        m2l_src_box_lists = np.array([1], dtype=np.int32)
+        m2l_target_boxes = actx.from_numpy(np.array([2], dtype=np.int32))
+        m2l_src_box_starts = actx.from_numpy(np.array([0, 1], dtype=np.int32))
+        m2l_src_box_lists = actx.from_numpy(np.array([1], dtype=np.int32))
 
         evt, (mpoles,) = m2l(actx.queue,
                 src_expansions=mpoles,
@@ -686,8 +696,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
                 src_rscale=m2_rscale,
                 tgt_rscale=l1_rscale,
-
-                out_host=True, **extra_kwargs)
+                **extra_kwargs)
 
         # }}}
 
@@ -700,9 +709,9 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
         # {{{ apply L2L
 
-        l2l_target_boxes = np.array([3], dtype=np.int32)
-        l2l_src_box_starts = np.array([0, 1], dtype=np.int32)
-        l2l_src_box_lists = np.array([2], dtype=np.int32)
+        l2l_target_boxes = actx.from_numpy(np.array([3], dtype=np.int32))
+        l2l_src_box_starts = actx.from_numpy(np.array([0, 1], dtype=np.int32))
+        l2l_src_box_lists = actx.from_numpy(np.array([2], dtype=np.int32))
 
         evt, (mpoles,) = l2l(actx.queue,
                 src_expansions=mpoles,
@@ -717,8 +726,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
                 src_rscale=l1_rscale,
                 tgt_rscale=l2_rscale,
-
-                out_host=True, **extra_kwargs)
+                **extra_kwargs)
 
         # }}}
 

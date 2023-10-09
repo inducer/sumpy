@@ -26,6 +26,7 @@ import numpy as np
 import loopy as lp
 
 from sumpy.tools import KernelCacheMixin, gather_loopy_arguments
+from sumpy.codegen import register_optimization_preambles
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 
 
@@ -68,7 +69,7 @@ class E2PBase(KernelCacheMixin, ABC):
         for knl in kernels:
             assert txr(knl) == expansion.kernel
 
-        self.ctx = ctx
+        self.context = ctx
         self.expansion = expansion
         self.kernels = kernels
         self.name = name or self.default_name
@@ -86,7 +87,7 @@ class E2PBase(KernelCacheMixin, ABC):
 
     def add_loopy_eval_callable(
             self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
-        inner_knl = self.expansion.get_loopy_evaluator(self.kernels)
+        inner_knl = self.expansion.loopy_evaluator(self.kernels)
         loopy_knl = lp.merge([loopy_knl, inner_knl])
         loopy_knl = lp.inline_callable_kernel(loopy_knl, "e2p")
         loopy_knl = lp.remove_unused_inames(loopy_knl)
@@ -198,6 +199,7 @@ class E2PFromSingleBox(E2PBase):
         knl = lp.add_inames_to_insn(knl, "itgt_box", "id:kernel_scaling")
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
+        knl = register_optimization_preambles(knl, self.device)
 
         return knl
 
@@ -210,7 +212,7 @@ class E2PFromSingleBox(E2PBase):
         :arg centers:
         :arg targets:
         """
-        knl = self.get_cached_optimized_kernel()
+        knl = self.get_cached_kernel_executor()
 
         centers = kwargs.pop("centers")
         # "1" may be passed for rscale, which won't have its type
@@ -324,10 +326,12 @@ class E2PFromCSR(E2PBase):
         knl = lp.add_inames_to_insn(knl, "itgt_box", "id:kernel_scaling")
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
+        knl = register_optimization_preambles(knl, self.device)
+
         return knl
 
     def __call__(self, queue, **kwargs):
-        knl = self.get_cached_optimized_kernel()
+        knl = self.get_cached_kernel_executor()
 
         centers = kwargs.pop("centers")
         # "1" may be passed for rscale, which won't have its type

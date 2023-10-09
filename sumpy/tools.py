@@ -24,41 +24,95 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from pytools import memoize_method
-from pytools.tag import Tag, tag_dataclass
-import numbers
-import warnings
-import os
-import sys
 import enum
+import logging
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-
-from pymbolic.mapper import WalkMapper
-import pymbolic
-
-import numpy as np
-import sumpy.symbolic as sym
-import pyopencl as cl
-import pyopencl.array as cla
+from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple
 
 import loopy as lp
-from typing import Any, List, Optional, TYPE_CHECKING
+import numpy as np
+from pymbolic.mapper import WalkMapper
+from pytools import memoize_method
+from pytools.tag import Tag, tag_dataclass
 
-import logging
-logger = logging.getLogger(__name__)
+import sumpy.symbolic as sym
 
 if TYPE_CHECKING:
+    import numpy
+    import pyopencl
+
     from sumpy.kernel import Kernel
+
+logger = logging.getLogger(__name__)
+
+
+__doc__ = """
+Tools
+=====
+
+.. autofunction:: to_complex_dtype
+.. autofunction:: is_obj_array_like
+.. autofunction:: vector_to_device
+.. autofunction:: vector_from_device
+.. autoclass:: OrderedSet
+
+Multi-index Helpers
+-------------------
+
+.. autofunction:: add_mi
+.. autofunction:: mi_factorial
+.. autofunction:: mi_increment_axis
+.. autofunction:: mi_set_axis
+.. autofunction:: mi_power
+
+Symbolic Helpers
+----------------
+
+.. autofunction:: add_to_sac
+.. autofunction:: gather_arguments
+.. autofunction:: gather_source_arguments
+.. autofunction:: gather_loopy_arguments
+.. autofunction:: gather_loopy_source_arguments
+
+.. autoclass:: ScalingAssignmentTag
+.. autoclass:: KernelComputation
+.. autoclass:: KernelCacheMixin
+
+.. autofunction:: reduced_row_echelon_form
+.. autofunction:: nullspace
+
+FFT
+---
+
+.. autofunction:: fft
+.. autofunction:: fft_toeplitz_upper_triangular
+.. autofunction:: matvec_toeplitz_upper_triangular
+
+.. autoclass:: FFTBackend
+    :members:
+.. autofunction:: loopy_fft
+.. autofunction:: get_opencl_fft_app
+.. autofunction:: run_opencl_fft
+
+Profiling
+---------
+
+.. autofunction:: get_native_event
+.. autoclass:: ProfileGetter
+.. autoclass:: AggregateProfilingEvent
+.. autoclass:: MarkerBasedProfilingEvent
+"""
 
 
 # {{{ multi_index helpers
 
-def add_mi(mi1, mi2):
+def add_mi(mi1: Sequence[int], mi2: Sequence[int]) -> Tuple[int, ...]:
     return tuple([mi1i + mi2i for mi1i, mi2i in zip(mi1, mi2)])
 
 
-def mi_factorial(mi):
+def mi_factorial(mi: Sequence[int]) -> int:
     import math
     result = 1
     for mi_i in mi:
@@ -66,19 +120,23 @@ def mi_factorial(mi):
     return result
 
 
-def mi_increment_axis(mi, axis, increment):
+def mi_increment_axis(
+        mi: Sequence[int], axis: int, increment: int
+        ) -> Tuple[int, ...]:
     new_mi = list(mi)
     new_mi[axis] += increment
     return tuple(new_mi)
 
 
-def mi_set_axis(mi, axis, value):
+def mi_set_axis(mi: Sequence[int], axis: int, value: int) -> Tuple[int, ...]:
     new_mi = list(mi)
     new_mi[axis] = value
     return tuple(new_mi)
 
 
-def mi_power(vector, mi, evaluate=True):
+def mi_power(
+        vector: Sequence[Any], mi: Sequence[int],
+        evaluate: bool = True) -> Any:
     result = 1
     for mi_i, vec_i in zip(mi, vector):
         if mi_i == 1:
@@ -94,8 +152,8 @@ def add_to_sac(sac, expr):
     if sac is None:
         return expr
 
-    if isinstance(expr, (numbers.Number, sym.Number, int,
-                         float, complex, sym.Symbol)):
+    from numbers import Number
+    if isinstance(expr, (Number, sym.Number, sym.Symbol)):
         return expr
 
     name = sac.assign_temp("temp", expr)
@@ -148,9 +206,8 @@ def build_matrix(op, dtype=None, shape=None):
 
 
 def vector_to_device(queue, vec):
-    from pytools.obj_array import obj_array_vectorize
-
     from pyopencl.array import to_device
+    from pytools.obj_array import obj_array_vectorize
 
     def to_dev(ary):
         return to_device(queue, ary)
@@ -227,7 +284,7 @@ class KernelComputation(ABC):
             target_kernels: List["Kernel"],
             source_kernels: List["Kernel"],
             strength_usage: Optional[List[int]] = None,
-            value_dtypes: Optional[List["np.dtype"]] = None,
+            value_dtypes: Optional[List["numpy.dtype[Any]"]] = None,
             name: Optional[str] = None,
             device: Optional[Any] = None) -> None:
         """
@@ -381,14 +438,23 @@ class OrderedSet(MutableSet):
 
 
 class KernelCacheMixin:
-    @memoize_method
     def get_cached_optimized_kernel(self, **kwargs):
-        from sumpy import (code_cache, CACHING_ENABLED, OPT_ENABLED,
-            NO_CACHE_KERNELS)
+        from warnings import warn
+        warn("get_cached_optimized_kernel is deprecated. "
+             "Use get_cached_kernel_executor instead. "
+             "This will stop working in October 2023.",
+             DeprecationWarning, stacklevel=2)
+
+        return self.get_cached_kernel_executor(**kwargs)
+
+    @memoize_method
+    def get_cached_kernel_executor(self, **kwargs) -> lp.ExecutorBase:
+        from sumpy import CACHING_ENABLED, NO_CACHE_KERNELS, OPT_ENABLED, code_cache
 
         if CACHING_ENABLED and not (
                 NO_CACHE_KERNELS and self.name in NO_CACHE_KERNELS):
             import loopy.version
+
             from sumpy.version import KERNEL_VERSION
             cache_key = (
                     self.get_cache_key()
@@ -399,9 +465,8 @@ class KernelCacheMixin:
 
             try:
                 result = code_cache[cache_key]
-                logger.debug("{}: kernel cache hit [key={}]".format(
-                    self.name, cache_key))
-                return result
+                logger.debug("%s: kernel cache hit [key=%s]", self.name, cache_key)
+                return result.executor(self.context)
             except KeyError:
                 pass
 
@@ -422,7 +487,7 @@ class KernelCacheMixin:
                 NO_CACHE_KERNELS and self.name in NO_CACHE_KERNELS):
             code_cache.store_if_not_present(cache_key, knl)
 
-        return knl
+        return knl.executor(self.context)
 
     @staticmethod
     def _allow_redundant_execution_of_knl_scaling(knl):
@@ -612,7 +677,8 @@ class ProfileGetter:
 
 
 def get_native_event(evt):
-    return evt if isinstance(evt, cl.Event) else evt.native_event
+    from pyopencl import Event
+    return evt if isinstance(evt, Event) else evt.native_event
 
 
 class AggregateProfilingEvent:
@@ -653,8 +719,10 @@ class MarkerBasedProfilingEvent:
 
 def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
         name=None):
-    from pymbolic.algorithm import find_factors
     from math import pi
+
+    from pymbolic import var
+    from pymbolic.algorithm import find_factors
 
     sign = 1 if not inverse else -1
     n = shape[-1]
@@ -667,7 +735,7 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
 
     nfft = n
 
-    broadcast_dims = tuple(pymbolic.var(f"j{d}") for d in range(len(shape) - 1))
+    broadcast_dims = tuple(var(f"j{d}") for d in range(len(shape) - 1))
 
     domains = [
         "{[i]: 0<=i<n}",
@@ -675,11 +743,11 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
     ]
     domains += [f"{{[j{d}]: 0<=j{d}<{shape[d]} }}" for d in range(len(shape) - 1)]
 
-    x = pymbolic.var("x")
-    y = pymbolic.var("y")
-    i = pymbolic.var("i")
-    i2 = pymbolic.var("i2")
-    i3 = pymbolic.var("i3")
+    x = var("x")
+    y = var("y")
+    i = var("i")
+    i2 = var("i2")
+    i3 = var("i3")
 
     fixed_parameters = {"const": complex_dtype(sign*(-2j)*pi/n), "n": n}
 
@@ -701,16 +769,16 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
         else:
             init_depends_on = f"update_{ilev-1}"
 
-        temp = pymbolic.var("temp")
-        exp_table = pymbolic.var("exp_table")
-        i = pymbolic.var(f"i_{ilev}")
-        i2 = pymbolic.var(f"i2_{ilev}")
-        ifft = pymbolic.var(f"ifft_{ilev}")
-        iN1 = pymbolic.var(f"iN1_{ilev}")           # noqa: N806
-        iN1_sum = pymbolic.var(f"iN1_sum_{ilev}")   # noqa: N806
-        iN2 = pymbolic.var(f"iN2_{ilev}")           # noqa: N806
-        table_idx = pymbolic.var(f"table_idx_{ilev}")
-        exp = pymbolic.var(f"exp_{ilev}")
+        temp = var("temp")
+        exp_table = var("exp_table")
+        i = var(f"i_{ilev}")
+        i2 = var(f"i2_{ilev}")
+        ifft = var(f"ifft_{ilev}")
+        iN1 = var(f"iN1_{ilev}")           # noqa: N806
+        iN1_sum = var(f"iN1_sum_{ilev}")   # noqa: N806
+        iN2 = var(f"iN2_{ilev}")           # noqa: N806
+        table_idx = var(f"table_idx_{ilev}")
+        exp = var(f"exp_{ilev}")
 
         insns += [
             lp.Assignment(
@@ -813,12 +881,16 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
 
 
 class FFTBackend(enum.Enum):
+    #: FFT backend based on the vkFFT library.
     pyvkfft = 1
+    #: FFT backend based on :mod:`loopy` used as a fallback.
     loopy = 2
 
 
-def _get_fft_backend(queue) -> FFTBackend:
-    env_val = os.environ.get("SUMPY_FFT_BACKEND", None)
+def _get_fft_backend(queue: "pyopencl.CommandQueue") -> FFTBackend:
+    import os
+
+    env_val = os.environ.get("SUMPY_FFT_BACKEND")
     if env_val:
         if env_val not in ["loopy", "pyvkfft"]:
             raise ValueError("Expected 'loopy' or 'pyvkfft' for SUMPY_FFT_BACKEND. "
@@ -831,13 +903,17 @@ def _get_fft_backend(queue) -> FFTBackend:
         warnings.warn("VkFFT not found. FFT runs will be slower.", stacklevel=3)
         return FFTBackend.loopy
 
-    if queue.properties & cl.command_queue_properties.OUT_OF_ORDER_EXEC_MODE_ENABLE:
+    from pyopencl import command_queue_properties
+
+    if queue.properties & command_queue_properties.OUT_OF_ORDER_EXEC_MODE_ENABLE:
         warnings.warn(
             "VkFFT does not support out of order queues yet. "
             "Falling back to slower implementation.", stacklevel=3)
         return FFTBackend.loopy
 
     import platform
+    import sys
+
     if (sys.platform == "darwin"
             and platform.machine() == "x86_64"
             and queue.context.devices[0].platform.name
@@ -851,7 +927,11 @@ def _get_fft_backend(queue) -> FFTBackend:
     return FFTBackend.pyvkfft
 
 
-def get_opencl_fft_app(queue, shape, dtype, inverse):
+def get_opencl_fft_app(
+        queue: "pyopencl.CommandQueue",
+        shape: Tuple[int, ...],
+        dtype: "numpy.dtype[Any]",
+        inverse: bool) -> Any:
     """Setup an object for out-of-place FFT on with given shape and dtype
     on given queue.
     """
@@ -870,7 +950,12 @@ def get_opencl_fft_app(queue, shape, dtype, inverse):
         raise RuntimeError(f"Unsupported FFT backend {backend}")
 
 
-def run_opencl_fft(fft_app, queue, input_vec, inverse=False, wait_for=None):
+def run_opencl_fft(
+        fft_app: Tuple[Any, FFTBackend],
+        queue: "pyopencl.CommandQueue",
+        input_vec: Any,
+        inverse: bool = False,
+        wait_for: List["pyopencl.Event"] = None) -> Tuple["pyopencl.Event", Any]:
     """Runs an FFT on input_vec and returns a :class:`MarkerBasedProfilingEvent`
     that indicate the end and start of the operations carried out and the output
     vector.
@@ -896,6 +981,9 @@ def run_opencl_fft(fft_app, queue, input_vec, inverse=False, wait_for=None):
             start_evt = cl.enqueue_marker(queue)
         else:
             start_evt = cl.enqueue_marker(queue, wait_for=wait_for[:])
+
+        import pyopencl as cl
+        import pyopencl.array as cla
 
         if app.inplace:
             raise RuntimeError("inplace fft is not supported")
@@ -934,21 +1022,19 @@ _depr_name_to_replacement_and_obj = {
     "KernelCacheWrapper": ("KernelCacheMixin", 2023),
     }
 
-if sys.version_info >= (3, 7):
-    def __getattr__(name):
-        replacement_and_obj = _depr_name_to_replacement_and_obj.get(name, None)
-        if replacement_and_obj is not None:
-            replacement, obj, year = replacement_and_obj
-            from warnings import warn
-            warn(f"'sumpy.tools.{name}' is deprecated. "
-                    f"Use '{replacement}' instead. "
-                    f"'sumpy.tools.{name}' will continue to work until {year}.",
-                    DeprecationWarning, stacklevel=2)
-            return obj
-        else:
-            raise AttributeError(name)
-else:
-    KernelCacheWrapper = KernelCacheMixin
+
+def __getattr__(name):
+    replacement_and_obj = _depr_name_to_replacement_and_obj.get(name, None)
+    if replacement_and_obj is not None:
+        replacement, obj, year = replacement_and_obj
+        from warnings import warn
+        warn(f"'sumpy.tools.{name}' is deprecated. "
+                f"Use '{replacement}' instead. "
+                f"'sumpy.tools.{name}' will continue to work until {year}.",
+                DeprecationWarning, stacklevel=2)
+        return obj
+    else:
+        raise AttributeError(name)
 
 # }}}
 

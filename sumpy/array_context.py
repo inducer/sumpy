@@ -26,6 +26,9 @@ from arraycontext.pytest import (
         register_pytest_array_context_factory)
 
 __doc__ = """
+Array Context
+-------------
+
 .. autoclass:: PyOpenCLArrayContext
 """
 

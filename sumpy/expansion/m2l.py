@@ -183,13 +183,13 @@ class M2LTranslationBase(ABC):
         """
         return 0
 
-    def translation_classes_dependent_data_loopy_knl(self, tgt_expansion,
+    def loopy_translation_classes_dependent_data(self, tgt_expansion,
             src_expansion, result_dtype):
         """Return a :mod:`loopy` kernel that calculates the data described by
         :func:`~sumpy.expansion.m2l.M2LTranslationBase.translation_classes_dependent_data`.
         :arg result_dtype: The :mod:`numpy` type of the result.
         """
-        return translation_classes_dependent_data_loopy_knl(tgt_expansion,
+        return loopy_translation_classes_dependent_data(tgt_expansion,
             src_expansion, result_dtype)
 
     @abstractmethod
@@ -437,7 +437,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
                 src_expansion)
         return len(circulant_matrix_mis)
 
-    def preprocess_multipole_loopy_knl(self, tgt_expansion, src_expansion,
+    def loopy_preprocess_multipole(self, tgt_expansion, src_expansion,
             result_dtype):
 
         circulant_matrix_mis, _, max_mi = \
@@ -553,7 +553,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         return self.translation_classes_dependent_ndata(
             tgt_expansion, src_expansion)
 
-    def postprocess_local_loopy_knl(self, tgt_expansion, src_expansion,
+    def loopy_postprocess_local(self, tgt_expansion, src_expansion,
             result_dtype):
         circulant_matrix_mis, needed_vector_terms, _ = \
             self._translation_classes_dependent_data_mis(tgt_expansion,
@@ -795,8 +795,8 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
         knl = lp.unprivatize_temporaries_with_inames(knl,
                 {"icoeff_tgt"}, {"tgt_expansion"})
 
-        knl = lp.split_iname(knl, "icoeff_tgt", 32, inner_iname="inner",
-                inner_tag="l.0")
+        knl = lp.split_iname(knl, "icoeff_tgt", 64, inner_iname="inner",
+                inner_tag="l.0", outer_tag="g.1")
         knl = lp.tag_inames(knl, {"itgt_box": "g.0"})
         return knl
 
@@ -1020,9 +1020,9 @@ class FourierBesselM2LWithFFT(FourierBesselM2LWithPreprocessedMultipoles):
 # }}} FourierBesselM2LWithFFT
 
 
-# {{{ translation_classes_dependent_data_loopy_knl
+# {{{ loopy_translation_classes_dependent_data
 
-def translation_classes_dependent_data_loopy_knl(tgt_expansion, src_expansion,
+def loopy_translation_classes_dependent_data(tgt_expansion, src_expansion,
             result_dtype):
     """
     This is a helper function to create a loopy kernel to generate translation
@@ -1086,6 +1086,6 @@ def translation_classes_dependent_data_loopy_knl(tgt_expansion, src_expansion,
 
     return knl
 
-# }}} translation_classes_dependent_data_loopy_knl
+# }}} loopy_translation_classes_dependent_data
 
 # vim: fdm=marker

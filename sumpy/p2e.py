@@ -25,6 +25,7 @@ import loopy as lp
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 
 from sumpy.tools import KernelCacheMixin, KernelComputation
+from sumpy.codegen import register_optimization_preambles
 
 import logging
 logger = logging.getLogger(__name__)
@@ -88,7 +89,7 @@ class P2EBase(KernelCacheMixin, KernelComputation):
 
     def add_loopy_form_callable(
             self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
-        inner_knl = self.expansion.get_loopy_expansion_formation(
+        inner_knl = self.expansion.loopy_expansion_formation(
             self.source_kernels, self.strength_usage, self.strength_count)
         loopy_knl = lp.merge([loopy_knl, inner_knl])
         loopy_knl = lp.inline_callable_kernel(loopy_knl, "p2e")
@@ -118,13 +119,14 @@ class P2EBase(KernelCacheMixin, KernelComputation):
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
+        knl = register_optimization_preambles(knl, self.device)
         return knl
 
     def __call__(self, queue, **kwargs):
         from sumpy.tools import is_obj_array_like
         sources = kwargs.pop("sources")
         centers = kwargs.pop("centers")
-        knl = self.get_cached_optimized_kernel(
+        knl = self.get_cached_kernel_executor(
                 sources_is_obj_array=is_obj_array_like(sources),
                 centers_is_obj_array=is_obj_array_like(centers))
 

@@ -102,9 +102,9 @@ class KernelArgument:
     def __eq__(self, other):
         if id(self) == id(other):
             return True
-        if not type(self) == KernelArgument:
+        if type(self) is not KernelArgument:
             return NotImplemented
-        if not type(other) == KernelArgument:
+        if type(other) is not KernelArgument:
             return NotImplemented
         return self.loopy_arg == other.loopy_arg
 
@@ -1077,11 +1077,12 @@ class _VectorIndexAdder(CSECachingMapperMixin, IdentityMapper):
         self.additional_indices = additional_indices
 
     def map_subscript(self, expr):
-        from pymbolic.primitives import CommonSubexpression
+        from pymbolic.primitives import CommonSubexpression, cse_scope
         if expr.aggregate.name == self.vec_name \
                 and isinstance(expr.index, int):
-            return CommonSubexpression(expr.aggregate.index(
-                    (expr.index,) + self.additional_indices))
+            return CommonSubexpression(
+                    expr.aggregate.index((expr.index,) + self.additional_indices),
+                    prefix=None, scope=cse_scope.EVALUATION)
         else:
             return IdentityMapper.map_subscript(self, expr)
 
