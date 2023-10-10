@@ -556,7 +556,8 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
     toy_ctx = t.ToyContext(
             actx.context,
             kernel=knl,
-            local_expn_class=partial(local_expn_class, m2l_translation=m2l_translation),
+            local_expn_class=partial(local_expn_class,
+                m2l_translation=m2l_translation),
             mpole_expn_class=mpole_expn_class,
             extra_kernel_kwargs=extra_kwargs,
     )
