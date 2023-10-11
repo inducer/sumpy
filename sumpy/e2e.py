@@ -791,8 +791,8 @@ class M2LPostprocessLocal(E2EBase):
                 for itgt_box
                     [itgt_coeff]: tgt_expansions[itgt_box, itgt_coeff] = \
                         m2l_postprocess_inner(
-                            tgt_rscale,
                             src_rscale,
+                            tgt_rscale,
                             [isrc_coeff]: tgt_expansions_before_postprocessing[ \
                             itgt_box, isrc_coeff],
                        )
