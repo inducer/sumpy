@@ -43,7 +43,8 @@ from sumpy.expansion.local import (
     VolumeTaylorLocalExpansion,
     H2DLocalExpansion,
     LinearPDEConformingVolumeTaylorLocalExpansion)
-from sumpy.expansion.m2l import NonFFTM2LTranslationClassFactory
+from sumpy.expansion.m2l import (NonFFTM2LTranslationClassFactory,
+    FFTM2LTranslationClassFactory)
 from sumpy.kernel import (
     LaplaceKernel,
     HelmholtzKernel,
@@ -473,27 +474,35 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
 
 # {{{ test_translations
 
-@pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class", [
-    (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+@pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class, use_fft", [
+    (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
+        False),
     (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
-     LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (LaplaceKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, True),
+    (LaplaceKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
+        False),
     (LaplaceKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
-     LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (LaplaceKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, True),
+    (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
+        False),
     (HelmholtzKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
-     LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
+        False),
     (HelmholtzKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
-     LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion),
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion, False),
     (StokesletKernel(2, 0, 0), VolumeTaylorLocalExpansion,
-     VolumeTaylorMultipoleExpansion),
+     VolumeTaylorMultipoleExpansion, False),
     (StokesletKernel(2, 0, 0), LinearPDEConformingVolumeTaylorLocalExpansion,
-     LinearPDEConformingVolumeTaylorMultipoleExpansion),
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
     ])
 def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
-        visualize=False):
+        use_fft, visualize=False):
     if visualize:
         logging.basicConfig(level=logging.INFO)
 
@@ -550,7 +559,10 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
     else:
         orders = [3, 4, 5]
 
-    m2l_factory = NonFFTM2LTranslationClassFactory()
+    if use_fft:
+        m2l_factory = FFTM2LTranslationClassFactory()
+    else:
+        m2l_factory = NonFFTM2LTranslationClassFactory()
     m2l_translation = m2l_factory.get_m2l_translation_class(knl, local_expn_class)()
 
     toy_ctx = t.ToyContext(
