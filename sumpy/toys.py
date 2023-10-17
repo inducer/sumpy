@@ -420,7 +420,7 @@ def _m2l(actx: PyOpenCLArrayContext,
                 m2l_translation_classes_dependent_data,
                 inverse=False)
 
-        ret = _e2e(psource, to_center, to_rscale, to_order,
+        ret = _e2e(actx, psource, to_center, to_rscale, to_order,
             e2e, expn_class, expn_kwargs,
             {
                 "src_expansions": preprocessed_src_expansions,
@@ -454,8 +454,10 @@ def _m2l(actx: PyOpenCLArrayContext,
             actx.to_numpy(to_coeffs)[0],
             derived_from=psource, **expn_kwargs)
     else:
-        ret = _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class,
-                expn_kwargs, {})
+        ret = _e2e(
+            actx,
+            psource, to_center, to_rscale, to_order, e2e, expn_class,
+            expn_kwargs, {})
 
     return ret
 
