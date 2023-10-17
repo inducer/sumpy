@@ -22,6 +22,7 @@ THE SOFTWARE.
 
 import pytest
 import sys
+from functools import partial
 
 import numpy as np
 import numpy.linalg as la
@@ -42,7 +43,8 @@ from sumpy.expansion.local import (
     VolumeTaylorLocalExpansion,
     H2DLocalExpansion,
     LinearPDEConformingVolumeTaylorLocalExpansion)
-from sumpy.expansion.m2l import NonFFTM2LTranslationClassFactory
+from sumpy.expansion.m2l import (NonFFTM2LTranslationClassFactory,
+    FFTM2LTranslationClassFactory)
 from sumpy.kernel import (
     LaplaceKernel,
     HelmholtzKernel,
@@ -50,6 +52,8 @@ from sumpy.kernel import (
     StokesletKernel,
     AxisTargetDerivative,
     DirectionalSourceDerivative)
+
+import sumpy.toys as t
 
 import logging
 logger = logging.getLogger(__name__)
@@ -468,27 +472,35 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
 
 # {{{ test_translations
 
-@pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class", [
-    (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+@pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class, use_fft", [
+    (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
+        False),
     (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
-     LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (LaplaceKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, True),
+    (LaplaceKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
+        False),
     (LaplaceKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
-     LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (LaplaceKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, True),
+    (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
+        False),
     (HelmholtzKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
-     LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
+        False),
     (HelmholtzKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
-     LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion),
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion, False),
     (StokesletKernel(2, 0, 0), VolumeTaylorLocalExpansion,
-     VolumeTaylorMultipoleExpansion),
+     VolumeTaylorMultipoleExpansion, False),
     (StokesletKernel(2, 0, 0), LinearPDEConformingVolumeTaylorLocalExpansion,
-     LinearPDEConformingVolumeTaylorMultipoleExpansion),
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
     ])
 def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
-        visualize=False):
+        use_fft, visualize=False):
     if visualize:
         logging.basicConfig(level=logging.INFO)
 
@@ -496,8 +508,6 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
     res = 20
     nsources = 15
-
-    target_kernels = [knl]
 
     extra_kwargs = {}
     if isinstance(knl, HelmholtzKernel):
@@ -508,11 +518,10 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
     # Just to make sure things also work away from the origin
     rng = np.random.default_rng(18)
     origin = np.array([2, 1, 0][:knl.dim], np.float64)
-    sources = actx.from_numpy(
+    sources = (
         0.7 * (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64))
         + origin[:, np.newaxis])
-    strengths = actx.from_numpy(
-        np.ones(nsources, dtype=np.float64) * (1/nsources))
+    strengths = np.ones(nsources, dtype=np.float64) * (1/nsources)
 
     pconv_verifier_p2m2p = PConvergenceVerifier()
     pconv_verifier_p2m2m2p = PConvergenceVerifier()
@@ -523,8 +532,9 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
     eval_offset = np.array([5.5, 0.0, 0][:knl.dim])
     fp = FieldPlotter(eval_offset + origin, extent=0.3, npoints=res)
+    targets = fp.points
 
-    centers = actx.from_numpy((np.array(
+    centers = (np.array(
             [
                 # box 0: particles, first mpole here
                 [0, 0, 0][:knl.dim],
@@ -538,7 +548,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
                 # box 3: second local and eval here
                 eval_offset
                 ],
-            dtype=np.float64) + origin).T.copy())
+            dtype=np.float64) + origin).T.copy()
 
     del eval_offset
 
@@ -578,6 +588,23 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
     m2l_factory = NonFFTM2LTranslationClassFactory()
     m2l_translation = m2l_factory.get_m2l_translation_class(knl, local_expn_class)()
+
+    toy_ctx = t.ToyContext(
+            actx.context,
+            kernel=knl,
+            local_expn_class=partial(local_expn_class,
+                m2l_translation=m2l_translation),
+            mpole_expn_class=mpole_expn_class,
+            extra_kernel_kwargs=extra_kwargs,
+    )
+
+    p = t.PointSources(toy_ctx, sources, weights=strengths)
+    p2p = p.eval(targets)
+
+    m1_rscale = 0.5
+    m2_rscale = 0.25
+    l1_rscale = 0.5
+    l2_rscale = 0.25
 
     for order in orders:
         m_expn = mpole_expn_class(knl, order=order)

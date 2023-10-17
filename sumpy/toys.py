@@ -99,7 +99,8 @@ class ToyContext:
             local_expn_class=None,
             expansion_factory=None,
             extra_source_kwargs=None,
-            extra_kernel_kwargs=None):
+            extra_kernel_kwargs=None,
+            m2l_use_fft=None):
         self.kernel = kernel
         self.no_target_deriv_kernel = TargetTransformationRemover()(kernel)
 
@@ -112,15 +113,24 @@ class ToyContext:
                 expansion_factory.get_multipole_expansion_class(kernel))
 
         if local_expn_class is None:
-            from sumpy.expansion.m2l import NonFFTM2LTranslationClassFactory
-            local_expn_class = (
-                expansion_factory.get_local_expansion_class(kernel))
-            m2l_translation_class_factory = NonFFTM2LTranslationClassFactory()
-            m2l_translation_class = (
-                m2l_translation_class_factory.get_m2l_translation_class(
-                    kernel, local_expn_class))
-            local_expn_class = (
-                partial(local_expn_class, m2l_translation=m2l_translation_class()))
+            from sumpy.expansion.m2l import (
+                FFTM2LTranslationClassFactory,
+                NonFFTM2LTranslationClassFactory)
+
+            if m2l_use_fft:
+                m2l_translation_class_factory = FFTM2LTranslationClassFactory()
+            else:
+                m2l_translation_class_factory = NonFFTM2LTranslationClassFactory()
+            local_expn_class = \
+                    expansion_factory.get_local_expansion_class(kernel)
+            m2l_translation_class = \
+                    m2l_translation_class_factory.get_m2l_translation_class(
+                        kernel, local_expn_class)
+            local_expn_class = partial(local_expn_class,
+                    m2l_translation=m2l_translation_class())
+        elif m2l_use_fft is not None:
+            raise ValueError("local_expn_class and m2l_use_fft are both supplied. "
+                             "Use only one of these arguments")
 
         self.mpole_expn_class = mpole_expn_class
         self.local_expn_class = local_expn_class
@@ -178,9 +188,50 @@ class ToyContext:
                 self.mpole_expn_class(self.no_target_deriv_kernel, to_order))
 
     @memoize_method
+    def use_translation_classes_dependent_data(self):
+        l_expn = self.local_expn_class(self.no_target_deriv_kernel, 2)
+        return l_expn.m2l_translation.use_preprocessing
+
+    @memoize_method
+    def use_fft(self):
+        l_expn = self.local_expn_class(self.no_target_deriv_kernel, 2)
+        return l_expn.m2l_translation.use_fft
+
+    @memoize_method
     def get_m2l(self, from_order, to_order):
-        from sumpy import E2EFromCSR
-        return E2EFromCSR(
+        from sumpy import E2EFromCSR, M2LUsingTranslationClassesDependentData
+        if self.use_translation_classes_dependent_data():
+            m2l_class = M2LUsingTranslationClassesDependentData
+        else:
+            m2l_class = E2EFromCSR
+        return m2l_class(
+                self.mpole_expn_class(self.no_target_deriv_kernel, from_order),
+                self.local_expn_class(self.no_target_deriv_kernel, to_order))
+
+    @memoize_method
+    def get_m2l_translation_class_dependent_data_kernel(self, from_order, to_order):
+        from sumpy import M2LGenerateTranslationClassesDependentData
+        return M2LGenerateTranslationClassesDependentData(
+                self.mpole_expn_class(self.no_target_deriv_kernel, from_order),
+                self.local_expn_class(self.no_target_deriv_kernel, to_order))
+
+    @memoize_method
+    def get_m2l_expansion_size(self, from_order, to_order):
+        m_expn = self.mpole_expn_class(self.no_target_deriv_kernel, from_order)
+        l_expn = self.local_expn_class(self.no_target_deriv_kernel, to_order)
+        return l_expn.m2l_translation.preprocess_multipole_nexprs(l_expn, m_expn)
+
+    @memoize_method
+    def get_m2l_preprocess_mpole_kernel(self, from_order, to_order):
+        from sumpy import M2LPreprocessMultipole
+        return M2LPreprocessMultipole(
+                self.mpole_expn_class(self.no_target_deriv_kernel, from_order),
+                self.local_expn_class(self.no_target_deriv_kernel, to_order))
+
+    @memoize_method
+    def get_m2l_postprocess_local_kernel(self, from_order, to_order):
+        from sumpy import M2LPostprocessLocal
+        return M2LPostprocessLocal(
                 self.mpole_expn_class(self.no_target_deriv_kernel, from_order),
                 self.local_expn_class(self.no_target_deriv_kernel, to_order))
 
@@ -261,7 +312,8 @@ def _e2p(actx, psource, targets, e2p):
 
 
 def _e2e(actx: PyOpenCLArrayContext,
-         psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs):
+         psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
+         extra_kernel_kwargs):
     toy_ctx = psource.toy_ctx
 
     target_boxes = actx.from_numpy(
@@ -282,32 +334,133 @@ def _e2e(actx: PyOpenCLArrayContext,
             ],
             dtype=np.float64).T.copy()
         )
+
     coeffs = actx.from_numpy(np.array([psource.coeffs]))
+    args = {
+        "actx": actx,
+        "src_expansions": coeffs,
+        "src_base_ibox": 0,
+        "tgt_base_ibox": 0,
+        "ntgt_level_boxes": 2,
+        "target_boxes": target_boxes,
+        "src_box_starts": src_box_starts,
+        "src_box_lists": src_box_lists,
+        "centers": centers,
+        "src_rscale": psource.rscale,
+        "tgt_rscale": to_rscale,
+        **extra_kernel_kwargs,
+        **toy_ctx.extra_kernel_kwargs,
+    }
 
-    to_coeffs, = e2e(
-            actx,
-            src_expansions=coeffs,
-            src_base_ibox=0,
-            tgt_base_ibox=0,
-            ntgt_level_boxes=2,
-
-            target_boxes=target_boxes,
-
-            src_box_starts=src_box_starts,
-            src_box_lists=src_box_lists,
-            centers=centers,
-
-            src_rscale=psource.rscale,
-            tgt_rscale=to_rscale,
-            **toy_ctx.extra_kernel_kwargs)
-
+    to_coeffs, = e2e(**args)
     return expn_class(
             toy_ctx, to_center, to_rscale, to_order,
             actx.to_numpy(to_coeffs[1]),
             derived_from=psource, **expn_kwargs)
 
-# }}}
 
+def _m2l(actx: PyOpenCLArrayContext,
+         psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
+         translation_classes_kwargs):
+    toy_ctx = psource.toy_ctx
+
+    coeffs = actx.from_numpy(np.array([psource.coeffs]))
+    m2l_use_translation_classes_dependent_data = \
+            toy_ctx.use_translation_classes_dependent_data()
+
+    if m2l_use_translation_classes_dependent_data:
+        data_kernel = translation_classes_kwargs["data_kernel"]
+        preprocess_kernel = translation_classes_kwargs["preprocess_kernel"]
+        postprocess_kernel = translation_classes_kwargs["postprocess_kernel"]
+        expn_size = translation_classes_kwargs["m2l_expn_size"]
+
+        # Preprocess the mpole expansion
+        preprocessed_src_expansions = actx.zeros((1, expn_size), dtype=np.complex128)
+        preprocess_kernel(
+                actx,
+                src_expansions=coeffs,
+                preprocessed_src_expansions=preprocessed_src_expansions,
+                src_rscale=np.float64(psource.rscale),
+                **toy_ctx.extra_kernel_kwargs)
+
+        if toy_ctx.use_fft:
+            from sumpy.tools import get_opencl_fft_app, run_opencl_fft
+
+            fft_app = get_opencl_fft_app(actx, (expn_size,),
+                dtype=preprocessed_src_expansions.dtype, inverse=False)
+            ifft_app = get_opencl_fft_app(actx, (expn_size,),
+                dtype=preprocessed_src_expansions.dtype, inverse=True)
+
+            preprocessed_src_expansions = run_opencl_fft(actx, fft_app,
+                    preprocessed_src_expansions, inverse=False)
+
+        # Compute translation classes data
+        m2l_translation_classes_lists = (
+            actx.from_numpy(np.array([0], dtype=np.int32)))
+        dist = np.array(to_center - psource.center, dtype=np.float64)
+        dim = toy_ctx.kernel.dim
+        m2l_translation_vectors = actx.from_numpy(dist.reshape(dim, 1))
+        m2l_translation_classes_dependent_data = (
+            actx.zeros((1, expn_size), dtype=np.complex128))
+
+        data_kernel(
+                actx,
+                src_rscale=np.float64(psource.rscale),
+                ntranslation_classes=1,
+                translation_classes_level_start=0,
+                m2l_translation_vectors=m2l_translation_vectors,
+                m2l_translation_classes_dependent_data=(
+                    m2l_translation_classes_dependent_data),
+                ntranslation_vectors=1,
+                **toy_ctx.extra_kernel_kwargs)
+
+        if toy_ctx.use_fft:
+            m2l_translation_classes_dependent_data = run_opencl_fft(
+                actx, fft_app,
+                m2l_translation_classes_dependent_data,
+                inverse=False)
+
+        ret = _e2e(psource, to_center, to_rscale, to_order,
+            e2e, expn_class, expn_kwargs,
+            {
+                "src_expansions": preprocessed_src_expansions,
+                "m2l_translation_classes_lists": m2l_translation_classes_lists,
+                "m2l_translation_classes_dependent_data": (
+                    m2l_translation_classes_dependent_data),
+                "translation_classes_level_start": 0,
+            }
+        )
+
+        # Postprocess the local expansion
+        local_before = actx.from_numpy(np.array([ret.coeffs]))
+        to_coeffs = actx.zeros((1, len(data_kernel.tgt_expansion)),
+                               dtype=coeffs.dtype)
+
+        if toy_ctx.use_fft:
+            evt, local_before = run_opencl_fft(
+                actx, ifft_app,
+                local_before, inverse=True)
+
+        postprocess_kernel(
+                actx,
+                tgt_expansions_before_postprocessing=local_before,
+                tgt_expansions=to_coeffs,
+                src_rscale=np.float64(psource.rscale),
+                tgt_rscale=np.float64(to_rscale),
+                **toy_ctx.extra_kernel_kwargs)
+
+        return expn_class(
+            toy_ctx, to_center, to_rscale, to_order,
+            actx.to_numpy(to_coeffs)[0],
+            derived_from=psource, **expn_kwargs)
+    else:
+        ret = _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class,
+                expn_kwargs, {})
+
+    return ret
+
+
+# }}}
 
 # {{{ potential source classes
 
@@ -595,7 +748,7 @@ def multipole_expand(
 
         return _e2e(actx, psource, center, rscale, order,
                 psource.toy_ctx.get_m2m(psource.order, order),
-                MultipoleExpansion, expn_kwargs)
+                MultipoleExpansion, expn_kwargs, {})
 
     else:
         raise TypeError(f"do not know how to expand '{type(psource).__name__}'")
@@ -620,9 +773,28 @@ def local_expand(
         if order is None:
             order = psource.order
 
-        return _e2e(actx, psource, center, rscale, order,
-                psource.toy_ctx.get_m2l(psource.order, order),
-                LocalExpansion, expn_kwargs)
+        toy_ctx = psource.toy_ctx
+        translation_classes_kwargs = {}
+        m2l_use_translation_classes_dependent_data = \
+            toy_ctx.use_translation_classes_dependent_data()
+
+        if m2l_use_translation_classes_dependent_data:
+            data_kernel = toy_ctx.get_m2l_translation_class_dependent_data_kernel(
+                    psource.order, order)
+            preprocess_kernel = toy_ctx.get_m2l_preprocess_mpole_kernel(
+                    psource.order, order)
+            postprocess_kernel = toy_ctx.get_m2l_postprocess_local_kernel(
+                    psource.order, order)
+            translation_classes_kwargs["data_kernel"] = data_kernel
+            translation_classes_kwargs["preprocess_kernel"] = preprocess_kernel
+            translation_classes_kwargs["postprocess_kernel"] = postprocess_kernel
+            translation_classes_kwargs["m2l_expn_size"] = \
+                    toy_ctx.get_m2l_expansion_size(psource.order, order)
+
+        return _m2l(actx, psource, center, rscale, order,
+                toy_ctx.get_m2l(psource.order, order),
+                LocalExpansion, expn_kwargs,
+                translation_classes_kwargs)
 
     elif isinstance(psource, LocalExpansion):
         if order is None:
@@ -630,7 +802,7 @@ def local_expand(
 
         return _e2e(actx, psource, center, rscale, order,
                 psource.toy_ctx.get_l2l(psource.order, order),
-                LocalExpansion, expn_kwargs)
+                LocalExpansion, expn_kwargs, {})
 
     else:
         raise TypeError(f"do not know how to expand '{type(psource).__name__}'")

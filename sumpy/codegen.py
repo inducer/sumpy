@@ -290,7 +290,8 @@ class BesselDerivativeReplacer(CSECachingIdentityMapper, CallExternalRecMapper):
                     2**(-k)*sum(
                         (-1)**idx*int(sym.binomial(k, idx)) * function(i, arg)
                         for idx, i in enumerate(range(order-k, order+k+1, 2))),
-                    f"d{n_derivs}_{function.name}_{order_str}")
+                    f"d{n_derivs}_{function.name}_{order_str}",
+                    scope=prim.cse_scope.EVALUATION)
         else:
             return CSECachingIdentityMapper.map_call(
                     rec_self or self, expr, rec_self, *args)

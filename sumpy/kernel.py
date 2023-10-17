@@ -1077,11 +1077,12 @@ class _VectorIndexAdder(CSECachingMapperMixin, IdentityMapper):
         self.additional_indices = additional_indices
 
     def map_subscript(self, expr):
-        from pymbolic.primitives import CommonSubexpression
+        from pymbolic.primitives import CommonSubexpression, cse_scope
         if expr.aggregate.name == self.vec_name \
                 and isinstance(expr.index, int):
-            return CommonSubexpression(expr.aggregate.index(
-                    (expr.index,) + self.additional_indices))
+            return CommonSubexpression(
+                    expr.aggregate.index((expr.index,) + self.additional_indices),
+                    prefix=None, scope=cse_scope.EVALUATION)
         else:
             return IdentityMapper.map_subscript(self, expr)
 

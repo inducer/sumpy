@@ -140,19 +140,6 @@ Pylint:
   except:
   - tags
 
-Benchmarks:
-  stage: test
-  script: |
-    PROJECT=sumpy
-    PYOPENCL_TEST=portable:pthread
-    curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-benchmark-py-project.sh
-    . ./build-and-benchmark-py-project.sh
-  tags:
-  - linux
-  - benchmark
-  except:
-  - tags
-
 Downstream:
   parallel:
     matrix:

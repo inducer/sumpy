@@ -25,6 +25,7 @@ import loopy as lp
 
 from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
 from sumpy.tools import KernelCacheMixin, KernelComputation
+from sumpy.codegen import register_optimization_preambles
 
 import logging
 logger = logging.getLogger(__name__)
@@ -117,6 +118,7 @@ class P2EBase(KernelCacheMixin, KernelComputation):
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
+        knl = register_optimization_preambles(knl, self.device)
         return knl
 
     def __call__(self, actx: PyOpenCLArrayContext, **kwargs):

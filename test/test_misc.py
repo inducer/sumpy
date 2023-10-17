@@ -230,6 +230,7 @@ class P2E2E2PTestCase:
     expansion1: Callable[..., Any]
     expansion2: Callable[..., Any]
     conv_factor: str
+    m2l_use_fft: bool = False
 
     @property
     def dim(self):
@@ -265,6 +266,17 @@ P2E2E2P_TEST_CASES = (
             target=np.array([0., 0., -1]),
             expansion1=t.multipole_expand,
             expansion2=t.local_expand,
+            conv_factor="norm(t-c2)/(norm(c2-c1)-norm(c1-s))"),
+
+        # multipole to local, 3D with FFT
+        P2E2E2PTestCase(
+            source=np.array([-2., 2., 1.]),
+            center1=np.array([-2., 5., 3.]),
+            center2=np.array([0., 0., 0.]),
+            target=np.array([0., 0., -1]),
+            expansion1=t.multipole_expand,
+            expansion2=t.local_expand,
+            m2l_use_fft=True,
             conv_factor="norm(t-c2)/(norm(c2-c1)-norm(c1-s))"),
 )
 
@@ -302,7 +314,8 @@ def test_toy_p2e2e2p(actx_factory, case):
     actx = actx_factory()
     ctx = t.ToyContext(
              LaplaceKernel(dim),
-             expansion_factory=VolumeTaylorExpansionFactory())
+             expansion_factory=VolumeTaylorExpansionFactory(),
+             m2l_use_fft=case.m2l_use_fft)
 
     errors = []
 
