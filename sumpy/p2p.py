@@ -661,13 +661,14 @@ class P2PFromCSR(P2PBase):
         return loopy_knl
 
     def get_optimized_kernel(self, max_nsources_in_one_box,
-            max_ntargets_in_one_box, dtype_size):
+            max_ntargets_in_one_box, source_dtype, strength_dtype):
         if not self.is_gpu:
             knl = self.get_kernel(max_nsources_in_one_box,
                     max_ntargets_in_one_box)
             knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
             knl = self._allow_redundant_execution_of_knl_scaling(knl)
         else:
+            dtype_size = np.dtype(strength_dtype).alignment
             work_items_per_group = min(256, max_ntargets_in_one_box)
             total_local_mem = max_nsources_in_one_box * \
                     (self.dim + self.strength_count) * dtype_size
@@ -682,6 +683,10 @@ class P2PFromCSR(P2PBase):
             knl = lp.set_temporary_address_space(knl,
                 ["local_isrc", "local_isrc_strength"], lp.AddressSpace.LOCAL)
 
+            local_arrays = ["local_isrc", "local_isrc_strength"]
+            local_array_isrc_axis = [1, 1]
+            local_array_sizes = [self.dim, self.strength_count]
+            local_array_dtypes = [source_dtype, strength_dtype]
             # By having a concatenated memory layout of the temporaries
             # and marking the first axis as vec, we are transposing the
             # the arrays and also making the access of the source
@@ -689,15 +694,33 @@ class P2PFromCSR(P2PBase):
             # access of 256 bits (assuming double precision) which is
             # optimized for NVIDIA GPUs. On an NVIDIA Titan V, this
             # optimization led to a 8% speedup in the performance.
-            knl = lp.concatenate_arrays(knl,
-                ["local_isrc", "local_isrc_strength"], "local_isrc")
-            count = self.strength_count + self.dim
-            if count in [2, 3, 4, 8, 16]:
-                knl = lp.tag_array_axes(knl, "local_isrc", "vec,C")
+            if strength_dtype == source_dtype:
+                knl = lp.concatenate_arrays(knl, local_arrays, "local_isrc")
+                local_arrays = ["local_isrc"]
+                local_array_sizes = [self.dim + self.strength_count]
+                local_array_dtypes = [source_dtype]
+            # We try to mark the local arrays (sources, strengths)
+            # as vec for the first dimension
+            for i, (array_name, array_size, array_dtype) in \
+                    enumerate(zip(local_arrays, local_array_sizes,
+                                  local_array_dtypes)):
+                if array_dtype not in [np.float, np.double]:
+                    # pyopencl does not support complex data type vectors
+                    continue
+                if array_size in [2, 3, 4, 8, 16]:
+                    knl = lp.tag_array_axes(knl, array_name, "vec,C")
+                else:
+                    # FIXME: check if CUDA
+                    n = 16 // dtype_size
+                    if n in [1, 2, 4, 8]:
+                        knl = lp.split_array_axis(knl, array_name, 0, n)
+                        knl = lp.tag_array_axes(knl, array_name, "C,vec,C")
+                        local_array_isrc_axis[i] = 2
 
             # We need to split isrc_prefetch and isrc_offset into chunks.
             nsources = (max_nsources_in_one_box + nprefetch - 1) // nprefetch
-            knl = lp.split_array_axis(knl, "local_isrc", 1, nsources)
+            for local_array, axis in zip(local_arrays, local_array_isrc_axis):
+                knl = lp.split_array_axis(knl, local_array, axis, nsources)
             knl = lp.split_iname(knl, "isrc_prefetch", nsources,
                     outer_iname="iprefetch")
             knl = lp.split_iname(knl, "isrc_prefetch_inner", work_items_per_group)
@@ -709,7 +732,7 @@ class P2PFromCSR(P2PBase):
             # be as large as before. Need to simplify before unprivatizing
             knl = lp.simplify_indices(knl)
             knl = lp.unprivatize_temporaries_with_inames(knl,
-                    "iprefetch", only_var_names="local_isrc")
+                    "iprefetch", only_var_names=local_arrays)
 
             knl = lp.add_inames_to_insn(knl,
                     "inner", "id:init_* or id:*_scaling or id:src_box_insn_*")
@@ -728,14 +751,19 @@ class P2PFromCSR(P2PBase):
         max_ntargets_in_one_box = kwargs.pop("max_ntargets_in_one_box")
 
         if self.is_gpu:
-            dtype_size = kwargs.get("sources")[0].dtype.alignment
+            source_dtype = kwargs.get("sources")[0].dtype
+            strength_dtype = kwargs.get("strength").dtype
         else:
-            dtype_size = None
+            # these are unused for not GPU and defeats the caching
+            # set them to None to keep the caching across dtypes
+            source_dtype = None
+            strength_dtype = None
 
         knl = self.get_cached_kernel_executor(
                 max_nsources_in_one_box=max_nsources_in_one_box,
                 max_ntargets_in_one_box=max_ntargets_in_one_box,
-                dtype_size=dtype_size,
+                source_dtype=source_dtype,
+                strength_dtype=strength_dtype,
                 )
 
         return knl(queue, **kwargs)
