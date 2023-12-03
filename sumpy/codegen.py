@@ -502,12 +502,12 @@ class ComplexRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
         super().__init__()
         self.complex_dtype = complex_dtype
 
-    def map_constant(self, expr, rec_self=None, *args, **kwargs):
+    def map_constant(self, expr, rec_self=None):
         """Convert complex values to numpy types
         """
         if not isinstance(expr, (complex, np.complex64, np.complex128)):
             return IdentityMapper.map_constant(rec_self or self, expr,
-                    rec_self=rec_self, *args, **kwargs)
+                    rec_self=rec_self)
 
         complex_dtype = self.complex_dtype
         if complex_dtype is None:
