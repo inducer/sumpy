@@ -713,9 +713,6 @@ class VolumeTaylorM2LWithPreprocessedMultipoles(VolumeTaylorM2LTranslation):
             domains.append(
                 f"{{[icoeff_src]: icoeff_tgt<=icoeff_src<{ncoeff_src} }}")
 
-        expr = src_coeffs[icoeff_tgt] \
-            * translation_classes_dependent_data[icoeff_tgt]
-
         insns = [
             lp.Assignment(
                 assignee=tgt_coeffs[icoeff_tgt],
