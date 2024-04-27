@@ -56,7 +56,7 @@ Particle-to-particle
 # {{{ P2PBase: base class
 
 class P2PBase(KernelCacheMixin, KernelComputation):
-    def __init__(self, target_kernels, exclude_self, strength_usage=None,
+    def __init__(self, actx, target_kernels, exclude_self, strength_usage=None,
             value_dtypes=None, name=None, source_kernels=None):
         """
         :arg target_kernels: list of :class:`sumpy.kernel.Kernel` instances
@@ -88,7 +88,7 @@ class P2PBase(KernelCacheMixin, KernelComputation):
         base_target_kernel = single_valued(txr(knl) for knl in target_kernels)
         assert base_source_kernel == base_target_kernel
 
-        KernelComputation.__init__(self, target_kernels=target_kernels,
+        KernelComputation.__init__(self, actx, target_kernels=target_kernels,
             source_kernels=source_kernels, strength_usage=strength_usage,
             value_dtypes=value_dtypes, name=name)
 
@@ -192,7 +192,7 @@ class P2PBase(KernelCacheMixin, KernelComputation):
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
 
-        knl = register_optimization_preambles(knl, self.device)
+        knl = register_optimization_preambles(knl, self.actx.device)
         return knl
 
 
@@ -254,17 +254,16 @@ class P2P(P2PBase):
 
         return loopy_knl
 
-    def __call__(self, actx: PyOpenCLArrayContext,
-            targets, sources, strength, **kwargs):
+    def __call__(self, targets, sources, strength, **kwargs):
         knl = self.get_cached_kernel_executor(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
 
         from sumpy.codegen import register_optimization_preambles
-        knl = register_optimization_preambles(knl, actx.queue.device)
+        knl = register_optimization_preambles(knl, self.actx.queue.device)
 
-        result = actx.call_loopy(
-            knl,
+        result = self.actx.call_loopy(
+            knl.t_unit,
             sources=sources,
             targets=targets,
             strength=strength,
@@ -332,7 +331,7 @@ class P2PMatrixGenerator(P2PBase):
                 sources_is_obj_array=is_obj_array_like(sources))
 
         from sumpy.codegen import register_optimization_preambles
-        knl = register_optimization_preambles(knl, actx.queue.device)
+        knl = register_optimization_preambles(knl, self.actx.queue.device)
 
         result = actx.call_loopy(knl, sources=sources, targets=targets, **kwargs)
         return make_obj_array([result[f"result_{i}"] for i in range(self.nresults)])

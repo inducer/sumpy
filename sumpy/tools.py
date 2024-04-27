@@ -258,6 +258,7 @@ class KernelComputation(ABC):
     """
 
     def __init__(self,
+            actx,
             target_kernels: List["Kernel"],
             source_kernels: List["Kernel"],
             strength_usage: Optional[List[int]] = None,
@@ -310,6 +311,8 @@ class KernelComputation(ABC):
         self.strength_count = strength_count
 
         self.name = name or self.default_name
+
+        self.actx = actx
 
     @property
     def nresults(self):
@@ -440,7 +443,7 @@ class KernelCacheMixin:
             try:
                 result = code_cache[cache_key]
                 logger.debug("%s: kernel cache hit [key=%s]", self.name, cache_key)
-                return result.executor(self.context)
+                return result.executor(self.actx.context)
             except KeyError:
                 pass
 
@@ -461,7 +464,7 @@ class KernelCacheMixin:
                 NO_CACHE_KERNELS and self.name in NO_CACHE_KERNELS):
             code_cache.store_if_not_present(cache_key, knl)
 
-        return knl.executor(self.context)
+        return knl.executor(self.actx.context)
 
     @staticmethod
     def _allow_redundant_execution_of_knl_scaling(knl):

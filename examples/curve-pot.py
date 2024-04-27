@@ -92,6 +92,7 @@ def draw_pot_figure(aspect_ratio,
 
     vol_source_knl, vol_target_knl = process_kernel(knl, what_operator)
     p2p = P2P(
+            actx,
             source_kernels=(vol_source_knl,),
             target_kernels=(vol_target_knl,),
             exclude_self=False,
@@ -101,6 +102,7 @@ def draw_pot_figure(aspect_ratio,
 
     from sumpy.qbx import LayerPotential
     lpot = LayerPotential(
+            actx,
             expansion=expn_class(knl, order=order),
             source_kernels=(lpot_source_knl,),
             target_kernels=(lpot_target_knl,),
@@ -210,7 +212,6 @@ def draw_pot_figure(aspect_ratio,
     strength = actx.from_numpy(native_curve.speed * native_weights * density)
 
     vol_pot, = p2p(
-            actx,
             targets,
             sources,
             [strength], **volpot_kwargs)
@@ -308,11 +309,11 @@ if __name__ == "__main__":
         plt.savefig("eigvals-ext-nsrc100-novsmp100.pdf")
         plt.clf()
 
-    # draw_pot_figure(
-    #         aspect_ratio=1, nsrc=100, novsmp=100, helmholtz_k=0,
-    #         what_operator="D", what_operator_lpot="D", force_center_side=-1)
-    # plt.savefig("eigvals-int-nsrc100-novsmp100.pdf")
-    # plt.clf()
+    #draw_pot_figure(
+    #        aspect_ratio=1, nsrc=100, novsmp=100, helmholtz_k=0,
+    #        what_operator="D", what_operator_lpot="D", force_center_side=-1)
+    #plt.savefig("eigvals-int-nsrc100-novsmp100.pdf")
+    #plt.clf()
 
     # draw_pot_figure(
     #         aspect_ratio=1, nsrc=100, novsmp=200, helmholtz_k=0,

@@ -67,13 +67,14 @@ def stringify_expn_index(i: Union[Tuple[int, ...], int]) -> str:
 # {{{ LayerPotentialBase: base class
 
 class LayerPotentialBase(KernelCacheMixin, KernelComputation):
-    def __init__(self, expansion, strength_usage=None,
+    def __init__(self, actx, expansion, strength_usage=None,
             value_dtypes=None, name=None,
             source_kernels=None, target_kernels=None):
 
         from pytools import single_valued
 
         KernelComputation.__init__(self,
+            actx=actx,
             target_kernels=target_kernels,
             source_kernels=source_kernels,
             strength_usage=strength_usage,
@@ -309,7 +310,7 @@ class LayerPotential(LayerPotentialBase):
             kwargs[f"strength_{i}"] = dens
 
         result = actx.call_loopy(
-            knl,
+            knl.t_unit,
             sources=sources,
             targets=targets,
             center=centers,

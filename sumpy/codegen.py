@@ -214,7 +214,7 @@ def _fp_contract_fast_preamble(preamble_info):
 
 
 def register_optimization_preambles(loopy_knl, device):
-    if isinstance(loopy_knl.target, lp.PyOpenCLTarget):
+    if isinstance(loopy_knl.t_unit.target, lp.PyOpenCLTarget):
         import pyopencl as cl
         if device.platform.name == "Portable Computing Language" and \
                 (device.type & cl.device_type.GPU):

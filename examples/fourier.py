@@ -21,8 +21,8 @@ def make_fourier_mode_extender(m, n, dtype):
     else:
         peak_pos_freq = (k-1)/2
 
-    num_pos_freq = peak_pos_freq + 1
-    num_neg_freq = k-num_pos_freq
+    num_pos_freq = int(peak_pos_freq + 1)
+    num_neg_freq = int(k-num_pos_freq)
 
     eye = np.eye(k)
     result[:num_pos_freq, :num_pos_freq] = eye[:num_pos_freq, :num_pos_freq]
