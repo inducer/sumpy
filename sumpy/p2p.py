@@ -88,9 +88,13 @@ class P2PBase(KernelCacheMixin, KernelComputation):
         base_target_kernel = single_valued(txr(knl) for knl in target_kernels)
         assert base_source_kernel == base_target_kernel
 
-        KernelComputation.__init__(self, actx, target_kernels=target_kernels,
-            source_kernels=source_kernels, strength_usage=strength_usage,
-            value_dtypes=value_dtypes, name=name)
+        KernelComputation.__init__(
+            self,
+            actx, target_kernels=target_kernels,
+            source_kernels=source_kernels,
+            strength_usage=strength_usage,
+            value_dtypes=value_dtypes,
+            name=name)
 
         self.exclude_self = exclude_self
         self.dim = single_valued([
@@ -192,7 +196,7 @@ class P2PBase(KernelCacheMixin, KernelComputation):
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
 
-        knl = register_optimization_preambles(knl, self.actx.device)
+        knl = register_optimization_preambles(knl, self.actx.queue.device)
         return knl
 
 
@@ -423,7 +427,7 @@ class P2PMatrixSubsetGenerator(P2PBase):
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
-        knl = register_optimization_preambles(knl, self.device)
+        knl = register_optimization_preambles(knl, self.actx.queue.device)
 
         return knl
 
@@ -746,7 +750,7 @@ class P2PFromCSR(P2PBase):
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
 
-        knl = register_optimization_preambles(knl, self.device)
+        knl = register_optimization_preambles(knl, self.actx.queue.device)
         return knl
 
     def __call__(self, actx: PyOpenCLArrayContext, **kwargs):

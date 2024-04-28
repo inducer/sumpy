@@ -50,7 +50,7 @@ Expansion-to-expansion
 # {{{ E2EBase: base class
 
 class E2EBase(KernelCacheMixin, ABC):
-    def __init__(self, src_expansion, tgt_expansion, name=None):
+    def __init__(self, actx, src_expansion, tgt_expansion, name=None):
         """
         :arg expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
         :arg strength_usage: A list of integers indicating which expression
@@ -75,6 +75,8 @@ class E2EBase(KernelCacheMixin, ABC):
         self.src_expansion = src_expansion
         self.tgt_expansion = tgt_expansion
         self.name = name or self.default_name
+
+        self.actx = actx
 
         if src_expansion.dim != tgt_expansion.dim:
             raise ValueError("source and target expansions must have "
@@ -129,7 +131,7 @@ class E2EBase(KernelCacheMixin, ABC):
         # FIXME
         knl = self.get_kernel()
         knl = lp.split_iname(knl, "itgt_box", 64, outer_tag="g.0", inner_tag="l.0")
-        knl = register_optimization_preambles(knl, self.device)
+        knl = register_optimization_preambles(knl, self.actx.queue.device)
 
         return knl
 
@@ -256,7 +258,7 @@ class E2EFromCSR(E2EBase):
         # FIXME
         knl = self.get_kernel()
         knl = lp.split_iname(knl, "itgt_box", 64, outer_tag="g.0", inner_tag="l.0")
-        knl = register_optimization_preambles(knl, self.device)
+        knl = register_optimization_preambles(knl, self.actx.queue.device)
 
         return knl
 
@@ -500,7 +502,7 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
         knl = self.get_kernel(result_dtype)
         knl = self.tgt_expansion.m2l_translation.optimize_loopy_kernel(
                 knl, self.tgt_expansion, self.src_expansion)
-        knl = register_optimization_preambles(knl, self.device)
+        knl = register_optimization_preambles(knl, self.actx.queue.device)
 
         return knl
 
@@ -613,7 +615,7 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
         knl = self.get_kernel(result_dtype)
         knl = lp.tag_inames(knl, "idim*:unr")
         knl = lp.tag_inames(knl, {"itr_class": "g.0"})
-        knl = register_optimization_preambles(knl, self.device)
+        knl = register_optimization_preambles(knl, self.actx.queue.device)
 
         return knl
 
@@ -719,7 +721,7 @@ class M2LPreprocessMultipole(E2EBase):
         _, optimizations = self.get_inner_knl_and_optimizations(result_dtype)
         for optimization in optimizations:
             knl = optimization(knl)
-        knl = register_optimization_preambles(knl, self.device)
+        knl = register_optimization_preambles(knl, self.actx.queue.device)
         return knl
 
     def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
@@ -820,7 +822,7 @@ class M2LPostprocessLocal(E2EBase):
         for optimization in optimizations:
             knl = optimization(knl)
         knl = lp.add_inames_for_unused_hw_axes(knl)
-        knl = register_optimization_preambles(knl, self.device)
+        knl = register_optimization_preambles(knl, self.actx.queue.device)
         return knl
 
     def __call__(self, actx: PyOpenCLArrayContext, **kwargs):

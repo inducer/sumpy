@@ -257,13 +257,14 @@ class KernelComputation(ABC):
     .. automethod:: get_kernel
     """
 
-    def __init__(self,
-            actx,
-            target_kernels: List["Kernel"],
-            source_kernels: List["Kernel"],
-            strength_usage: Optional[List[int]] = None,
-            value_dtypes: Optional[List["numpy.dtype[Any]"]] = None,
-            name: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        actx,
+        target_kernels: List["Kernel"],
+        source_kernels: List["Kernel"],
+        strength_usage: Optional[List[int]] = None,
+        value_dtypes: Optional[List["numpy.dtype[Any]"]] = None,
+        name: Optional[str] = None) -> None:
         """
         :arg target_kernels: list of :class:`~sumpy.kernel.Kernel` instances,
             with :class:`sumpy.kernel.DirectionalTargetDerivative` as
@@ -443,7 +444,7 @@ class KernelCacheMixin:
             try:
                 result = code_cache[cache_key]
                 logger.debug("%s: kernel cache hit [key=%s]", self.name, cache_key)
-                return result.executor(self.actx.context)
+                return result
             except KeyError:
                 pass
 
@@ -464,7 +465,7 @@ class KernelCacheMixin:
                 NO_CACHE_KERNELS and self.name in NO_CACHE_KERNELS):
             code_cache.store_if_not_present(cache_key, knl)
 
-        return knl.executor(self.actx.context)
+        return knl
 
     @staticmethod
     def _allow_redundant_execution_of_knl_scaling(knl):

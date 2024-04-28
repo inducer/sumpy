@@ -47,7 +47,7 @@ Expansion-to-particle
 # {{{ E2PBase: base class
 
 class E2PBase(KernelCacheMixin, ABC):
-    def __init__(self, expansion, kernels, name=None):
+    def __init__(self, actx, expansion, kernels, name=None):
         """
         :arg expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
         :arg strength_usage: A list of integers indicating which expression
@@ -71,6 +71,8 @@ class E2PBase(KernelCacheMixin, ABC):
         self.name = name or self.default_name
 
         self.dim = expansion.dim
+
+        self.actx = actx
 
     @property
     def nresults(self):
@@ -195,7 +197,7 @@ class E2PFromSingleBox(E2PBase):
         knl = lp.add_inames_to_insn(knl, "itgt_box", "id:kernel_scaling")
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
-        knl = register_optimization_preambles(knl, self.device)
+        knl = register_optimization_preambles(knl, self.actx.queue.device)
 
         return knl
 
@@ -324,7 +326,7 @@ class E2PFromCSR(E2PBase):
         knl = lp.add_inames_to_insn(knl, "itgt_box", "id:kernel_scaling")
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
-        knl = register_optimization_preambles(knl, self.device)
+        knl = register_optimization_preambles(knl, self.actx.queue.device)
 
         return knl
 

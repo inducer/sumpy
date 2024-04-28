@@ -50,7 +50,8 @@ class P2EBase(KernelCacheMixin, KernelComputation):
     .. automethod:: __init__
     """
 
-    def __init__(self, expansion, kernels=None, name=None, strength_usage=None):
+    def __init__(self, actx,
+                 expansion, kernels=None, name=None, strength_usage=None):
         """
         :arg expansion: a subclass of :class:`sumpy.expansion.ExpansionBase`
         :arg kernels: if not provided, the kernel of the *expansion* is used.
@@ -78,7 +79,10 @@ class P2EBase(KernelCacheMixin, KernelComputation):
             assert txr(knl) == knl
             assert sxr(knl) == expansion.kernel
 
-        KernelComputation.__init__(self, target_kernels=[],
+        KernelComputation.__init__(
+            self,
+            actx,
+            target_kernels=[],
             source_kernels=kernels,
             strength_usage=strength_usage, value_dtypes=None,
             name=name)
@@ -118,7 +122,7 @@ class P2EBase(KernelCacheMixin, KernelComputation):
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
-        knl = register_optimization_preambles(knl, self.device)
+        knl = register_optimization_preambles(knl, self.actx.queue.device)
         return knl
 
     def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
