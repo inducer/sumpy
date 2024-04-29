@@ -229,6 +229,11 @@ class P2EFromSingleBox(P2EBase):
         loopy_knl = lp.tag_inames(loopy_knl, "istrength*:unr")
         loopy_knl = self.add_loopy_form_callable(loopy_knl)
 
+        from sumpy.transform.metadata import P2EFromSingleBoxKernelTag
+        default_ep = loopy_knl.default_entrypoint
+        loopy_knl = loopy_knl.with_kernel(
+            default_ep.tagged(P2EFromSingleBoxKernelTag()))
+
         return loopy_knl
 
     def get_optimized_kernel(self, sources_is_obj_array, centers_is_obj_array):
@@ -359,6 +364,9 @@ class P2EFromCSR(P2EBase):
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, "istrength*:unr")
         loopy_knl = self.add_loopy_form_callable(loopy_knl)
+
+        from sumpy.transform.metadata import P2EFromCSRKernelTag
+        loopy_knl = loopy_knl.tagged(P2EFromCSRKernelTag)
 
         return loopy_knl
 

@@ -20,16 +20,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Dict, List, Optional, Union
-
-import numpy as np
-
-from boxtree.array_context import PyOpenCLArrayContext as PyOpenCLArrayContextBase
-from arraycontext.pytest import (
-        _PytestPyOpenCLArrayContextFactoryWithClass,
-        register_pytest_array_context_factory)
-from pytools.tag import ToTagSetConvertible
-
 __doc__ = """
 Array Context
 -------------
@@ -39,7 +29,44 @@ Array Context
 """
 
 
+from typing import Any, Dict, List, Optional, Union
+
+import numpy as np
+import sumpy.transform.metadata as mtd
+
+from boxtree.array_context import (
+    PyOpenCLArrayContext as PyOpenCLArrayContextBase,
+    PytatoPyOpenCLArrayContext as PytatoPyOpenCLArrayContextBase
+)
+from arraycontext.pytest import (
+        _PytestPyOpenCLArrayContextFactoryWithClass,
+        register_pytest_array_context_factory)
+from pytools.tag import ToTagSetConvertible
+
+
 # {{{ PyOpenCLArrayContext
+
+class PyOpenCLArrayContext(PyOpenCLArrayContextBase):
+    def transform_loopy_program(self, t_unit):
+
+        knl = t_unit.default_entrypoint
+
+        return t_unit
+
+# }}}
+
+
+# {{{ PytatoPyOpenCLArrayContext
+
+class PytatoPyOpenCLArrayContext(PytatoPyOpenCLArrayContextBase):
+    def transform_loopy_program(self, t_unit):
+
+        knl = t_unit.default_entrypoint
+
+        return t_unit
+
+# }}}
+
 
 def make_loopy_program(
         domains, statements,
@@ -77,16 +104,9 @@ def make_loopy_program(
             tags=tags)
 
 
-class PyOpenCLArrayContext(PyOpenCLArrayContextBase):
-    def transform_loopy_program(self, t_unit):
-        return t_unit
-
-
 def is_cl_cpu(actx: PyOpenCLArrayContext) -> bool:
     import pyopencl as cl
     return all(dev.type & cl.device_type.CPU for dev in actx.context.devices)
-
-# }}}
 
 
 # {{{ pytest

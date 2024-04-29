@@ -310,7 +310,7 @@ class LayerPotential(LayerPotentialBase):
             kwargs[f"strength_{i}"] = dens
 
         result = actx.call_loopy(
-            knl.t_unit,
+            knl,
             sources=sources,
             targets=targets,
             center=centers,

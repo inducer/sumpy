@@ -256,11 +256,16 @@ class E2EFromCSR(E2EBase):
 
     def get_optimized_kernel(self):
         # FIXME
-        knl = self.get_kernel()
-        knl = lp.split_iname(knl, "itgt_box", 64, outer_tag="g.0", inner_tag="l.0")
-        knl = register_optimization_preambles(knl, self.actx.queue.device)
+        t_unit = self.get_kernel()
+        t_unit = lp.split_iname(
+            t_unit, "itgt_box", 64, outer_tag="g.0", inner_tag="l.0")
+        t_unit = register_optimization_preambles(t_unit, self.actx.queue.device)
 
-        return knl
+        from sumpy.transform.metadata import E2EFromCSRKernelTag
+        default_ep = t_unit.default_entrypoint
+        t_unit = t_unit.with_kernel(default_ep.tagged(E2EFromCSRKernelTag()))
+
+        return t_unit
 
     def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
         """
@@ -935,6 +940,11 @@ class E2EFromChildren(E2EBase):
         loopy_knl = lp.set_options(loopy_knl,
                 enforce_variable_access_ordered="no_check")
 
+        from sumpy.transform.metadata import E2EFromChildrenKernelTag
+        default_ep = loopy_knl.default_entrypoint
+        loopy_knl = loopy_knl.with_kernel(
+            default_ep.tagged(E2EFromChildrenKernelTag()))
+
         return loopy_knl
 
     def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
@@ -1040,6 +1050,11 @@ class E2EFromParent(E2EBase):
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.set_options(loopy_knl,
                 enforce_variable_access_ordered="no_check")
+
+        from sumpy.transform.metadata import E2EFromParentKernelTag
+        default_ep = loopy_knl.default_entrypoint
+        loopy_knl = loopy_knl.with_knl(
+            default_ep.tagged(E2EFromParentKernelTag()))
 
         return loopy_knl
 

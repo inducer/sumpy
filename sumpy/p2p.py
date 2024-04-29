@@ -256,6 +256,11 @@ class P2P(P2PBase):
         for knl in self.target_kernels + self.source_kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
+        from sumpy.transform.metadata import P2PKernelTag
+        default_ep = loopy_knl.default_entrypoint
+        loopy_knl = loopy_knl.with_kernel(
+            default_ep.tagged(P2PKernelTag()))
+
         return loopy_knl
 
     def __call__(self, targets, sources, strength, **kwargs):
@@ -267,7 +272,7 @@ class P2P(P2PBase):
         knl = register_optimization_preambles(knl, self.actx.queue.device)
 
         result = self.actx.call_loopy(
-            knl.t_unit,
+            knl,
             sources=sources,
             targets=targets,
             strength=strength,
@@ -326,6 +331,12 @@ class P2PMatrixGenerator(P2PBase):
 
         for knl in self.target_kernels + self.source_kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
+
+
+        from sumpy.transform.metadata import P2PMatrixGeneratorKernelTag
+        default_ep = loopy_knl.default_entrypoint
+        loopy_knl = loopy_knl.with_kernel(
+            default_ep.tagged(P2PMatrixGeneratorKernelTag()))
 
         return loopy_knl
 
@@ -428,6 +439,12 @@ class P2PMatrixSubsetGenerator(P2PBase):
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
         knl = register_optimization_preambles(knl, self.actx.queue.device)
+
+        from sumpy.transform.metadata import P2PMatrixSubsetGeneratorKernelTag
+        default_ep = knl.default_entrypoint
+        knl = knl.with_kernel(
+            default_ep.tagged(P2PMatrixSubsetGeneratorKernelTag())
+        )
 
         return knl
 
@@ -751,6 +768,12 @@ class P2PFromCSR(P2PBase):
                 enforce_variable_access_ordered="no_check")
 
         knl = register_optimization_preambles(knl, self.actx.queue.device)
+
+        from sumpy.transform.metadata import P2PFromCSRKernelTag
+        default_ep = knl.default_entrypoint
+        knl = knl.with_kernel(
+            default_ep.tagged(P2PFromCSRKernelTag()))
+
         return knl
 
     def __call__(self, actx: PyOpenCLArrayContext, **kwargs):

@@ -188,6 +188,11 @@ class E2PFromSingleBox(E2PBase):
         loopy_knl = lp.tag_inames(loopy_knl, "iknl*:unr")
         loopy_knl = self.add_loopy_eval_callable(loopy_knl)
 
+        from sumpy.transform.metadata import E2PFromSingleBoxKernelTag
+        default_ep = loopy_knl.default_entrypoint
+        loopy_knl = loopy_knl.with_kernel(
+            default_ep.tagged(E2PFromSingleBoxKernelTag()))
+
         return loopy_knl
 
     def get_optimized_kernel(self):
@@ -316,6 +321,11 @@ class E2PFromCSR(E2PBase):
         loopy_knl = lp.prioritize_loops(loopy_knl, "itgt_box,itgt,isrc_box")
         loopy_knl = self.add_loopy_eval_callable(loopy_knl)
         loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
+
+        from sumpy.transform.metadata import E2PFromCSRKernelTag
+        default_ep = loopy_knl.default_entrypoint
+        loopy_knl = loopy_knl.with_kernel(
+            default_ep.tagged(E2PFromCSRKernelTag()))
 
         return loopy_knl
 
