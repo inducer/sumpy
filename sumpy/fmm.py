@@ -232,6 +232,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         super().__init__(tree_indep, traversal)
 
         self.dtype = dtype
+        self.actx = self.tree_indep.actx
 
         if not self.tree_indep.m2l_translation.use_fft:
             # If not FFT, we don't need complex dtypes
@@ -275,7 +276,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 translation_classes_builder = TranslationClassesBuilder(actx)
                 translation_classes_data, _ = translation_classes_builder(
                     actx, traversal, self.tree, is_translation_per_level=True)
-                translation_classes_data = actx.freeze(translation_classes_data)
+                translation_classes_data = translation_classes_data
 
             self.supports_translation_classes = True
 
@@ -374,11 +375,17 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             translation_class_start, translation_class_stop = (
                 level_start_box_nrs[level:level + 2])
 
+
             exprs_level = actx.zeros(
                 expn_stop - expn_start,
                 dtype=self.preprocessed_mpole_dtype
-                ).reshape(translation_class_stop - translation_class_start, -1)
-            result.append(exprs_level)
+                )
+
+            if 0 not in exprs_level.shape:
+                exprs_level = exprs_level.reshape(
+                    translation_class_stop - translation_class_start, -1)
+
+            result.append(actx.freeze(exprs_level))
 
         return result
 
@@ -387,7 +394,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 self.multipole_expansions_level_starts()[level:level + 2])
         box_start, box_stop = self.tree_level_start_box_nrs[level:level + 2]
 
-        return (box_start,
+        return (box_start, expn_start, expn_stop,
                 mpole_exps[expn_start:expn_stop].reshape(box_stop-box_start, -1))
 
     def local_expansions_view(self, local_exps, level):
@@ -395,7 +402,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 self.local_expansions_level_starts()[level:level + 2])
         box_start, box_stop = self.tree_level_start_box_nrs[level:level + 2]
 
-        return (box_start,
+        return (box_start, expn_start, expn_stop,
                 local_exps[expn_start:expn_stop].reshape(box_stop-box_start, -1))
 
     def m2l_translation_classes_dependent_data_view(self,
@@ -450,9 +457,11 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         the potential, or arbitrary other per-target output data.
         """
         from pytools.obj_array import make_obj_array
-        return make_obj_array([
-                actx.zeros(self.tree.ntargets, dtype=self.dtype)
-                for k in self.tree_indep.target_kernels])
+        ary = actx.zeros(self.tree.ntargets, dtype=self.dtype)
+
+        return actx.freeze(
+            actx.np.stack(*(ary,)*len(self.tree_indep.target_kernels))).reshape(
+            len(self.tree_indep.target_kernels), -1)
 
     def reorder_sources(self, source_array):
         actx = self.tree_indep._setup_actx
@@ -461,21 +470,26 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     def reorder_potentials(self, potentials):
         from pytools.obj_array import obj_array_vectorize
         import numpy as np
-        assert (
-                isinstance(potentials, np.ndarray)
-                and potentials.dtype.char == "O")
+        # assert (
+        #         isinstance(potentials, np.ndarray)
+        #         and potentials.dtype.char == "O")
 
-        def reorder(x):
-            return x[self.tree.sorted_target_ids]
+        # def reorder(x):
+        #     return x[self.tree.sorted_target_ids]
+        #
+        # return obj_array_vectorize(reorder, potentials)
 
-        return obj_array_vectorize(reorder, potentials)
+        sorted_target_ids = self.actx.to_numpy(self.tree.sorted_target_ids)
+        potentials = self.actx.to_numpy(potentials)
+
+        return self.actx.from_numpy(potentials[:,sorted_target_ids])
 
     @property
     @memoize_method
     def max_nsources_in_one_box(self):
         actx = self.tree_indep._setup_actx
         return actx.to_numpy(
-            actx.np.max(self.tree.box_source_counts_nonchild)
+            actx.np.max(actx.thaw(self.tree.box_source_counts_nonchild))
             ).item()
 
     @property
@@ -483,7 +497,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     def max_ntargets_in_one_box(self):
         actx = self.tree_indep._setup_actx
         return actx.to_numpy(
-            actx.np.max(self.tree.box_target_counts_nonchild)
+            actx.np.max(actx.thaw(self.tree.box_target_counts_nonchild))
             ).item()
 
     # }}}
@@ -495,16 +509,20 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     # use a FilteredTargetListsInTreeOrder object.
 
     def box_source_list_kwargs(self):
+        actx = self.actx
+        sources = actx.freeze(actx.np.stack(actx.thaw(*(self.tree.sources,))))
         return {
                 "box_source_starts": self.tree.box_source_starts,
                 "box_source_counts_nonchild": self.tree.box_source_counts_nonchild,
-                "sources": self.tree.sources}
+                "sources": sources}
 
     def box_target_list_kwargs(self):
+        actx = self.actx
+        targets = actx.freeze(actx.np.stack(actx.thaw(*(self.tree.targets,))))
         return {
                 "box_target_starts": self.tree.box_target_starts,
                 "box_target_counts_nonchild": self.tree.box_target_counts_nonchild,
-                "targets": self.tree.targets}
+                "targets": targets}
 
     # }}}
 
@@ -526,7 +544,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             actx: PyOpenCLArrayContext,
             level_start_source_box_nrs, source_boxes,
             src_weight_vecs):
-        mpoles = self.multipole_expansion_zeros(actx)
+        mpoles = actx.to_numpy(self.multipole_expansion_zeros(actx))
         level_start_source_box_nrs = actx.to_numpy(level_start_source_box_nrs)
 
         kwargs = self.extra_kwargs.copy()
@@ -538,23 +556,24 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             if start == stop:
                 continue
 
-            level_start_ibox, mpoles_view = self.multipole_expansions_view(
-                    mpoles, lev)
+            level_start_ibox, expn_start, expn_stop, mpoles_view = (
+                    self.multipole_expansions_view(mpoles, lev)
+            )
 
             mpoles_res = p2m(
                     actx,
+                    tgt_expansions=actx.from_numpy(mpoles_view),
                     source_boxes=source_boxes[start:stop],
                     centers=self.tree.box_centers,
                     strengths=src_weight_vecs,
-                    tgt_expansions=mpoles_view,
+                    nboxes=mpoles_view.shape[0],
                     tgt_base_ibox=level_start_ibox,
                     rscale=self.level_to_rscale(lev),
-
                     **kwargs)
 
-            assert mpoles_res is mpoles_view
+            mpoles[expn_start:expn_stop] = actx.to_numpy(mpoles_res.reshape(-1))
 
-        return mpoles
+        return actx.from_numpy(mpoles)
 
     @return_timing_data
     def coarsen_multipoles(self,
@@ -565,6 +584,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         tree = self.tree
         level_start_source_parent_box_nrs = (
             actx.to_numpy(level_start_source_parent_box_nrs))
+
+        mpoles = actx.to_numpy(actx.freeze(mpoles))
 
         # nlevels-1 is the last valid level index
         # nlevels-2 is the last valid level that could have children
@@ -586,16 +607,19 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     self.level_orders[source_level],
                     self.level_orders[target_level])
 
-            source_level_start_ibox, source_mpoles_view = (
+            source_level_start_ibox, _, _, src_mpoles_view = (
                     self.multipole_expansions_view(mpoles, source_level))
-            target_level_start_ibox, target_mpoles_view = (
+            target_level_start_ibox, tgt_start, tgt_stop, tgt_mpoles_view = (
                     self.multipole_expansions_view(mpoles, target_level))
 
-            mpoles_res = m2m(
+            mpoles_res = actx.freeze(m2m(
                     actx,
-                    src_expansions=source_mpoles_view,
+                    src_expansions=actx.from_numpy(src_mpoles_view),
                     src_base_ibox=source_level_start_ibox,
-                    tgt_expansions=target_mpoles_view,
+                    nsrc_level_boxes=src_mpoles_view.shape[0],
+
+                    tgt_expansions=actx.from_numpy(tgt_mpoles_view),
+                    ntgt_level_boxes=tgt_mpoles_view.shape[0],
                     tgt_base_ibox=target_level_start_ibox,
 
                     target_boxes=source_parent_boxes[start:stop],
@@ -605,11 +629,11 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     src_rscale=self.level_to_rscale(source_level),
                     tgt_rscale=self.level_to_rscale(target_level),
 
-                    **self.kernel_extra_kwargs)
+                    **self.kernel_extra_kwargs))
 
-            assert mpoles_res is target_mpoles_view
+            mpoles[tgt_start:tgt_stop] += actx.to_numpy(mpoles_res.reshape(-1))
 
-        return mpoles
+        return actx.from_numpy(mpoles)
 
     @return_timing_data
     def eval_direct(self,
@@ -628,13 +652,14 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 source_box_starts=source_box_starts,
                 source_box_lists=source_box_lists,
                 strength=src_weight_vecs,
-                result=pot,
                 max_nsources_in_one_box=self.max_nsources_in_one_box,
                 max_ntargets_in_one_box=self.max_ntargets_in_one_box,
                 **kwargs)
 
-        for pot_i, pot_res_i in zip(pot, pot_res):
-            assert pot_i is pot_res_i
+        # for pot_i, pot_res_i in zip(pot, pot_res):
+        #     assert pot_i is pot_res_i
+
+        pot = actx.thaw(actx.freeze(pot_res))
 
         return pot
 
@@ -721,7 +746,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             target_boxes, src_box_starts, src_box_lists,
             mpole_exps):
 
-        local_exps = self.local_expansion_zeros(actx)
+        local_exps = actx.to_numpy(self.local_expansion_zeros(actx))
         level_start_target_box_nrs = actx.to_numpy(level_start_target_box_nrs)
 
         if self.tree_indep.m2l_translation.use_preprocessing:
@@ -775,21 +800,25 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             m2l = self.tree_indep.m2l(order, order,
                     self.supports_translation_classes)
 
-            source_level_start_ibox, source_mpoles_view = \
+            source_level_start_ibox, src_start, src_stop, source_mpoles_view = \
                     mpole_exps_view_func(preprocessed_mpole_exps, lev)
-            target_level_start_ibox, target_locals_view = \
+            target_level_start_ibox, tgt_start, tgt_stop, target_locals_view = \
                     local_exps_view_func(m2l_work_array, lev)
 
             kwargs = dict(
                     src_expansions=source_mpoles_view,
                     src_base_ibox=source_level_start_ibox,
-                    tgt_expansions=target_locals_view,
+                    nsrc_level_boxes=source_mpoles_view.shape[0],
+
                     tgt_base_ibox=target_level_start_ibox,
+                    ntgt_level_boxes=target_locals_view.shape[0],
 
                     target_boxes=target_boxes[start:stop],
                     src_box_starts=src_box_starts[start:stop+1],
                     src_box_lists=src_box_lists,
                     centers=self.tree.box_centers,
+
+                    aligned_nboxes=self.tree.box_centers.shape[1],
 
                     src_rscale=self.level_to_rscale(lev),
                     tgt_rscale=self.level_to_rscale(lev),
@@ -837,25 +866,25 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     **self.kernel_extra_kwargs,
                 )
 
-        return local_exps
+        return actx.from_numpy(local_exps)
 
     @return_timing_data
     def eval_multipoles(self,
             actx: PyOpenCLArrayContext,
             target_boxes_by_source_level, source_boxes_by_level, mpole_exps):
-        pot = self.output_zeros(actx)
+        pot = actx.to_numpy(self.output_zeros(actx))
 
         kwargs = self.kernel_extra_kwargs.copy()
         kwargs.update(self.box_target_list_kwargs())
 
-        wait_for = mpole_exps.events
+        wait_for = actx.freeze(mpole_exps).events
         for isrc_level, ssn in enumerate(source_boxes_by_level):
             if len(target_boxes_by_source_level[isrc_level]) == 0:
                 continue
 
             m2p = self.tree_indep.m2p(self.level_orders[isrc_level])
 
-            source_level_start_ibox, source_mpoles_view = \
+            source_level_start_ibox, start, stop, source_mpoles_view = \
                     self.multipole_expansions_view(mpole_exps, isrc_level)
 
             pot_res = m2p(
@@ -868,7 +897,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     source_box_starts=ssn.starts,
                     source_box_lists=ssn.lists,
                     centers=self.tree.box_centers,
-                    result=pot,
+                    result=actx.from_numpy(pot),
 
                     rscale=self.level_to_rscale(isrc_level),
 
@@ -876,17 +905,18 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
                     **kwargs)
 
-            for pot_i, pot_res_i in zip(pot, pot_res):
-                assert pot_i is pot_res_i
+            pot = pot + actx.to_numpy(pot_res)
+            # for pot_i, pot_res_i in zip(pot, pot_res):
+            #     assert pot_i is pot_res_i
 
-        return pot
+        return actx.from_numpy(pot)
 
     @return_timing_data
     def form_locals(self,
             actx: PyOpenCLArrayContext,
             level_start_target_or_target_parent_box_nrs,
             target_or_target_parent_boxes, starts, lists, src_weight_vecs):
-        local_exps = self.local_expansion_zeros(actx)
+        local_exps = actx.to_numpy(self.local_expansion_zeros(actx))
         level_start_target_or_target_parent_box_nrs = (
             actx.to_numpy(level_start_target_or_target_parent_box_nrs))
 
@@ -901,7 +931,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
             p2l = self.tree_indep.p2l(self.level_orders[lev])
 
-            target_level_start_ibox, target_local_exps_view = \
+            target_level_start_ibox, tgt_start, tgt_stop, target_local_exps_view = \
                     self.local_expansions_view(local_exps, lev)
 
             result = p2l(
@@ -912,16 +942,18 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     centers=self.tree.box_centers,
                     strengths=src_weight_vecs,
 
-                    tgt_expansions=target_local_exps_view,
+                    tgt_expansions=actx.from_numpy(target_local_exps_view),
                     tgt_base_ibox=target_level_start_ibox,
 
                     rscale=self.level_to_rscale(lev),
 
-                    **kwargs)
+                    **kwargs).reshape(-1)
 
-            assert result is target_local_exps_view
+            local_exps[tgt_start:tgt_stop] = actx.to_numpy(result)
 
-        return local_exps
+            #assert result is target_local_exps_view
+
+        return actx.from_numpy(local_exps)
 
     @return_timing_data
     def refine_locals(self,
@@ -931,6 +963,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             local_exps):
         level_start_target_or_target_parent_box_nrs = (
             actx.to_numpy(level_start_target_or_target_parent_box_nrs))
+
+        local_exps = actx.to_numpy(local_exps)
 
         for target_lev in range(1, self.tree.nlevels):
             start, stop = (
@@ -943,15 +977,16 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     self.level_orders[source_lev],
                     self.level_orders[target_lev])
 
-            source_level_start_ibox, source_local_exps_view = \
+            source_level_start_ibox, src_start, src_stop, source_local_exps_view = \
                     self.local_expansions_view(local_exps, source_lev)
-            target_level_start_ibox, target_local_exps_view = \
+            target_level_start_ibox, tgt_start, tgt_stop, target_local_exps_view = \
                     self.local_expansions_view(local_exps, target_lev)
 
             local_exps_res = l2l(actx,
-                    src_expansions=source_local_exps_view,
+                    src_expansions=actx.from_numpy(source_local_exps_view),
                     src_base_ibox=source_level_start_ibox,
-                    tgt_expansions=target_local_exps_view,
+
+                    tgt_expansions=actx.from_numpy(target_local_exps_view),
                     tgt_base_ibox=target_level_start_ibox,
 
                     target_boxes=target_or_target_parent_boxes[start:stop],
@@ -963,15 +998,16 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
                     **self.kernel_extra_kwargs)
 
-            assert local_exps_res is target_local_exps_view
+            local_exps[tgt_start:tgt_stop] += actx.to_numpy(
+                local_exps_res).reshape(-1)
 
-        return local_exps
+        return actx.from_numpy(local_exps)
 
     @return_timing_data
     def eval_locals(self,
             actx: PyOpenCLArrayContext,
             level_start_target_box_nrs, target_boxes, local_exps):
-        pot = self.output_zeros(actx)
+        pot = actx.to_numpy(self.output_zeros(actx))
         level_start_target_box_nrs = actx.to_numpy(level_start_target_box_nrs)
 
         kwargs = self.kernel_extra_kwargs.copy()
@@ -984,7 +1020,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
             l2p = self.tree_indep.l2p(self.level_orders[lev])
 
-            source_level_start_ibox, source_local_exps_view = \
+            source_level_start_ibox, src_start, src_stop, source_local_exps_view = \
                     self.local_expansions_view(local_exps, lev)
 
             pot_res = l2p(
@@ -995,16 +1031,15 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
                     target_boxes=target_boxes[start:stop],
                     centers=self.tree.box_centers,
-                    result=pot,
+                    result=actx.from_numpy(pot),
 
                     rscale=self.level_to_rscale(lev),
 
                     **kwargs)
 
-            for pot_i, pot_res_i in zip(pot, pot_res):
-                assert pot_i is pot_res_i
+            pot = pot + actx.to_numpy(pot_res)
 
-        return pot
+        return actx.from_numpy(pot)
 
     def finalize_potentials(self, actx: PyOpenCLArrayContext, potentials):
         return potentials

@@ -282,9 +282,10 @@ class E2EFromCSR(E2EBase):
         src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
 
-        knl = self.get_cached_kernel_executor()
+        t_unit = self.get_cached_kernel_executor()
+
         result = actx.call_loopy(
-            knl,
+            t_unit,
             centers=centers,
             src_rscale=src_rscale, tgt_rscale=tgt_rscale,
             **kwargs)
@@ -527,9 +528,9 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
         src_expansions = kwargs.pop("src_expansions")
 
-        knl = self.get_cached_kernel_executor(result_dtype=src_expansions.dtype)
+        t_unit = self.get_kernel(result_dtype=src_expansions.dtype)
         result = actx.call_loopy(
-            knl,
+            t_unit,
             src_expansions=src_expansions,
             centers=centers,
             src_rscale=src_rscale, tgt_rscale=tgt_rscale,
@@ -641,13 +642,12 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                 "m2l_translation_classes_dependent_data")
         result_dtype = m2l_translation_classes_dependent_data.dtype
 
-        knl = self.get_cached_kernel_executor(result_dtype=result_dtype)
+        t_unit = self.get_kernel(result_dtype=result_dtype)
+
         result = actx.call_loopy(
-            knl,
+            t_unit,
             src_rscale=src_rscale,
             m2l_translation_vectors=m2l_translation_vectors,
-            m2l_translation_classes_dependent_data=(
-                m2l_translation_classes_dependent_data),
             **kwargs)
 
         return result["m2l_translation_classes_dependent_data"]
@@ -902,7 +902,6 @@ class E2EFromChildren(E2EBase):
                             """.format(i=i) for i in range(ncoeffs_src)] + [
                             ] + loopy_insns + ["""
                             tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] = \
-                                tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] \
                                 + coeff{i} \
                                 {{id_prefix=write_expn,dep=compute_coeff*,
                                     nosync=read_coeff*}}
@@ -962,9 +961,12 @@ class E2EFromChildren(E2EBase):
         src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
 
-        knl = self.get_cached_kernel_executor()
+        t_unit = self.get_cached_kernel_executor()
+
+        kwargs["aligned_nboxes"] = centers.shape[1]
+
         result = actx.call_loopy(
-            knl,
+            t_unit,
             centers=centers,
             src_rscale=src_rscale, tgt_rscale=tgt_rscale,
             **kwargs)
@@ -1017,8 +1019,7 @@ class E2EFromParent(E2EBase):
 
                     ] + self.get_translation_loopy_insns() + ["""
 
-                    tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] = \
-                        tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] + coeff{i} \
+                    tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] = coeff{i} \
                         {{id_prefix=write_expn,nosync=read_expn*}}
                     """.format(i=i) for i in range(ncoeffs_tgt)] + ["""
                 end
@@ -1053,7 +1054,7 @@ class E2EFromParent(E2EBase):
 
         from sumpy.transform.metadata import E2EFromParentKernelTag
         default_ep = loopy_knl.default_entrypoint
-        loopy_knl = loopy_knl.with_knl(
+        loopy_knl = loopy_knl.with_kernel(
             default_ep.tagged(E2EFromParentKernelTag()))
 
         return loopy_knl
@@ -1073,9 +1074,17 @@ class E2EFromParent(E2EBase):
         src_rscale = centers.dtype.type(kwargs.pop("src_rscale"))
         tgt_rscale = centers.dtype.type(kwargs.pop("tgt_rscale"))
 
-        knl = self.get_cached_kernel_executor()
+        t_unit= self.get_cached_kernel_executor()
+
+        # update kwargs for lazy
+        kwargs["naligned_boxes"] = centers.shape[1]
+        kwargs["nboxes"] = kwargs["box_parent_ids"].shape[0]
+        kwargs["ntgt_level_boxes"] = kwargs["tgt_expansions"].shape[0]
+        kwargs["nsrc_level_boxes"] = kwargs["src_expansions"].shape[0]
+        kwargs["ntgt_boxes"] = kwargs["target_boxes"].shape[0]
+
         result = actx.call_loopy(
-            knl,
+            t_unit,
             centers=centers,
             src_rscale=src_rscale, tgt_rscale=tgt_rscale,
             **kwargs)

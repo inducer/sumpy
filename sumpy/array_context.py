@@ -32,6 +32,7 @@ Array Context
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
+import pytato as pt
 import sumpy.transform.metadata as mtd
 
 from boxtree.array_context import (
@@ -42,6 +43,7 @@ from arraycontext.pytest import (
         _PytestPyOpenCLArrayContextFactoryWithClass,
         register_pytest_array_context_factory)
 from pytools.tag import ToTagSetConvertible
+
 
 
 # {{{ PyOpenCLArrayContext
@@ -59,6 +61,55 @@ class PyOpenCLArrayContext(PyOpenCLArrayContextBase):
 # {{{ PytatoPyOpenCLArrayContext
 
 class PytatoPyOpenCLArrayContext(PytatoPyOpenCLArrayContextBase):
+
+    def transform_dag(self, dag):
+        try:
+            self.dot_codes.append(pt.get_dot(dag))
+        except AttributeError:
+            self.dot_codes = []
+            self.dot_codes.append(pt.get_dot_graph(dag))
+
+        return super().transform_dag(dag)
+
+
+    def call_loopy(self, program, **kwargs):
+
+        import loopy as lp
+
+        # {{{ preprocess arguments
+
+        knl = program.default_entrypoint
+
+        # shape inference
+        new_args = []
+        for arg in knl.args:
+            new_arg = arg
+            if isinstance(arg, lp.ArrayArg) and arg.shape is None:
+                new_arg = new_arg.copy(shape=kwargs[arg.name].shape)
+
+            new_args.append(new_arg)
+
+        knl = knl.copy(args=new_args)
+        program = program.with_kernel(knl)
+
+        # }}}
+
+        # {{{ preprocess kwargs
+
+        # remove unnecessary kwargs
+        if "wait_for" in kwargs.keys():
+            kwargs.pop("wait_for")
+
+        # remove output args from kwargs (they are implicit in CallLoopy nodes)
+        for arg in program.default_entrypoint.args:
+            if arg.is_output and arg.name in kwargs.keys():
+                kwargs.pop(arg.name)
+
+        # }}}
+
+        return super().call_loopy(program, **kwargs)
+
+
     def transform_loopy_program(self, t_unit):
 
         knl = t_unit.default_entrypoint

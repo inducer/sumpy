@@ -22,8 +22,9 @@ THE SOFTWARE.
 
 import numpy as np
 import loopy as lp
+from loopy import ArrayArg
 
-from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
+from sumpy.array_context import PyOpenCLArrayContext, PytatoPyOpenCLArrayContext, make_loopy_program
 from sumpy.tools import KernelCacheMixin, KernelComputation
 from sumpy.codegen import register_optimization_preambles
 
@@ -99,7 +100,7 @@ class P2EBase(KernelCacheMixin, KernelComputation):
         loopy_knl = lp.remove_unused_inames(loopy_knl)
         for kernel in self.source_kernels:
             loopy_knl = kernel.prepare_loopy_kernel(loopy_knl)
-        loopy_knl = lp.tag_array_axes(loopy_knl, "strengths", "sep,C")
+        #loopy_knl = lp.tag_array_axes(loopy_knl, "strengths", "sep,C")
         return loopy_knl
 
     def get_loopy_args(self):
@@ -135,12 +136,12 @@ class P2EBase(KernelCacheMixin, KernelComputation):
         dtype = centers[0].dtype if is_obj_array_like(centers) else centers.dtype
         rscale = dtype.type(kwargs.pop("rscale"))
 
-        knl = self.get_cached_kernel_executor(
+        t_unit = self.get_cached_kernel_executor(
                 sources_is_obj_array=is_obj_array_like(sources),
                 centers_is_obj_array=is_obj_array_like(centers))
 
         result = actx.call_loopy(
-            knl,
+            t_unit,
             sources=sources, centers=centers, rscale=rscale,
             **kwargs)
 
@@ -211,10 +212,10 @@ class P2EFromSingleBox(P2EBase):
                         None, shape=None),
                     lp.GlobalArg("centers", None, shape="dim, aligned_nboxes"),
                     lp.ValueArg("rscale", None),
-                    lp.GlobalArg("tgt_expansions", None,
-                        shape=("nboxes", ncoeffs), offset=lp.auto),
                     lp.ValueArg("nboxes, aligned_nboxes, tgt_base_ibox", np.int32),
                     lp.ValueArg("nsources", np.int32),
+                    lp.GlobalArg("tgt_expansions", None,
+                        shape=("nboxes", ncoeffs), offset=lp.auto),
                     *loopy_args,
                     ...
                 ],
@@ -265,6 +266,12 @@ class P2EFromSingleBox(P2EBase):
 
         :returns: an array of *tgt_expansions*.
         """
+
+        # prepare kwargs
+        kwargs["aligned_nboxes"] = kwargs["centers"].shape[1]
+        kwargs["nsources"] = kwargs["sources"].shape[1]
+        kwargs["nsrc_boxes"] = kwargs["source_boxes"].shape[0]
+
         return super().__call__(actx, **kwargs)
 
 # }}}
@@ -366,7 +373,9 @@ class P2EFromCSR(P2EBase):
         loopy_knl = self.add_loopy_form_callable(loopy_knl)
 
         from sumpy.transform.metadata import P2EFromCSRKernelTag
-        loopy_knl = loopy_knl.tagged(P2EFromCSRKernelTag)
+        loopy_knl = loopy_knl.with_kernel(
+            loopy_knl.default_entrypoint.tagged(P2EFromCSRKernelTag())
+        )
 
         return loopy_knl
 
@@ -398,6 +407,12 @@ class P2EFromCSR(P2EBase):
         :arg tgt_base_ibox: see :meth:`P2EFromSingleBox.__call__`.
         :arg tgt_expansion: see :meth:`P2EFromSingleBox.__call__`.
         """
+
+        kwargs["ntgt_level_boxes"] = kwargs["tgt_expansions"].shape[0]
+        kwargs["nsources"] = kwargs["sources"].shape[1]
+        kwargs["naligned_boxes"] = kwargs["centers"].shape[1]
+        kwargs["ntgt_boxes"] = kwargs["target_boxes"].shape[0]
+
         return super().__call__(actx, **kwargs)
 
 # }}}

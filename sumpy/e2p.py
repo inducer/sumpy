@@ -93,7 +93,7 @@ class E2PBase(KernelCacheMixin, ABC):
         loopy_knl = lp.remove_unused_inames(loopy_knl)
         for kernel in self.kernels:
             loopy_knl = kernel.prepare_loopy_kernel(loopy_knl)
-        loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
+        #loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
         return loopy_knl
 
     def get_loopy_args(self):
@@ -168,8 +168,7 @@ class E2PFromSingleBox(E2PBase):
                         None, shape=None),
                     lp.GlobalArg("centers", None, shape="dim, naligned_boxes"),
                     lp.ValueArg("rscale", None),
-                    lp.GlobalArg("result", None, shape="nresults, ntargets",
-                        dim_tags="sep,C"),
+                    lp.GlobalArg("result", None, shape="nresults, ntargets"),
                     lp.GlobalArg("src_expansions", None,
                         shape=("nsrc_level_boxes", ncoeffs), offset=lp.auto),
                     lp.ValueArg("nsrc_level_boxes,naligned_boxes", np.int32),
@@ -226,7 +225,7 @@ class E2PFromSingleBox(E2PBase):
             knl,
             centers=centers, rscale=rscale, **kwargs)
 
-        return make_obj_array([result[f"result_s{i}"] for i in range(self.nresults)])
+        return result["result"]
 
 # }}}
 
@@ -285,7 +284,7 @@ class E2PFromCSR(E2PBase):
                             )  {id=update_result, \
                               dep=fetch_coeffs:fetch_center:fetch_tgt:init_result}
                         end
-                        result[iknl, itgt] = result[iknl, itgt] + result_temp[iknl] \
+                        result[iknl, itgt] = result_temp[iknl] \
                                 * kernel_scaling \
                                 {dep=update_result:init_result,id=write_result,dup=iknl}
                     end
@@ -301,8 +300,7 @@ class E2PFromCSR(E2PBase):
                     lp.ValueArg("src_base_ibox", np.int32),
                     lp.ValueArg("nsrc_level_boxes,aligned_nboxes", np.int32),
                     lp.ValueArg("ntargets", np.int32),
-                    lp.GlobalArg("result", None, shape="nresults,ntargets",
-                        dim_tags="sep,C"),
+                    lp.GlobalArg("result", None, shape="nresults,ntargets"),
                     lp.GlobalArg("source_box_starts, source_box_lists,",
                         None, shape=None, offset=lp.auto),
                     *loopy_args,
@@ -320,7 +318,7 @@ class E2PFromCSR(E2PBase):
         loopy_knl = lp.tag_inames(loopy_knl, "iknl*:unr")
         loopy_knl = lp.prioritize_loops(loopy_knl, "itgt_box,itgt,isrc_box")
         loopy_knl = self.add_loopy_eval_callable(loopy_knl)
-        loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
+        #loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
 
         from sumpy.transform.metadata import E2PFromCSRKernelTag
         default_ep = loopy_knl.default_entrypoint
@@ -353,7 +351,7 @@ class E2PFromCSR(E2PBase):
             rscale=rscale,
             **kwargs)
 
-        return make_obj_array([result[f"result_s{i}"] for i in range(self.nresults)])
+        return result["result"]
 
 # }}}
 

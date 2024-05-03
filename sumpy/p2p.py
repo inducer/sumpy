@@ -214,13 +214,23 @@ class P2P(P2PBase):
 
     def get_kernel(self):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
+        # FIXME: "sep" as a dimtag currently does not work with lazy
+        # arguments = (
+        #     self.get_default_src_tgt_arguments()
+        #     + [
+        #         lp.GlobalArg("strength", None,
+        #             shape="nstrengths, nsources", dim_tags="sep,C"),
+        #         lp.GlobalArg("result", None,
+        #             shape="nresults, ntargets", dim_tags="sep,C")
+        #     ])
+
         arguments = (
             self.get_default_src_tgt_arguments()
             + [
                 lp.GlobalArg("strength", None,
-                    shape="nstrengths, nsources", dim_tags="sep,C"),
+                    shape="nstrengths, nsources"),
                 lp.GlobalArg("result", None,
-                    shape="nresults, ntargets", dim_tags="sep,C")
+                    shape="nresults, ntargets")
             ])
 
         loopy_knl = make_loopy_program(["""
@@ -495,6 +505,29 @@ class P2PFromCSR(P2PBase):
             max_nsources_in_one_box: int, max_ntargets_in_one_box: int, *,
             work_items_per_group: int = 32, is_gpu: bool = False):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
+        # FIXME: "sep" breaks lazy
+        # arguments = self.get_default_src_tgt_arguments() \
+        #     + [
+        #         lp.GlobalArg("box_target_starts",
+        #             None, shape=None),
+        #         lp.GlobalArg("box_target_counts_nonchild",
+        #             None, shape=None),
+        #         lp.GlobalArg("box_source_starts",
+        #             None, shape=None),
+        #         lp.GlobalArg("box_source_counts_nonchild",
+        #             None, shape=None),
+        #         lp.GlobalArg("source_box_starts",
+        #             None, shape=None),
+        #         lp.GlobalArg("source_box_lists",
+        #             None, shape=None),
+        #         lp.GlobalArg("strength", None,
+        #             shape="nstrengths, nsources", dim_tags="sep,C"),
+        #         lp.GlobalArg("result", None,
+        #             shape="noutputs, ntargets", dim_tags="sep,C"),
+        #         lp.TemporaryVariable("tgt_center", shape=(self.dim,)),
+        #         ...
+        #     ]
+
         arguments = self.get_default_src_tgt_arguments() \
             + [
                 lp.GlobalArg("box_target_starts",
@@ -510,9 +543,9 @@ class P2PFromCSR(P2PBase):
                 lp.GlobalArg("source_box_lists",
                     None, shape=None),
                 lp.GlobalArg("strength", None,
-                    shape="nstrengths, nsources", dim_tags="sep,C"),
+                    shape="nstrengths, nsources"),
                 lp.GlobalArg("result", None,
-                    shape="noutputs, ntargets", dim_tags="sep,C"),
+                    shape="noutputs, ntargets"),
                 lp.TemporaryVariable("tgt_center", shape=(self.dim,)),
                 ...
             ]
@@ -695,8 +728,8 @@ class P2PFromCSR(P2PBase):
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, "istrength*:unr")
-        loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
-        loopy_knl = lp.tag_array_axes(loopy_knl, "sources", "sep,C")
+        # loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
+        # loopy_knl = lp.tag_array_axes(loopy_knl, "sources", "sep,C")
 
         for knl in self.target_kernels + self.source_kernels:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
@@ -712,7 +745,7 @@ class P2PFromCSR(P2PBase):
         if not is_gpu:
             knl = self.get_kernel(max_nsources_in_one_box,
                     max_ntargets_in_one_box, is_gpu=is_gpu)
-            knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
+            #knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
             knl = self._allow_redundant_execution_of_knl_scaling(knl)
         else:
             work_items_per_group = min(256, max_ntargets_in_one_box)
@@ -787,18 +820,16 @@ class P2PFromCSR(P2PBase):
         else:
             dtype_size = None
 
-        knl = self.get_cached_kernel_executor(
+        t_unit = self.get_kernel(
                 max_nsources_in_one_box=max_nsources_in_one_box,
                 max_ntargets_in_one_box=max_ntargets_in_one_box,
-                dtype_size=dtype_size,
-                local_mem_size=actx.queue.device.local_mem_size,
                 is_gpu=is_gpu)
 
-        from sumpy.codegen import register_optimization_preambles
-        knl = register_optimization_preambles(knl, actx.queue.device)
+        # from sumpy.codegen import register_optimization_preambles
+        # knl = register_optimization_preambles(knl, actx.queue.device)
 
-        result = actx.call_loopy(knl, **kwargs)
-        return make_obj_array([result[f"result_s{i}"] for i in range(self.nresults)])
+        result = actx.call_loopy(t_unit, **kwargs)
+        return result["result"]
 
 # }}}
 
