@@ -510,7 +510,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
     def box_source_list_kwargs(self):
         actx = self.actx
-        sources = actx.freeze(actx.np.stack(actx.thaw(*(self.tree.sources,))))
+        sources = actx.np.stack(actx.thaw(*(self.tree.sources,)))
         return {
                 "box_source_starts": self.tree.box_source_starts,
                 "box_source_counts_nonchild": self.tree.box_source_counts_nonchild,
@@ -518,7 +518,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
     def box_target_list_kwargs(self):
         actx = self.actx
-        targets = actx.freeze(actx.np.stack(actx.thaw(*(self.tree.targets,))))
+        targets = actx.np.stack(actx.thaw(*(self.tree.targets,)))
         return {
                 "box_target_starts": self.tree.box_target_starts,
                 "box_target_counts_nonchild": self.tree.box_target_counts_nonchild,
@@ -585,7 +585,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         level_start_source_parent_box_nrs = (
             actx.to_numpy(level_start_source_parent_box_nrs))
 
-        mpoles = actx.to_numpy(actx.freeze(mpoles))
+        mpoles = actx.to_numpy(mpoles)
 
         # nlevels-1 is the last valid level index
         # nlevels-2 is the last valid level that could have children
@@ -612,7 +612,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             target_level_start_ibox, tgt_start, tgt_stop, tgt_mpoles_view = (
                     self.multipole_expansions_view(mpoles, target_level))
 
-            mpoles_res = actx.freeze(m2m(
+            mpoles_res = m2m(
                     actx,
                     src_expansions=actx.from_numpy(src_mpoles_view),
                     src_base_ibox=source_level_start_ibox,
@@ -629,7 +629,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     src_rscale=self.level_to_rscale(source_level),
                     tgt_rscale=self.level_to_rscale(target_level),
 
-                    **self.kernel_extra_kwargs))
+                    **self.kernel_extra_kwargs)
 
             mpoles[tgt_start:tgt_stop] += actx.to_numpy(mpoles_res.reshape(-1))
 

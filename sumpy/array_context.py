@@ -35,7 +35,7 @@ import numpy as np
 import pytato as pt
 import sumpy.transform.metadata as mtd
 
-from boxtree.array_context import (
+from arraycontext import (
     PyOpenCLArrayContext as PyOpenCLArrayContextBase,
     PytatoPyOpenCLArrayContext as PytatoPyOpenCLArrayContextBase
 )
@@ -49,11 +49,7 @@ from pytools.tag import ToTagSetConvertible
 # {{{ PyOpenCLArrayContext
 
 class PyOpenCLArrayContext(PyOpenCLArrayContextBase):
-    def transform_loopy_program(self, t_unit):
-
-        knl = t_unit.default_entrypoint
-
-        return t_unit
+    pass
 
 # }}}
 
@@ -62,12 +58,15 @@ class PyOpenCLArrayContext(PyOpenCLArrayContextBase):
 
 class PytatoPyOpenCLArrayContext(PytatoPyOpenCLArrayContextBase):
 
+
+    def __init__(self, queue, **kwargs):
+        self.dot_codes = []
+
+        super().__init__(queue, **kwargs)
+
+
     def transform_dag(self, dag):
-        try:
-            self.dot_codes.append(pt.get_dot(dag))
-        except AttributeError:
-            self.dot_codes = []
-            self.dot_codes.append(pt.get_dot_graph(dag))
+        self.dot_codes.append(pt.get_dot_graph(dag))
 
         return super().transform_dag(dag)
 
