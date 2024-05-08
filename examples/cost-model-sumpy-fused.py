@@ -3,6 +3,8 @@ import os
 
 import numpy as np
 
+import matplotlib.pyplot as plt
+
 import pyopencl as cl
 
 from boxtree import TreeBuilder
@@ -30,14 +32,16 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def demo_cost_model(lazy=False):
+def demo_cost_model(plot_results=False, lazy=False):
 
     # {{{ useful variables and actx setup
 
-    nsources_list = [1000, 2000, 3000, 4000, 5000]
-    ntargets_list = [1000, 2000, 3000, 4000, 5000]
-    #nsources_list = [100, 200, 300]
-    #ntargets_list = [100, 200, 300]
+    nsources_list = [5000]
+    ntargets_list = [5000]
+    #nsources_list = [100, 200, 300, 400, 500]
+    #ntargets_list = [100, 200, 300, 400, 500]
+    nparticles_per_box_list = [32, 64, 128, 256, 512]
+    #nparticles_per_box_list = [32, 64, 128]
     dim = 2
     dtype = np.float64
 
@@ -49,16 +53,23 @@ def demo_cost_model(lazy=False):
     traversals_dev = []
     level_orders_list = []
     timing_results = []
+    results = {}
+    fields = ["form_multipoles", "eval_direct", "multipole_to_local", 
+              "eval_multipoles", "form_locals", "eval_locals", 
+              "coarsen_multipoles", "refine_locals"]
+    for field in fields:
+        results[field] = []
 
     # }}}
 
     def fmm_level_to_order(kernel, kernel_args, tree, ilevel):
         return 10
 
-    for nparticles in [25, 50]:
+    timings = {}
+    for nparticles_per_box in nparticles_per_box_list:
         for nsources, ntargets in zip(nsources_list, ntargets_list):
             logger.info(f"Testing nsources = {nsources}, ntargets = {ntargets} "
-                        f"with nparticles per box = {nparticles}")
+                        f"with nparticles per box = {nparticles_per_box}")
 
             # {{{ Generate sources, targets and target_radii
 
@@ -75,7 +86,8 @@ def demo_cost_model(lazy=False):
             tb = TreeBuilder(actx_boxtree)
             tree, _ = tb(
                 actx_boxtree, sources, targets=targets, target_radii=target_radii,
-                stick_out_factor=0.15, max_particles_in_box=nparticles, debug=True
+                stick_out_factor=0.15, 
+                max_particles_in_box=nparticles_per_box, debug=True
             )
 
             tg = FMMTraversalBuilder(actx_boxtree, well_sep_is_n_away=2)
@@ -166,7 +178,7 @@ def demo_cost_model(lazy=False):
 
         if not timing_results:
             return
-
+        
         # {{{ analyze and report cost model results
 
         params = cost_model.estimate_calibration_params(
@@ -182,17 +194,44 @@ def demo_cost_model(lazy=False):
         for field in ["form_multipoles", "eval_direct", "multipole_to_local",
                       "eval_multipoles", "form_locals", "eval_locals",
                       "coarsen_multipoles", "refine_locals"]:
-            measured = timing_results[-1][field]["process_elapsed"]
-            pred_err = (
-                    (measured - predicted_time[field])
-                    / measured)
-            logger.info("actual/predicted time for %s: %.3g/%.3g -> %g %% error",
-                    field,
-                    measured,
-                    predicted_time[field],
-                    abs(100*pred_err))
+            # measured = timing_results[-1][field]["process_elapsed"]
+            # pred_err = (
+            #         (measured - predicted_time[field])
+            #         / measured)
+            # logger.info("actual/predicted time for %s: %.3g/%.3g -> %g %% error",
+            #         field,
+            #         measured,
+            #         predicted_time[field],
+            #         abs(100*pred_err))
+
+            if nparticles_per_box != nparticles_per_box_list[0]:
+                results[field].append(predicted_time[field])
 
         # }}}
+
+
+    if plot_results:
+        x = np.arange(len(nparticles_per_box_list) - 1)
+        width = 0.1
+        mult = 0
+
+        fig, ax = plt.subplots()
+
+        for field, timing in results.items():
+            offset = width*mult
+            bars = ax.bar(x + offset, timing, width, label=field)
+            #ax.bar_label(bars, padding=4)
+            mult += 1
+
+        ax.set_xlabel("Particles per box")
+        ax.set_xticks(x + 3*width, nparticles_per_box_list[1:])
+
+        ax.set_ylabel("Process time (s)")
+
+        ax.legend(loc="upper left", ncols=3)
+
+        #plt.show()
+        plt.savefig("./balancing.pdf")
 
 
 if __name__ == "__main__":
@@ -202,7 +241,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--lazy", action="store_true")
+    parser.add_argument("--plot_results", action="store_true")
 
     args = parser.parse_args()
 
-    demo_cost_model(lazy=args.lazy)
+    demo_cost_model(lazy=args.lazy, plot_results=args.plot_results)
