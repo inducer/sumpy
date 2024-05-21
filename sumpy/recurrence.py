@@ -59,7 +59,7 @@ class Recurrence:
         - n_derivs, the max number of derivatives of f that are floating around.
 
     Description: We assume we are handed a system of 1 sumpy PDE (pde) and we output the 
-    pde in a way that allows us to easily replace derivatives with respect to r. 
+    pde in a way that allows us to easily replace derivatives with respect to r. Typo
     '''
     def get_pde_in_recurrence_form():
         laplace = self.sumpy_pde
