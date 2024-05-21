@@ -389,9 +389,10 @@ def _m2l(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
                 src_rscale=np.float64(psource.rscale),
                 **toy_ctx.extra_kernel_kwargs)
 
+        from sumpy.tools import (run_opencl_fft, get_opencl_fft_app,
+            get_native_event)
+
         if toy_ctx.use_fft:
-            from sumpy.tools import (run_opencl_fft, get_opencl_fft_app,
-                get_native_event)
             fft_app = get_opencl_fft_app(queue, (expn_size,),
                 dtype=preprocessed_src_expansions.dtype, inverse=False)
             ifft_app = get_opencl_fft_app(queue, (expn_size,),
