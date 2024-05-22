@@ -297,7 +297,7 @@ def frequency_domain_maxwell(cpatch, e, h, k):
 
     # https://en.wikipedia.org/w/index.php?title=Maxwell%27s_equations&oldid=798940325#Macroscopic_formulation
     # assumed time dependence exp(-1j*omega*t)
-    # this agrees with Jackson, Third Ed., (8.16)
+    # This agrees with Jackson, Third Ed., (8.16)
     resid_faraday = cpatch.curl(e) - 1j * omega * b
     resid_ampere = cpatch.curl(h) + 1j * omega * d
 
