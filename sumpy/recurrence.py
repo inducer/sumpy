@@ -1,6 +1,6 @@
 __copyright__ = """
-Copyright (C) 2024 Andreas Kloeckner
 Copyright (C) 2024 Hirish Chandrasekaran
+Copyright (C) 2024 Andreas Kloeckner
 """
 
 __license__ = """
@@ -34,16 +34,13 @@ from typing import List
 import sympy as sp
 from sumpy.expansion.diff_op import LinearPDESystemOperator
 from pytools.obj_array import make_obj_array
+from sumpy.symbolic import make_sympy_vec
 
 
 __doc__ = """
 .. autoclass:: Recurrence
-
-.. autofunction:: make_sympy_vec
+.. automodule:: sumpy.recurrence
 """
-
-def make_sympy_vec(name, n):
-    return make_obj_array([sp.Symbol(f"{name}{i}") for i in range(n)])
 
 class Recurrence:
     def __init__(self, sumpy_pde):
@@ -52,7 +49,7 @@ class Recurrence:
     '''
     get_pde_in_recurrence_form
     Input: 
-        - pde a LinearPDESystemOperator such that assert(len(pde.eqs) == 1) is true.
+        - pde a :class:`sumpy.expansion.diff_op.LinearSystemPDEOperator` such that assert(len(pde.eqs) == 1) is true.
     Output: 
         - ode_in_r, which is the pde but now as an ode in r, which f(r) satisfies. 
         - var represents the variables for the input
