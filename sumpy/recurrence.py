@@ -24,13 +24,6 @@ THE SOFTWARE.
 """
 
 from collections import namedtuple
-from pyrsistent import pmap
-from pytools import memoize
-from sumpy.tools import add_mi
-from itertools import accumulate
-import sumpy.symbolic as sym
-import logging
-from typing import List
 import sympy as sp
 from sumpy.expansion.diff_op import LinearPDESystemOperator
 from pytools.obj_array import make_obj_array
@@ -45,50 +38,29 @@ __doc__ = """
 .. automodule:: sumpy.recurrence
 """
 
-#CREATE LAPLACE_3D
-DerivativeIdentifier = namedtuple("DerivativeIdentifier", ["mi", "vec_idx"])
-partial2_x = DerivativeIdentifier((2,0,0), 0)
-partial2_y = DerivativeIdentifier((0,2,0), 0)
-partial2_z = DerivativeIdentifier((0,0,2), 0)
-#Coefficients
-list_pde_dict_3d = {partial2_x: 1, partial2_y: 1, partial2_z: 1}
-laplace_3d = LinearPDESystemOperator(3,list_pde_dict_3d)
 
-#CREATE LAPLACE_2D
-partial2_x = DerivativeIdentifier((2,0), 0)
-partial2_y = DerivativeIdentifier((0,2), 0)
-#Coefficients
-list_pde_dict = {partial2_x: 1, partial2_y: 1}
-laplace_2d = LinearPDESystemOperator(2,list_pde_dict)
-
-#CREATE HELMHOLTZ_2D
-func_val = DerivativeIdentifier((0,0), 0)
-#Coefficients
-list_pde_dict = {partial2_x: 1, partial2_y: 1, func_val: 1}
-helmholtz_2d = LinearPDESystemOperator(2,list_pde_dict)
-
-'''
-get_pde_in_recurrence_form
-Input: 
-    - pde, a :class:`sumpy.expansion.diff_op.LinearSystemPDEOperator` pde such that assert(len(pde.eqs) == 1) 
-    is true.
-Output: 
-    - ode_in_r, an ode in r which the POINT-POTENTIAL (has radial symmetry) satisfies away from the origin.
-      Note: to represent f, f_r, f_{rr}, we use the sympy variables f_{r0}, f_{r1}, .... So ode_in_r is a linear
-      combination of the sympy variables f_{r0}, f_{r1}, ....
-    - var, represents the variables for the input space: [x0, x1, ...]
-    - n_derivs, the order of the original PDE + 1, i.e. the number of derivatives of f that may be present
-      (the reason this is called n_derivs since if we have a second order PDE for example
-      then we might see f, f_{r}, f_{rr} in our ODE in r, which is technically 3 terms since we count
-      the 0th order derivative f as a "derivative." If this doesn't make sense just know that n_derivs 
-      is the order the of the input sumpy PDE + 1)
-
-Description: We assume we are handed a system of 1 sumpy PDE (pde) and output the 
-pde in a way that allows us to easily replace derivatives with respect to r. In other words we output
-a linear combination of sympy variables f_{r0}, f_{r1}, ... (which represents f, f_r, f_{rr} respectively)
-to represent our ODE in r for the point potential.
-'''
 def get_pde_in_recurrence_form(laplace):
+    '''
+    get_pde_in_recurrence_form
+    Input: 
+        - pde, a :class:`sumpy.expansion.diff_op.LinearSystemPDEOperator` pde such that assert(len(pde.eqs) == 1) 
+        is true.
+    Output: 
+        - ode_in_r, an ode in r which the POINT-POTENTIAL (has radial symmetry) satisfies away from the origin.
+          Note: to represent f, f_r, f_{rr}, we use the sympy variables f_{r0}, f_{r1}, .... So ode_in_r is a linear
+          combination of the sympy variables f_{r0}, f_{r1}, ....
+        - var, represents the variables for the input space: [x0, x1, ...]
+        - n_derivs, the order of the original PDE + 1, i.e. the number of derivatives of f that may be present
+          (the reason this is called n_derivs since if we have a second order PDE for example
+          then we might see f, f_{r}, f_{rr} in our ODE in r, which is technically 3 terms since we count
+          the 0th order derivative f as a "derivative." If this doesn't make sense just know that n_derivs 
+          is the order the of the input sumpy PDE + 1)
+
+    Description: We assume we are handed a system of 1 sumpy PDE (pde) and output the 
+    pde in a way that allows us to easily replace derivatives with respect to r. In other words we output
+    a linear combination of sympy variables f_{r0}, f_{r1}, ... (which represents f, f_r, f_{rr} respectively)
+    to represent our ODE in r for the point potential.
+    '''
     dim = laplace.dim
     n_derivs = laplace.order
     assert(len(laplace.eqs) == 1)
@@ -113,20 +85,33 @@ def get_pde_in_recurrence_form(laplace):
             term = term.diff(var[i], t[i])
         return term
 
-    pde = 0
+    ode_in_r = 0
     for i in range(ops):
-        pde += coeffs[i] * compute_term(f(rval), derivs[i])
+        ode_in_r += coeffs[i] * compute_term(f(rval), derivs[i])
         
     n_derivs = len(f_derivs)
     f_r_derivs = make_sympy_vec("f_r", n_derivs)
 
     for i in range(n_derivs):
-        pde = pde.subs(f_derivs[i], f_r_derivs[i])
+        ode_in_r = ode_in_r.subs(f_derivs[i], f_r_derivs[i])
         
-    return pde, var, n_derivs
+    return ode_in_r, var, n_derivs
 
 
-ode_in_r, var, n_derivs = get_pde_in_recurrence_form(laplace_2d)
+def test_recurrence_finder():
+    from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+    w = make_identity_diff_op(2)
+    laplace2d = laplacian(w)
+    print(get_pde_in_recurrence_form(laplace2d))
+
+    assert 1 == 1
+  
+
+
+    
+
+
+# ode_in_r, var, n_derivs = get_pde_in_recurrence_form(laplace_2d)
 
 
 '''
@@ -181,11 +166,11 @@ def ode_in_r_to_x(ode_in_r, var, n_derivs):
     return ode_in_x
 
 
-ode_in_x = ode_in_r_to_x(ode_in_r, var, n_derivs).simplify()
-ode_in_x_cleared = (ode_in_x * var[0]**n_derivs).simplify()
+# ode_in_x = ode_in_r_to_x(ode_in_r, var, n_derivs).simplify()
+# ode_in_x_cleared = (ode_in_x * var[0]**n_derivs).simplify()
 
-delta_x = sp.symbols("delta_x")
-c_vec = make_sympy_vec("c", len(var))
+# delta_x = sp.symbols("delta_x")
+# c_vec = make_sympy_vec("c", len(var))
 
 '''
 compute_poly_in_deriv
@@ -214,7 +199,7 @@ def compute_poly_in_deriv(ode_in_x_cleared, n_derivs):
     
     return poly
 
-poly = compute_poly_in_deriv(ode_in_x, n_derivs)
+# poly = compute_poly_in_deriv(ode_in_x, n_derivs)
 
 '''
 compute_coefficients_of_poly
@@ -246,10 +231,10 @@ def compute_coefficients_of_poly(poly, n_derivs):
         
     return coeffs
 
-coeffs = compute_coefficients_of_poly(poly, n_derivs)
+# coeffs = compute_coefficients_of_poly(poly, n_derivs)
 
-i = sp.symbols("i")
-s = sp.Function("s")
+# i = sp.symbols("i")
+# s = sp.Function("s")
 
 '''
 compute_recurrence_relation
@@ -291,6 +276,6 @@ def compute_recurrence_relation(coeffs, n_derivs):
         
     return r.simplify()
 
-r = compute_recurrence_relation(coeffs, n_derivs)
+# r = compute_recurrence_relation(coeffs, n_derivs)
 
 
