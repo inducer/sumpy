@@ -99,9 +99,9 @@ def get_pde_in_recurrence_form(laplace):
     return ode_in_r, var, n_derivs
 
 
-def generate_ND_derivative_relations(var, n_derivs):
+def generate_nd_derivative_relations(var, n_derivs):
     '''
-    generate_ND_derivative_relations
+    generate_nd_derivative_relations
     Input:
     - var, a sympy vector of variables called [x0, x1, ...]
     - n_derivs, the order of the original PDE + 1, i.e. the number of derivatives of
@@ -148,7 +148,7 @@ def ode_in_r_to_x(ode_in_r, var, n_derivs):
     by substituting f, f_r, f_{rr}, ... as a linear combination of
     f, f_x, f_{xx}, ... using the chain rule
     '''
-    subme = generate_ND_derivative_relations(var, n_derivs)
+    subme = generate_nd_derivative_relations(var, n_derivs)
     ode_in_x = ode_in_r
     f_r_derivs = make_sympy_vec("f_r", n_derivs)
     for i in range(n_derivs):
@@ -173,7 +173,7 @@ def compute_poly_in_deriv(ode_in_x, n_derivs, var):
     Description: Converts an ode in x, to a polynomial in f, f_x, f_{xx}, ...,
     with coefficients as polynomials in delta_x = x_0 - c_0.
     '''
-    #Note that generate_ND_derivative_relations will at worst put some power of
+    #Note that generate_nd_derivative_relations will at worst put some power of
     #$x_0^order$ in the denominator. To clear
     #the denominator we can probably? just multiply by x_0^order.
     delta_x = sp.symbols("delta_x")
@@ -244,10 +244,10 @@ def compute_recurrence_relation(coeffs, n_derivs, var):
 
     #Compute symbolic derivative
     def hc_diff(i, n):
-        retMe = 1
+        retme = 1
         for j in range(n):
-            retMe *= (i-j)
-        return retMe
+            retme *= (i-j)
+        return retme
 
     #We are differentiating deriv_ind, which shifts down deriv_ind.
     #Do this for one deriv_ind
