@@ -80,6 +80,7 @@ def get_pde_in_recurrence_form(laplace):
     eps = sp.symbols("epsilon")
     rval = r + eps
     f = sp.Function("f")
+    # pylint: disable=not-callable
     f_derivs = [sp.diff(f(rval), eps, i) for i in range(n_derivs+1)]
 
     def compute_term(a, t):
@@ -121,8 +122,10 @@ def generate_nd_derivative_relations(var, n_derivs):
     f = sp.Function("f")
     eps = sp.symbols("epsilon")
     rval = sp.sqrt(sum(var**2)) + eps
+    # pylint: disable=not-callable
     f_derivs_x = [sp.diff(f(rval), var[0], i) for i in range(n_derivs)]
     f_derivs = [sp.diff(f(rval), eps, i) for i in range(n_derivs)]
+    # pylint: disable=not-callable
     for i in range(len(f_derivs_x)):
         for j in range(len(f_derivs)):
             f_derivs_x[i] = f_derivs_x[i].subs(f_derivs[j], f_r_derivs[j])
@@ -258,6 +261,7 @@ def compute_recurrence_relation(coeffs, n_derivs, var):
         for j in range(len(coeffs[deriv_ind])-1, -1, -1):
             shift = pow_delta - deriv_ind + 1
             pow_delta += 1
+            # pylint: disable=not-callable
             temp = coeffs[deriv_ind][j] * s(i) * hc_diff(i, deriv_ind)
             part_of_r += temp.subs(i, i-shift)
         r += part_of_r
