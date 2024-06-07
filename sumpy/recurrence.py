@@ -39,7 +39,7 @@ __doc__ = """
 
 
 def get_pde_in_recurrence_form(laplace):
-    '''
+    """
     get_pde_in_recurrence_form
     Input:
         - pde, a :class:`sumpy.expansion.diff_op.LinearSystemPDEOperator` pde such
@@ -64,7 +64,7 @@ def get_pde_in_recurrence_form(laplace):
     In other words we output a linear combination of sympy variables
     f_{r0}, f_{r1}, ... (which represents f, f_r, f_{rr} respectively)
     to represent our ODE in r for the point potential.
-    '''
+    """
     dim = laplace.dim
     n_derivs = laplace.order
     assert (len(laplace.eqs) == 1)
@@ -100,7 +100,7 @@ def get_pde_in_recurrence_form(laplace):
 
 
 def generate_nd_derivative_relations(var, n_derivs):
-    '''
+    """
     generate_nd_derivative_relations
     Input:
     - var, a sympy vector of variables called [x0, x1, ...]
@@ -115,7 +115,7 @@ def generate_nd_derivative_relations(var, n_derivs):
     Description: Using the chain rule outputs a vector that tells us how to
     write f, f_r, f_{rr}, ... as a linear
     combination of f, f_x, f_{xx}, ...
-    '''
+    """
     f_r_derivs = make_sympy_vec("f_r", n_derivs)
     f_x_derivs = make_sympy_vec("f_x", n_derivs)
     f = sp.Function("f")
@@ -131,7 +131,7 @@ def generate_nd_derivative_relations(var, n_derivs):
 
 
 def ode_in_r_to_x(ode_in_r, var, n_derivs):
-    '''
+    """
     ode_in_r_to_x
     Input:
     - ode_in_r, a linear combination of f, f_r, f_{rr}, ...
@@ -147,7 +147,7 @@ def ode_in_r_to_x(ode_in_r, var, n_derivs):
     Description: Translates an ode in the variable r into an ode in the variable x
     by substituting f, f_r, f_{rr}, ... as a linear combination of
     f, f_x, f_{xx}, ... using the chain rule
-    '''
+    """
     subme = generate_nd_derivative_relations(var, n_derivs)
     ode_in_x = ode_in_r
     f_r_derivs = make_sympy_vec("f_r", n_derivs)
@@ -157,7 +157,7 @@ def ode_in_r_to_x(ode_in_r, var, n_derivs):
 
 
 def compute_poly_in_deriv(ode_in_x, n_derivs, var):
-    '''
+    """
     compute_poly_in_deriv
     Input:
     - ode_in_x, a linear combination of f, f_x, f_{xx}, ... with coefficients as
@@ -172,7 +172,7 @@ def compute_poly_in_deriv(ode_in_x, n_derivs, var):
 
     Description: Converts an ode in x, to a polynomial in f, f_x, f_{xx}, ...,
     with coefficients as polynomials in delta_x = x_0 - c_0.
-    '''
+    """
     #Note that generate_nd_derivative_relations will at worst put some power of
     #$x_0^order$ in the denominator. To clear
     #the denominator we can probably? just multiply by x_0^order.
@@ -186,7 +186,7 @@ def compute_poly_in_deriv(ode_in_x, n_derivs, var):
 
 
 def compute_coefficients_of_poly(poly, n_derivs):
-    '''
+    """
     compute_coefficients_of_poly
     Input:
     - poly, a polynomial in sympy variables f_{x0}, f_{x1}, ...,
@@ -199,7 +199,7 @@ def compute_coefficients_of_poly(poly, n_derivs):
     Description: Takes in a polynomial in f_{x0}, f_{x1}, ..., w/coeffs that are
     polynomials in delta_x and outputs a 2d array for easy access to the
     coefficients based on their degree as a polynomial in delta_x.
-    '''
+    """
     delta_x = sp.symbols("delta_x")
 
     #Returns coefficients in lexographic order. So lowest order first
@@ -221,7 +221,7 @@ def compute_coefficients_of_poly(poly, n_derivs):
 
 
 def compute_recurrence_relation(coeffs, n_derivs, var):
-    '''
+    """
     compute_recurrence_relation
     Input:
     - coeffs a 2d array that gives access to the coefficients of poly, where poly
@@ -237,7 +237,7 @@ def compute_recurrence_relation(coeffs, n_derivs, var):
     Description: Takes in coeffs which represents our ``shifted ode in x"
     (i.e. ode_in_x with coefficients in delta_x) and outputs a recurrence relation
     for the point potential.
-    '''
+    """
     i = sp.symbols("i")
     s = sp.Function("s")
     c_vec = make_sympy_vec("c", len(var))
