@@ -519,7 +519,15 @@ class HelmholtzKernel(ExpressionKernel):
             scaling = var("I")/4
         elif dim == 3:
             r = pymbolic_real_norm_2(make_sym_vector("d", dim))
-            expr = var("exp")(var("I")*k*r)/r
+            if allow_evanescent:
+                expr = var("exp")(var("I")*k*r)/r
+            else:
+                # expi is a function that takes in a real and returns a
+                # complex number such that
+                # expi(x) = exp(I * x)
+                # Retaining the information that the input is real leads
+                # to better code generation
+                expr = var("expi")(k*r)/r
             scaling = 1/(4*var("pi"))
         else:
             raise RuntimeError("unsupported dimensionality")
