@@ -25,7 +25,8 @@ THE SOFTWARE.
 
 import sympy as sp
 from pytools.obj_array import make_obj_array
-
+from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+import math
 
 #A similar function exists in sumpy.symbolic
 def make_sympy_vec(name, n):
@@ -272,10 +273,31 @@ def compute_recurrence_relation(coeffs, n_derivs, var):
     return r.simplify()
 
 
-def test_recurrence_finder():
-    from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+def test_recurrence_finder_laplace():
+    """
+    test_recurrence_finder_laplace
+    Description: Checks that the recurrence finder works correctly for the Laplace
+    2D point potential.
+    """
     w = make_identity_diff_op(2)
     laplace2d = laplacian(w)
-    print(get_pde_in_recurrence_form(laplace2d))
+    ode_in_r, var, n_derivs = get_pde_in_recurrence_form(laplace2d)
+    ode_in_x = ode_in_r_to_x(ode_in_r, var, n_derivs).simplify()
+    poly = compute_poly_in_deriv(ode_in_x, n_derivs, var)
+    coeffs = compute_coefficients_of_poly(poly, n_derivs)
+    i = sp.symbols("i")
+    s = sp.Function("s")
+    r = compute_recurrence_relation(coeffs, n_derivs, var)
 
-    assert 1 == 1
+    def coeff_laplace(i):
+        x, y = sp.symbols("x,y")
+        c_vec = make_sympy_vec("c", 2)
+        true_f = sp.log(sp.sqrt(x**2 + y**2))
+        return sp.diff(true_f, x, i).subs(x, c_vec[0]).subs(
+            y, c_vec[1])/math.factorial(i)
+    d = 6
+    # pylint: disable=not-callable
+    val = r.subs(i, d).subs(s(d+1),coeff_laplace(d+1)).subs(
+        s(d), coeff_laplace(d)).subs(s(d-1), coeff_laplace(d-1)).subs(
+            s(d-2), coeff_laplace(d-2)).simplify()
+    assert val == 0
