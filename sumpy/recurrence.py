@@ -301,3 +301,37 @@ def test_recurrence_finder_laplace():
         s(d), coeff_laplace(d)).subs(s(d-1), coeff_laplace(d-1)).subs(
             s(d-2), coeff_laplace(d-2)).simplify()
     assert val == 0
+
+
+def test_recurrence_finder_laplace_three_d():
+    """
+    test_recurrence_finder_laplace_three_d
+    Description: Checks that the recurrence finder works correctly for the Laplace
+    3D point potential.
+    """
+    w = make_identity_diff_op(3)
+    laplace3d = laplacian(w)
+    print(laplace3d)
+    ode_in_r, var, n_derivs = get_pde_in_recurrence_form(laplace3d)
+    ode_in_x = ode_in_r_to_x(ode_in_r, var, n_derivs).simplify()
+    poly = compute_poly_in_deriv(ode_in_x, n_derivs, var)
+    coeffs = compute_coefficients_of_poly(poly, n_derivs)
+    i = sp.symbols("i")
+    s = sp.Function("s")
+    r = compute_recurrence_relation(coeffs, n_derivs, var)
+
+    def coeff_laplace_three_d(i):
+        x, y, z = sp.symbols("x,y,z")
+        c_vec = make_sympy_vec("c", 3)
+        true_f = 1/(sp.sqrt(x**2 + y**2 + z**2))
+        return sp.diff(true_f, x, i).subs(x, c_vec[0]).subs(
+            y, c_vec[1]).subs(z, c_vec[2])/math.factorial(i)
+
+
+    d = 6
+    # pylint: disable=not-callable
+    val = r.subs(i, d).subs(s(d+1),coeff_laplace_three_d(d+1)).subs(
+        s(d), coeff_laplace_three_d(d)).subs(s(d-1), coeff_laplace_three_d(d-1)).subs(
+            s(d-2), coeff_laplace_three_d(d-2)).simplify()
+
+    assert val == 0
