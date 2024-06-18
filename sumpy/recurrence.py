@@ -23,10 +23,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import math
 import sympy as sp
 from pytools.obj_array import make_obj_array
 from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
-import math
+
 
 #A similar function exists in sumpy.symbolic
 def make_sympy_vec(name, n):
@@ -297,7 +298,7 @@ def test_recurrence_finder_laplace():
             y, c_vec[1])/math.factorial(i)
     d = 6
     # pylint: disable=not-callable
-    val = r.subs(i, d).subs(s(d+1),coeff_laplace(d+1)).subs(
+    val = r.subs(i, d).subs(s(d+1), coeff_laplace(d+1)).subs(
         s(d), coeff_laplace(d)).subs(s(d-1), coeff_laplace(d-1)).subs(
             s(d-2), coeff_laplace(d-2)).simplify()
     assert val == 0
@@ -327,11 +328,11 @@ def test_recurrence_finder_laplace_three_d():
         return sp.diff(true_f, x, i).subs(x, c_vec[0]).subs(
             y, c_vec[1]).subs(z, c_vec[2])/math.factorial(i)
 
-
     d = 6
     # pylint: disable=not-callable
-    val = r.subs(i, d).subs(s(d+1),coeff_laplace_three_d(d+1)).subs(
-        s(d), coeff_laplace_three_d(d)).subs(s(d-1), coeff_laplace_three_d(d-1)).subs(
+    val = r.subs(i, d).subs(s(d+1), coeff_laplace_three_d(d+1)).subs(
+        s(d), coeff_laplace_three_d(d)).subs(s(d-1),
+            coeff_laplace_three_d(d-1)).subs(
             s(d-2), coeff_laplace_three_d(d-2)).simplify()
 
     assert val == 0
