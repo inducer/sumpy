@@ -1,3 +1,12 @@
+"""
+.. autofunction:: get_pde_in_recurrence_form
+.. autofunction:: generate_nd_derivative_relations
+.. autofunction:: ode_in_r_to_x
+.. autofunction:: compute_poly_in_deriv
+.. autofunction:: compute_coefficients_of_poly
+.. autofunction:: compute_recurrence_relation
+"""
+
 __copyright__ = """
 Copyright (C) 2024 Hirish Chandrasekaran
 Copyright (C) 2024 Andreas Kloeckner
@@ -23,35 +32,32 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import numpy as np
 import math
 import sympy as sp
+from typing import Tuple
 from pytools.obj_array import make_obj_array
-from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+from sumpy.expansion.diff_op import (
+    make_identity_diff_op, laplacian,LinearPDESystemOperator)
 
 
-#A similar function exists in sumpy.symbolic
-def make_sympy_vec(name, n):
+# similar to make_sym_vector in sumpy.symbolic, but returns an object array
+# instead of a sympy.Matrix.
+def _make_sympy_vec(name, n):
     return make_obj_array([sp.Symbol(f"{name}{i}") for i in range(n)])
 
 
-__doc__ = """
-.. autoclass:: Recurrence
-.. automodule:: sumpy.recurrence
-"""
-
-
-def get_pde_in_recurrence_form(laplace):
+def get_pde_in_recurrence_form(pde: LinearPDESystemOperator) -> Tuple[
+        sp.Expr, np.ndarray, int
+    ]:
     """
-    get_pde_in_recurrence_form
     Input:
-        - pde, a :class:`sumpy.expansion.diff_op.LinearSystemPDEOperator` pde such
-        that assert(len(pde.eqs) == 1)
-        is true.
+        - *pde*, representing a scalar PDE.
     Output:
         - ode_in_r, an ode in r which the POINT-POTENTIAL (has radial symmetry)
           satisfies away from the origin.
           Note: to represent f, f_r, f_{rr}, we use the sympy variables
-          f_{r0}, f_{r1}, .... So ode_in_r is a linear combination of the sympy
+          :math:`f_{r0}`, f_{r1}, .... So ode_in_r is a linear combination of the sympy
           variables f_{r0}, f_{r1}, ....
         - var, represents the variables for the input space: [x0, x1, ...]
         - n_derivs, the order of the original PDE + 1, i.e. the number of
@@ -67,16 +73,19 @@ def get_pde_in_recurrence_form(laplace):
     f_{r0}, f_{r1}, ... (which represents f, f_r, f_{rr} respectively)
     to represent our ODE in r for the point potential.
     """
-    dim = laplace.dim
-    n_derivs = laplace.order
-    assert (len(laplace.eqs) == 1)
-    ops = len(laplace.eqs[0])
+    if len(pde.eqs) != 1:
+        raise ValueError("PDE must be scalar")
+
+    dim = pde.dim
+    n_derivs = pde.order
+    assert (len(pde.eqs) == 1)
+    ops = len(pde.eqs[0])
     derivs = []
     coeffs = []
-    for i in laplace.eqs[0]:
+    for i in pde.eqs[0]:
         derivs.append(i.mi)
-        coeffs.append(laplace.eqs[0][i])
-    var = make_sympy_vec("x", dim)
+        coeffs.append(pde.eqs[0][i])
+    var = _make_sympy_vec("x", dim)
     r = sp.sqrt(sum(var**2))
 
     eps = sp.symbols("epsilon")
@@ -95,7 +104,7 @@ def get_pde_in_recurrence_form(laplace):
     for i in range(ops):
         ode_in_r += coeffs[i] * compute_term(f(rval), derivs[i])
     n_derivs = len(f_derivs)
-    f_r_derivs = make_sympy_vec("f_r", n_derivs)
+    f_r_derivs = _make_sympy_vec("f_r", n_derivs)
 
     for i in range(n_derivs):
         ode_in_r = ode_in_r.subs(f_derivs[i], f_r_derivs[i])
@@ -109,6 +118,7 @@ def generate_nd_derivative_relations(var, n_derivs):
     - var, a sympy vector of variables called [x0, x1, ...]
     - n_derivs, the order of the original PDE + 1, i.e. the number of derivatives of
     f that may be present
+
     Output:
     - a vector that gives [f, f_r, f_{rr}, ...] in terms of f, f_x, f_{xx}, ...
     using the chain rule
@@ -119,8 +129,8 @@ def generate_nd_derivative_relations(var, n_derivs):
     write f, f_r, f_{rr}, ... as a linear
     combination of f, f_x, f_{xx}, ...
     """
-    f_r_derivs = make_sympy_vec("f_r", n_derivs)
-    f_x_derivs = make_sympy_vec("f_x", n_derivs)
+    f_r_derivs = _make_sympy_vec("f_r", n_derivs)
+    f_x_derivs = _make_sympy_vec("f_x", n_derivs)
     f = sp.Function("f")
     eps = sp.symbols("epsilon")
     rval = sp.sqrt(sum(var**2)) + eps
@@ -155,7 +165,7 @@ def ode_in_r_to_x(ode_in_r, var, n_derivs):
     """
     subme = generate_nd_derivative_relations(var, n_derivs)
     ode_in_x = ode_in_r
-    f_r_derivs = make_sympy_vec("f_r", n_derivs)
+    f_r_derivs = _make_sympy_vec("f_r", n_derivs)
     for i in range(n_derivs):
         ode_in_x = ode_in_x.subs(f_r_derivs[i], subme[f_r_derivs[i]])
     return ode_in_x
@@ -182,10 +192,10 @@ def compute_poly_in_deriv(ode_in_x, n_derivs, var):
     #$x_0^order$ in the denominator. To clear
     #the denominator we can probably? just multiply by x_0^order.
     delta_x = sp.symbols("delta_x")
-    c_vec = make_sympy_vec("c", len(var))
+    c_vec = _make_sympy_vec("c", len(var))
     ode_in_x_cleared = (ode_in_x * var[0]**n_derivs).simplify()
     ode_in_x_shifted = ode_in_x_cleared.subs(var[0], delta_x + c_vec[0]).simplify()
-    f_x_derivs = make_sympy_vec("f_x", n_derivs)
+    f_x_derivs = _make_sympy_vec("f_x", n_derivs)
     poly = sp.Poly(ode_in_x_shifted, *f_x_derivs)
     return poly
 
@@ -245,7 +255,7 @@ def compute_recurrence_relation(coeffs, n_derivs, var):
     """
     i = sp.symbols("i")
     s = sp.Function("s")
-    c_vec = make_sympy_vec("c", len(var))
+    c_vec = _make_sympy_vec("c", len(var))
 
     #Compute symbolic derivative
     def hc_diff(i, n):
@@ -292,7 +302,7 @@ def test_recurrence_finder_laplace():
 
     def coeff_laplace(i):
         x, y = sp.symbols("x,y")
-        c_vec = make_sympy_vec("c", 2)
+        c_vec = _make_sympy_vec("c", 2)
         true_f = sp.log(sp.sqrt(x**2 + y**2))
         return sp.diff(true_f, x, i).subs(x, c_vec[0]).subs(
             y, c_vec[1])/math.factorial(i)
@@ -323,7 +333,7 @@ def test_recurrence_finder_laplace_three_d():
 
     def coeff_laplace_three_d(i):
         x, y, z = sp.symbols("x,y,z")
-        c_vec = make_sympy_vec("c", 3)
+        c_vec = _make_sympy_vec("c", 3)
         true_f = 1/(sp.sqrt(x**2 + y**2 + z**2))
         return sp.diff(true_f, x, i).subs(x, c_vec[0]).subs(
             y, c_vec[1]).subs(z, c_vec[2])/math.factorial(i)
