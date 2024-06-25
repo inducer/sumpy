@@ -284,6 +284,24 @@ def compute_recurrence_relation(coeffs, n_derivs, var):
     return r.simplify()
 
 
+def get_recurrence_from_pde(pde):
+    """
+    Input:
+        - *pde*, representing a scalar PDE.
+
+    Output:
+        - r, a recurrence relation for a Line-Taylor expansion.
+
+    Description: Takes in a pde, outputs a recurrence.
+    """
+    ode_in_r, var, n_derivs = get_pde_in_recurrence_form(pde)
+    ode_in_x = ode_in_r_to_x(ode_in_r, var, n_derivs).simplify()
+    poly = compute_poly_in_deriv(ode_in_x, n_derivs, var)
+    coeffs = compute_coefficients_of_poly(poly, n_derivs)
+    r = compute_recurrence_relation(coeffs, n_derivs, var)
+    return r
+
+
 def test_recurrence_finder_laplace():
     """
     test_recurrence_finder_laplace
@@ -292,13 +310,9 @@ def test_recurrence_finder_laplace():
     """
     w = make_identity_diff_op(2)
     laplace2d = laplacian(w)
-    ode_in_r, var, n_derivs = get_pde_in_recurrence_form(laplace2d)
-    ode_in_x = ode_in_r_to_x(ode_in_r, var, n_derivs).simplify()
-    poly = compute_poly_in_deriv(ode_in_x, n_derivs, var)
-    coeffs = compute_coefficients_of_poly(poly, n_derivs)
+    r = get_recurrence_from_pde(laplace2d)
     i = sp.symbols("i")
     s = sp.Function("s")
-    r = compute_recurrence_relation(coeffs, n_derivs, var)
 
     def coeff_laplace(i):
         x, y = sp.symbols("x,y")
@@ -323,13 +337,9 @@ def test_recurrence_finder_laplace_three_d():
     w = make_identity_diff_op(3)
     laplace3d = laplacian(w)
     print(laplace3d)
-    ode_in_r, var, n_derivs = get_pde_in_recurrence_form(laplace3d)
-    ode_in_x = ode_in_r_to_x(ode_in_r, var, n_derivs).simplify()
-    poly = compute_poly_in_deriv(ode_in_x, n_derivs, var)
-    coeffs = compute_coefficients_of_poly(poly, n_derivs)
+    r = get_recurrence_from_pde(laplace3d)
     i = sp.symbols("i")
     s = sp.Function("s")
-    r = compute_recurrence_relation(coeffs, n_derivs, var)
 
     def coeff_laplace_three_d(i):
         x, y, z = sp.symbols("x,y,z")
