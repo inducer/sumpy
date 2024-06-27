@@ -234,10 +234,8 @@ def compute_coefficients_of_poly(poly: sp.polys.polytools.Poly,
                 a.append(1)
         return tuple(a)
 
-    coeffs = []
-    for deriv_ind in range(n_derivs):
-        coeffs.append(
-            sp.Poly(poly.coeff_monomial(tup(deriv_ind)), delta_x).all_coeffs())
+    coeffs = [sp.Poly(poly.coeff_monomial(tup(deriv_ind)), delta_x).all_coeffs()
+              for deriv_ind in range(n_derivs)]
 
     return coeffs
 
