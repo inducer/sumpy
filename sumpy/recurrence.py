@@ -355,9 +355,9 @@ def test_recurrence_finder_laplace_three_d():
 
     d = 6
     # pylint: disable=not-callable
-    val = r.subs(i, d).subs(s(d+1), coeff_laplace_three_d(d+1)).subs(
-        s(d), coeff_laplace_three_d(d)).subs(s(d-1),
-            coeff_laplace_three_d(d-1)).subs(
-            s(d-2), coeff_laplace_three_d(d-2)).simplify()
+    r_sub = r.subs(i, d)
+    for i in range(d-2, d+2):
+        r_sub = r_sub.subs(s(i), coeff_laplace_three_d(i))
+    r_sub = r_sub.simplify()
 
-    assert val == 0
+    assert r_sub == 0
