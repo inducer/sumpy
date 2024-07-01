@@ -322,7 +322,7 @@ def get_recurrence_from_pde(pde):
     poly = compute_poly_in_deriv(ode_in_x, n_derivs, var)
     coeffs = compute_coefficients_of_poly(poly, n_derivs)
     r = compute_recurrence_relation(coeffs, n_derivs, var)
-    return r
+    return r, get_recurrence_order(coeffs)
 
 
 def test_recurrence_finder_laplace():
@@ -333,7 +333,7 @@ def test_recurrence_finder_laplace():
     """
     w = make_identity_diff_op(2)
     laplace2d = laplacian(w)
-    r = get_recurrence_from_pde(laplace2d)
+    r, order = get_recurrence_from_pde(laplace2d)
     i = sp.symbols("i")
     s = sp.Function("s")
 
@@ -348,6 +348,7 @@ def test_recurrence_finder_laplace():
     val = r.subs(i, d).subs(s(d+1), coeff_laplace(d+1)).subs(
         s(d), coeff_laplace(d)).subs(s(d-1), coeff_laplace(d-1)).subs(
             s(d-2), coeff_laplace(d-2)).simplify()
+    assert order == 4
     assert val == 0
 
 
@@ -359,7 +360,7 @@ def test_recurrence_finder_laplace_three_d():
     """
     w = make_identity_diff_op(3)
     laplace3d = laplacian(w)
-    r = get_recurrence_from_pde(laplace3d)
+    r, order = get_recurrence_from_pde(laplace3d)
     i = sp.symbols("i")
     s = sp.Function("s")
 
@@ -376,5 +377,5 @@ def test_recurrence_finder_laplace_three_d():
     for i in range(d-2, d+2):
         r_sub = r_sub.subs(s(i), coeff_laplace_three_d(i))
     r_sub = r_sub.simplify()
-
+    assert order == 4
     assert r_sub == 0
