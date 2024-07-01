@@ -32,7 +32,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import math
-from typing import Tuple
+from typing import Sequence, Tuple
 import numpy as np
 import sympy as sp
 from pytools.obj_array import make_obj_array
@@ -289,21 +289,24 @@ def compute_recurrence_relation(coeffs, n_derivs, var):
     return r.simplify()
 
 
-def get_recurrence_order(coeffs):
+def get_recurrence_order(coeffs: Sequence[Sequence[sp.Expr]]) -> int:
     """
     Input:
-        - *coeffs*, represents coefficients of a scalar ODE.
-
+        - *coeffs*, represents coefficients of the normalized,
+          center-shifted ODE (se above)
+          with the outer sequence reflecting the order of the derivative,
+          and the second expansion reflecting expansion in the shift
+          $\delta_x$
     Output:
         - true_order, the order of the recurrence relation that will be produced.
     """
-    orders = []
-    for i in range(len(coeffs)):
-        for j in range(len(coeffs[i])):
-            if coeffs[i][j] != 0:
-                orders.append(i - j)
-    true_order = (max(orders)-min(orders)+1)
-    return true_order
+    orders = {
+        i - j
+        for i, deriv_order_coeff in enumerate(coeffs)
+        for j, shift_coeff in enumerate(deriv_order_coeff)
+        if shift_coeff
+    }
+    return max(orders)-min(orders)+1
 
 
 def get_recurrence_from_pde(pde):
