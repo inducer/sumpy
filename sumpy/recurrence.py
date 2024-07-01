@@ -289,6 +289,23 @@ def compute_recurrence_relation(coeffs, n_derivs, var):
     return r.simplify()
 
 
+def get_recurrence_order(coeffs):
+    """
+    Input:
+        - *coeffs*, represents coefficients of a scalar ODE.
+
+    Output:
+        - true_order, the order of the recurrence relation that will be produced.
+    """
+    orders = []
+    for i in range(len(coeffs)):
+        for j in range(len(coeffs[i])):
+            if coeffs[i][j] != 0:
+                orders.append(i - j)
+    true_order = (max(orders)-min(orders)+1)
+    return true_order
+
+
 def get_recurrence_from_pde(pde):
     """
     Input:
