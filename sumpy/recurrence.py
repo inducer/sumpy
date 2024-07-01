@@ -117,7 +117,7 @@ def generate_nd_derivative_relations(var: np.ndarray, n_derivs: int) -> dict:
     """
     Input:
         - *var*, a sympy vector of variables called [x0, x1, ...]
-        - *n_derivs*, the order of the original PDE + 1, i.e. the number of 
+        - *n_derivs*, the order of the original PDE + 1, i.e. the number of
           derivatives of f that may be present
 
     Output:
@@ -214,8 +214,8 @@ def compute_coefficients_of_poly(poly: sp.polys.polytools.Poly,
           with math:`x_0 - c_0`
 
     Output:
-        - coeffs, a 2d array, each row giving the coefficient of 
-          math:`f_0, f_x, f_{xx}, ...`, each entry in the row giving the 
+        - coeffs, a 2d array, each row giving the coefficient of
+          math:`f_0, f_x, f_{xx}, ...`, each entry in the row giving the
           coefficients of the polynomial in math:`\\delta_x`
 
     Description: Takes in a polynomial in f_{x0}, f_{x1}, ..., w/coeffs that are
@@ -243,15 +243,15 @@ def compute_coefficients_of_poly(poly: sp.polys.polytools.Poly,
 def compute_recurrence_relation(coeffs, n_derivs, var):
     """
     Input:
-        - *coeffs* a 2d array that gives access to the coefficients of poly, where 
+        - *coeffs* a 2d array that gives access to the coefficients of poly, where
           poly represents the coefficients of the ''shifted ODE''
           (''shifted ODE'' = we substitute all occurences of delta_x with x_0 - c_0)
           based on their degree as a polynomial in delta_x)
-        - *n_derivs*, the order of the original PDE + 1, i.e. the number of 
+        - *n_derivs*, the order of the original PDE + 1, i.e. the number of
           derivatives of f that may be present
 
     Output:
-        - r, a recurrence statement that equals 0 where s(i) is the ith coefficient 
+        - r, a recurrence statement that equals 0 where s(i) is the ith coefficient
           of the Taylor polynomial for our point potential.
 
     Description: Takes in coeffs which represents our ``shifted ode in x"
@@ -312,7 +312,7 @@ def get_recurrence_from_pde(pde):
         - *pde*, representing a scalar PDE.
 
     Output:
-        - r, a recurrence relation for a coefficients of a Line-Taylor expansion of 
+        - r, a recurrence relation for a coefficients of a Line-Taylor expansion of
           the point potential.
 
     Description: Takes in a pde, outputs a recurrence.
@@ -327,9 +327,8 @@ def get_recurrence_from_pde(pde):
 
 def test_recurrence_finder_laplace():
     """
-    test_recurrence_finder_laplace
-    Description: Checks that the recurrence finder works correctly for the Laplace
-    2D point potential.
+    Description: Test the recurrence relation produced for the Laplace 2D point
+    potential.
     """
     w = make_identity_diff_op(2)
     laplace2d = laplacian(w)
@@ -354,7 +353,6 @@ def test_recurrence_finder_laplace():
 
 def test_recurrence_finder_laplace_three_d():
     """
-    test_recurrence_finder_laplace_three_d
     Description: Checks that the recurrence finder works correctly for the Laplace
     3D point potential.
     """
