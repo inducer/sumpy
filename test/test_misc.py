@@ -534,7 +534,7 @@ def test_weird_kernel(pde):
 
 # {{{ test_get_storage_index
 
-class TestKernel(ExpressionKernel):
+class StorageIndexTestKernel(ExpressionKernel):
     def __init__(self, dim, max_mi):
         super().__init__(dim=dim, expression=1, global_scaling_const=1,
                 is_complex_valued=False)
@@ -550,11 +550,11 @@ class TestKernel(ExpressionKernel):
 @pytest.mark.parametrize("knl", [
     LaplaceKernel(2),
     LaplaceKernel(3),
-    TestKernel(2, (3, 0)),
-    TestKernel(2, (0, 3)),
-    TestKernel(3, (3, 0, 0)),
-    TestKernel(3, (0, 3, 0)),
-    TestKernel(3, (0, 0, 3)),
+    StorageIndexTestKernel(2, (3, 0)),
+    StorageIndexTestKernel(2, (0, 3)),
+    StorageIndexTestKernel(3, (3, 0, 0)),
+    StorageIndexTestKernel(3, (0, 3, 0)),
+    StorageIndexTestKernel(3, (0, 0, 3)),
     BiharmonicKernel(2),
     BiharmonicKernel(3),
 ])
