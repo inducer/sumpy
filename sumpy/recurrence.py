@@ -211,7 +211,8 @@ def auto_product_rule_single_term(p: int, m: int, var: np.ndarray) -> sp.Expr:
     - *m*, see description
     - *var*, array of sympy variables [x_0, x_1, ...]
     ## Output
-    - A sympy expression is output.
+    - A sympy expression is output corresponding to the nth order derivative of the
+    input expression.
     We let :math:`s(i)` represent the ith order derivative of f when
     we output the final result. We let n represent a symbolic variable
     corresponding to how many derivatives of the original expression were
