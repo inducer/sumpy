@@ -200,6 +200,23 @@ def compute_coefficients_of_poly_parametric(poly: sp.Poly, n_derivs: int,
 
 
 def auto_product_rule_single_term(p: int, m: int, var: np.ndarray) -> sp.Expr:
+    """
+    ## Description
+    We assume that we are given the expression :math:`x_0^p f^(m)(x_0)`. We then
+    output the nth order derivative of the expression where n is a symbolic variable.
+    We let :math:`s(i)` represent the ith order derivative of f when
+    we output the final result.
+    ## Input
+    - *p*, see description
+    - *m*, see description
+    - *var*, array of sympy variables [x_0, x_1, ...]
+    ## Output
+    - A sympy expression is output.
+    We let :math:`s(i)` represent the ith order derivative of f when
+    we output the final result. We let n represent a symbolic variable
+    corresponding to how many derivatives of the original expression were
+    taken.
+    """
     n = sp.symbols("n")
     s = sp.Function("s")
     result = 0
