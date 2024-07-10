@@ -172,7 +172,8 @@ def ode_in_r_to_x(ode_in_r: sp.Expr, var: np.ndarray, n_derivs: int) -> sp.Expr:
     return ode_in_x
 
 
-def compute_coefficients_of_poly_parametric(poly, n_derivs, var):
+def compute_coefficients_of_poly_parametric(poly: sp.Poly, n_derivs: int,
+                                            var: np.ndarray) -> list:
     """
     Input:
         - *poly*, a polynomial in sympy variables math:`f_{x0}, f_{x1}, ...`,
@@ -209,7 +210,7 @@ def compute_coefficients_of_poly_parametric(poly, n_derivs, var):
     return coeffs
 
 
-def auto_product_rule_single_term(p, m, var):
+def auto_product_rule_single_term(p: int, m: int, var: np.ndarray) -> sp.Expr:
     """
     Input:
         - *p*, degree of monomial
@@ -232,12 +233,12 @@ def auto_product_rule_single_term(p, m, var):
     return result
 
 
-def get_recurrence_parametric_from_coeffs(coeffs, var):
+def get_recurrence_parametric_from_coeffs(coeffs: list, var: np.ndarray) -> sp.Expr:
     """
-    Input:
+    ## Input:
         - *coeffs*, take the ODE
 
-    Output:
+    ## Output:
         - recurrence relation for full ODE
     """
     final_recurrence = 0
@@ -250,7 +251,7 @@ def get_recurrence_parametric_from_coeffs(coeffs, var):
     return final_recurrence
 
 
-def get_recurrence_parametric_from_pde(pde):
+def get_recurrence_parametric_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
     """
     Input:
         - *pde*, representing a scalar PDE.
