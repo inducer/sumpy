@@ -216,17 +216,17 @@ def auto_product_rule_single_term(p: int, m: int, var: np.ndarray) -> sp.Expr:
 def get_recurrence_parametric_from_coeffs(coeffs: list, var: np.ndarray) -> sp.Expr:
     """
     ## Input
-    - *coeffs*, a 2D array with elements :math:`b_{ij}`.
-      If we write the coefficients of our ODE for the point-potential as a
-      polynomial w/respect to f_{x0}, f_{x1}, f_{x2}, ... we can call these
-      coefficients :math:`a_0, a_1, a_2, ...` Since each coefficient :math:`a_i` is a
-      polynomial in :math:`x_0`, we can write a_i as a polynomial in :math:`x_0^j`,
-      and call these coefficients :math:`b_{ij}`.
-
+    - *coeffs*,
+      Consider an ODE obeyed by a function f that can be expressed in the following
+      form: :math:`(b_{00} x_0^0 + b_{01} x_0^1 + \\cdots) \\partial_{x_0}^0 f +
+      (b_{10} x_0^0 + b_{11} x_0^1 +\\cdots) \\partial_x^1 f`. coeffs is a sequence
+      of sequences, with the outer sequence iterating over derivative orders, and
+      each inner sequence iterating over powers of :math:`x_0`, so that, in terms of
+      the above form, coeffs is [[b_00, b_01, ...], [b_10, b_11, ...], ...]
     - *var*, array of sympy variables [x_0, x_1, ...]
     ## Output
-        - final_recurrence, the recurrence relation for derivatives of our
-          point-potential.
+    - final_recurrence, the recurrence relation for derivatives of our
+      point-potential.
     """
     final_recurrence = 0
     #Outer loop is derivative direction
