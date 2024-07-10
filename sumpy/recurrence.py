@@ -377,6 +377,7 @@ def auto_product_rule_single_term(p, m, var):
 
     Output:
         - recurrence relation for ODE math:`x_0^p f^(m)(x_0)`
+          s(i)
     """
     n = sp.symbols("n")
     s = sp.Function("s")
@@ -394,12 +395,14 @@ def auto_product_rule_single_term(p, m, var):
 def get_recurrence_parametric_from_coeffs(coeffs, var):
     """
     Input:
-        - *coeffs*
+        - *coeffs*, take the ODE
 
     Output:
         - recurrence relation for full ODE
     """
     final_recurrence = 0
+    #Outer loop is derivative direction
+    #Inner is polynomial order of x_0
     for m, _ in enumerate(coeffs):
         for p, _ in enumerate(coeffs[m]):
             final_recurrence += coeffs[m][p] * auto_product_rule_single_term(p,
