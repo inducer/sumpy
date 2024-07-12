@@ -145,7 +145,8 @@ def ode_in_r_to_x(ode_in_r: sp.Expr, var: np.ndarray, n_derivs: int) -> sp.Expr:
     ## Input
         - *ode_in_r*, a linear combination of f, f_r, f_{rr}, ...
           (in code represented as f_{r0}, f_{r1}, f_{r2})
-          with coefficients as RATIONAL functions in var[0], var[1], ...
+          with coefficients that are polynomials in var[0], var[1], ...
+          divided by some power of var[0]
         - *var*, array of sympy variables [x_0, x_1, ...]
         - *n_derivs*, the order of the original PDE + 1, i.e. the number of
           derivatives of f that may be present
@@ -170,7 +171,8 @@ def compute_coefficients_of_poly_parametric(poly: sp.Poly, n_derivs: int,
     """
     ## Input
         - *poly*, the original ODE for our point-potential as a polynomial
-          in f_{x0}, f_{x1}, f_{x2}, etc.
+          in f_{x0}, f_{x1}, f_{x2}, etc. with polynomial coefficients
+          in var[0], var[1], ...
         - *n_derivs*, the order of the original PDE + 1, i.e. the number of
           derivatives of f that may be present
         - *var*, array of sympy variables [x_0, x_1, ...]
