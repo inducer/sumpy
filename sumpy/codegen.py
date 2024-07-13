@@ -32,7 +32,7 @@ import pymbolic.primitives as prim
 
 from pytools import memoize_method
 
-from sumpy.symbolic import (SympyToPymbolicMapper as SympyToPymbolicMapperBase)
+from sumpy.symbolic import SympyToPymbolicMapper
 
 import logging
 logger = logging.getLogger(__name__)
@@ -47,27 +47,6 @@ Conversion of :mod:`sympy` expressions to :mod:`loopy`
 .. autofunction:: to_loopy_insns
 
 """
-
-
-# {{{ sympy -> pymbolic mapper
-
-import sumpy.symbolic as sym
-_SPECIAL_FUNCTION_NAMES = frozenset(dir(sym.functions))
-
-
-class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
-
-    def not_supported(self, expr):
-        if isinstance(expr, int):
-            return expr
-        elif getattr(expr, "is_Function", False):
-            func_name = SympyToPymbolicMapperBase.function_name(self, expr)
-            return prim.Variable(func_name)(
-                    *tuple(self.rec(arg) for arg in expr.args))
-        else:
-            return SympyToPymbolicMapperBase.not_supported(self, expr)
-
-# }}}
 
 
 # {{{ bessel -> loopy codegen

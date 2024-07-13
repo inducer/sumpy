@@ -313,6 +313,17 @@ class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
 
         return math.prod(num_args) / math.prod(den_args)
 
+    def not_supported(self, expr):
+        if getattr(expr, "is_Function", False):
+            if self.function_name(expr) == "ExpI":
+                arg = self.rec(expr.args[0])
+                return prim.Variable("cos")(arg) + 1j * prim.Variable("sin")(arg)
+            else:
+                return prim.Variable(self.function_name(expr))(
+                    *[self.rec(arg) for arg in expr.args])
+        else:
+            return SympyToPymbolicMapperBase.not_supported(self, expr)
+
 
 class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):
     def map_variable(self, expr):
@@ -338,6 +349,9 @@ class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):
             args = [self.rec(param) for param in expr.parameters]
             args.append(0)
             return BesselJ(*args)
+        elif expr.function.name == "expi":
+            args = [self.rec(param) for param in expr.parameters]
+            return ExpI(*args)
         else:
             return PymbolicToSympyMapper.map_call(self, expr)
 
@@ -369,8 +383,20 @@ class Hankel1(_BesselOrHankel):
     pass
 
 
+class ExpI(sympy.Function):
+    """A symbolic function that takes a real value as an
+    input and returns a complex number such that
+    expi(x) = exp(i*x).
+    """
+    nargs = (1,)
+
+    def fdiff(self, argindex=1):
+        return self.func(self.args[0]) * sympy.I
+
+
 _SympyBesselJ = BesselJ
 _SympyHankel1 = Hankel1
+_SympyExpI = ExpI
 
 if USE_SYMENGINE:
     def BesselJ(*args):   # noqa: N802  # pylint: disable=function-redefined
@@ -378,5 +404,8 @@ if USE_SYMENGINE:
 
     def Hankel1(*args):   # noqa: N802  # pylint: disable=function-redefined
         return sym.sympify(_SympyHankel1(*args))
+
+    def ExpI(*args):   # noqa: N802  # pylint: disable=function-redefined
+        return sym.sympify(_SympyExpI(*args))
 
 # vim: fdm=marker
