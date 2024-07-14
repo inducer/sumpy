@@ -46,6 +46,20 @@ from sumpy.expansion.diff_op import (
 def _make_sympy_vec(name, n):
     return make_obj_array([sp.Symbol(f"{name}{i}") for i in range(n)])
 
+"""
+Overall Narrative:
+First we take an elliptic PDE represented as a sumpy 
+:class:`sumpy.expansion.diff_op.LinearSystemPDEOperator` type. We then
+use get_pde_in_recurrence_form to get an ODE in the radial variable
+that the point-potential satisfies assuming radial symmetry of the point-potential.
+
+We then take the ODE in the radial variable that we get and use the chain-rule to
+convert it into a ODE in a single spatial variable using ode_in_r_to_x. We then
+collect the coefficients of the ODE using compute_coefficients_of_poly_parametric 
+and then use these coefficients to finally compute the recurrence relation via
+get_recurrence_parametric_from_pde.
+"""
+
 
 def get_pde_in_recurrence_form(pde: LinearPDESystemOperator) -> Tuple[
         sp.Expr, np.ndarray, int
