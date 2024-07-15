@@ -81,9 +81,8 @@ def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
 
     :returns: a tuple ``(ode_in_r, var, n_derivs)``, where
       - *ode_in_r* is the ODE satisfied by :math:`f`.
-      - var, an array representing the input coordinates
-        (maybe give an example?)
-      - n_derivs, the order of the original PDE + 1, i.e. the number of
+      - *var*, represents the sympy vec [x0, x1, ...] corresponding to coordinates
+      - *n_derivs*, the order of the original PDE + 1, i.e. the number of
         derivatives of f that may be present (the reason this is called n_derivs
         since if we have a second order PDE for example then we might see
         :math:`f, f_{r}, f_{rr}` in our ODE in r, which is technically 3 terms
