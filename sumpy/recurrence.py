@@ -1,12 +1,33 @@
-"""
-.. autofunction:: get_pde_in_recurrence_form
-.. autofunction:: generate_nd_derivative_relations
+r"""
+With the functionality in this module, we aim to compute a recurrence for
+one-dimensional derivatives of functions :math:`f:\mathbb R^n \to \mathbb R`
+for functions :math:`f` satisfying two assumptions:
+
+- :math:`f` satisfies a PDE is linear and has coefficients polynomial
+  in the coordinates.
+- :math:`f` only depends on the radius :math:`r`,
+  i.e. :math:`f(\boldsymbol x)=f(|\boldsymbol x|_2)`.
+
+This process proceeds in multiple steps:
+
+- Convert from the PDE to an ODE in :math:`r`, using :func:`pde_to_ode_in_r`.
+- Convert from an ODE in :math:`r` to one in :math:`x`, using :func:`ode_in_r_to_x`.
+- Sort general-form ODE in :math:`x` into a coefficient array, using
+  :func:`ode_in_x_to_coeff_array`.
+- Finally, get an expression for the recurrence, using
+  :func:`recurrence_from_coeff_array`.
+
+The whole process can be automated using :func:`recurrence_from_pde`.
+
+.. autofunction:: pde_to_ode_in_r
 .. autofunction:: ode_in_r_to_x
-.. autofunction:: get_recurrence_parametric_from_pde
-.. autofunction:: get_recurrence_parametric_from_coeffs
-.. autofunction:: auto_product_rule_single_term
-.. autofunction:: compute_coefficients_of_poly_parametric
+.. autofunction:: ode_in_x_to_coeff_array
+.. autofunction:: recurrence_from_coeff_array
+.. autofunction:: recurrence_from_pde
 """
+
+from __future__ import annotations
+
 
 __copyright__ = """
 Copyright (C) 2024 Hirish Chandrasekaran
@@ -33,7 +54,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import math
-from typing import Tuple
 import numpy as np
 import sympy as sp
 from pytools.obj_array import make_obj_array
@@ -47,44 +67,29 @@ def _make_sympy_vec(name, n):
     return make_obj_array([sp.Symbol(f"{name}{i}") for i in range(n)])
 
 
-"""
-Overall Narrative:
-First we take an elliptic PDE represented as a sumpy
-:class:`sumpy.expansion.diff_op.LinearSystemPDEOperator` type. We then
-use get_pde_in_recurrence_form to get an ODE in the radial variable
-that the point-potential satisfies assuming radial symmetry of the point-potential.
-
-We then take the ODE in the radial variable that we get and use the chain-rule to
-convert it into a ODE in a single spatial variable using ode_in_r_to_x. We then
-collect the coefficients of the ODE using compute_coefficients_of_poly_parametric
-and then use these coefficients to finally compute the recurrence relation via
-get_recurrence_parametric_from_pde.
-"""
-
-
-def get_pde_in_recurrence_form(pde: LinearPDESystemOperator) -> Tuple[
+def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
         sp.Expr, np.ndarray, int
 ]:
     """
-    ## Input
-    - *pde*, a :class:`sumpy.expansion.diff_op.LinearSystemPDEOperator` such that
-    pde.eqs == 1
-    ## Output
-    - ode_in_r, an ODE that the point-potential satifies w/respect to radial variable
-    - var, an array representing the input coordinates
-    - n_derivs, the order of the original PDE + 1, i.e. the number of
-      derivatives of f that may be present (the reason this is called n_derivs
-      since if we have a second order PDE for example then we might see
-      :math:`f, f_{r}, f_{rr}` in our ODE in r, which is technically 3 terms
-      since we count the 0th order derivative f as a "derivative." If this
-      doesn't make sense just know that n_derivs is the order the of the input
-      sumpy PDE + 1)
-    ## Description
     Takes as input a scalar pde represented as the type
     :class:`sumpy.expansion.diff_op.LinearSystemPDEOperator`. Assumes that the scalar
     pde has coefficients that are polynomial in the input coordinates. Then assumes
     that the PDE is satisfied by a point-potential with radial symmetry and comes up
     with an ODE in the radial variable that the point-potential satisfies.
+
+    :arg pde: must satisfy ``pde.eqs == 1```
+
+    :returns: a tuple ``(ode_in_r, var, n_derivs)``, where
+      - *ode_in_r* is the ODE satisfied by :math:`f`.
+      - var, an array representing the input coordinates
+        (maybe give an example?)
+      - n_derivs, the order of the original PDE + 1, i.e. the number of
+        derivatives of f that may be present (the reason this is called n_derivs
+        since if we have a second order PDE for example then we might see
+        :math:`f, f_{r}, f_{rr}` in our ODE in r, which is technically 3 terms
+        since we count the 0th order derivative f as a "derivative." If this
+        doesn't make sense just know that n_derivs is the order the of the input
+        sumpy PDE + 1)
     """
     if len(pde.eqs) != 1:
         raise ValueError("PDE must be scalar")
@@ -124,7 +129,7 @@ def get_pde_in_recurrence_form(pde: LinearPDESystemOperator) -> Tuple[
     return ode_in_r, var, n_derivs
 
 
-def generate_nd_derivative_relations(var: np.ndarray, n_derivs: int) -> dict:
+def _generate_nd_derivative_relations(var: np.ndarray, n_derivs: int) -> dict:
     """
     ## Input
         - *var*, a sympy vector of variables called [x0, x1, ...]
@@ -173,7 +178,7 @@ def ode_in_r_to_x(ode_in_r: sp.Expr, var: np.ndarray, n_derivs: int) -> sp.Expr:
     by substituting f, f_r, f_{rr}, ... as a linear combination of
     f, f_x, f_{xx}, ... using the chain rule.
     """
-    subme = generate_nd_derivative_relations(var, n_derivs)
+    subme = _generate_nd_derivative_relations(var, n_derivs)
     ode_in_x = ode_in_r
     f_r_derivs = _make_sympy_vec("f_r", n_derivs)
     for i in range(n_derivs):
@@ -181,7 +186,7 @@ def ode_in_r_to_x(ode_in_r: sp.Expr, var: np.ndarray, n_derivs: int) -> sp.Expr:
     return ode_in_x
 
 
-def compute_coefficients_of_poly_parametric(poly: sp.Poly, n_derivs: int,
+def ode_in_x_to_coeff_array(poly: sp.Poly, n_derivs: int,
                                             var: np.ndarray) -> list:
     """
     ## Input
@@ -216,7 +221,7 @@ def compute_coefficients_of_poly_parametric(poly: sp.Poly, n_derivs: int,
     return coeffs
 
 
-def auto_product_rule_single_term(p: int, m: int, var: np.ndarray) -> sp.Expr:
+def _auto_product_rule_single_term(p: int, m: int, var: np.ndarray) -> sp.Expr:
     """
     ## Description
     We assume that we are given the expression :math:`x_0^p f^(m)(x_0)`. We then
@@ -248,7 +253,7 @@ def auto_product_rule_single_term(p: int, m: int, var: np.ndarray) -> sp.Expr:
     return result
 
 
-def get_recurrence_parametric_from_coeffs(coeffs: list, var: np.ndarray) -> sp.Expr:
+def recurrence_from_coeff_array(coeffs: list, var: np.ndarray) -> sp.Expr:
     """
     ## Input
     - *coeffs*,
@@ -268,12 +273,12 @@ def get_recurrence_parametric_from_coeffs(coeffs: list, var: np.ndarray) -> sp.E
     #Inner is polynomial order of x_0
     for m, _ in enumerate(coeffs):
         for p, _ in enumerate(coeffs[m]):
-            final_recurrence += coeffs[m][p] * auto_product_rule_single_term(p,
+            final_recurrence += coeffs[m][p] * _auto_product_rule_single_term(p,
                                                                              m, var)
     return final_recurrence
 
 
-def get_recurrence_parametric_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
+def recurrence_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
     """
     ## Input
     - *pde*, a :class:`sumpy.expansion.diff_op.LinearSystemPDEOperator` such that
@@ -282,13 +287,13 @@ def get_recurrence_parametric_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
     - final_recurrence, the recurrence relation for derivatives of our
       point-potential.
     """
-    ode_in_r, var, n_derivs = get_pde_in_recurrence_form(pde)
+    ode_in_r, var, n_derivs = pde_to_ode_in_r(pde)
     ode_in_x = ode_in_r_to_x(ode_in_r, var, n_derivs).simplify()
     ode_in_x_cleared = (ode_in_x * var[0]**n_derivs).simplify()
     f_x_derivs = _make_sympy_vec("f_x", n_derivs)
     poly = sp.Poly(ode_in_x_cleared, *f_x_derivs)
-    coeffs = compute_coefficients_of_poly_parametric(poly, n_derivs, var)
-    return get_recurrence_parametric_from_coeffs(coeffs, var)
+    coeffs = ode_in_x_to_coeff_array(poly, n_derivs, var)
+    return recurrence_from_coeff_array(coeffs, var)
 
 
 def test_recurrence_finder_laplace():
@@ -298,7 +303,7 @@ def test_recurrence_finder_laplace():
     """
     w = make_identity_diff_op(2)
     laplace2d = laplacian(w)
-    r = get_recurrence_parametric_from_pde(laplace2d)
+    r = recurrence_from_pde(laplace2d)
     n = sp.symbols("n")
     s = sp.Function("s")
 
@@ -326,7 +331,7 @@ def test_recurrence_finder_laplace_three_d():
     """
     w = make_identity_diff_op(3)
     laplace3d = laplacian(w)
-    r = get_recurrence_parametric_from_pde(laplace3d)
+    r = recurrence_from_pde(laplace3d)
     n = sp.symbols("n")
     s = sp.Function("s")
 
@@ -355,7 +360,7 @@ def test_recurrence_finder_helmholtz_three_d():
     #seems to be an order 5 recurrence relation
     w = make_identity_diff_op(3)
     helmholtz3d = laplacian(w) + w
-    r = get_recurrence_parametric_from_pde(helmholtz3d)
+    r = recurrence_from_pde(helmholtz3d)
 
     #We create that function that gives the derivatives of the point 
     # potential for helmholtz
