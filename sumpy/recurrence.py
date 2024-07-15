@@ -344,3 +344,58 @@ def test_recurrence_finder_laplace_three_d():
         r_sub = r_sub.subs(s(i), deriv_laplace_three_d(i))
     r_sub = r_sub.simplify()
     assert r_sub == 0
+
+
+def test_recurrence_finder_helmholtz_three_d():
+    """
+    ## Description
+    Tests our recurrence relation generator for Helmhotlz 3D.
+    """
+    #We are creating the recurrence relation for helmholtz3d which 
+    #seems to be an order 5 recurrence relation
+    w = make_identity_diff_op(3)
+    helmholtz3d = laplacian(w) + w
+    r = get_recurrence_parametric_from_pde(helmholtz3d)
+
+    #We create that function that gives the derivatives of the point 
+    # potential for helmholtz
+    #Remember! Our point-source was placed at the origin and we 
+    # were performing a LT expansion at x_0
+    def deriv_helmholtz_three_d(i, s_loc):
+        s_x = s_loc[0]
+        s_y = s_loc[1]
+        s_z = s_loc[2]
+        x, y, z = sp.symbols("x,y,z")
+        true_f = sp.exp(1j * sp.sqrt(x**2 + y**2 + z**2)
+                        ) / (sp.sqrt(x**2 + y**2 + z**2))
+        return sp.diff(true_f, x, i).subs(x, s_x).subs(
+            y, s_y).subs(z, s_z)
+    
+    #Create relevant symbols
+    var = _make_sympy_vec("x", 3)
+    n = sp.symbols("n")
+    s = sp.Function("s")
+
+    #Create random source location
+    s_loc = np.random.rand(3)
+
+    #Create random order to check
+    d = np.random.randint(0, 5)
+
+    #Substitute random location into recurrence relation and value of n = d
+    r_loc = r.subs(var[0], s_loc[0])
+    r_loc = r_loc.subs(var[1], s_loc[1])
+    r_loc = r_loc.subs(var[2], s_loc[2])
+    r_sub = r_loc.subs(n, d)
+
+    #Checking that the recurrence holds to some machine epsilon
+    for i in range(max(d-3, 0), d+3):
+        # pylint: disable=not-callable
+        r_sub = r_sub.subs(s(i), deriv_helmholtz_three_d(i, s_loc))
+    err = abs(abs(r_sub).evalf())
+    print(err)
+    assert err <= 1e-10
+
+
+
+
