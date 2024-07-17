@@ -75,13 +75,13 @@ def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
     :math:`f:\mathbb R^n \to \mathbb R` satisfying
     :math:`f(\boldsymbol x)=f(|\boldsymbol x|_2)` and *pde*.
 
-    :arg pde: must satisfy ``pde.eqs == 1``` and have polynomial coefficients.
+    :arg pde: must satisfy ``pde.eqs == 1`` and have polynomial coefficients.
 
     :returns: a tuple ``(ode_in_r, var, ode_order)``, where
-      - *ode_in_r* with derivatives given as :class:`sympy.Derivative`.
-      - *var* is an object array of :class:`sympy.Symbol`, with successive
-        variables representing the Cartesian coordinate directions.
-      - *ode_order* the order of ODE that is returned
+    - *ode_in_r* with derivatives given as :class:`sympy.Derivative`.
+    - *var* is an object array of :class:`sympy.Symbol`, with successive variables
+      representing the Cartesian coordinate directions.
+    - *ode_order* the order of ODE that is returned
     """
     if len(pde.eqs) != 1:
         raise ValueError("PDE must be scalar")
@@ -118,18 +118,13 @@ def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
 
 
 def _generate_nd_derivative_relations(var: np.ndarray, ode_order: int) -> dict:
-    """
-    ## Input
-        - *var*, a sympy vector of variables called [x0, x1, ...]
-        - *ode_order*, the order of the ODE that we will be translating
-    ## Output
-        - a vector that gives [f, f_r, f_{rr}, ...] in terms of f, f_x, f_{xx}, ...
-          using the chain rule
-          (f, f_x, f_{xx}, ... in code is represented as f_{x0}, f_{x1}, f_{x2} and
-          f, f_r, f_{rr}, ... in code is represented as f_{r0}, f_{r1}, f_{r2})
-    ## Description
-    Using the chain rule outputs a vector that tells us how to
-    write f, f_r, f_{rr}, ... as a linear combination of f, f_x, f_{xx}, ...
+    r"""
+    Using the chain rule outputs a vector that gives in each component respectively
+    :math:`[f(r), f'(r), \dots, f^{(ode_order)}(r)]` as a linear combination of
+    :math:`[f(x), f'(x), \dots, f^{(ode_order)}(x)]`
+
+    :arg var: array of sympy variables math:`[x_0, x_1, \dots]`
+    :arg ode_order: the order of the ODE that we will be translating
     """
     f_r_derivs = _make_sympy_vec("f_r", ode_order+1)
     f_x_derivs = _make_sympy_vec("f_x", ode_order+1)
@@ -148,21 +143,18 @@ def _generate_nd_derivative_relations(var: np.ndarray, ode_order: int) -> dict:
 
 
 def ode_in_r_to_x(ode_in_r: sp.Expr, var: np.ndarray, ode_order: int) -> sp.Expr:
-    """
-    ## Input
-        - *ode_in_r*, a linear combination of f, f_r, f_{rr}, ...
-          (in code represented as f_{r0}, f_{r1}, f_{r2})
-          with coefficients that are polynomials in var[0], var[1], ...
-          divided by some power of var[0]
-        - *var*, array of sympy variables [x_0, x_1, ...]
-        - *ode_order*, the order of the input ODE
-    ## Output
-        - ode_in_x, a linear combination of f, f_x, f_{xx}, ... with coefficients as
-          rational functions in var[0], var[1], ...
-    ## Description
+    r"""
     Translates an ode in the variable r into an ode in the variable x
-    by substituting f, f_r, f_{rr}, ... as a linear combination of
-    f, f_x, f_{xx}, ... using the chain rule.
+    by replcaing the terms :math:`f, f_r, f_{rr}, \dots` as a linear combinations of
+    :math:`f, f_x, f_{xx}, \dots` using the chain rule.
+
+    :arg ode_in_r: a linear combination of :math:`f, f_r, f_{rr}, \dots` represented
+        by the sympy variables :math:`f_{r0}, f_{r1}, f_{r1}, f_{r2}, \dots`
+    :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
+    :arg ode_order: the order of the input ODE
+
+    :returns: *ode_in_x* a linear combination of :math:`f, f_x, f_{xx}, \dots` with 
+        coefficients as rational functions in :math:`x_0, x_1, \dots`
     """
     subme = _generate_nd_derivative_relations(var, ode_order+1)
     ode_in_x = ode_in_r
