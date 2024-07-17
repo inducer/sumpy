@@ -216,8 +216,8 @@ class SymbolicAssignmentCollection:
             del self.assignments[name]
             self.assignments[name] = new_expr
 
-        logger.info("common subexpression elimination: done after {dur:.2f} s"
-                    .format(dur=time.time() - start_time))
+        logger.info("common subexpression elimination: done after %.2f s",
+                    time.time() - start_time)
         return new_extra_exprs
 
 # }}}

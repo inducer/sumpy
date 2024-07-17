@@ -45,7 +45,7 @@ class TranslationBenchmarkSuite:
 
     def setup(self, param):
         logging.basicConfig(level=logging.INFO)
-        np.random.seed(17)
+        np.random.seed(17)  # noqa: NPY002
         if self.__class__ == TranslationBenchmarkSuite:
             raise NotImplementedError
         mpole_expn_class = self.mpole_expn_class
@@ -78,7 +78,7 @@ class TranslationBenchmarkSuite:
         insns = to_loopy_insns(sac.assignments.items())
         counter = pymbolic.mapper.flop_counter.CSEAwareFlopCounter()
 
-        return sum([counter.rec(insn.expression)+1 for insn in insns])
+        return sum(counter.rec(insn.expression)+1 for insn in insns)
 
     track_m2l_op_count.unit = "ops"
     track_m2l_op_count.timeout = 300.0

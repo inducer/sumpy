@@ -734,9 +734,9 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         plog.done()
 
-        logger.debug("number of Taylor coefficients was reduced from {orig} to {red}"
-                     .format(orig=len(self.get_full_coefficient_identifiers()),
-                             red=len(stored_identifiers)))
+        logger.debug("number of Taylor coefficients was reduced from %d to %d",
+                     len(self.get_full_coefficient_identifiers()),
+                     len(stored_identifiers))
 
         shape = (len(mis), len(stored_identifiers))
         op = CSEMatVecOperator(from_input_coeffs_by_row,

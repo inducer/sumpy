@@ -50,7 +50,7 @@ def find_git_revision(tree_root):
     if retcode != 0:
         from warnings import warn
 
-        warn("unable to find git revision")
+        warn("unable to find git revision", stacklevel=1)
         return None
 
     return git_rev

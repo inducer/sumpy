@@ -426,7 +426,7 @@ def test_as_scalar_pde_maxwell():
     mu, epsilon = symbols("mu, epsilon")
     t = (0, 0, 0, 1)
 
-    pde = concat(curl(E) + diff(B, t),  curl(B) - mu*epsilon*diff(E, t),
+    pde = concat(curl(E) + diff(B, t), curl(B) - mu*epsilon*diff(E, t),
                  divergence(E), divergence(B))
     as_scalar_pde(pde, 3)
 

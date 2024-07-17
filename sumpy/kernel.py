@@ -1313,9 +1313,9 @@ class KernelMapper:
     def rec(self, kernel):
         try:
             method = getattr(self, kernel.mapper_method)
-        except AttributeError:
+        except AttributeError as err:
             raise RuntimeError("{} cannot handle {}".format(
-                type(self), type(kernel)))
+                type(self), type(kernel))) from err
         else:
             return method(kernel)
 

@@ -481,7 +481,7 @@ class BigIntegerKiller(CSECachingIdentityMapper, CallExternalRecMapper):
             if int(expr_as_float) != int(expr):
                 from warnings import warn
                 warn(f"Converting '{expr}' to "
-                     f"'{self.float_type.__name__}' loses digits")
+                     f"'{self.float_type.__name__}' loses digits", stacklevel=1)
 
             # Suppress further warnings.
             self.warn = False

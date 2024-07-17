@@ -527,7 +527,7 @@ def tree_cse(exprs, symbols, opt_subs=None):
             try:
                 sym = next(symbols)
             except StopIteration:
-                raise ValueError("Symbols iterator ran out of symbols.")
+                raise ValueError("Symbols iterator ran out of symbols.") from None
 
             subs[orig_expr] = sym
             replacements.append((sym, new_expr))
