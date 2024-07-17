@@ -42,3 +42,22 @@ known-local-folder = [
     "sumpy",
 ]
 lines-after-imports = 2
+
+[tool.typos.default]
+extend-ignore-re = [
+  "(?Rm)^.*(#|//)\\s*spellchecker:\\s*disable-line$"
+]
+
+[tool.typos.default.extend-words]
+# short for multi-indices
+mis = "mis"
+# short for n-dimensional
+nd = "nd"
+# short for Theorem
+thm = "thm"
+
+[tool.typos.files]
+extend-exclude = [
+  "contrib/*/*.ipynb",
+  "notes/*/*.eps",
+]

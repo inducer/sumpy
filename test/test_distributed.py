@@ -34,7 +34,7 @@ import pyopencl as cl
 
 
 def set_cache_dir(mpirank):
-    """Make each rank use a differnt cache location to avoid conflict."""
+    """Make each rank use a different cache location to avoid conflict."""
     import platformdirs
     cache_dir = platformdirs.user_cache_dir("sumpy", "sumpy")
 
@@ -122,11 +122,11 @@ def _test_against_single_rank(
             communicate_mpoles_via_allreduce=communicate_mpoles_via_allreduce)
 
     from boxtree.distributed import DistributedFMMRunner
-    distribued_fmm_info = DistributedFMMRunner(
+    distributed_fmm_info = DistributedFMMRunner(
         queue, global_tree_dev, traversal_builder, wrangler_factory, comm=comm)
 
     timing_data = {}
-    distributed_potential = distribued_fmm_info.drive_dfmm(
+    distributed_potential = distributed_fmm_info.drive_dfmm(
                 [sources_weights], timing_data=timing_data)
     assert timing_data
 
