@@ -58,7 +58,7 @@ import numpy as np
 import sympy as sp
 from pytools.obj_array import make_obj_array
 from sumpy.expansion.diff_op import (
-    make_identity_diff_op, laplacian, LinearPDESystemOperator)
+    DerivativeIdentifier, make_identity_diff_op, laplacian, LinearPDESystemOperator)
 
 
 # similar to make_sym_vector in sumpy.symbolic, but returns an object array
@@ -70,61 +70,51 @@ def _make_sympy_vec(name, n):
 def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
         sp.Expr, np.ndarray, int
 ]:
-    """
-    Takes as input a scalar pde represented as the type
-    :class:`sumpy.expansion.diff_op.LinearSystemPDEOperator`. Assumes that the scalar
-    pde has coefficients that are polynomial in the input coordinates. Then assumes
-    that the PDE is satisfied by a point-potential with radial symmetry and comes up
-    with an ODE in the radial variable that the point-potential satisfies.
+    r"""
+    Returns an ODE satisfied by the radial derivatives of a function
+    :math:`f:\mathbb R^n \to \mathbb R` satisfying
+    :math:`f(\boldsymbol x)=f(|\boldsymbol x|_2)` and *pde*.
 
-    :arg pde: must satisfy ``pde.eqs == 1```
+    :arg pde: must satisfy ``pde.eqs == 1``` and have polynomial coefficients.
 
     :returns: a tuple ``(ode_in_r, var, n_derivs)``, where
-      - *ode_in_r* is the ODE satisfied by :math:`f`.
-      - *var*, represents the sympy vec [x0, x1, ...] corresponding to coordinates
-      - *n_derivs*, the order of the original PDE + 1, i.e. the number of
-        derivatives of f that may be present (the reason this is called n_derivs
-        since if we have a second order PDE for example then we might see
-        :math:`f, f_{r}, f_{rr}` in our ODE in r, which is technically 3 terms
-        since we count the 0th order derivative f as a "derivative." If this
-        doesn't make sense just know that n_derivs is the order the of the input
-        sumpy PDE + 1)
+      - *ode_in_r* with derivatives given as :class:`sympy.Derivative`.
+      - *var* is an object array of :class:`sympy.Symbol`, with successive
+        variables representing the Cartesian coordinate directions.
     """
     if len(pde.eqs) != 1:
         raise ValueError("PDE must be scalar")
 
+    # FIXME remove n_derivs
     dim = pde.dim
     n_derivs = pde.order
-    assert (len(pde.eqs) == 1)
-    ops = len(pde.eqs[0])
-    derivs = []
-    coeffs = []
-    for i in pde.eqs[0]:
-        derivs.append(i.mi)
-        coeffs.append(pde.eqs[0][i])
+    pde_eqn, = pde.eqs
+
     var = _make_sympy_vec("x", dim)
     r = sp.sqrt(sum(var**2))
-
     eps = sp.symbols("epsilon")
     rval = r + eps
     f = sp.Function("f")
-    # pylint: disable=not-callable
-    f_derivs = [sp.diff(f(rval), eps, i) for i in range(n_derivs+1)]
 
-    def compute_term(a, t):
-        term = a
-        for i in range(len(t)):
-            term = term.diff(var[i], t[i])
-        return term
+    def apply_deriv_id(expr: sp.Expr, deriv_id: DerivativeIdentifier) -> sp.Expr:
+        for i, nderivs in enumerate(deriv_id.mi):
+            expr = expr.diff(var[i], nderivs)
+        return expr
 
-    ode_in_r = 0
-    for i in range(ops):
-        ode_in_r += coeffs[i] * compute_term(f(rval), derivs[i])
-    n_derivs = len(f_derivs)
+    ode_in_r = sum(
+        coeff * apply_deriv_id(f(rval), deriv_id)
+        for deriv_id, coeff in pde_eqn.items()
+    )
+
     f_r_derivs = _make_sympy_vec("f_r", n_derivs)
+    # pylint: disable-next=not-callable
+    f_derivs = [sp.diff(f(rval), eps, i) for i in range(n_derivs+1)]
+    n_derivs = len(f_derivs)
 
+    # FIXME: Is this bulletproof? I.e. can non-r derivatives survive?
     for i in range(n_derivs):
         ode_in_r = ode_in_r.subs(f_derivs[i], f_r_derivs[i])
+
     return ode_in_r, var, n_derivs
 
 
