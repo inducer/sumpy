@@ -28,7 +28,7 @@ THE SOFTWARE.
 
 from functools import partial
 from numbers import Number
-from typing import TYPE_CHECKING, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Sequence
 
 from pytools import memoize_method
 
@@ -508,7 +508,7 @@ class PotentialSource:
     def __neg__(self) -> PotentialSource:
         return -1*self
 
-    def __add__(self, other: Union[Number, np.number, PotentialSource]
+    def __add__(self, other: Number | np.number | PotentialSource
                 ) -> PotentialSource:
         if isinstance(other, (Number, np.number)):
             other = ConstantPotential(self.toy_ctx, other)
@@ -520,16 +520,16 @@ class PotentialSource:
     __radd__ = __add__
 
     def __sub__(self,
-                other: Union[Number, np.number, PotentialSource]) -> PotentialSource:
+                other: Number | np.number | PotentialSource) -> PotentialSource:
         return self.__add__(-other)
 
     def __rsub__(self,
-                 other: Union[Number, np.number, PotentialSource]
+                 other: Number | np.number | PotentialSource
                  ) -> PotentialSource:
         return (-self).__add__(other)
 
     def __mul__(self,
-                other: Union[Number, np.number, PotentialSource]) -> PotentialSource:
+                other: Number | np.number | PotentialSource) -> PotentialSource:
         if isinstance(other, (Number, np.number)):
             other = ConstantPotential(self.toy_ctx, other)
         elif not isinstance(other, PotentialSource):
@@ -608,7 +608,7 @@ class PointSources(PotentialSource):
 
     def __init__(self,
                  toy_ctx: ToyContext, points: np.ndarray, weights: np.ndarray,
-                 center: Optional[np.ndarray] = None):
+                 center: np.ndarray | None = None):
         super().__init__(toy_ctx)
 
         self.points = points
@@ -741,7 +741,7 @@ class Product(PotentialExpressionNode):
 
 
 def multipole_expand(psource: PotentialSource,
-                     center: np.ndarray, order: Optional[int] = None,
+                     center: np.ndarray, order: int | None = None,
                      rscale: float = 1, **expn_kwargs) -> MultipoleExpansion:
     if isinstance(psource, PointSources):
         if order is None:
@@ -764,7 +764,7 @@ def multipole_expand(psource: PotentialSource,
 
 def local_expand(
         psource: PotentialSource,
-        center: np.ndarray, order: Optional[int] = None, rscale: Number = 1,
+        center: np.ndarray, order: int | None = None, rscale: Number = 1,
         **expn_kwargs) -> LocalExpansion:
     if isinstance(psource, PointSources):
         if order is None:
@@ -820,8 +820,8 @@ def logplot(fp: FieldPlotter, psource: PotentialSource, **kwargs) -> None:
 def combine_inner_outer(
         psource_inner: PotentialSource,
         psource_outer: PotentialSource,
-        radius: Optional[float],
-        center: Optional[np.ndarray] = None) -> PotentialSource:
+        radius: float | None,
+        center: np.ndarray | None = None) -> PotentialSource:
     if center is None:
         center = psource_inner.center
     if radius is None:
@@ -835,7 +835,7 @@ def combine_inner_outer(
 
 def combine_halfspace(psource_pos: PotentialSource,
                       psource_neg: PotentialSource, axis: int,
-                      center: Optional[np.ndarray] = None) -> PotentialSource:
+                      center: np.ndarray | None = None) -> PotentialSource:
     if center is None:
         center = psource_pos.center
 
@@ -849,8 +849,8 @@ def combine_halfspace_and_outer(
         psource_pos: PotentialSource,
         psource_neg: PotentialSource,
         psource_outer: PotentialSource,
-        axis: int, radius: Optional[Number] = None,
-        center: Optional[np.ndarray] = None) -> PotentialSource:
+        axis: int, radius: Number | None = None,
+        center: np.ndarray | None = None) -> PotentialSource:
 
     if center is None:
         center = psource_pos.center
@@ -863,7 +863,7 @@ def combine_halfspace_and_outer(
 
 
 def l_inf(psource: PotentialSource, radius: float,
-          center: Optional[np.ndarray] = None, npoints: int = 100,
+          center: np.ndarray | None = None, npoints: int = 100,
           debug: bool = False) -> np.number:
     if center is None:
         center = psource.center
