@@ -449,7 +449,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
     def loopy_preprocess_multipole(self, tgt_expansion, src_expansion,
             result_dtype):
 
-        circulant_matrix_mis, _, max_mi = \
+        _circulant_matrix_mis, _, max_mi = \
             self._translation_classes_dependent_data_mis(tgt_expansion,
                 src_expansion)
 
@@ -564,7 +564,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
 
     def loopy_postprocess_local(self, tgt_expansion, src_expansion,
             result_dtype):
-        circulant_matrix_mis, needed_vector_terms, _ = \
+        circulant_matrix_mis, _needed_vector_terms, _ = \
             self._translation_classes_dependent_data_mis(tgt_expansion,
                 src_expansion)
         circulant_matrix_ident_to_index = {ident: i for i, ident in

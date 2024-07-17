@@ -213,7 +213,7 @@ class P2P(P2PBase):
         return "p2p_apply"
 
     def get_kernel(self):
-        loopy_insns, result_names = self.get_loopy_insns_and_result_names()
+        loopy_insns, _result_names = self.get_loopy_insns_and_result_names()
         arguments = [
                 *self.get_default_src_tgt_arguments(),
                 lp.GlobalArg("strength", None,
@@ -282,7 +282,7 @@ class P2PMatrixGenerator(P2PBase):
         return 1
 
     def get_kernel(self):
-        loopy_insns, result_names = self.get_loopy_insns_and_result_names()
+        loopy_insns, _result_names = self.get_loopy_insns_and_result_names()
         arguments = (
             self.get_default_src_tgt_arguments()
             + [
@@ -349,7 +349,7 @@ class P2PMatrixSubsetGenerator(P2PBase):
         return 1
 
     def get_kernel(self):
-        loopy_insns, result_names = self.get_loopy_insns_and_result_names()
+        loopy_insns, _result_names = self.get_loopy_insns_and_result_names()
         arguments = (
             self.get_default_src_tgt_arguments()
             + [
@@ -456,7 +456,7 @@ class P2PFromCSR(P2PBase):
 
     def get_kernel(self, max_nsources_in_one_box, max_ntargets_in_one_box,
             work_items_per_group=32):
-        loopy_insns, result_names = self.get_loopy_insns_and_result_names()
+        loopy_insns, _result_names = self.get_loopy_insns_and_result_names()
         arguments = [
                 *self.get_default_src_tgt_arguments(),
                 lp.GlobalArg("box_target_starts",

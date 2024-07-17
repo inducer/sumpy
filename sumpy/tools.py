@@ -188,7 +188,7 @@ def build_matrix(op, dtype=None, shape=None):
     dtype = dtype or op.dtype
     from pytools import ProgressBar
     shape = shape or op.shape
-    rows, cols = shape
+    _rows, cols = shape
     pb = ProgressBar("matrix", cols)
     mat = np.zeros(shape, dtype)
 

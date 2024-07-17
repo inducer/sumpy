@@ -93,7 +93,7 @@ def test_p2p(actx_factory, exclude_self):
         extra_kwargs["target_to_source"] = (
             actx.from_numpy(np.arange(n, dtype=np.int32)))
 
-    evt, (potential, x_derivative) = knl(
+    _evt, (potential, _x_derivative) = knl(
             actx.queue,
             actx.from_numpy(targets),
             actx.from_numpy(sources),
@@ -192,7 +192,7 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
         kernels=source_kernels,
         strength_usage=[0, 1])
 
-    evt, (mpoles,) = p2e(actx.queue,
+    _evt, (mpoles,) = p2e(actx.queue,
             source_boxes=source_boxes,
             box_source_starts=box_source_starts,
             box_source_counts_nonchild=box_source_counts_nonchild,
@@ -217,7 +217,7 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
         p2e = P2EFromSingleBox(actx.context, expn,
             kernels=[source_kernel], strength_usage=[i])
 
-        evt, (mpoles,) = p2e(actx.queue,
+        _evt, (mpoles,) = p2e(actx.queue,
             source_boxes=source_boxes,
             box_source_starts=box_source_starts,
             box_source_counts_nonchild=box_source_counts_nonchild,
@@ -353,7 +353,7 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
 
         # {{{ apply p2e
 
-        evt, (mpoles,) = p2e(actx.queue,
+        _evt, (mpoles,) = p2e(actx.queue,
                 source_boxes=source_boxes,
                 box_source_starts=box_source_starts,
                 box_source_counts_nonchild=box_source_counts_nonchild,
@@ -375,7 +375,7 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
         box_target_counts_nonchild = (
             actx.from_numpy(np.array([ntargets], dtype=np.int32)))
 
-        evt, (pot, grad_x, ) = e2p(
+        _evt, (pot, grad_x, ) = e2p(
                 actx.queue,
                 src_expansions=mpoles,
                 src_base_ibox=0,
@@ -393,7 +393,7 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
 
         # {{{ compute (direct) reference solution
 
-        evt, (pot_direct, grad_x_direct, ) = p2p(
+        _evt, (pot_direct, grad_x_direct, ) = p2p(
                 actx.queue,
                 targets, sources, (strengths,),
                 **extra_source_kwargs)

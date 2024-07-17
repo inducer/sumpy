@@ -92,7 +92,7 @@ def test_direct_qbx_vs_eigval(actx_factory, expn_class, visualize=False):
         expansion_radii = actx.from_numpy(radius * np.ones(n))
         strengths = (actx.from_numpy(sigma * h),)
 
-        evt, (result_qbx,) = lpot(
+        _evt, (result_qbx,) = lpot(
                 actx.queue,
                 targets, sources, centers, strengths,
                 expansion_radii=expansion_radii)
@@ -163,11 +163,11 @@ def test_direct_qbx_vs_eigval_with_tgt_deriv(
         expansion_radii = actx.from_numpy(radius * np.ones(n))
         strengths = (actx.from_numpy(sigma * h),)
 
-        evt, (result_qbx_dx,) = lpot_dx(
+        _evt, (result_qbx_dx,) = lpot_dx(
                 actx.queue,
                 targets, sources, centers, strengths,
                 expansion_radii=expansion_radii)
-        evt, (result_qbx_dy,) = lpot_dy(
+        _evt, (result_qbx_dy,) = lpot_dy(
                 actx.queue,
                 targets, sources, centers, strengths,
                 expansion_radii=expansion_radii)

@@ -187,7 +187,7 @@ def draw_pot_figure(aspect_ratio,
 
         def apply_lpot(x):
             xovsmp = np.dot(fim, x)
-            evt, (y,) = lpot(actx.queue,
+            _evt, (y,) = lpot(actx.queue,
                     sources,
                     ovsmp_sources,
                     actx.from_numpy(centers),
@@ -199,7 +199,7 @@ def draw_pot_figure(aspect_ratio,
 
         op = LinearOperator((nsrc, nsrc), apply_lpot)
         mat = build_matrix(op, dtype=np.complex128)
-        w, v = la.eig(mat)
+        w, _v = la.eig(mat)
         plt.plot(w.real, "o-")
         #import sys; sys.exit(0)
         return
@@ -212,7 +212,7 @@ def draw_pot_figure(aspect_ratio,
     density = np.cos(mode_nr*2*np.pi*native_t).astype(np.complex128)
     strength = actx.from_numpy(native_curve.speed * native_weights * density)
 
-    evt, (vol_pot,) = p2p(actx.queue,
+    _evt, (vol_pot,) = p2p(actx.queue,
             targets,
             sources,
             [strength], **volpot_kwargs)
@@ -222,7 +222,7 @@ def draw_pot_figure(aspect_ratio,
     ovsmp_strength = actx.from_numpy(
         ovsmp_curve.speed * ovsmp_weights * ovsmp_density)
 
-    evt, (curve_pot,) = lpot(actx.queue,
+    _evt, (curve_pot,) = lpot(actx.queue,
             sources,
             ovsmp_sources,
             actx.from_numpy(centers),
