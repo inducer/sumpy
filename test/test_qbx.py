@@ -148,7 +148,7 @@ def test_direct_qbx_vs_eigval_with_tgt_deriv(
         unit_circle = np.array([unit_circle.real, unit_circle.imag])
 
         sigma = np.cos(mode_nr * t)
-        #eigval = 1/(2*mode_nr)
+        # eigval = 1/(2*mode_nr)
         eigval = 0.5
 
         result_ref = eigval * sigma

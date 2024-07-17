@@ -193,7 +193,7 @@ class SymbolicAssignmentCollection:
         #   Uses maxima to verify.
         # - sym.cse: The sympy thing.
         # - sumpy.cse.cse: Based on sympy, designed to go faster.
-        #from sumpy.symbolic import checked_cse
+        # from sumpy.symbolic import checked_cse
 
         from sumpy.cse import cse
         new_assignments, new_exprs = cse(assign_exprs + extra_exprs,

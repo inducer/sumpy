@@ -26,9 +26,6 @@ extend-ignore = [
     "UP007", # updated annotations due to __future__ import
     "UP031", # use f-strings instead of %
     "UP032", # use f-strings instead of .format
-
-    # TODO
-    "E265",  # comment format
 ]
 
 [tool.ruff.lint.flake8-quotes]
