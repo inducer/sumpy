@@ -473,8 +473,8 @@ class KernelCacheMixin:
         logger.info("%s: kernel cache miss", self.name)
         if CACHING_ENABLED and not (
                 NO_CACHE_KERNELS and self.name in NO_CACHE_KERNELS):
-            logger.info("{}: kernel cache miss [key={}]".format(
-                self.name, cache_key))
+            logger.info("%s: kernel cache miss [key=%d]",
+                self.name, cache_key)
 
         from pytools import MinRecursionLimit
         with MinRecursionLimit(3000):
@@ -666,8 +666,8 @@ def to_complex_dtype(dtype):
     np_type = np.dtype(dtype).type
     try:
         return to_complex_type_dict[np_type]
-    except KeyError:
-        raise RuntimeError(f"Unknown dtype: {dtype}")
+    except KeyError as err:
+        raise RuntimeError(f"Unknown dtype: {dtype}") from err
 
 
 @dataclass(frozen=True)

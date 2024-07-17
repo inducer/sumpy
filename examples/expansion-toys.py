@@ -29,9 +29,10 @@ def main():
             # HelmholtzKernel(2), extra_kernel_kwargs={"k": 0.3},
             )
 
+    rng = np.random.default_rng()
     pt_src = t.PointSources(
             tctx,
-            np.random.rand(2, 50) - 0.5,
+            rng.uniform(size=(2, 50)) - 0.5,
             np.ones(50))
 
     fp = FieldPlotter([3, 0], extent=8)

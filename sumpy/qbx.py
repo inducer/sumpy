@@ -210,7 +210,8 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
                     ["isrc_outer", f"{itgt_name}_inner"])
         else:
             from warnings import warn
-            warn(f"don't know how to tune layer potential computation for '{dev}'")
+            warn(f"don't know how to tune layer potential computation for '{dev}'",
+                 stacklevel=1)
             loopy_knl = lp.split_iname(loopy_knl, itgt_name, 128, outer_tag="g.0")
         loopy_knl = self._allow_redundant_execution_of_knl_scaling(loopy_knl)
 
@@ -574,7 +575,7 @@ def find_jump_term(kernel, arg_provider):
         elif tgt_count == 1:
             from warnings import warn
             warn("jump terms for mixed derivatives (1 src+1 tgt) only available "
-                    "for the double-layer potential")
+                    "for the double-layer potential", stacklevel=1)
             i, = tgt_derivatives
             assert isinstance(i, int)
             return (
