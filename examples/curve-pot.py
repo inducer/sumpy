@@ -201,7 +201,7 @@ def draw_pot_figure(aspect_ratio,
         mat = build_matrix(op, dtype=np.complex128)
         w, _v = la.eig(mat)
         plt.plot(w.real, "o-")
-        #import sys; sys.exit(0)
+        # import sys; sys.exit(0)
         return
 
         # }}}
