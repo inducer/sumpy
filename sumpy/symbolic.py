@@ -34,12 +34,15 @@ __doc__ = """
 """
 
 
-import numpy as np
-from pymbolic.mapper import IdentityMapper as IdentityMapperBase
-import pymbolic.primitives as prim
+import logging
 import math
 
-import logging
+import numpy as np
+
+import pymbolic.primitives as prim
+from pymbolic.mapper import IdentityMapper as IdentityMapperBase
+
+
 logger = logging.getLogger(__name__)
 
 USE_SYMENGINE = False
@@ -85,14 +88,18 @@ _find_symbolic_backend()
 
 if USE_SYMENGINE:
     import symengine as sym
+
     from pymbolic.interop.symengine import (
         PymbolicToSymEngineMapper as PymbolicToSympyMapperBase,
-        SymEngineToPymbolicMapper as SympyToPymbolicMapperBase)
+        SymEngineToPymbolicMapper as SympyToPymbolicMapperBase,
+    )
 else:
     import sympy as sym
+
     from pymbolic.interop.sympy import (
         PymbolicToSympyMapper as PymbolicToSympyMapperBase,
-        SympyToPymbolicMapper as SympyToPymbolicMapperBase)
+        SympyToPymbolicMapper as SympyToPymbolicMapperBase,
+    )
 
 # Symbolic API common to SymEngine and sympy.
 # Before adding a function here, make sure it's present in both modules.

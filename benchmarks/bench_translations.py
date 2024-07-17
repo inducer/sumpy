@@ -1,18 +1,24 @@
+import logging
+
 import numpy as np
 
 from pyopencl.tools import (  # noqa
-        pytest_generate_tests_for_pyopencl as pytest_generate_tests)
+    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
+)
 
-from sumpy.expansion.multipole import (
-        VolumeTaylorMultipoleExpansion, H2DMultipoleExpansion,
-        LinearPDEConformingVolumeTaylorMultipoleExpansion)
 from sumpy.expansion.local import (
-        VolumeTaylorLocalExpansion, H2DLocalExpansion,
-        LinearPDEConformingVolumeTaylorLocalExpansion)
+    H2DLocalExpansion,
+    LinearPDEConformingVolumeTaylorLocalExpansion,
+    VolumeTaylorLocalExpansion,
+)
+from sumpy.expansion.multipole import (
+    H2DMultipoleExpansion,
+    LinearPDEConformingVolumeTaylorMultipoleExpansion,
+    VolumeTaylorMultipoleExpansion,
+)
+from sumpy.kernel import HelmholtzKernel, LaplaceKernel
 
-from sumpy.kernel import LaplaceKernel, HelmholtzKernel
 
-import logging
 logger = logging.getLogger(__name__)
 
 import pymbolic.mapper.flop_counter

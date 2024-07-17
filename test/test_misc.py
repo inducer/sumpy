@@ -20,39 +20,47 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import pytest
+import logging
 import sys
 from dataclasses import dataclass
 from typing import Any, Callable
 
 import numpy as np
 import numpy.linalg as la
+import pytest
 
 from arraycontext import pytest_generate_tests_for_array_contexts
-from sumpy.array_context import (                                 # noqa: F401
-        PytestPyOpenCLArrayContextFactory, _acf)
 
-import sumpy.toys as t
 import sumpy.symbolic as sym
-
+import sumpy.toys as t
+from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
+from sumpy.expansion import (
+    FullExpansionTermsWrangler,
+    LinearPDEBasedExpansionTermsWrangler,
+)
+from sumpy.expansion.diff_op import (
+    as_scalar_pde,
+    concat,
+    curl,
+    diff,
+    divergence,
+    gradient,
+    laplacian,
+    make_identity_diff_op,
+)
 from sumpy.kernel import (
-    LaplaceKernel,
-    HelmholtzKernel,
     BiharmonicKernel,
-    YukawaKernel,
+    ElasticityKernel,
+    ExpressionKernel,
+    HelmholtzKernel,
+    LaplaceKernel,
+    LineOfCompressionKernel,
     StokesletKernel,
     StressletKernel,
-    ElasticityKernel,
-    LineOfCompressionKernel,
-    ExpressionKernel)
-from sumpy.expansion.diff_op import (
-    make_identity_diff_op, concat, as_scalar_pde, diff,
-    gradient, divergence, laplacian, curl)
+    YukawaKernel,
+)
 
-from sumpy.expansion import (FullExpansionTermsWrangler,
-    LinearPDEBasedExpansionTermsWrangler)
 
-import logging
 logger = logging.getLogger(__name__)
 
 pytest_generate_tests = pytest_generate_tests_for_array_contexts([
@@ -125,6 +133,7 @@ def test_pde_check_kernels(actx_factory, knl_info, order=5):
             np.ones(50))
 
     from pytools.convergence import EOCRecorder
+
     from sumpy.point_calculus import CalculusPatch
     eoc_rec = EOCRecorder()
 
@@ -147,8 +156,9 @@ def test_pde_check_kernels(actx_factory, knl_info, order=5):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_pde_check(dim, order=4):
-    from sumpy.point_calculus import CalculusPatch
     from pytools.convergence import EOCRecorder
+
+    from sumpy.point_calculus import CalculusPatch
 
     for iaxis in range(dim):
         eoc_rec = EOCRecorder()
@@ -296,7 +306,7 @@ def test_toy_p2e2e2p(actx_factory, case):
     src = case.source.reshape(dim, -1)
     tgt = case.target.reshape(dim, -1)
 
-    from pymbolic import parse, evaluate
+    from pymbolic import evaluate, parse
     case_conv_factor = evaluate(parse(case.conv_factor), {
             "s": case.source,
             "c1": case.center1,
@@ -373,7 +383,7 @@ def test_cse_matvec():
 # {{{ test_diff_op_stokes
 
 def test_diff_op_stokes():
-    from sumpy.symbolic import symbols, Function
+    from sumpy.symbolic import Function, symbols
     diff_op = make_identity_diff_op(3, 4)
     u = diff_op[:3]
     p = diff_op[3]
@@ -515,9 +525,10 @@ def test_weird_kernel(pde):
         def get_pde_as_diff_op(self):
             return pde
 
-    from sumpy.expansion import LinearPDEConformingVolumeTaylorExpansion
-    from operator import mul
     from functools import reduce
+    from operator import mul
+
+    from sumpy.expansion import LinearPDEConformingVolumeTaylorExpansion
 
     knl = MyKernel()
     order = 10

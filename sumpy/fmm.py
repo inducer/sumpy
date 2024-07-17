@@ -27,24 +27,35 @@ __doc__ = """Integrates :mod:`boxtree` with :mod:`sumpy`.
 """
 
 
+from typing import List, TypeVar, Union
+
+from boxtree.fmm import ExpansionWranglerInterface, TreeIndependentDataForWrangler
+
 import pyopencl as cl
 import pyopencl.array
-
 from pytools import memoize_method
-from boxtree.fmm import TreeIndependentDataForWrangler, ExpansionWranglerInterface
 
 from sumpy import (
-        P2EFromSingleBox, P2EFromCSR,
-        E2PFromSingleBox, E2PFromCSR,
-        P2PFromCSR,
-        E2EFromCSR, M2LUsingTranslationClassesDependentData,
-        E2EFromChildren, E2EFromParent,
-        M2LGenerateTranslationClassesDependentData,
-        M2LPreprocessMultipole, M2LPostprocessLocal)
-from sumpy.tools import (to_complex_dtype, AggregateProfilingEvent,
-        run_opencl_fft, get_opencl_fft_app, get_native_event)
-
-from typing import TypeVar, List, Union
+    E2EFromChildren,
+    E2EFromCSR,
+    E2EFromParent,
+    E2PFromCSR,
+    E2PFromSingleBox,
+    M2LGenerateTranslationClassesDependentData,
+    M2LPostprocessLocal,
+    M2LPreprocessMultipole,
+    M2LUsingTranslationClassesDependentData,
+    P2EFromCSR,
+    P2EFromSingleBox,
+    P2PFromCSR,
+)
+from sumpy.tools import (
+    AggregateProfilingEvent,
+    get_native_event,
+    get_opencl_fft_app,
+    run_opencl_fft,
+    to_complex_dtype,
+)
 
 
 # {{{ tree-independent data for wrangler
@@ -506,8 +517,9 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         return source_array.with_queue(source_array.queue)[self.tree.user_source_ids]
 
     def reorder_potentials(self, potentials):
-        from pytools.obj_array import obj_array_vectorize
         import numpy as np
+
+        from pytools.obj_array import obj_array_vectorize
         assert (
                 isinstance(potentials, np.ndarray)
                 and potentials.dtype.char == "O")

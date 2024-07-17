@@ -64,9 +64,11 @@ DAMAGE.
 
 # }}}
 
-from sumpy.symbolic import (
-    Basic, Mul, Add, Pow, Symbol, _coeff_isneg, Derivative, Subs)
 from sympy.utilities.iterables import numbered_symbols
+
+from sumpy.symbolic import Add, Basic, Derivative, Mul, Pow, Subs, Symbol, _coeff_isneg
+
+
 try:
     from sympy.utilities.iterables import iterable
 except ImportError:

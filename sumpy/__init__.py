@@ -21,15 +21,23 @@ THE SOFTWARE.
 """
 
 import os
-from sumpy.p2p import P2P, P2PFromCSR
-from sumpy.p2e import P2EFromSingleBox, P2EFromCSR
-from sumpy.e2p import E2PFromSingleBox, E2PFromCSR
-from sumpy.e2e import (E2EFromCSR, E2EFromChildren, E2EFromParent,
-    M2LUsingTranslationClassesDependentData,
-    M2LGenerateTranslationClassesDependentData, M2LPreprocessMultipole,
-    M2LPostprocessLocal)
-from sumpy.version import VERSION_TEXT
+
 from pytools.persistent_dict import WriteOncePersistentDict
+
+from sumpy.e2e import (
+    E2EFromChildren,
+    E2EFromCSR,
+    E2EFromParent,
+    M2LGenerateTranslationClassesDependentData,
+    M2LPostprocessLocal,
+    M2LPreprocessMultipole,
+    M2LUsingTranslationClassesDependentData,
+)
+from sumpy.e2p import E2PFromCSR, E2PFromSingleBox
+from sumpy.p2e import P2EFromCSR, P2EFromSingleBox
+from sumpy.p2p import P2P, P2PFromCSR
+from sumpy.version import VERSION_TEXT
+
 
 __all__ = [
     "P2P",

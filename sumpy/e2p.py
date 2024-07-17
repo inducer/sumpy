@@ -23,11 +23,12 @@ THE SOFTWARE.
 from abc import ABC, abstractmethod
 
 import numpy as np
-import loopy as lp
 
-from sumpy.tools import KernelCacheMixin, gather_loopy_arguments
-from sumpy.codegen import register_optimization_preambles
+import loopy as lp
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
+
+from sumpy.codegen import register_optimization_preambles
+from sumpy.tools import KernelCacheMixin, gather_loopy_arguments
 
 
 __doc__ = """
@@ -58,8 +59,10 @@ class E2PBase(KernelCacheMixin, ABC):
         if device is None:
             device = ctx.devices[0]
 
-        from sumpy.kernel import (SourceTransformationRemover,
-                TargetTransformationRemover)
+        from sumpy.kernel import (
+            SourceTransformationRemover,
+            TargetTransformationRemover,
+        )
         sxr = SourceTransformationRemover()
         txr = TargetTransformationRemover()
         expansion = expansion.with_kernel(

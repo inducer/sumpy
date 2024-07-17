@@ -21,9 +21,11 @@ THE SOFTWARE.
 """
 
 
+import logging
+
 import sumpy.symbolic as sym
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 __doc__ = """

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2017 Andreas Kloeckner
 Copyright (C) 2017 Matt Wala
@@ -25,24 +26,30 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Sequence, Union, Optional, TYPE_CHECKING
+from functools import partial
+from numbers import Number
+from typing import TYPE_CHECKING, Optional, Sequence, Union
 
 from pytools import memoize_method
-from numbers import Number
-from functools import partial
+
 from sumpy.kernel import TargetTransformationRemover
 
+
 if TYPE_CHECKING:
-    from sumpy.kernel import Kernel
-    from sumpy.visualization import FieldPlotter
     import pyopencl
 
+    from sumpy.kernel import Kernel
+    from sumpy.visualization import FieldPlotter
+
+import logging
+
 import numpy as np
+
 import loopy as lp  # noqa: F401
 import pyopencl as cl
 import pyopencl.array
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 __doc__ = """
@@ -116,8 +123,10 @@ class ToyContext:
             mpole_expn_class = \
                     expansion_factory.get_multipole_expansion_class(kernel)
         if local_expn_class is None:
-            from sumpy.expansion.m2l import (NonFFTM2LTranslationClassFactory,
-                FFTM2LTranslationClassFactory)
+            from sumpy.expansion.m2l import (
+                FFTM2LTranslationClassFactory,
+                NonFFTM2LTranslationClassFactory,
+            )
             if m2l_use_fft:
                 m2l_translation_class_factory = FFTM2LTranslationClassFactory()
             else:
@@ -297,6 +306,7 @@ def _e2p(psource, targets, e2p):
         np.array(psource.center, dtype=np.float64).reshape(toy_ctx.kernel.dim, 1))
 
     from pytools.obj_array import make_obj_array
+
     from sumpy.tools import vector_to_device
 
     coeffs = cl.array.to_device(queue, np.array([psource.coeffs]))
@@ -389,8 +399,7 @@ def _m2l(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
                 src_rscale=np.float64(psource.rscale),
                 **toy_ctx.extra_kernel_kwargs)
 
-        from sumpy.tools import (run_opencl_fft, get_opencl_fft_app,
-            get_native_event)
+        from sumpy.tools import get_native_event, get_opencl_fft_app, run_opencl_fft
 
         if toy_ctx.use_fft:
             fft_app = get_opencl_fft_app(queue, (expn_size,),
@@ -878,8 +887,8 @@ def l_inf(psource: PotentialSource, radius: float,
 # {{{ schematic visualization
 
 def draw_box(el, eh, **kwargs):
-    import matplotlib.pyplot as pt
     import matplotlib.patches as mpatches
+    import matplotlib.pyplot as pt
     from matplotlib.path import Path
 
     pathdata = [

@@ -20,20 +20,18 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import pytest
+import logging
 import sys
 
 import numpy as np
+import pytest
 
 from arraycontext import pytest_generate_tests_for_array_contexts
-from sumpy.array_context import (                                 # noqa: F401
-        PytestPyOpenCLArrayContextFactory, _acf)
 
-from sumpy.expansion.local import (
-        LineTaylorLocalExpansion,
-        VolumeTaylorLocalExpansion)
+from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
+from sumpy.expansion.local import LineTaylorLocalExpansion, VolumeTaylorLocalExpansion
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 pytest_generate_tests = pytest_generate_tests_for_array_contexts([
@@ -126,7 +124,7 @@ def test_direct_qbx_vs_eigval_with_tgt_deriv(
 
     actx = actx_factory()
 
-    from sumpy.kernel import LaplaceKernel, AxisTargetDerivative
+    from sumpy.kernel import AxisTargetDerivative, LaplaceKernel
     lknl = LaplaceKernel(2)
 
     order = 8

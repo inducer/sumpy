@@ -24,17 +24,19 @@ THE SOFTWARE.
 """
 
 
+import logging
+
 import numpy as np
+
 import loopy as lp
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
-import sumpy.symbolic as sym
-from pytools import memoize_method
 from pymbolic import parse, var
+from pytools import memoize_method
 
-from sumpy.tools import (
-        KernelComputation, KernelCacheMixin, is_obj_array_like)
+import sumpy.symbolic as sym
+from sumpy.tools import KernelCacheMixin, KernelComputation, is_obj_array_like
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -503,11 +505,12 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
 
 def find_jump_term(kernel, arg_provider):
     from sumpy.kernel import (
-            AxisSourceDerivative,
-            AxisTargetDerivative,
-            DirectionalSourceDerivative,
-            DirectionalTargetDerivative,
-            DerivativeBase)
+        AxisSourceDerivative,
+        AxisTargetDerivative,
+        DerivativeBase,
+        DirectionalSourceDerivative,
+        DirectionalTargetDerivative,
+    )
 
     tgt_derivatives = []
     src_derivatives = []

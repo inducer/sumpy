@@ -23,6 +23,8 @@ THE SOFTWARE.
 # {{{ find install- or run-time git revision
 
 import os
+
+
 if os.environ.get("AKPYTHON_EXEC_FROM_WITHIN_WITHIN_SETUP_PY") is not None:
     # We're just being exec'd by setup.py. We can't import anything.
     _git_rev = None

@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 
 import os
-from setuptools import setup
 from pathlib import Path
+
+from setuptools import setup
+
 
 ver_dic = {}
 version_file = open("sumpy/version.py")
@@ -22,14 +24,14 @@ def find_git_revision(tree_root):
     # Keep this routine self-contained so that it can be copy-pasted into
     # setup.py.
 
-    from os.path import join, exists, abspath
+    from os.path import abspath, exists, join
 
     tree_root = abspath(tree_root)
 
     if not exists(join(tree_root, ".git")):
         return None
 
-    from subprocess import Popen, PIPE, STDOUT
+    from subprocess import PIPE, STDOUT, Popen
 
     p = Popen(
         ["git", "rev-parse", "HEAD"],

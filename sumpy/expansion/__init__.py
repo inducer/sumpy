@@ -20,19 +20,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import logging
 from abc import ABC, abstractmethod
-from typing import (
-        Any, ClassVar, Dict, Hashable, List, Optional, Sequence, Tuple, Type)
+from typing import Any, ClassVar, Dict, Hashable, List, Optional, Sequence, Tuple, Type
 
-from pytools import memoize_method
 import loopy as lp
+import pymbolic.primitives as prim
+from pytools import memoize_method
 
 import sumpy.symbolic as sym
 from sumpy.kernel import Kernel
 from sumpy.tools import add_mi
-import pymbolic.primitives as prim
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -284,8 +284,8 @@ class ExpansionTermsWrangler(ABC):
         Returns identifiers for every coefficient in the complete expansion.
         """
         from pytools import (
-                generate_nonnegative_integer_tuples_summing_to_at_most
-                as gnitstam)
+            generate_nonnegative_integer_tuples_summing_to_at_most as gnitstam,
+        )
 
         res = sorted(gnitstam(self.order, self.dim), key=sum)
 
@@ -948,8 +948,9 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
         :returns: a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
         from sumpy.expansion.local import (
-                LinearPDEConformingVolumeTaylorLocalExpansion,
-                VolumeTaylorLocalExpansion)
+            LinearPDEConformingVolumeTaylorLocalExpansion,
+            VolumeTaylorLocalExpansion,
+        )
         try:
             base_kernel.get_base_kernel().get_pde_as_diff_op()
             return LinearPDEConformingVolumeTaylorLocalExpansion
@@ -961,8 +962,9 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
         :returns: a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
         from sumpy.expansion.multipole import (
-                LinearPDEConformingVolumeTaylorMultipoleExpansion,
-                VolumeTaylorMultipoleExpansion)
+            LinearPDEConformingVolumeTaylorMultipoleExpansion,
+            VolumeTaylorMultipoleExpansion,
+        )
         try:
             base_kernel.get_base_kernel().get_pde_as_diff_op()
             return LinearPDEConformingVolumeTaylorMultipoleExpansion

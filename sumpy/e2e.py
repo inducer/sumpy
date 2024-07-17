@@ -20,19 +20,21 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import logging
 from abc import ABC, abstractmethod
 
 import numpy as np
-import loopy as lp
-import sumpy.symbolic as sym
-import pymbolic
 
+import loopy as lp
+import pymbolic
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
-from sumpy.tools import KernelCacheMixin, to_complex_dtype
-from sumpy.codegen import register_optimization_preambles
 from pytools import memoize_method
 
-import logging
+import sumpy.symbolic as sym
+from sumpy.codegen import register_optimization_preambles
+from sumpy.tools import KernelCacheMixin, to_complex_dtype
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -66,16 +68,20 @@ class E2EBase(KernelCacheMixin, ABC):
             device = ctx.devices[0]
 
         if src_expansion is tgt_expansion:
-            from sumpy.kernel import (TargetTransformationRemover,
-                    SourceTransformationRemover)
+            from sumpy.kernel import (
+                SourceTransformationRemover,
+                TargetTransformationRemover,
+            )
             tgt_expansion = src_expansion = src_expansion.with_kernel(
                     SourceTransformationRemover()(
                         TargetTransformationRemover()(src_expansion.kernel)))
 
         else:
 
-            from sumpy.kernel import (TargetTransformationRemover,
-                    SourceTransformationRemover)
+            from sumpy.kernel import (
+                SourceTransformationRemover,
+                TargetTransformationRemover,
+            )
             src_expansion = src_expansion.with_kernel(
                     SourceTransformationRemover()(
                         TargetTransformationRemover()(src_expansion.kernel)))

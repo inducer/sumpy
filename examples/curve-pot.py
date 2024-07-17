@@ -3,6 +3,7 @@ import numpy.linalg as la
 
 import pyopencl as cl
 
+
 try:
     import matplotlib.pyplot as plt
     USE_MATPLOTLIB = True
@@ -16,6 +17,8 @@ except ImportError:
     USE_MAYAVI = False
 
 import logging
+
+
 logging.basicConfig(level=logging.INFO)
 
 
@@ -72,9 +75,9 @@ def draw_pot_figure(aspect_ratio,
 
     # {{{ make p2p kernel calculator
 
-    from sumpy.p2p import P2P
-    from sumpy.kernel import LaplaceKernel, HelmholtzKernel
     from sumpy.expansion.local import H2DLocalExpansion, LineTaylorLocalExpansion
+    from sumpy.kernel import HelmholtzKernel, LaplaceKernel
+    from sumpy.p2p import P2P
     if helmholtz_k:
         if isinstance(helmholtz_k, complex):
             knl = HelmholtzKernel(2, allow_evanescent=True)
@@ -178,8 +181,9 @@ def draw_pot_figure(aspect_ratio,
         from fourier import make_fourier_interp_matrix
         fim = make_fourier_interp_matrix(novsmp, nsrc)
 
-        from sumpy.tools import build_matrix
         from scipy.sparse.linalg import LinearOperator
+
+        from sumpy.tools import build_matrix
 
         def apply_lpot(x):
             xovsmp = np.dot(fim, x)

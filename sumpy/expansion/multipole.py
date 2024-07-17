@@ -20,18 +20,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import logging
 import math
 from abc import abstractmethod
 
 import sumpy.symbolic as sym
 from sumpy.expansion import (
     ExpansionBase,
+    LinearPDEConformingVolumeTaylorExpansion,
     VolumeTaylorExpansion,
     VolumeTaylorExpansionMixin,
-    LinearPDEConformingVolumeTaylorExpansion)
-from sumpy.tools import mi_set_axis, add_to_sac, mi_power, mi_factorial
+)
+from sumpy.tools import add_to_sac, mi_factorial, mi_power, mi_set_axis
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -418,7 +420,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
         if kernel is None:
             kernel = self.kernel
 
-        from sumpy.symbolic import sym_real_norm_2, BesselJ
+        from sumpy.symbolic import BesselJ, sym_real_norm_2
         avec_len = sym_real_norm_2(avec)
 
         arg_scale = self.get_bessel_arg_scaling()
@@ -437,7 +439,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
         if not self.use_rscale:
             rscale = 1
 
-        from sumpy.symbolic import sym_real_norm_2, Hankel1
+        from sumpy.symbolic import Hankel1, sym_real_norm_2
         bvec_len = sym_real_norm_2(bvec)
         target_angle_rel_center = sym.atan2(bvec[1], bvec[0])
 
@@ -461,7 +463,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
             src_rscale = 1
             tgt_rscale = 1
 
-        from sumpy.symbolic import sym_real_norm_2, BesselJ
+        from sumpy.symbolic import BesselJ, sym_real_norm_2
         dvec_len = sym_real_norm_2(dvec)
         new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
 
