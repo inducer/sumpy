@@ -29,7 +29,6 @@ extend-ignore = [
 
     # TODO
     "E265",  # comment format
-    "F841",  # unused local
 ]
 
 [tool.ruff.lint.flake8-quotes]

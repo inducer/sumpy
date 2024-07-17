@@ -241,7 +241,7 @@ def _test_sumpy_fmm(actx_factory, knl, local_expn_class, mpole_expn_class,
 
         from sumpy import P2P
         p2p = P2P(actx.context, target_kernels, exclude_self=False)
-        evt, (ref_pot,) = p2p(actx.queue, targets, sources, (weights,),
+        _evt, (ref_pot,) = p2p(actx.queue, targets, sources, (weights,),
                 **extra_kwargs)
 
         pot = actx.to_numpy(pot)
@@ -495,7 +495,7 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory, use_fft, visualize=False)
     from boxtree.fmm import drive_fmm
 
     timing_data = {}
-    pot, = drive_fmm(wrangler, (weights,), timing_data=timing_data)
+    _pot, = drive_fmm(wrangler, (weights,), timing_data=timing_data)
     logger.info("timing_data:\n%s", timing_data)
 
     assert timing_data
@@ -553,7 +553,7 @@ def test_sumpy_fmm_exclude_self(actx_factory, visualize=False):
 
     from sumpy import P2P
     p2p = P2P(actx.context, target_kernels, exclude_self=True)
-    evt, (ref_pot,) = p2p(actx.queue, sources, sources, (weights,),
+    _evt, (ref_pot,) = p2p(actx.queue, sources, sources, (weights,),
             **self_extra_kwargs)
 
     pot = actx.to_numpy(pot)

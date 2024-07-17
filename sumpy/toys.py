@@ -273,7 +273,7 @@ def _p2e(psource, center, rscale, order, p2e, expn_class, expn_kwargs):
         queue,
         np.array(center, dtype=np.float64).reshape(toy_ctx.kernel.dim, 1))
 
-    evt, (coeffs,) = p2e(toy_ctx.queue,
+    _evt, (coeffs,) = p2e(toy_ctx.queue,
             source_boxes=source_boxes,
             box_source_starts=box_source_starts,
             box_source_counts_nonchild=box_source_counts_nonchild,
@@ -310,7 +310,7 @@ def _e2p(psource, targets, e2p):
     from sumpy.tools import vector_to_device
 
     coeffs = cl.array.to_device(queue, np.array([psource.coeffs]))
-    evt, (pot,) = e2p(
+    _evt, (pot,) = e2p(
             toy_ctx.queue,
             src_expansions=coeffs,
             src_base_ibox=0,
@@ -367,7 +367,7 @@ def _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
         **toy_ctx.extra_kernel_kwargs,
     }
 
-    evt, (to_coeffs,) = e2e(**args)
+    _evt, (to_coeffs,) = e2e(**args)
 
     return expn_class(
             toy_ctx, to_center, to_rscale, to_order, to_coeffs[1].get(queue),
@@ -617,7 +617,7 @@ class PointSources(PotentialSource):
 
     def eval(self, targets: np.ndarray) -> np.ndarray:
         queue = self.toy_ctx.queue
-        evt, (potential,) = self.toy_ctx.get_p2p()(
+        _evt, (potential,) = self.toy_ctx.get_p2p()(
                 queue,
                 cl.array.to_device(queue, targets),
                 cl.array.to_device(queue, self.points),

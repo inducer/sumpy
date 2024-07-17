@@ -239,7 +239,7 @@ def test_dont_cse_subs():
     f = sym.Function("f")
     g = sym.Function("g")
 
-    name_val, (expr,) = cse(f(x+y).diff(x) + g(x+y).diff(x))
+    name_val, (_expr,) = cse(f(x+y).diff(x) + g(x+y).diff(x))
 
     assert name_val == []
 
@@ -353,7 +353,7 @@ def test_cse_indexed():
 
     expr1 = (y[i+1]-y[i])/(x[i+1]-x[i])
     expr2 = 1/(x[i+1]-x[i])
-    replacements, reduced_exprs = cse([expr1, expr2])
+    replacements, _reduced_exprs = cse([expr1, expr2])
     assert len(replacements) > 0
 
 # }}}
