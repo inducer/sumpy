@@ -1127,10 +1127,7 @@ class DirectionalDerivative(DerivativeBase):
                 self.inner_kernel)
 
     def __repr__(self):
-        return "{}({!r}, {})".format(
-                type(self).__name__,
-                self.inner_kernel,
-                self.dir_vec_name)
+        return f"{type(self).__name__}({self.inner_kernel!r}, {self.dir_vec_name})"
 
 
 class DirectionalTargetDerivative(DirectionalDerivative):
@@ -1325,8 +1322,7 @@ class KernelMapper:
         try:
             method = getattr(self, kernel.mapper_method)
         except AttributeError as err:
-            raise RuntimeError("{} cannot handle {}".format(
-                type(self), type(kernel))) from err
+            raise RuntimeError(f"{type(self)} cannot handle {type(kernel)}") from err
         else:
             return method(kernel)
 

@@ -235,11 +235,11 @@ class E2EFromCSR(E2EBase):
                         <> src_center[idim] = centers[idim, src_ibox] {dup=idim}
                         <> d[idim] = tgt_center[idim] - src_center[idim] \
                             {dup=idim}
-                        """] + ["""
-                        <> src_coeff{coeffidx} = \
-                            src_expansions[src_ibox - src_base_ibox, {coeffidx}] \
+                        """] + [f"""
+                        <> src_coeff{i} = \
+                            src_expansions[src_ibox - src_base_ibox, {i}] \
                             {{dep=read_src_ibox}}
-                        """.format(coeffidx=i) for i in range(ncoeff_src)] + [
+                        """ for i in range(ncoeff_src)] + [
                         ] + self.get_translation_loopy_insns() + ["""
                     end
 
@@ -912,18 +912,18 @@ class E2EFromChildren(E2EBase):
                             <> d[idim] = tgt_center[idim] - src_center[idim] \
                                     {dup=idim}
 
-                            """] + ["""
+                            """] + [f"""
                             <> src_coeff{i} = \
                                 src_expansions[src_ibox - src_base_ibox, {i}] \
                                 {{id_prefix=read_coeff,dep=read_src_ibox}}
-                            """.format(i=i) for i in range(ncoeffs_src)] + [
-                            ] + loopy_insns + ["""
+                            """ for i in range(ncoeffs_src)] + [
+                            ] + loopy_insns + [f"""
                             tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] = \
                                 tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] \
                                 + coeff{i} \
                                 {{id_prefix=write_expn,dep=compute_coeff*,
                                     nosync=read_coeff*}}
-                            """.format(i=i) for i in range(ncoeffs_tgt)] + ["""
+                            """ for i in range(ncoeffs_tgt)] + ["""
                         end
                     end
                 end
@@ -1021,18 +1021,18 @@ class E2EFromParent(E2EBase):
                     <> src_center[idim] = centers[idim, src_ibox] {dup=idim}
                     <> d[idim] = tgt_center[idim] - src_center[idim] {dup=idim}
 
-                    """] + ["""
+                    """] + [f"""
                     <> src_coeff{i} = \
                         src_expansions[src_ibox - src_base_ibox, {i}] \
                         {{id_prefix=read_expn,dep=read_src_ibox}}
-                    """.format(i=i) for i in range(ncoeffs_src)] + [
+                    """ for i in range(ncoeffs_src)] + [
 
-                    ] + self.get_translation_loopy_insns() + ["""
+                    ] + self.get_translation_loopy_insns() + [f"""
 
                     tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] = \
                         tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] + coeff{i} \
                         {{id_prefix=write_expn,nosync=read_expn*}}
-                    """.format(i=i) for i in range(ncoeffs_tgt)] + ["""
+                    """ for i in range(ncoeffs_tgt)] + ["""
                 end
                 """],
                 [
