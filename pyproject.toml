@@ -15,7 +15,7 @@ extend-select = [
     "Q",   # flake8-quotes
     "UP",  # pyupgrade
     "RUF", # ruff
-    # "W",   # pycodestyle
+    "W",   # pycodestyle
 ]
 extend-ignore = [
     "C90",  # McCabe complexity
