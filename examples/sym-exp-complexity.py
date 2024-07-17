@@ -1,16 +1,17 @@
 import numpy as np
-import loopy as lp
 
+import loopy as lp
 import pyopencl as cl
 
-from sumpy.kernel import LaplaceKernel, HelmholtzKernel
-from sumpy.expansion.local import (
-        LinearPDEConformingVolumeTaylorLocalExpansion,
-        )
-from sumpy.expansion.multipole import (
-        LinearPDEConformingVolumeTaylorMultipoleExpansion,
-        )
 from sumpy.e2e import E2EFromCSR
+from sumpy.expansion.local import (
+    LinearPDEConformingVolumeTaylorLocalExpansion,
+)
+from sumpy.expansion.multipole import (
+    LinearPDEConformingVolumeTaylorMultipoleExpansion,
+)
+from sumpy.kernel import HelmholtzKernel, LaplaceKernel
+
 
 try:
     import matplotlib.pyplot as plt

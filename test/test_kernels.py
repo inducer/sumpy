@@ -20,42 +20,46 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import pytest
+import logging
 import sys
 from functools import partial
 
 import numpy as np
 import numpy.linalg as la
+import pytest
 
-from pytools.obj_array import make_obj_array
-from pytools.convergence import PConvergenceVerifier
 from arraycontext import pytest_generate_tests_for_array_contexts
-from sumpy.array_context import (                                 # noqa: F401
-        PytestPyOpenCLArrayContextFactory, _acf)
+from pytools.convergence import PConvergenceVerifier
+from pytools.obj_array import make_obj_array
 
 import sumpy.symbolic as sym
-from sumpy.expansion.multipole import (
-    VolumeTaylorMultipoleExpansion,
-    H2DMultipoleExpansion,
-    VolumeTaylorMultipoleExpansionBase,
-    LinearPDEConformingVolumeTaylorMultipoleExpansion)
-from sumpy.expansion.local import (
-    VolumeTaylorLocalExpansion,
-    H2DLocalExpansion,
-    LinearPDEConformingVolumeTaylorLocalExpansion)
-from sumpy.expansion.m2l import (NonFFTM2LTranslationClassFactory,
-    FFTM2LTranslationClassFactory)
-from sumpy.kernel import (
-    LaplaceKernel,
-    HelmholtzKernel,
-    BiharmonicKernel,
-    StokesletKernel,
-    AxisTargetDerivative,
-    DirectionalSourceDerivative)
-
 import sumpy.toys as t
+from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
+from sumpy.expansion.local import (
+    H2DLocalExpansion,
+    LinearPDEConformingVolumeTaylorLocalExpansion,
+    VolumeTaylorLocalExpansion,
+)
+from sumpy.expansion.m2l import (
+    FFTM2LTranslationClassFactory,
+    NonFFTM2LTranslationClassFactory,
+)
+from sumpy.expansion.multipole import (
+    H2DMultipoleExpansion,
+    LinearPDEConformingVolumeTaylorMultipoleExpansion,
+    VolumeTaylorMultipoleExpansion,
+    VolumeTaylorMultipoleExpansionBase,
+)
+from sumpy.kernel import (
+    AxisTargetDerivative,
+    BiharmonicKernel,
+    DirectionalSourceDerivative,
+    HelmholtzKernel,
+    LaplaceKernel,
+    StokesletKernel,
+)
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 pytest_generate_tests = pytest_generate_tests_for_array_contexts([
@@ -294,7 +298,7 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
             ]
     expn = expn_class(knl, order=order)
 
-    from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P
+    from sumpy import P2P, E2PFromSingleBox, P2EFromSingleBox
     p2e = P2EFromSingleBox(actx.context, expn, kernels=[knl])
     e2p = E2PFromSingleBox(actx.context, expn, kernels=target_kernels)
     p2p = P2P(actx.context, target_kernels, exclude_self=False)

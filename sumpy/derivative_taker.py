@@ -35,15 +35,16 @@ __doc__ = """
  .. autoclass:: DifferentiatedExprDerivativeTaker
 """
 
-from pytools.tag import tag_dataclass
+import logging
+from typing import Any, Dict, Tuple
 
 import numpy as np
+
+from pytools.tag import tag_dataclass
+
 import sumpy.symbolic as sym
-from sumpy.tools import add_to_sac, add_mi
+from sumpy.tools import add_mi, add_to_sac
 
-from typing import Dict, Tuple, Any
-
-import logging
 
 logger = logging.getLogger(__name__)
 

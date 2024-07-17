@@ -9,7 +9,7 @@ extend-select = [
     "E",   # pycodestyle
     "F",   # pyflakes
     "G",   # flake8-logging-format
-    # "I",   # flake8-isort
+    "I",   # flake8-isort
     "N",   # pep8-naming
     "NPY", # numpy
     "Q",   # flake8-quotes
@@ -39,7 +39,14 @@ multiline-quotes = "double"
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
-known-local-folder = [
+known-first-party = [
     "pytools",
+    "pymbolic",
+    "arraycontext",
+    "loopy",
+    "pyopencl",
+]
+known-local-folder = [
+    "sumpy",
 ]
 lines-after-imports = 2

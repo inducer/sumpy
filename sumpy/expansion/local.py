@@ -20,6 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import logging
 import math
 from abc import abstractmethod
 
@@ -27,13 +28,14 @@ from pytools import single_valued
 
 import sumpy.symbolic as sym
 from sumpy.expansion import (
-        ExpansionBase,
-        VolumeTaylorExpansion,
-        VolumeTaylorExpansionMixin,
-        LinearPDEConformingVolumeTaylorExpansion)
+    ExpansionBase,
+    LinearPDEConformingVolumeTaylorExpansion,
+    VolumeTaylorExpansion,
+    VolumeTaylorExpansionMixin,
+)
 from sumpy.tools import add_to_sac, mi_increment_axis
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 __doc__ = """
@@ -225,7 +227,7 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
                 coeffs, rscale, sac=sac))
 
         bvec_scaled = [b*rscale**-1 for b in bvec]
-        from sumpy.tools import mi_power, mi_factorial
+        from sumpy.tools import mi_factorial, mi_power
 
         result = sum(
             coeff
@@ -490,7 +492,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         if not self.use_rscale:
             rscale = 1
 
-        from sumpy.symbolic import sym_real_norm_2, Hankel1
+        from sumpy.symbolic import Hankel1, sym_real_norm_2
 
         arg_scale = self.get_bessel_arg_scaling()
 
@@ -507,7 +509,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         if not self.use_rscale:
             rscale = 1
 
-        from sumpy.symbolic import sym_real_norm_2, BesselJ
+        from sumpy.symbolic import BesselJ, sym_real_norm_2
         bvec_len = sym_real_norm_2(bvec)
         target_angle_rel_center = sym.atan2(bvec[1], bvec[0])
 
@@ -522,7 +524,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, m2l_translation_classes_dependent_data=None):
-        from sumpy.symbolic import sym_real_norm_2, BesselJ
+        from sumpy.symbolic import BesselJ, sym_real_norm_2
 
         if not self.use_rscale:
             src_rscale = 1

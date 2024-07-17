@@ -22,9 +22,12 @@ THE SOFTWARE.
 
 import os
 from functools import partial
-import pyopencl as cl
+
 import numpy as np
 import pytest
+
+import pyopencl as cl
+
 
 # Note: Do not import mpi4py.MPI object at the module level, because OpenMPI does not
 # support recursive invocations.
@@ -60,8 +63,8 @@ def _test_against_single_rank(
     from boxtree.traversal import FMMTraversalBuilder
     traversal_builder = FMMTraversalBuilder(cl_context, well_sep_is_n_away=2)
 
-    from sumpy.kernel import LaplaceKernel
     from sumpy.expansion import DefaultExpansionFactory
+    from sumpy.kernel import LaplaceKernel
     kernel = LaplaceKernel(dims)
     expansion_factory = DefaultExpansionFactory()
     local_expansion_factory = expansion_factory.get_local_expansion_class(kernel)

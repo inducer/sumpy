@@ -48,9 +48,14 @@ class FMMLibExpansionOrderFinder:
         self.extra_order = extra_order
 
     def __call__(self, kernel, kernel_args, tree, level):
-        from pyfmmlib import (          # pylint: disable=no-name-in-module
-            l2dterms, l3dterms, h2dterms, h3dterms)
-        from sumpy.kernel import LaplaceKernel, HelmholtzKernel
+        from pyfmmlib import (  # pylint: disable=no-name-in-module
+            h2dterms,
+            h3dterms,
+            l2dterms,
+            l3dterms,
+        )
+
+        from sumpy.kernel import HelmholtzKernel, LaplaceKernel
 
         if isinstance(kernel, LaplaceKernel):
             if tree.dimensions == 2:
@@ -127,7 +132,7 @@ class SimpleExpansionOrderFinder:
         self.extra_order = extra_order
 
     def __call__(self, kernel, kernel_args, tree, level):
-        from sumpy.kernel import LaplaceKernel, HelmholtzKernel
+        from sumpy.kernel import HelmholtzKernel, LaplaceKernel
 
         assert isinstance(kernel, (LaplaceKernel, HelmholtzKernel))
 

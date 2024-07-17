@@ -22,7 +22,9 @@ THE SOFTWARE.
 
 import numpy as np
 import numpy.linalg as la
+
 from pytools import memoize_method
+
 
 __doc__ = """
 .. autoclass:: CalculusPatch
@@ -119,8 +121,9 @@ class CalculusPatch:
             a high-order interpolation basis on the :py:attr:`points`.
         """
 
+        from scipy.special import eval_chebyt  # pylint: disable=no-name-in-module
+
         from pytools import indices_in_shape
-        from scipy.special import eval_chebyt   # pylint: disable=no-name-in-module
 
         def eval_basis(ind, x):
             result = 1

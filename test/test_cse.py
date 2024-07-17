@@ -64,18 +64,22 @@ DAMAGE.
 
 # }}}
 
-import pytest
 import sys
 
+import pytest
+
 import sumpy.symbolic as sym
-from sumpy.cse import cse, preprocess_for_cse, postprocess_for_cse
+from sumpy.cse import cse, postprocess_for_cse, preprocess_for_cse
+
 
 if not sym.USE_SYMENGINE:
-    from sympy.simplify.cse_opts import sub_pre, sub_post
     from sympy.functions.special.hyper import meijerg
     from sympy.simplify import cse_opts
+    from sympy.simplify.cse_opts import sub_post, sub_pre
 
 import logging
+
+
 logger = logging.getLogger(__name__)
 
 w, x, y, z = sym.symbols("w,x,y,z")
@@ -287,8 +291,8 @@ def test_pow_invpow():
 @sympyonly
 def test_issue_4499():
     # previously, this gave 16 constants
+    from sympy import S, Tuple
     from sympy.abc import a, b
-    from sympy import Tuple, S
 
     B = sym.Function("B")   # noqa: N806
     G = sym.Function("G")   # noqa: N806
@@ -341,7 +345,7 @@ def test_issue_6169():
 
 @sympyonly
 def test_cse_indexed():
-    from sympy import IndexedBase, Idx
+    from sympy import Idx, IndexedBase
     len_y = 5
     y = IndexedBase("y", shape=(len_y,))
     x = IndexedBase("x", shape=(len_y,))
@@ -359,7 +363,7 @@ def test_cse_indexed():
 
 @sympyonly
 def test_piecewise():
-    from sympy import Piecewise, Eq
+    from sympy import Eq, Piecewise
     f = Piecewise((-z + x*y, Eq(y, 0)), (-z - x*y, True))
     ans = cse(f)
     actual_ans = ([(x0, -z), (x1, x*y)],

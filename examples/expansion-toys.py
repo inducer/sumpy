@@ -3,11 +3,9 @@ import numpy as np
 import pyopencl as cl
 
 import sumpy.toys as t
+from sumpy.kernel import HelmholtzKernel, LaplaceKernel, YukawaKernel  # noqa: F401
 from sumpy.visualization import FieldPlotter
-from sumpy.kernel import (      # noqa: F401
-        YukawaKernel,
-        HelmholtzKernel,
-        LaplaceKernel)
+
 
 try:
     import matplotlib.pyplot as plt

@@ -21,8 +21,10 @@ THE SOFTWARE.
 """
 
 from boxtree.distributed.calculation import DistributedExpansionWrangler
-from sumpy.fmm import SumpyExpansionWrangler
+
 import pyopencl as cl
+
+from sumpy.fmm import SumpyExpansionWrangler
 
 
 class DistributedSumpyExpansionWrangler(
@@ -78,8 +80,9 @@ class DistributedSumpyExpansionWrangler(
 
     def reorder_potentials(self, potentials):
         if self.comm.Get_rank() == 0:
-            from pytools.obj_array import obj_array_vectorize
             import numpy as np
+
+            from pytools.obj_array import obj_array_vectorize
             assert (
                     isinstance(potentials, np.ndarray)
                     and potentials.dtype.char == "O")

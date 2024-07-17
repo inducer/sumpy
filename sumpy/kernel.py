@@ -20,17 +20,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from collections import defaultdict
 from typing import ClassVar, Tuple
 
-import loopy as lp
 import numpy as np
-from pymbolic.mapper import IdentityMapper, CSECachingMapperMixin
-from sumpy.symbolic import pymbolic_real_norm_2, SpatialConstant
-import sumpy.symbolic as sym
-from pymbolic.primitives import make_sym_vector
+
+import loopy as lp
 from pymbolic import var
+from pymbolic.mapper import CSECachingMapperMixin, IdentityMapper
+from pymbolic.primitives import make_sym_vector
 from pytools import memoize_method
-from collections import defaultdict
+
+import sumpy.symbolic as sym
+from sumpy.symbolic import SpatialConstant, pymbolic_real_norm_2
+
 
 __doc__ = """
 Kernel interface
@@ -226,8 +229,10 @@ class Kernel:
         The typical use of this function is to apply source-variable
         derivatives to the kernel.
         """
-        from sumpy.derivative_taker import (ExprDerivativeTaker,
-            DifferentiatedExprDerivativeTaker)
+        from sumpy.derivative_taker import (
+            DifferentiatedExprDerivativeTaker,
+            ExprDerivativeTaker,
+        )
         expr_dict = {(0,)*self.dim: 1}
         expr_dict = self.get_derivative_coeff_dict_at_source(expr_dict)
         if isinstance(expr, ExprDerivativeTaker):
@@ -370,7 +375,8 @@ class ExpressionKernel(Kernel):
         for name, value in zip(self.init_arg_names, self.__getinitargs__()):
             if name in ["expression", "global_scaling_const"]:
                 from pymbolic.mapper.persistent_hash import (
-                        PersistentHashWalkMapper as PersistentHashWalkMapper)
+                    PersistentHashWalkMapper as PersistentHashWalkMapper,
+                )
                 PersistentHashWalkMapper(key_hash)(value)
             else:
                 key_builder.rec(key_hash, value)
@@ -445,7 +451,7 @@ class LaplaceKernel(ExpressionKernel):
         return LaplaceDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
     def get_pde_as_diff_op(self):
-        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
         w = make_identity_diff_op(self.dim)
         return laplacian(w)
 
@@ -494,7 +500,7 @@ class BiharmonicKernel(ExpressionKernel):
                 sac)
 
     def get_pde_as_diff_op(self):
-        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
         w = make_identity_diff_op(self.dim)
         return laplacian(laplacian(w))
 
@@ -570,7 +576,7 @@ class HelmholtzKernel(ExpressionKernel):
         return HelmholtzDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
     def get_pde_as_diff_op(self):
-        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
 
         w = make_identity_diff_op(self.dim)
         k = sym.Symbol(self.helmholtz_k_name)
@@ -652,7 +658,7 @@ class YukawaKernel(ExpressionKernel):
         return HelmholtzDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
     def get_pde_as_diff_op(self):
-        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
         w = make_identity_diff_op(self.dim)
         lam = sym.Symbol(self.yukawa_lambda_name)
         return (laplacian(w) - lam**2 * w)
@@ -762,7 +768,7 @@ class ElasticityKernel(ExpressionKernel):
     mapper_method = "map_elasticity_kernel"
 
     def get_pde_as_diff_op(self):
-        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
         w = make_identity_diff_op(self.dim)
         return laplacian(laplacian(w))
 
@@ -848,7 +854,7 @@ class StressletKernel(ExpressionKernel):
     mapper_method = "map_stresslet_kernel"
 
     def get_pde_as_diff_op(self):
-        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
         w = make_identity_diff_op(self.dim)
         return laplacian(laplacian(w))
 
@@ -928,7 +934,7 @@ class LineOfCompressionKernel(ExpressionKernel):
     mapper_method = "map_line_of_compression_kernel"
 
     def get_pde_as_diff_op(self):
-        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
         w = make_identity_diff_op(self.dim)
         return laplacian(w)
 
@@ -1044,8 +1050,10 @@ class AxisTargetDerivative(DerivativeBase):
         return f"AxisTargetDerivative({self.axis}, {self.inner_kernel!r})"
 
     def postprocess_at_target(self, expr, bvec):
-        from sumpy.derivative_taker import (DifferentiatedExprDerivativeTaker,
-                diff_derivative_coeff_dict)
+        from sumpy.derivative_taker import (
+            DifferentiatedExprDerivativeTaker,
+            diff_derivative_coeff_dict,
+        )
         from sumpy.symbolic import make_sym_vector as make_sympy_vector
 
         target_vec = make_sympy_vector(self.target_array_name, self.dim)
@@ -1143,9 +1151,10 @@ class DirectionalTargetDerivative(DirectionalDerivative):
         return transform
 
     def postprocess_at_target(self, expr, bvec):
-        from sumpy.derivative_taker import (DifferentiatedExprDerivativeTaker,
-                diff_derivative_coeff_dict)
-
+        from sumpy.derivative_taker import (
+            DifferentiatedExprDerivativeTaker,
+            diff_derivative_coeff_dict,
+        )
         from sumpy.symbolic import make_sym_vector as make_sympy_vector
         dir_vec = make_sympy_vector(self.dir_vec_name, self.dim)
         target_vec = make_sympy_vector(self.target_array_name, self.dim)
@@ -1270,9 +1279,11 @@ class TargetPointMultiplier(KernelWrapper):
         return type(self)(self.axis, new_inner_kernel)
 
     def postprocess_at_target(self, expr, avec):
+        from sumpy.derivative_taker import (
+            DifferentiatedExprDerivativeTaker,
+            ExprDerivativeTaker,
+        )
         from sumpy.symbolic import make_sym_vector as make_sympy_vector
-        from sumpy.derivative_taker import (ExprDerivativeTaker,
-            DifferentiatedExprDerivativeTaker)
 
         expr = self.inner_kernel.postprocess_at_target(expr, avec)
         target_vec = make_sympy_vector(self.target_array_name, self.dim)

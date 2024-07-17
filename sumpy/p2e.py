@@ -20,14 +20,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import logging
+
 import numpy as np
+
 import loopy as lp
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 
-from sumpy.tools import KernelCacheMixin, KernelComputation
 from sumpy.codegen import register_optimization_preambles
+from sumpy.tools import KernelCacheMixin, KernelComputation
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -63,8 +66,10 @@ class P2EBase(KernelCacheMixin, KernelComputation):
             number of strength arrays that need to be passed in.
             By default all kernels use the same strength.
         """
-        from sumpy.kernel import (TargetTransformationRemover,
-                SourceTransformationRemover)
+        from sumpy.kernel import (
+            SourceTransformationRemover,
+            TargetTransformationRemover,
+        )
         txr = TargetTransformationRemover()
         sxr = SourceTransformationRemover()
 

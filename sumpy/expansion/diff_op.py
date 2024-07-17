@@ -20,15 +20,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from dataclasses import dataclass
-from pyrsistent import pmap
-from pytools import memoize
-from sumpy.tools import add_mi
-from itertools import accumulate
-import sumpy.symbolic as sym
 import logging
+from dataclasses import dataclass
+from itertools import accumulate
 from typing import List, Mapping, Sequence
+
 import sympy as sp
+from pyrsistent import pmap
+
+from pytools import memoize
+
+import sumpy.symbolic as sym
+from sumpy.tools import add_mi
+
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +143,7 @@ class LinearPDESystemOperator:
         return len(did.mi)
 
     def to_sym(self, fnames=None):
-        from sumpy.symbolic import make_sym_vector, Function
+        from sumpy.symbolic import Function, make_sym_vector
         x = list(make_sym_vector("x", self.dim))
         x += list(make_sym_vector("t", self.total_dims - self.dim))
 

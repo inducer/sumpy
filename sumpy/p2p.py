@@ -24,12 +24,12 @@ THE SOFTWARE.
 """
 
 import numpy as np
+
 import loopy as lp
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 
-from sumpy.tools import (
-        KernelComputation, KernelCacheMixin, is_obj_array_like)
 from sumpy.codegen import register_optimization_preambles
+from sumpy.tools import KernelCacheMixin, KernelComputation, is_obj_array_like
 
 
 __doc__ = """
@@ -65,8 +65,11 @@ class P2PBase(KernelCacheMixin, KernelComputation):
           Default: all kernels use the same strength.
         """
         from pytools import single_valued
-        from sumpy.kernel import (TargetTransformationRemover,
-                SourceTransformationRemover)
+
+        from sumpy.kernel import (
+            SourceTransformationRemover,
+            TargetTransformationRemover,
+        )
         txr = TargetTransformationRemover()
         sxr = SourceTransformationRemover()
 
@@ -102,8 +105,9 @@ class P2PBase(KernelCacheMixin, KernelComputation):
                 self.device.hashable_model_and_version_identifier)
 
     def get_loopy_insns_and_result_names(self):
-        from sumpy.symbolic import make_sym_vector
         from pymbolic import var
+
+        from sumpy.symbolic import make_sym_vector
 
         dvec = make_sym_vector("d", self.dim)
 

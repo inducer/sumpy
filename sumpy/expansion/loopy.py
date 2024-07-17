@@ -20,17 +20,21 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import logging
 from typing import Sequence
-import pymbolic
-import loopy as lp
+
 import numpy as np
-from sumpy.expansion import ExpansionBase
-from sumpy.kernel import Kernel
+
+import loopy as lp
+import pymbolic
+
 import sumpy.symbolic as sym
 from sumpy.assignment_collection import SymbolicAssignmentCollection
+from sumpy.expansion import ExpansionBase
+from sumpy.kernel import Kernel
 from sumpy.tools import gather_loopy_arguments, gather_loopy_source_arguments
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 

@@ -21,20 +21,20 @@ THE SOFTWARE.
 """
 
 
+import logging
 import re
 
 import numpy as np
+
 import loopy as lp
-from loopy.kernel.instruction import make_assignment
-
-from pymbolic.mapper import IdentityMapper, CSECachingMapperMixin
 import pymbolic.primitives as prim
-
+from loopy.kernel.instruction import make_assignment
+from pymbolic.mapper import CSECachingMapperMixin, IdentityMapper
 from pytools import memoize_method
 
-from sumpy.symbolic import (SympyToPymbolicMapper as SympyToPymbolicMapperBase)
+from sumpy.symbolic import SympyToPymbolicMapper as SympyToPymbolicMapperBase
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -52,6 +52,8 @@ Conversion of :mod:`sympy` expressions to :mod:`loopy`
 # {{{ sympy -> pymbolic mapper
 
 import sumpy.symbolic as sym
+
+
 _SPECIAL_FUNCTION_NAMES = frozenset(dir(sym.functions))
 
 
@@ -654,8 +656,8 @@ def combine_mappers(*mappers):
                 return self.rec(new_expr)
         return expr
 
-    from functools import partial
     import types
+    from functools import partial
     combine_mapper = CombinedMapper(all_methods)
     for method_name in all_methods.keys():
         setattr(combine_mapper, method_name,

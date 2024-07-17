@@ -31,16 +31,19 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple
 
-import loopy as lp
 import numpy as np
+
+import loopy as lp
 from pymbolic.mapper import WalkMapper
 from pytools import memoize_method
 from pytools.tag import Tag, tag_dataclass
 
 import sumpy.symbolic as sym
 
+
 if TYPE_CHECKING:
     import numpy
+
     import pyopencl
 
     from sumpy.kernel import Kernel

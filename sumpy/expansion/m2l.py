@@ -20,17 +20,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import logging
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar, Tuple
 
-import pymbolic
-import loopy as lp
 import numpy as np
-import sumpy.symbolic as sym
-from sumpy.tools import (
-        add_to_sac, matvec_toeplitz_upper_triangular)
 
-import logging
+import loopy as lp
+import pymbolic
+
+import sumpy.symbolic as sym
+from sumpy.tools import add_to_sac, matvec_toeplitz_upper_triangular
+
+
 logger = logging.getLogger(__name__)
 
 __doc__ = """
@@ -69,8 +71,10 @@ class NonFFTM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
         """Returns a subclass of :class:`M2LTranslationBase` suitable for
         *base_kernel* and *local_expansion_class*.
         """
-        from sumpy.expansion.local import (VolumeTaylorLocalExpansionBase,
-            _FourierBesselLocalExpansion)
+        from sumpy.expansion.local import (
+            VolumeTaylorLocalExpansionBase,
+            _FourierBesselLocalExpansion,
+        )
         if issubclass(local_expansion_class, VolumeTaylorLocalExpansionBase):
             return VolumeTaylorM2LTranslation
         elif issubclass(local_expansion_class, _FourierBesselLocalExpansion):
@@ -89,8 +93,10 @@ class FFTM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
         """Returns a subclass of :class:`M2LTranslationBase` suitable for
         *base_kernel* and *local_expansion_class*.
         """
-        from sumpy.expansion.local import (VolumeTaylorLocalExpansionBase,
-            _FourierBesselLocalExpansion)
+        from sumpy.expansion.local import (
+            VolumeTaylorLocalExpansionBase,
+            _FourierBesselLocalExpansion,
+        )
         if issubclass(local_expansion_class, VolumeTaylorLocalExpansionBase):
             return VolumeTaylorM2LWithFFT
         elif issubclass(local_expansion_class, _FourierBesselLocalExpansion):
@@ -104,8 +110,10 @@ class DefaultM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
     """An implementation of :class:`M2LTranslationClassFactoryBase` that gives the
     'best known' translation type for each kernel and local expansion class"""
     def get_m2l_translation_class(self, base_kernel, local_expansion_class):
-        from sumpy.expansion.local import (VolumeTaylorLocalExpansionBase,
-            _FourierBesselLocalExpansion)
+        from sumpy.expansion.local import (
+            VolumeTaylorLocalExpansionBase,
+            _FourierBesselLocalExpansion,
+        )
         if issubclass(local_expansion_class, VolumeTaylorLocalExpansionBase):
             return VolumeTaylorM2LWithFFT
         elif issubclass(local_expansion_class, _FourierBesselLocalExpansion):
@@ -307,6 +315,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         latter.
         """
         from pytools import generate_nonnegative_integer_tuples_below as gnitb
+
         from sumpy.tools import add_mi
 
         dim = tgt_expansion.dim
@@ -837,7 +846,7 @@ class FourierBesselM2LTranslation(M2LTranslationBase):
     def translation_classes_dependent_data(self, tgt_expansion, src_expansion,
             src_rscale, dvec, sac):
 
-        from sumpy.symbolic import sym_real_norm_2, Hankel1
+        from sumpy.symbolic import Hankel1, sym_real_norm_2
 
         dvec_len = sym_real_norm_2(dvec)
         new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
