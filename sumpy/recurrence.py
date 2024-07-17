@@ -77,17 +77,17 @@ def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
 
     :arg pde: must satisfy ``pde.eqs == 1``` and have polynomial coefficients.
 
-    :returns: a tuple ``(ode_in_r, var, n_derivs)``, where
+    :returns: a tuple ``(ode_in_r, var, ode_order)``, where
       - *ode_in_r* with derivatives given as :class:`sympy.Derivative`.
       - *var* is an object array of :class:`sympy.Symbol`, with successive
         variables representing the Cartesian coordinate directions.
+      - *ode_order* the order of ODE that is returned
     """
     if len(pde.eqs) != 1:
         raise ValueError("PDE must be scalar")
 
-    # FIXME remove n_derivs
     dim = pde.dim
-    n_derivs = pde.order
+    ode_order = pde.order
     pde_eqn, = pde.eqs
 
     var = _make_sympy_vec("x", dim)
@@ -100,30 +100,28 @@ def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
         for i, nderivs in enumerate(deriv_id.mi):
             expr = expr.diff(var[i], nderivs)
         return expr
-
+    # pylint: disable-next=not-callable
     ode_in_r = sum(
         coeff * apply_deriv_id(f(rval), deriv_id)
         for deriv_id, coeff in pde_eqn.items()
     )
 
-    f_r_derivs = _make_sympy_vec("f_r", n_derivs)
+    f_r_derivs = _make_sympy_vec("f_r", ode_order+1)
     # pylint: disable-next=not-callable
-    f_derivs = [sp.diff(f(rval), eps, i) for i in range(n_derivs+1)]
-    n_derivs = len(f_derivs)
+    f_derivs = [sp.diff(f(rval), eps, i) for i in range(ode_order+1)]
 
-    # FIXME: Is this bulletproof? I.e. can non-r derivatives survive?
-    for i in range(n_derivs):
+    # PDE ORDER = ODE ORDER
+    for i in range(ode_order+1):
         ode_in_r = ode_in_r.subs(f_derivs[i], f_r_derivs[i])
 
-    return ode_in_r, var, n_derivs
+    return ode_in_r, var, ode_order
 
 
-def _generate_nd_derivative_relations(var: np.ndarray, n_derivs: int) -> dict:
+def _generate_nd_derivative_relations(var: np.ndarray, ode_order: int) -> dict:
     """
     ## Input
         - *var*, a sympy vector of variables called [x0, x1, ...]
-        - *n_derivs*, the order of the original PDE + 1, i.e. the number of
-          derivatives of f that may be present
+        - *ode_order*, the order of the ODE that we will be translating
     ## Output
         - a vector that gives [f, f_r, f_{rr}, ...] in terms of f, f_x, f_{xx}, ...
           using the chain rule
@@ -133,23 +131,23 @@ def _generate_nd_derivative_relations(var: np.ndarray, n_derivs: int) -> dict:
     Using the chain rule outputs a vector that tells us how to
     write f, f_r, f_{rr}, ... as a linear combination of f, f_x, f_{xx}, ...
     """
-    f_r_derivs = _make_sympy_vec("f_r", n_derivs)
-    f_x_derivs = _make_sympy_vec("f_x", n_derivs)
+    f_r_derivs = _make_sympy_vec("f_r", ode_order+1)
+    f_x_derivs = _make_sympy_vec("f_x", ode_order+1)
     f = sp.Function("f")
     eps = sp.symbols("epsilon")
     rval = sp.sqrt(sum(var**2)) + eps
     # pylint: disable=not-callable
-    f_derivs_x = [sp.diff(f(rval), var[0], i) for i in range(n_derivs)]
-    f_derivs = [sp.diff(f(rval), eps, i) for i in range(n_derivs)]
+    f_derivs_x = [sp.diff(f(rval), var[0], i) for i in range(ode_order+1)]
+    f_derivs = [sp.diff(f(rval), eps, i) for i in range(ode_order+1)]
     # pylint: disable=not-callable
     for i in range(len(f_derivs_x)):
         for j in range(len(f_derivs)):
             f_derivs_x[i] = f_derivs_x[i].subs(f_derivs[j], f_r_derivs[j])
-    system = [f_x_derivs[i] - f_derivs_x[i] for i in range(n_derivs)]
+    system = [f_x_derivs[i] - f_derivs_x[i] for i in range(ode_order+1)]
     return sp.solve(system, *f_r_derivs, dict=True)[0]
 
 
-def ode_in_r_to_x(ode_in_r: sp.Expr, var: np.ndarray, n_derivs: int) -> sp.Expr:
+def ode_in_r_to_x(ode_in_r: sp.Expr, var: np.ndarray, ode_order: int) -> sp.Expr:
     """
     ## Input
         - *ode_in_r*, a linear combination of f, f_r, f_{rr}, ...
@@ -157,8 +155,7 @@ def ode_in_r_to_x(ode_in_r: sp.Expr, var: np.ndarray, n_derivs: int) -> sp.Expr:
           with coefficients that are polynomials in var[0], var[1], ...
           divided by some power of var[0]
         - *var*, array of sympy variables [x_0, x_1, ...]
-        - *n_derivs*, the order of the original PDE + 1, i.e. the number of
-          derivatives of f that may be present
+        - *ode_order*, the order of the input ODE
     ## Output
         - ode_in_x, a linear combination of f, f_x, f_{xx}, ... with coefficients as
           rational functions in var[0], var[1], ...
@@ -167,23 +164,22 @@ def ode_in_r_to_x(ode_in_r: sp.Expr, var: np.ndarray, n_derivs: int) -> sp.Expr:
     by substituting f, f_r, f_{rr}, ... as a linear combination of
     f, f_x, f_{xx}, ... using the chain rule.
     """
-    subme = _generate_nd_derivative_relations(var, n_derivs)
+    subme = _generate_nd_derivative_relations(var, ode_order+1)
     ode_in_x = ode_in_r
-    f_r_derivs = _make_sympy_vec("f_r", n_derivs)
-    for i in range(n_derivs):
+    f_r_derivs = _make_sympy_vec("f_r", ode_order+1)
+    for i in range(ode_order+1):
         ode_in_x = ode_in_x.subs(f_r_derivs[i], subme[f_r_derivs[i]])
     return ode_in_x
 
 
-def ode_in_x_to_coeff_array(poly: sp.Poly, n_derivs: int,
+def ode_in_x_to_coeff_array(poly: sp.Poly, ode_order: int,
                                             var: np.ndarray) -> list:
     """
     ## Input
         - *poly*, the original ODE for our point-potential as a polynomial
           in f_{x0}, f_{x1}, f_{x2}, etc. with polynomial coefficients
           in var[0], var[1], ...
-        - *n_derivs*, the order of the original PDE + 1, i.e. the number of
-          derivatives of f that may be present
+        - *ode_order*, the order of input ODE
         - *var*, array of sympy variables [x_0, x_1, ...]
     ## Output
         - ode_in_x, a linear combination of f, f_x, f_{xx}, ... with coefficients as
@@ -193,7 +189,7 @@ def ode_in_x_to_coeff_array(poly: sp.Poly, n_derivs: int,
     by substituting f, f_r, f_{rr}, ... as a linear combination of
     f, f_x, f_{xx}, ... using the chain rule.
     """
-    def tup(i, n=n_derivs):
+    def tup(i, n=ode_order+1):
         a = []
         for j in range(n):
             if j != i:
@@ -203,7 +199,7 @@ def ode_in_x_to_coeff_array(poly: sp.Poly, n_derivs: int,
         return tuple(a)
 
     coeffs = []
-    for deriv_ind in range(n_derivs):
+    for deriv_ind in range(ode_order+1):
         coeffs.append(sp.Poly(poly.coeff_monomial(tup(deriv_ind)),
                               var[0]).all_coeffs()[::-1])
 
@@ -276,12 +272,12 @@ def recurrence_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
     - final_recurrence, the recurrence relation for derivatives of our
       point-potential.
     """
-    ode_in_r, var, n_derivs = pde_to_ode_in_r(pde)
-    ode_in_x = ode_in_r_to_x(ode_in_r, var, n_derivs).simplify()
-    ode_in_x_cleared = (ode_in_x * var[0]**n_derivs).simplify()
-    f_x_derivs = _make_sympy_vec("f_x", n_derivs)
+    ode_in_r, var, ode_order = pde_to_ode_in_r(pde)
+    ode_in_x = ode_in_r_to_x(ode_in_r, var, ode_order).simplify()
+    ode_in_x_cleared = (ode_in_x * var[0]**(ode_order+1)).simplify()
+    f_x_derivs = _make_sympy_vec("f_x", ode_order+1)
     poly = sp.Poly(ode_in_x_cleared, *f_x_derivs)
-    coeffs = ode_in_x_to_coeff_array(poly, n_derivs, var)
+    coeffs = ode_in_x_to_coeff_array(poly, ode_order, var)
     return recurrence_from_coeff_array(coeffs, var)
 
 
@@ -390,6 +386,7 @@ def test_recurrence_finder_helmholtz_three_d():
     print(err)
     assert err <= 1e-10
 
-
-
+test_recurrence_finder_laplace()
+test_recurrence_finder_laplace_three_d()
+test_recurrence_finder_helmholtz_three_d()
 
