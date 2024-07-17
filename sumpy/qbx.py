@@ -264,11 +264,11 @@ class LayerPotential(LayerPotentialBase):
             + [f"<> strength_{i}_isrc = strength_{i}[isrc]" for i in
                     range(self.strength_count)]
             + loopy_insns + kernel_exprs
-            + ["""
-                result_{i}[itgt] = knl_{i}_scaling * \
-                    simul_reduce(sum, isrc, pair_result_{i}) \
+            + [f"""
+                result_{iknl}[itgt] = knl_{iknl}_scaling * \
+                    simul_reduce(sum, isrc, pair_result_{iknl}) \
                         {{id_prefix=write_lpot,inames=itgt}}
-                """.format(i=iknl)
+                """
                 for iknl in range(len(self.target_kernels))]
             + ["end"],
             arguments,
@@ -342,11 +342,11 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
             + ["<> b[idim] = targets[idim, itgt] - center[idim, itgt] {dup=idim}"]
             + ["<> rscale = expansion_radii[itgt]"]
             + loopy_insns + kernel_exprs
-            + ["""
-                result_{i}[itgt, isrc] = \
-                    knl_{i}_scaling * pair_result_{i} \
+            + [f"""
+                result_{iknl}[itgt, isrc] = \
+                    knl_{iknl}_scaling * pair_result_{iknl} \
                         {{inames=isrc:itgt}}
-                """.format(i=iknl)
+                """
                 for iknl in range(len(self.target_kernels))]
             + ["end"],
             arguments,
@@ -422,10 +422,10 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
                     <> rscale = expansion_radii[itgt]
             """]
             + loopy_insns + kernel_exprs
-            + ["""
-                    result_{i}[imat] = knl_{i}_scaling * pair_result_{i} \
+            + [f"""
+                    result_{iknl}[imat] = knl_{iknl}_scaling * pair_result_{iknl} \
                             {{id_prefix=write_lpot}}
-                """.format(i=iknl)
+                """
                 for iknl in range(len(self.target_kernels))]
             + ["end"],
             arguments,
