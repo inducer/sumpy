@@ -28,7 +28,7 @@ __doc__ = """Integrates :mod:`boxtree` with :mod:`sumpy`.
 
 
 import pyopencl as cl
-import pyopencl.array  # noqa
+import pyopencl.array
 
 from pytools import memoize_method
 from boxtree.fmm import TreeIndependentDataForWrangler, ExpansionWranglerInterface

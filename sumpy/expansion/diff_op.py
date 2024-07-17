@@ -122,7 +122,7 @@ class LinearPDESystemOperator:
         return self + (-1)*other_diff_op
 
     def __repr__(self):
-        return f"LinearPDESystemOperator({self.dim}, {repr(self.eqs)})"
+        return f"LinearPDESystemOperator({self.dim}, {self.eqs!r})"
 
     def __getitem__(self, idx):
         item = self.eqs.__getitem__(idx)
@@ -313,7 +313,7 @@ def as_scalar_pde(pde: LinearPDESystemOperator, comp_idx: int) \
             indices.add(deriv_ident.vec_idx)
 
     # this is already a scalar pde
-    if len(indices) == 1 and list(indices)[0] == comp_idx:
+    if len(indices) == 1 and next(iter(indices)) == comp_idx:
         return pde
 
     return _get_all_scalar_pdes(pde)[comp_idx]

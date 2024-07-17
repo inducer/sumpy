@@ -129,13 +129,13 @@ def _coeff_isneg(a):
 
 
 if USE_SYMENGINE:
-    def UnevaluatedExpr(x):  # noqa: F811, N802
+    def UnevaluatedExpr(x):  # noqa: N802
         return x
 else:
     try:
         from sympy import UnevaluatedExpr
     except ImportError:
-        def UnevaluatedExpr(x):  # noqa: F811, N802
+        def UnevaluatedExpr(x):  # noqa: N802
             return x
 
 

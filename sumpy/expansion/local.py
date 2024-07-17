@@ -340,8 +340,7 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
         for axis in {d for d, _ in tgt_split}:
             # Use the axis as the first dimension to vary so that the below
             # algorithm is O(p^{d+1}) for full and O(p^{d}) for compressed
-            dims = [axis] + list(range(axis)) + \
-                    list(range(axis+1, self.dim))
+            dims = [axis, *list(range(axis)), *list(range(axis + 1, self.dim))]
             # Start with source coefficients. Gets updated after each axis.
             cur_dim_input_coeffs = src_coeffs
             # O(1) iterations

@@ -102,7 +102,7 @@ class P2EBase(KernelCacheMixin, KernelComputation):
     def get_loopy_args(self):
         from sumpy.tools import gather_loopy_source_arguments
         return gather_loopy_source_arguments(
-                (self.expansion,) + tuple(self.source_kernels))
+                (self.expansion, *tuple(self.source_kernels)))
 
     def get_cache_key(self):
         return (type(self).__name__, self.name, self.expansion,

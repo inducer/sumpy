@@ -97,7 +97,7 @@ class E2PBase(KernelCacheMixin, ABC):
         return loopy_knl
 
     def get_loopy_args(self):
-        return gather_loopy_arguments((self.expansion,) + tuple(self.kernels))
+        return gather_loopy_arguments((self.expansion, *tuple(self.kernels)))
 
     def get_kernel_scaling_assignment(self):
         from sumpy.symbolic import SympyToPymbolicMapper
@@ -128,9 +128,9 @@ class E2PFromSingleBox(E2PBase):
                     "{[itgt,idim]: itgt_start<=itgt<itgt_end and 0<=idim<dim}",
                     "{[icoeff]: 0<=icoeff<ncoeffs}",
                     "{[iknl]: 0<=iknl<nresults}",
-                ],
-                self.get_kernel_scaling_assignment()
-                + ["""
+                ], [
+                *self.get_kernel_scaling_assignment(),
+                """
                 for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
                     <> itgt_start = box_target_starts[tgt_ibox]
@@ -243,9 +243,9 @@ class E2PFromCSR(E2PBase):
                     "{[idim]: 0<=idim<dim}",
                     "{[icoeff]: 0<=icoeff<ncoeffs}",
                     "{[iknl]: 0<=iknl<nresults}",
-                ],
-                self.get_kernel_scaling_assignment()
-                + ["""
+                ], [
+                *self.get_kernel_scaling_assignment(),
+                """
                 for itgt_box
                     <> tgt_ibox = target_boxes[itgt_box]
                     <> itgt_start = box_target_starts[tgt_ibox]
