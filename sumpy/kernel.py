@@ -160,7 +160,7 @@ class Kernel:
         try:
             return self.hash_value
         except AttributeError:
-            self.hash_value = hash((type(self),) + self.__getinitargs__())
+            self.hash_value = hash((type(self), *self.__getinitargs__()))
             return self.hash_value
 
     def update_persistent_hash(self, key_hash, key_builder):
@@ -692,7 +692,7 @@ class ElasticityKernel(ExpressionKernel):
             # See (Berger and Karageorghis 2001)
             expr = (
                 -var("log")(r)*((3 - 4 * nu) if icomp == jcomp else 0)
-                +  # noqa: W504
+                +
                 d[icomp]*d[jcomp]/r**2
                 )
             scaling = -1/(8*var("pi")*(1 - nu)*mu)
@@ -703,7 +703,7 @@ class ElasticityKernel(ExpressionKernel):
             # Kelvin solution
             expr = (
                 (1/r)*((3 - 4*nu) if icomp == jcomp else 0)
-                +  # noqa: W504
+                +
                 d[icomp]*d[jcomp]/r**3
                 )
             scaling = -1/(16*var("pi")*(1 - nu)*mu)
@@ -1081,7 +1081,7 @@ class _VectorIndexAdder(CSECachingMapperMixin, IdentityMapper):
         if expr.aggregate.name == self.vec_name \
                 and isinstance(expr.index, int):
             return CommonSubexpression(
-                    expr.aggregate.index((expr.index,) + self.additional_indices),
+                    expr.aggregate.index((expr.index, *self.additional_indices)),
                     prefix=None, scope=cse_scope.EVALUATION)
         else:
             return IdentityMapper.map_subscript(self, expr)
@@ -1231,8 +1231,8 @@ class DirectionalSourceDerivative(DirectionalDerivative):
                         None,
                         shape=(self.dim, "nsources"),
                         offset=lp.auto),
-                    )
-                    ] + self.inner_kernel.get_source_args()
+                    ),
+                    *self.inner_kernel.get_source_args()]
 
     def prepare_loopy_kernel(self, loopy_knl):
         loopy_knl = self.inner_kernel.prepare_loopy_kernel(loopy_knl)

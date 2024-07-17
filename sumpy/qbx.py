@@ -168,7 +168,7 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
 
     def get_default_src_tgt_arguments(self):
         from sumpy.tools import gather_loopy_source_arguments
-        return ([
+        return [
                 lp.GlobalArg("sources", None,
                     shape=(self.dim, "nsources"), order="C"),
                 lp.GlobalArg("targets", None,
@@ -178,8 +178,9 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
                 lp.GlobalArg("expansion_radii",
                     None, shape="ntargets"),
                 lp.ValueArg("nsources", None),
-                lp.ValueArg("ntargets", None)]
-                + gather_loopy_source_arguments(self.source_kernels))
+                lp.ValueArg("ntargets", None),
+                *gather_loopy_source_arguments(self.source_kernels)
+            ]
 
     def get_kernel(self):
         raise NotImplementedError

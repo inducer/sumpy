@@ -33,15 +33,15 @@ class Param:
 
 class TranslationBenchmarkSuite:
 
-    params = [
+    params = (
         Param(2, 10),
         Param(2, 15),
         Param(2, 20),
         Param(3, 5),
         Param(3, 10),
-    ]
+    )
 
-    param_names = ["order"]
+    param_names = ("order",)
 
     def setup(self, param):
         logging.basicConfig(level=logging.INFO)
@@ -88,10 +88,10 @@ class LaplaceVolumeTaylorTranslation(TranslationBenchmarkSuite):
     knl = LaplaceKernel
     local_expn_class = VolumeTaylorLocalExpansion
     mpole_expn_class = VolumeTaylorMultipoleExpansion
-    params = [
+    params = (
         Param(2, 10),
         Param(3, 5),
-    ]
+    )
 
 
 class LaplaceConformingVolumeTaylorTranslation(TranslationBenchmarkSuite):
@@ -104,10 +104,10 @@ class HelmholtzVolumeTaylorTranslation(TranslationBenchmarkSuite):
     knl = HelmholtzKernel
     local_expn_class = VolumeTaylorLocalExpansion
     mpole_expn_class = VolumeTaylorMultipoleExpansion
-    params = [
+    params = (
         Param(2, 10),
         Param(3, 5),
-    ]
+    )
 
 
 class HelmholtzConformingVolumeTaylorTranslation(TranslationBenchmarkSuite):
@@ -120,8 +120,8 @@ class Helmholtz2DTranslation(TranslationBenchmarkSuite):
     knl = HelmholtzKernel
     local_expn_class = H2DLocalExpansion
     mpole_expn_class = H2DMultipoleExpansion
-    params = [
+    params = (
         Param(2, 10),
         Param(2, 15),
         Param(2, 20),
-    ]
+    )

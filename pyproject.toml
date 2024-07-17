@@ -13,8 +13,8 @@ extend-select = [
     "N",   # pep8-naming
     "NPY", # numpy
     "Q",   # flake8-quotes
-    # "UP",  # pyupgrade
-    # "RUF", # ruff
+    "UP",  # pyupgrade
+    "RUF", # ruff
     # "W",   # pycodestyle
 ]
 extend-ignore = [

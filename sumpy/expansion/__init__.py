@@ -419,7 +419,7 @@ class FullExpansionTermsWrangler(ExpansionTermsWrangler):
                 mi = ident.mi
             else:
                 mi = ident
-            return tuple([sum(mi)] + list(reversed(mi)))
+            return (sum(mi), *list(reversed(mi)))
 
         return mi_key, axis_permutation
 # }}}

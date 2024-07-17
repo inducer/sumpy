@@ -304,7 +304,7 @@ def match_common_args(func_class, funcs, opt_subs):
         # This makes us try combining smaller matches first.
         common_arg_candidates = OrderedSet(sorted(
                 common_arg_candidates_counts.keys(),
-                key=lambda k: (common_arg_candidates_counts[k], k)))  # noqa: B023
+                key=lambda k: (common_arg_candidates_counts[k], k)))
 
         while common_arg_candidates:
             j = common_arg_candidates.pop(last=False)

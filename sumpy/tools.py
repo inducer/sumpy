@@ -955,7 +955,8 @@ def run_opencl_fft(
         queue: "pyopencl.CommandQueue",
         input_vec: Any,
         inverse: bool = False,
-        wait_for: List["pyopencl.Event"] = None) -> Tuple["pyopencl.Event", Any]:
+        wait_for: Optional[List["pyopencl.Event"]] = None
+    ) -> Tuple["pyopencl.Event", Any]:
     """Runs an FFT on input_vec and returns a :class:`MarkerBasedProfilingEvent`
     that indicate the end and start of the operations carried out and the output
     vector.

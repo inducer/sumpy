@@ -32,13 +32,20 @@ from sumpy.version import VERSION_TEXT
 from pytools.persistent_dict import WriteOncePersistentDict
 
 __all__ = [
-    "P2P", "P2PFromCSR",
-    "P2EFromSingleBox", "P2EFromCSR",
-    "E2PFromSingleBox", "E2PFromCSR",
-    "E2EFromCSR", "E2EFromChildren", "E2EFromParent",
-    "M2LUsingTranslationClassesDependentData",
+    "P2P",
+    "E2EFromCSR",
+    "E2EFromChildren",
+    "E2EFromParent",
+    "E2PFromCSR",
+    "E2PFromSingleBox",
     "M2LGenerateTranslationClassesDependentData",
-    "M2LPreprocessMultipole", "M2LPostprocessLocal"]
+    "M2LPostprocessLocal",
+    "M2LPreprocessMultipole",
+    "M2LUsingTranslationClassesDependentData",
+    "P2EFromCSR",
+    "P2EFromSingleBox",
+    "P2PFromCSR",
+]
 
 
 code_cache = WriteOncePersistentDict("sumpy-code-cache-v6-"+VERSION_TEXT,

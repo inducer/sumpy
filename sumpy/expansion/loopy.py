@@ -64,7 +64,7 @@ def make_e2p_loopy_kernel(
             expression="target[idim]-center[idim]",
             temp_var_type=lp.Optional(None),
         ))
-    target_args = gather_loopy_arguments((expansion,) + tuple(kernels))
+    target_args = gather_loopy_arguments((expansion, *tuple(kernels)))
 
     coeff_exprs = sym.make_sym_vector("coeffs", ncoeffs)
     coeff_names = [
@@ -159,7 +159,7 @@ def make_p2e_loopy_kernel(
             expression="center[idim]-source[idim]",
             temp_var_type=lp.Optional(None),
         ))
-    source_args = gather_loopy_source_arguments((expansion,) + tuple(kernels))
+    source_args = gather_loopy_source_arguments((expansion, *tuple(kernels)))
 
     all_strengths = sym.make_sym_vector("strength", nstrengths)
     strengths = [all_strengths[i] for i in strength_usage]

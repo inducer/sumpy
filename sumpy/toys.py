@@ -35,9 +35,9 @@ from sumpy.kernel import TargetTransformationRemover
 if TYPE_CHECKING:
     from sumpy.kernel import Kernel
     from sumpy.visualization import FieldPlotter
-    import pyopencl  # noqa: F401
+    import pyopencl
 
-import numpy as np  # noqa: F401
+import numpy as np
 import loopy as lp  # noqa: F401
 import pyopencl as cl
 import pyopencl.array

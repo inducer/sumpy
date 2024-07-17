@@ -210,14 +210,13 @@ class P2P(P2PBase):
 
     def get_kernel(self):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
-        arguments = (
-            self.get_default_src_tgt_arguments()
-            + [
+        arguments = [
+                *self.get_default_src_tgt_arguments(),
                 lp.GlobalArg("strength", None,
                     shape="nstrengths, nsources", dim_tags="sep,C"),
                 lp.GlobalArg("result", None,
                     shape="nresults, ntargets", dim_tags="sep,C")
-            ])
+            ]
 
         loopy_knl = lp.make_kernel(["""
             {[itgt, isrc, idim]: \
@@ -454,8 +453,8 @@ class P2PFromCSR(P2PBase):
     def get_kernel(self, max_nsources_in_one_box, max_ntargets_in_one_box,
             work_items_per_group=32):
         loopy_insns, result_names = self.get_loopy_insns_and_result_names()
-        arguments = self.get_default_src_tgt_arguments() \
-            + [
+        arguments = [
+                *self.get_default_src_tgt_arguments(),
                 lp.GlobalArg("box_target_starts",
                     None, shape=None),
                 lp.GlobalArg("box_target_counts_nonchild",
