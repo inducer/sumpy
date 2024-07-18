@@ -121,7 +121,7 @@ Documentation:
 Ruff:
   stage: test
   script:
-  - pix install ruff
+  - pipx install ruff
   - ruff check
   tags:
   - docker-runner
