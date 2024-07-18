@@ -111,7 +111,7 @@ setup(
         "loopy>=2021.1",
         "boxtree>=2018.1",
         "arraycontext",
-        "pyrsistent>=0.16.0",
+        "immutabledict",
         "sympy>=0.7.2",
         "pymbolic>=2021.1",
         "pyvkfft>=2022.1",
