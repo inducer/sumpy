@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -22,7 +25,7 @@ THE SOFTWARE.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar, Dict, Hashable, List, Optional, Sequence, Tuple, Type
+from typing import Any, ClassVar, Hashable, Sequence
 
 import loopy as lp
 import pymbolic.primitives as prim
@@ -77,12 +80,12 @@ class ExpansionBase(ABC):
     .. automethod:: __eq__
     .. automethod:: __ne__
     """
-    init_arg_names = ("kernel", "order", "use_rscale")
+    init_arg_names: tuple[str, ...] = ("kernel", "order", "use_rscale")
 
     def __init__(self,
             kernel: Kernel,
             order: int,
-            use_rscale: Optional[bool] = None) -> None:
+            use_rscale: bool | None = None) -> None:
         # Don't be tempted to remove target derivatives here.
         # Line Taylor QBX can't do without them, because it can't
         # apply those derivatives to the expanded quantity.
@@ -125,7 +128,7 @@ class ExpansionBase(ABC):
     # {{{ abstract interface
 
     @abstractmethod
-    def get_coefficient_identifiers(self) -> List[Hashable]:
+    def get_coefficient_identifiers(self) -> list[Hashable]:
         """
         :returns: the identifiers of the coefficients that actually get stored.
         """
@@ -195,10 +198,10 @@ class ExpansionBase(ABC):
 
     # {{{ copy
 
-    def with_kernel(self, kernel: Kernel) -> "ExpansionBase":
+    def with_kernel(self, kernel: Kernel) -> ExpansionBase:
         return type(self)(kernel, self.order, self.use_rscale)
 
-    def copy(self, **kwargs) -> "ExpansionBase":
+    def copy(self, **kwargs) -> ExpansionBase:
         new_kwargs = {
                 name: getattr(self, name)
                 for name in self.init_arg_names}
@@ -250,12 +253,12 @@ class ExpansionTermsWrangler(ABC):
 
     .. automethod:: get_full_coefficient_identifiers
     """
-    init_arg_names = ("order", "dim", "max_mi")
+    init_arg_names: tuple[str, ...] = ("order", "dim", "max_mi")
 
     def __init__(self,
             order: int,
             dim: int,
-            max_mi: Optional[int] = None) -> None:
+            max_mi: tuple[int, ...] | None = None) -> None:
         self.order = order
         self.dim = dim
         self.max_mi = max_mi
@@ -263,7 +266,7 @@ class ExpansionTermsWrangler(ABC):
     # {{{ abstract interface
 
     @abstractmethod
-    def get_coefficient_identifiers(self) -> List[Hashable]:
+    def get_coefficient_identifiers(self) -> list[tuple[int, ...]]:
         pass
 
     @abstractmethod
@@ -279,7 +282,7 @@ class ExpansionTermsWrangler(ABC):
     # }}}
 
     @memoize_method
-    def get_full_coefficient_identifiers(self) -> List[Hashable]:
+    def get_full_coefficient_identifiers(self) -> list[Hashable]:
         """
         Returns identifiers for every coefficient in the complete expansion.
         """
@@ -311,7 +314,7 @@ class ExpansionTermsWrangler(ABC):
 
     # {{{ hyperplane helpers
 
-    def _get_mi_hyperpplanes(self) -> List[Tuple[int, int]]:
+    def _get_mi_hyperpplanes(self) -> list[tuple[int, int]]:
         r"""
         Coefficient storage is organized into "hyperplanes" in multi-index
         space. Potentially only a subset of these hyperplanes contain
@@ -332,7 +335,7 @@ class ExpansionTermsWrangler(ABC):
 
     @memoize_method
     def _split_coeffs_into_hyperplanes(
-            self) -> List[Tuple[int, List[Tuple[int, ...]]]]:
+            self) -> list[tuple[int, list[tuple[int, ...]]]]:
         r"""
         This splits the coefficients into :math:`O(p)` disjoint sets
         so that for each set, all the identifiers have the form,
@@ -511,7 +514,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
     def __init__(self,
             order: int, dim: int, knl: Kernel,
-            max_mi: Optional[int] = None) -> None:
+            max_mi: tuple[int, ...] | None = None) -> None:
         r"""
         :param order: order of the expansion
         :param dim: number of dimensions
@@ -592,7 +595,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         return mi_key, axis_permutation
 
-    def _get_mi_hyperpplanes(self) -> List[Tuple[int, int]]:
+    def _get_mi_hyperpplanes(self) -> list[tuple[int, int]]:
         mis = self.get_full_coefficient_identifiers()
         mi_to_index = {mi: i for i, mi in enumerate(mis)}
 
@@ -804,8 +807,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 # FIXME: This is called an expansion but doesn't inherit from ExpansionBase?
 
 class VolumeTaylorExpansionMixin:
-    expansion_terms_wrangler_class: ClassVar[Type[ExpansionTermsWrangler]]
-    expansion_terms_wrangler_cache: ClassVar[Dict[Hashable, Any]] = {}
+    expansion_terms_wrangler_class: ClassVar[type[ExpansionTermsWrangler]]
+    expansion_terms_wrangler_cache: ClassVar[dict[Hashable, Any]] = {}
 
     @classmethod
     def get_or_make_expansion_terms_wrangler(cls, *key):

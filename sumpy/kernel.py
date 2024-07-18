@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -20,10 +23,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from abc import abstractmethod
 from collections import defaultdict
-from typing import ClassVar, Tuple
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
+import sympy as sp
 
 import loopy as lp
 from pymbolic import var
@@ -33,6 +38,10 @@ from pytools import memoize_method
 
 import sumpy.symbolic as sym
 from sumpy.symbolic import SpatialConstant, pymbolic_real_norm_2
+
+
+if TYPE_CHECKING:
+    from sumpy.expansion.diff_op import LinearPDESystemOperator
 
 
 __doc__ = """
@@ -140,9 +149,16 @@ class Kernel:
     .. automethod:: get_source_args
     """
 
-    init_arg_names: ClassVar[Tuple[str, ...]]
+    if TYPE_CHECKING:
+        @property
+        def is_complex_valued(self) -> bool:
+            ...
 
-    def __init__(self, dim):
+    dim: int
+    init_arg_names: ClassVar[tuple[str, ...]]
+    _hash_value: int
+
+    def __init__(self, dim: int) -> None:
         self.dim = dim
 
     # {{{ hashing/pickling/equality
@@ -159,12 +175,12 @@ class Kernel:
     def __ne__(self, other):
         return not self.__eq__(other)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         try:
-            return self.hash_value
+            return self._hash_value
         except AttributeError:
-            self.hash_value = hash((type(self), *self.__getinitargs__()))
-            return self.hash_value
+            self._hash_value = hash((type(self), *self.__getinitargs__()))
+            return self._hash_value
 
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode("utf8"))
@@ -183,13 +199,13 @@ class Kernel:
 
     # }}}
 
-    def get_base_kernel(self):
+    def get_base_kernel(self) -> Kernel:
         """Return the kernel being wrapped by this one, or else
         *self*.
         """
         return self
 
-    def replace_base_kernel(self, new_base_kernel):
+    def replace_base_kernel(self, new_base_kernel: Kernel) -> Kernel:
         """Return the base kernel being wrapped by this one, or else
         *new_base_kernel*.
         """
@@ -208,9 +224,10 @@ class Kernel:
         """
         return lambda expr: expr
 
-    def get_expression(self, dist_vec):
+    @abstractmethod
+    def get_expression(self, dist_vec: np.ndarray) -> sp.Expr:
         r"""Return a :mod:`sympy` expression for the kernel."""
-        raise NotImplementedError
+        ...
 
     def _diff(self, expr, vec, mi):
         """Take the derivative of an expression
@@ -268,6 +285,7 @@ class Kernel:
         """
         return expr_dict
 
+    @abstractmethod
     def get_global_scaling_const(self):
         r"""Return a global scaling constant of the kernel.
         Typically, this ensures that the kernel is scaled so that
@@ -276,20 +294,24 @@ class Kernel:
         Not to be confused with *rscale*, which keeps expansion
         coefficients benignly scaled.
         """
-        raise NotImplementedError
+        ...
 
-    def get_args(self):
+    def get_args(self) -> list[KernelArgument]:
         """Return list of :class:`KernelArgument` instances describing
         extra arguments used by the kernel.
         """
         return []
 
-    def get_source_args(self):
+    def get_source_args(self) -> list[KernelArgument]:
         """Return list of :class:`KernelArgument` instances describing
         extra arguments used by kernel in picking up contributions
         from point sources.
         """
         return []
+
+    @abstractmethod
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        ...
 
     # TODO: Allow kernels that are not translation invariant
     is_translation_invariant = True
@@ -324,8 +346,8 @@ class ExpressionKernel(Kernel):
     .. automethod:: get_expression
     """
 
-    init_arg_names = ("dim", "expression", "global_scaling_const",
-            "is_complex_valued")
+    init_arg_names: ClassVar[tuple[str, ...]] = (
+            "dim", "expression", "global_scaling_const", "is_complex_valued")
 
     def __init__(self, dim, expression, global_scaling_const,
             is_complex_valued):

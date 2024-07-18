@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from sumpy.expansion.m2l import M2LTranslationClassFactoryBase
+
 
 __copyright__ = """
 Copyright (C) 2017 Andreas Kloeckner
@@ -28,7 +30,7 @@ THE SOFTWARE.
 
 from functools import partial
 from numbers import Number
-from typing import TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING, Sequence, Union
 
 from pytools import memoize_method
 
@@ -128,7 +130,8 @@ class ToyContext:
                 NonFFTM2LTranslationClassFactory,
             )
             if m2l_use_fft:
-                m2l_translation_class_factory = FFTM2LTranslationClassFactory()
+                m2l_translation_class_factory: M2LTranslationClassFactoryBase = \
+                    FFTM2LTranslationClassFactory()
             else:
                 m2l_translation_class_factory = NonFFTM2LTranslationClassFactory()
             local_expn_class = \
@@ -478,6 +481,9 @@ def _m2l(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
 
 # {{{ potential source classes
 
+Number_ish = Union[int, float, complex, np.number]
+
+
 class PotentialSource:
     """A base class for all classes representing potentials that can be
     evaluated anywhere in space.
@@ -508,7 +514,7 @@ class PotentialSource:
     def __neg__(self) -> PotentialSource:
         return -1*self
 
-    def __add__(self, other: Number | np.number | PotentialSource
+    def __add__(self, other: Number_ish | PotentialSource
                 ) -> PotentialSource:
         if isinstance(other, (Number, np.number)):
             other = ConstantPotential(self.toy_ctx, other)
@@ -520,16 +526,18 @@ class PotentialSource:
     __radd__ = __add__
 
     def __sub__(self,
-                other: Number | np.number | PotentialSource) -> PotentialSource:
+                other: Number_ish | PotentialSource) -> PotentialSource:
         return self.__add__(-other)
 
-    def __rsub__(self,
-                 other: Number | np.number | PotentialSource
+    # FIXME: mypy says " Forward operator "__sub__" is not callable"
+    # I don't know what it means. -AK, 2024-07-18
+    def __rsub__(self,  # type:ignore[misc]
+                 other: Number_ish | PotentialSource
                  ) -> PotentialSource:
         return (-self).__add__(other)
 
     def __mul__(self,
-                other: Number | np.number | PotentialSource) -> PotentialSource:
+                other: Number_ish | PotentialSource) -> PotentialSource:
         if isinstance(other, (Number, np.number)):
             other = ConstantPotential(self.toy_ctx, other)
         elif not isinstance(other, PotentialSource):
@@ -705,7 +713,7 @@ class PotentialExpressionNode(PotentialSource):
     def center(self) -> np.ndarray:
         for psource in self.psources:
             try:
-                return psource.center
+                return psource.center  # type: ignore[attr-defined]
             except AttributeError:
                 pass
 
@@ -718,7 +726,7 @@ class Sum(PotentialExpressionNode):
     """
 
     def eval(self, targets: np.ndarray) -> np.ndarray:
-        result = 0
+        result = np.zeros(targets.shape[1])
         for psource in self.psources:
             result = result + psource.eval(targets)
 
@@ -731,7 +739,7 @@ class Product(PotentialExpressionNode):
     """
 
     def eval(self, targets: np.ndarray) -> np.ndarray:
-        result = 1
+        result = np.zeros(targets.shape[1])
         for psource in self.psources:
             result = result * psource.eval(targets)
 
@@ -764,7 +772,7 @@ def multipole_expand(psource: PotentialSource,
 
 def local_expand(
         psource: PotentialSource,
-        center: np.ndarray, order: int | None = None, rscale: Number = 1,
+        center: np.ndarray, order: int | None = None, rscale: Number_ish = 1,
         **expn_kwargs) -> LocalExpansion:
     if isinstance(psource, PointSources):
         if order is None:
@@ -823,8 +831,10 @@ def combine_inner_outer(
         radius: float | None,
         center: np.ndarray | None = None) -> PotentialSource:
     if center is None:
+        assert isinstance(psource_inner, ExpansionPotentialSource)
         center = psource_inner.center
     if radius is None:
+        assert isinstance(psource_inner, ExpansionPotentialSource)
         radius = psource_inner.radius
 
     ball_one = OneOnBallPotential(psource_inner.toy_ctx, center, radius)
@@ -837,6 +847,7 @@ def combine_halfspace(psource_pos: PotentialSource,
                       psource_neg: PotentialSource, axis: int,
                       center: np.ndarray | None = None) -> PotentialSource:
     if center is None:
+        assert isinstance(psource_pos, ExpansionPotentialSource)
         center = psource_pos.center
 
     halfspace_one = HalfspaceOnePotential(psource_pos.toy_ctx, center, axis)
@@ -849,12 +860,14 @@ def combine_halfspace_and_outer(
         psource_pos: PotentialSource,
         psource_neg: PotentialSource,
         psource_outer: PotentialSource,
-        axis: int, radius: Number | None = None,
+        axis: int, radius: float | None = None,
         center: np.ndarray | None = None) -> PotentialSource:
 
     if center is None:
+        assert isinstance(psource_pos, ExpansionPotentialSource)
         center = psource_pos.center
     if radius is None:
+        assert isinstance(psource_pos, ExpansionPotentialSource)
         center = psource_pos.radius
 
     return combine_inner_outer(
@@ -866,6 +879,7 @@ def l_inf(psource: PotentialSource, radius: float,
           center: np.ndarray | None = None, npoints: int = 100,
           debug: bool = False) -> np.number:
     if center is None:
+        assert isinstance(psource, ExpansionPotentialSource)
         center = psource.center
 
     restr = psource * OneOnBallPotential(psource.toy_ctx, center, radius)

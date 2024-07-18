@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -36,6 +39,7 @@ __doc__ = """
 
 import logging
 import math
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -135,7 +139,7 @@ def _coeff_isneg(a):
     return a.is_Number and a.is_negative
 
 
-if USE_SYMENGINE:
+if TYPE_CHECKING or USE_SYMENGINE:
     def UnevaluatedExpr(x):  # noqa: N802
         return x
 else:
@@ -379,11 +383,12 @@ class Hankel1(_BesselOrHankel):
 _SympyBesselJ = BesselJ
 _SympyHankel1 = Hankel1
 
-if USE_SYMENGINE:
-    def BesselJ(*args):   # noqa: N802  # pylint: disable=function-redefined
-        return sym.sympify(_SympyBesselJ(*args))
+if not TYPE_CHECKING:
+    if USE_SYMENGINE:
+        def BesselJ(*args):   # noqa: N802  # pylint: disable=function-redefined
+            return sym.sympify(_SympyBesselJ(*args))
 
-    def Hankel1(*args):   # noqa: N802  # pylint: disable=function-redefined
-        return sym.sympify(_SympyHankel1(*args))
+        def Hankel1(*args):   # noqa: N802  # pylint: disable=function-redefined
+            return sym.sympify(_SympyHankel1(*args))
 
 # vim: fdm=marker

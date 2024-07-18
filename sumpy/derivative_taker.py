@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = """
 Copyright (C) 2012 Andreas Kloeckner
 Copyright (C) 2020 Isuru Fernando
@@ -338,7 +341,7 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
 
 # {{{ DifferentiatedExprDerivativeTaker
 
-DerivativeCoeffDict = Dict[Tuple[int], Any]
+DerivativeCoeffDict = Dict[Tuple[int, ...], Any]
 
 
 @tag_dataclass
@@ -390,7 +393,7 @@ def diff_derivative_coeff_dict(derivative_coeff_dict: DerivativeCoeffDict,
     and return a new derivative transformation dictionary.
     """
     from collections import defaultdict
-    new_derivative_coeff_dict = defaultdict(lambda: 0)
+    new_derivative_coeff_dict: DerivativeCoeffDict = defaultdict(lambda: 0)
 
     for mi, coeff in derivative_coeff_dict.items():
         # In the case where we have x * u.diff(x), the result should
