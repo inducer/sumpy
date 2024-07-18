@@ -16,6 +16,9 @@ extend-select = [
     "UP",  # pyupgrade
     "RUF", # ruff
     "W",   # pycodestyle
+
+    # TODO
+    # "SIM",
 ]
 extend-ignore = [
     "C90",  # McCabe complexity
@@ -42,6 +45,12 @@ known-local-folder = [
     "sumpy",
 ]
 lines-after-imports = 2
+required-imports = ["from __future__ import annotations"]
+
+[tool.ruff.lint.per-file-ignores]
+"doc/**/*.py" = ["I002"]
+"examples/**/*.py" = ["I002"]
+"setup.py" = ["I002"]
 
 [tool.typos.default]
 extend-ignore-re = [
@@ -61,3 +70,23 @@ extend-exclude = [
   "contrib/*/*.ipynb",
   "notes/*/*.eps",
 ]
+
+[tool.mypy]
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = [
+    "pyopencl.*",
+    "pymbolic.*",
+    "loopy.*",
+    "symengine.*",
+    "boxtree.*",
+    "pyvkfft.*",
+    "pyfmmlib.*",
+    "mayavi.*",
+    "scipy.*",
+    "sympy.*",
+    "matplotlib.*",
+    "pyvisfile.*",
+]
+ignore_missing_imports = true

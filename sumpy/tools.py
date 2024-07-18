@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = """
 Copyright (C) 2012 Andreas Kloeckner
 Copyright (C) 2018 Alexandru Fikl
@@ -29,11 +32,12 @@ import logging
 import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Hashable, Sequence
 
 import numpy as np
 
 import loopy as lp
+import pyopencl as cl
 from pymbolic.mapper import WalkMapper
 from pytools import memoize_method
 from pytools.tag import Tag, tag_dataclass
@@ -111,7 +115,7 @@ Profiling
 
 # {{{ multi_index helpers
 
-def add_mi(mi1: Sequence[int], mi2: Sequence[int]) -> Tuple[int, ...]:
+def add_mi(mi1: Sequence[int], mi2: Sequence[int]) -> tuple[int, ...]:
     return tuple([mi1i + mi2i for mi1i, mi2i in zip(mi1, mi2)])
 
 
@@ -125,13 +129,13 @@ def mi_factorial(mi: Sequence[int]) -> int:
 
 def mi_increment_axis(
         mi: Sequence[int], axis: int, increment: int
-        ) -> Tuple[int, ...]:
+        ) -> tuple[int, ...]:
     new_mi = list(mi)
     new_mi[axis] += increment
     return tuple(new_mi)
 
 
-def mi_set_axis(mi: Sequence[int], axis: int, value: int) -> Tuple[int, ...]:
+def mi_set_axis(mi: Sequence[int], axis: int, value: int) -> tuple[int, ...]:
     new_mi = list(mi)
     new_mi[axis] = value
     return tuple(new_mi)
@@ -284,12 +288,12 @@ class KernelComputation(ABC):
     """
 
     def __init__(self, ctx: Any,
-            target_kernels: List["Kernel"],
-            source_kernels: List["Kernel"],
-            strength_usage: Optional[List[int]] = None,
-            value_dtypes: Optional[List["numpy.dtype[Any]"]] = None,
-            name: Optional[str] = None,
-            device: Optional[Any] = None) -> None:
+            target_kernels: list[Kernel],
+            source_kernels: list[Kernel],
+            strength_usage: list[int] | None = None,
+            value_dtypes: list[numpy.dtype[Any]] | None = None,
+            name: str | None = None,
+            device: Any | None = None) -> None:
         """
         :arg target_kernels: list of :class:`~sumpy.kernel.Kernel` instances,
             with :class:`sumpy.kernel.DirectionalTargetDerivative` as
@@ -309,9 +313,9 @@ class KernelComputation(ABC):
             value_dtypes = []
             for knl in target_kernels:
                 if knl.is_complex_valued:
-                    value_dtypes.append(np.complex128)
+                    value_dtypes.append(np.dtype(np.complex128))
                 else:
-                    value_dtypes.append(np.float64)
+                    value_dtypes.append(np.dtype(np.float64))
 
         if not isinstance(value_dtypes, (list, tuple)):
             value_dtypes = [np.dtype(value_dtypes)] * len(target_kernels)
@@ -440,15 +444,21 @@ class OrderedSet(MutableSet):
 # }}}
 
 
-class KernelCacheMixin:
-    def get_cached_optimized_kernel(self, **kwargs):
-        from warnings import warn
-        warn("get_cached_optimized_kernel is deprecated. "
-             "Use get_cached_kernel_executor instead. "
-             "This will stop working in October 2023.",
-             DeprecationWarning, stacklevel=2)
+class KernelCacheMixin(ABC):
+    context: cl.Context
+    name: str
 
-        return self.get_cached_kernel_executor(**kwargs)
+    @abstractmethod
+    def get_cache_key(self) -> tuple[Hashable, ...]:
+        ...
+
+    @abstractmethod
+    def get_kernel(self, **kwargs: Any) -> lp.TranslationUnit:
+        ...
+
+    @abstractmethod
+    def get_optimized_kernel(self, **kwargs: Any) -> lp.TranslationUnit:
+        ...
 
     @memoize_method
     def get_cached_kernel_executor(self, **kwargs) -> lp.ExecutorBase:
@@ -890,7 +900,7 @@ class FFTBackend(enum.Enum):
     loopy = 2
 
 
-def _get_fft_backend(queue: "pyopencl.CommandQueue") -> FFTBackend:
+def _get_fft_backend(queue: pyopencl.CommandQueue) -> FFTBackend:
     import os
 
     env_val = os.environ.get("SUMPY_FFT_BACKEND")
@@ -931,9 +941,9 @@ def _get_fft_backend(queue: "pyopencl.CommandQueue") -> FFTBackend:
 
 
 def get_opencl_fft_app(
-        queue: "pyopencl.CommandQueue",
-        shape: Tuple[int, ...],
-        dtype: "numpy.dtype[Any]",
+        queue: pyopencl.CommandQueue,
+        shape: tuple[int, ...],
+        dtype: numpy.dtype[Any],
         inverse: bool) -> Any:
     """Setup an object for out-of-place FFT on with given shape and dtype
     on given queue.
@@ -954,12 +964,12 @@ def get_opencl_fft_app(
 
 
 def run_opencl_fft(
-        fft_app: Tuple[Any, FFTBackend],
-        queue: "pyopencl.CommandQueue",
+        fft_app: tuple[Any, FFTBackend],
+        queue: pyopencl.CommandQueue,
         input_vec: Any,
         inverse: bool = False,
-        wait_for: Optional[List["pyopencl.Event"]] = None
-    ) -> Tuple["pyopencl.Event", Any]:
+        wait_for: list[pyopencl.Event] | None = None
+    ) -> tuple[pyopencl.Event, Any]:
     """Runs an FFT on input_vec and returns a :class:`MarkerBasedProfilingEvent`
     that indicate the end and start of the operations carried out and the output
     vector.

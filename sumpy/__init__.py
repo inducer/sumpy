@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2013 Andreas Kloeckner"
 
 __license__ = """
@@ -21,7 +24,9 @@ THE SOFTWARE.
 """
 
 import os
+from typing import Hashable
 
+import loopy as lp
 from pytools.persistent_dict import WriteOncePersistentDict
 
 from sumpy.e2e import (
@@ -56,8 +61,8 @@ __all__ = [
 ]
 
 
-code_cache = WriteOncePersistentDict("sumpy-code-cache-v6-"+VERSION_TEXT,
-                                     safe_sync=False)
+code_cache: WriteOncePersistentDict[Hashable, lp.TranslationUnit] = \
+        WriteOncePersistentDict("sumpy-code-cache-v6-"+VERSION_TEXT, safe_sync=False)
 
 
 # {{{ optimization control

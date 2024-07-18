@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2022 Isuru Fernando"
 
 __license__ = """
@@ -22,7 +25,7 @@ THE SOFTWARE.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar, Tuple
+from typing import Any, ClassVar
 
 import numpy as np
 
@@ -164,7 +167,7 @@ class M2LTranslationBase(ABC):
             f"{src_expansion} to {tgt_expansion} using {self} is not implemented.")
 
     def translation_classes_dependent_data(self, tgt_expansion, src_expansion,
-            src_rscale, dvec, sac) -> Tuple[Any]:
+            src_rscale, dvec, sac) -> tuple[Any, ...]:
         """Return an iterable of expressions that needs to be precomputed
         for multipole-to-local translations that depend only on the
         distance between the multipole center and the local center which

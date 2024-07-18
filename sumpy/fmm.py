@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2013 Andreas Kloeckner"
 
 __license__ = """
@@ -27,7 +30,7 @@ __doc__ = """Integrates :mod:`boxtree` with :mod:`sumpy`.
 """
 
 
-from typing import List, TypeVar, Union
+from typing import Protocol
 
 from boxtree.fmm import ExpansionWranglerInterface, TreeIndependentDataForWrangler
 
@@ -203,11 +206,12 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
 _SECONDS_PER_NANOSECOND = 1e-9
 
 
-"""
-EventLike objects have an attribute native_event that returns
-a cl.Event that indicates the end of the event.
-"""
-EventLike = TypeVar("CLEventLike")
+class CLEventLike(Protocol):
+    """
+    EventLike objects have an attribute native_event that returns
+    a cl.Event that indicates the end of the event.
+    """
+    native_event: cl.Event
 
 
 class UnableToCollectTimingData(UserWarning):
@@ -216,12 +220,12 @@ class UnableToCollectTimingData(UserWarning):
 
 class SumpyTimingFuture:
 
-    def __init__(self, queue, events: List[Union[cl.Event, EventLike]]):
+    def __init__(self, queue, events: list[cl.Event | CLEventLike]):
         self.queue = queue
         self.events = events
 
     @property
-    def native_events(self) -> List[cl.Event]:
+    def native_events(self) -> list[cl.Event]:
         return [evt if isinstance(evt, cl.Event) else evt.native_event
                 for evt in self.events]
 
