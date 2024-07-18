@@ -166,20 +166,18 @@ def ode_in_r_to_x(ode_in_r: sp.Expr, var: np.ndarray, ode_order: int) -> sp.Expr
 
 def ode_in_x_to_coeff_array(poly: sp.Poly, ode_order: int,
                                             var: np.ndarray) -> list:
-    """
-    ## Input
-        - *poly*, the original ODE for our point-potential as a polynomial
-          in f_{x0}, f_{x1}, f_{x2}, etc. with polynomial coefficients
-          in var[0], var[1], ...
-        - *ode_order*, the order of input ODE
-        - *var*, array of sympy variables [x_0, x_1, ...]
-    ## Output
-        - ode_in_x, a linear combination of f, f_x, f_{xx}, ... with coefficients as
-          rational functions in var[0], var[1], ...
-    ## Description
-    Translates an ode in the variable r into an ode in the variable x
-    by substituting f, f_r, f_{rr}, ... as a linear combination of
-    f, f_x, f_{xx}, ... using the chain rule.
+    r"""
+    Organizes the coefficients of an ODE in the :math:`x_0` variable into a 2D array.
+    
+    :arg poly: :math:`(b_{00} x_0^0 + b_{01} x_0^1 + \cdots) \partial_{x_0}^0 f + 
+        (b_{10} x_0^0 + b_{11} x_0^1 +\cdots) \partial_x^1 f`
+    :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
+    :arg ode_order: the order of the input ODE we return a sequence
+
+    :returns: *coeffs* a sequence of of sequences, with the outer sequence iterating 
+        over derivative orders, and each inner sequence iterating over powers of :math:`x_0`,
+        so that, in terms of the above form, coeffs is  
+        :math:`[[b_{00}, b_{01}, ...], [b_{10}, b_{11}, ...], ...]`
     """
     def tup(i, n=ode_order+1):
         a = []
