@@ -77,10 +77,10 @@ def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
 
     :arg pde: must satisfy ``pde.eqs == 1`` and have polynomial coefficients.
 
-    :returns: a tuple ``(ode_in_r, var, ode_order)``, where
-    - *ode_in_r* with derivatives given as :class:`sympy.Derivative`.
+    :returns: a tuple ``(ode_in_r, var, ode_order)``, where 
+    - *ode_in_r* with derivatives given as :class:`sympy.Derivative`
     - *var* is an object array of :class:`sympy.Symbol`, with successive variables
-      representing the Cartesian coordinate directions.
+        representing the Cartesian coordinate directions.
     - *ode_order* the order of ODE that is returned
     """
     if len(pde.eqs) != 1:
@@ -149,12 +149,13 @@ def ode_in_r_to_x(ode_in_r: sp.Expr, var: np.ndarray, ode_order: int) -> sp.Expr
     :math:`f, f_x, f_{xx}, \dots` using the chain rule.
 
     :arg ode_in_r: a linear combination of :math:`f, f_r, f_{rr}, \dots` represented
-        by the sympy variables :math:`f_{r0}, f_{r1}, f_{r1}, f_{r2}, \dots`
+        by the sympy variables :math:`f_{r0}, f_{r1}, f_{r2}, \dots`
     :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
     :arg ode_order: the order of the input ODE
 
-    :returns: *ode_in_x* a linear combination of :math:`f, f_x, f_{xx}, \dots` with 
-        coefficients as rational functions in :math:`x_0, x_1, \dots`
+    :returns: *ode_in_x* a linear combination of :math:`f, f_x, f_{xx}, \dots` 
+        represented by the sympy variables :math:`f_{x0}, f_{x1}, f_{x2}, \dots` 
+        with coefficients as rational functions in :math:`x_0, x_1, \dots`
     """
     subme = _generate_nd_derivative_relations(var, ode_order+1)
     ode_in_x = ode_in_r
@@ -169,7 +170,9 @@ def ode_in_x_to_coeff_array(poly: sp.Poly, ode_order: int,
     r"""
     Organizes the coefficients of an ODE in the :math:`x_0` variable into a 2D array.
     
-    :arg poly: :math:`(b_{00} x_0^0 + b_{01} x_0^1 + \cdots) \partial_{x_0}^0 f + 
+    :arg poly: a sympy polynomial in 
+        :math:`\partial_{x_0}^0 f, \partial_{x_0}^1 f,\cdots` of the form
+        :math:`(b_{00} x_0^0 + b_{01} x_0^1 + \cdots) \partial_{x_0}^0 f +
         (b_{10} x_0^0 + b_{11} x_0^1 +\cdots) \partial_x^1 f`
     :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
     :arg ode_order: the order of the input ODE we return a sequence
@@ -197,23 +200,15 @@ def ode_in_x_to_coeff_array(poly: sp.Poly, ode_order: int,
 
 
 def _auto_product_rule_single_term(p: int, m: int, var: np.ndarray) -> sp.Expr:
-    """
-    ## Description
+    r"""
     We assume that we are given the expression :math:`x_0^p f^(m)(x_0)`. We then
-    output the nth order derivative of the expression where n is a symbolic variable.
+    output the nth order derivative of the expression where :math:`n` is a symbolic
+    variable.
     We let :math:`s(i)` represent the ith order derivative of f when
     we output the final result.
-    ## Input
-    - *p*, see description
-    - *m*, see description
-    - *var*, array of sympy variables [x_0, x_1, ...]
-    ## Output
-    - A sympy expression is output corresponding to the nth order derivative of the
-    input expression.
-    We let :math:`s(i)` represent the ith order derivative of f when
-    we output the final result. We let n represent a symbolic variable
-    corresponding to how many derivatives of the original expression were
-    taken.
+    :arg p: see description
+    :arg m: see description
+    :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
     """
     n = sp.symbols("n")
     s = sp.Function("s")
@@ -229,19 +224,15 @@ def _auto_product_rule_single_term(p: int, m: int, var: np.ndarray) -> sp.Expr:
 
 
 def recurrence_from_coeff_array(coeffs: list, var: np.ndarray) -> sp.Expr:
-    """
-    ## Input
-    - *coeffs*,
-      Consider an ODE obeyed by a function f that can be expressed in the following
-      form: :math:`(b_{00} x_0^0 + b_{01} x_0^1 + \\cdots) \\partial_{x_0}^0 f +
-      (b_{10} x_0^0 + b_{11} x_0^1 +\\cdots) \\partial_x^1 f`. coeffs is a sequence
-      of sequences, with the outer sequence iterating over derivative orders, and
-      each inner sequence iterating over powers of :math:`x_0`, so that, in terms of
-      the above form, coeffs is [[b_00, b_01, ...], [b_10, b_11, ...], ...]
-    - *var*, array of sympy variables [x_0, x_1, ...]
-    ## Output
-    - final_recurrence, the recurrence relation for derivatives of our
-      point-potential.
+    r"""
+    A function that takes in as input an organized 2D coefficient array (see above)
+    and outputs a recurrence relation.
+
+    :arg coeffs: a sequence of of sequences, with the outer sequence iterating
+        over derivative orders, and each inner sequence iterating over powers of
+        :math:`x_0`, so that, in terms of the above form, coeffs is
+        :math:`[[b_{00}, b_{01}, ...], [b_{10}, b_{11}, ...], ...]`
+    :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
     """
     final_recurrence = 0
     #Outer loop is derivative direction
@@ -254,13 +245,12 @@ def recurrence_from_coeff_array(coeffs: list, var: np.ndarray) -> sp.Expr:
 
 
 def recurrence_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
-    """
-    ## Input
-    - *pde*, a :class:`sumpy.expansion.diff_op.LinearSystemPDEOperator` such that
-      pde.eqs == 1
-    ## Output
-    - final_recurrence, the recurrence relation for derivatives of our
-      point-potential.
+    r"""
+    A function that takes in as input a sympy PDE and outputs a recurrence relation.
+
+    :arg pde: a :class:`sumpy.expansion.diff_op.LinearSystemPDEOperator` 
+        that must satisfy ``pde.eqs == 1`` and have polynomial coefficients.
+    :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
     """
     ode_in_r, var, ode_order = pde_to_ode_in_r(pde)
     ode_in_x = ode_in_r_to_x(ode_in_r, var, ode_order).simplify()
@@ -273,7 +263,6 @@ def recurrence_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
 
 def test_recurrence_finder_laplace():
     """
-    ## Description
     Tests our recurrence relation generator for Lapalace 2D.
     """
     w = make_identity_diff_op(2)
@@ -301,7 +290,6 @@ def test_recurrence_finder_laplace():
 
 def test_recurrence_finder_laplace_three_d():
     """
-    ## Description
     Tests our recurrence relation generator for Laplace 3D.
     """
     w = make_identity_diff_op(3)
@@ -328,7 +316,6 @@ def test_recurrence_finder_laplace_three_d():
 
 def test_recurrence_finder_helmholtz_three_d():
     """
-    ## Description
     Tests our recurrence relation generator for Helmhotlz 3D.
     """
     #We are creating the recurrence relation for helmholtz3d which 
