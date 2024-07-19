@@ -77,7 +77,7 @@ def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
 
     :arg pde: must satisfy ``pde.eqs == 1`` and have polynomial coefficients.
 
-    :returns: a tuple ``(ode_in_r, var, ode_order)``, where 
+    :returns: a tuple ``(ode_in_r, var, ode_order)``, where
     - *ode_in_r* with derivatives given as :class:`sympy.Derivative`
     - *var* is an object array of :class:`sympy.Symbol`, with successive variables
         representing the Cartesian coordinate directions.
@@ -100,8 +100,9 @@ def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
         for i, nderivs in enumerate(deriv_id.mi):
             expr = expr.diff(var[i], nderivs)
         return expr
-    # pylint: disable-next=not-callable
+
     ode_in_r = sum(
+        # pylint: disable-next=not-callable
         coeff * apply_deriv_id(f(rval), deriv_id)
         for deriv_id, coeff in pde_eqn.items()
     )
@@ -153,8 +154,8 @@ def ode_in_r_to_x(ode_in_r: sp.Expr, var: np.ndarray, ode_order: int) -> sp.Expr
     :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
     :arg ode_order: the order of the input ODE
 
-    :returns: *ode_in_x* a linear combination of :math:`f, f_x, f_{xx}, \dots` 
-        represented by the sympy variables :math:`f_{x0}, f_{x1}, f_{x2}, \dots` 
+    :returns: *ode_in_x* a linear combination of :math:`f, f_x, f_{xx}, \dots`
+        represented by the sympy variables :math:`f_{x0}, f_{x1}, f_{x2}, \dots`
         with coefficients as rational functions in :math:`x_0, x_1, \dots`
     """
     subme = _generate_nd_derivative_relations(var, ode_order+1)
@@ -169,17 +170,16 @@ def ode_in_x_to_coeff_array(poly: sp.Poly, ode_order: int,
                                             var: np.ndarray) -> list:
     r"""
     Organizes the coefficients of an ODE in the :math:`x_0` variable into a 2D array.
-    
-    :arg poly: a sympy polynomial in 
+    :arg poly: a sympy polynomial in
         :math:`\partial_{x_0}^0 f, \partial_{x_0}^1 f,\cdots` of the form
         :math:`(b_{00} x_0^0 + b_{01} x_0^1 + \cdots) \partial_{x_0}^0 f +
         (b_{10} x_0^0 + b_{11} x_0^1 +\cdots) \partial_x^1 f`
     :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
     :arg ode_order: the order of the input ODE we return a sequence
 
-    :returns: *coeffs* a sequence of of sequences, with the outer sequence iterating 
-        over derivative orders, and each inner sequence iterating over powers of :math:`x_0`,
-        so that, in terms of the above form, coeffs is  
+    :returns: *coeffs* a sequence of of sequences, with the outer sequence iterating
+        over derivative orders, and each inner sequence iterating over powers of
+        :math:`x_0`, so that, in terms of the above form, coeffs is
         :math:`[[b_{00}, b_{01}, ...], [b_{10}, b_{11}, ...], ...]`
     """
     def tup(i, n=ode_order+1):
@@ -248,7 +248,7 @@ def recurrence_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
     r"""
     A function that takes in as input a sympy PDE and outputs a recurrence relation.
 
-    :arg pde: a :class:`sumpy.expansion.diff_op.LinearSystemPDEOperator` 
+    :arg pde: a :class:`sumpy.expansion.diff_op.LinearSystemPDEOperator`
         that must satisfy ``pde.eqs == 1`` and have polynomial coefficients.
     :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
     """
@@ -318,16 +318,12 @@ def test_recurrence_finder_helmholtz_three_d():
     """
     Tests our recurrence relation generator for Helmhotlz 3D.
     """
-    #We are creating the recurrence relation for helmholtz3d which 
+    #We are creating the recurrence relation for helmholtz3d which
     #seems to be an order 5 recurrence relation
     w = make_identity_diff_op(3)
     helmholtz3d = laplacian(w) + w
     r = recurrence_from_pde(helmholtz3d)
 
-    #We create that function that gives the derivatives of the point 
-    # potential for helmholtz
-    #Remember! Our point-source was placed at the origin and we 
-    # were performing a LT expansion at x_0
     def deriv_helmholtz_three_d(i, s_loc):
         s_x = s_loc[0]
         s_y = s_loc[1]
@@ -337,7 +333,6 @@ def test_recurrence_finder_helmholtz_three_d():
                         ) / (sp.sqrt(x**2 + y**2 + z**2))
         return sp.diff(true_f, x, i).subs(x, s_x).subs(
             y, s_y).subs(z, s_z)
-    
     #Create relevant symbols
     var = _make_sympy_vec("x", 3)
     n = sp.symbols("n")
@@ -362,8 +357,3 @@ def test_recurrence_finder_helmholtz_three_d():
     err = abs(abs(r_sub).evalf())
     print(err)
     assert err <= 1e-10
-
-test_recurrence_finder_laplace()
-test_recurrence_finder_laplace_three_d()
-test_recurrence_finder_helmholtz_three_d()
-
