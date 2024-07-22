@@ -1,4 +1,4 @@
-import os
+from importlib import metadata
 from urllib.request import urlopen
 
 
@@ -8,27 +8,21 @@ with urlopen(_conf_url) as _inf:
     exec(compile(_inf.read(), _conf_url, "exec"), globals())
 
 copyright = "2016-21, sumpy contributors"
-
-os.environ["AKPYTHON_EXEC_FROM_WITHIN_WITHIN_SETUP_PY"] = "1"
-ver_dic = {}
-exec(compile(open("../sumpy/version.py").read(), "../sumpy/version.py", "exec"),
-        ver_dic)
-version = ".".join(str(x) for x in ver_dic["VERSION"])
-release = ver_dic["VERSION_TEXT"]
+release = metadata.version("sumpy")
+version = ".".join(release.split(".")[:2])
 
 intersphinx_mapping = {
-    "python": ("https://docs.python.org/3/", None),
-    "numpy": ("https://numpy.org/doc/stable/", None),
-    "sympy": ("https://docs.sympy.org/latest/", None),
-    "matplotlib": ("https://matplotlib.org/stable/", None),
-    "pyopencl": ("https://documen.tician.de/pyopencl/", None),
-    "pytools": ("https://documen.tician.de/pytools/", None),
-    "modepy": ("https://documen.tician.de/modepy/", None),
-    "pymbolic": ("https://documen.tician.de/pymbolic/", None),
-    "loopy": ("https://documen.tician.de/loopy/", None),
-    "pytential": ("https://documen.tician.de/pytential/", None),
-    "boxtree": ("https://documen.tician.de/boxtree/", None),
     "arraycontext": ("https://documen.tician.de/arraycontext/", None),
+    "boxtree": ("https://documen.tician.de/boxtree/", None),
+    "loopy": ("https://documen.tician.de/loopy/", None),
+    "matplotlib": ("https://matplotlib.org/stable/", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+    "pymbolic": ("https://documen.tician.de/pymbolic/", None),
+    "pyopencl": ("https://documen.tician.de/pyopencl/", None),
+    "pytential": ("https://documen.tician.de/pytential/", None),
+    "python": ("https://docs.python.org/3/", None),
+    "pytools": ("https://documen.tician.de/pytools/", None),
+    "sympy": ("https://docs.sympy.org/latest/", None),
 }
 
 nitpick_ignore_regex = [
