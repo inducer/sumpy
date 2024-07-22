@@ -561,7 +561,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
     del eval_offset
 
-    if knl.dim == 2:
+    if knl.dim == 2:  # noqa: SIM108
         orders = [2, 3, 4]
     else:
         orders = [3, 4, 5]

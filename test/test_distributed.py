@@ -159,32 +159,35 @@ def test_against_single_rank(
 
     from boxtree.tools import run_mpi
     run_mpi(__file__, num_processes, {
-        "PYTEST": "against_single_rank",
-        "dims": dims,
-        "nsources": nsources,
-        "ntargets": ntargets,
         "OMP_NUM_THREADS": 1,
-        "communicate_mpoles_via_allreduce": communicate_mpoles_via_allreduce
+        "_SUMPY_TEST_NAME": "against_single_rank",
+        "_SUMPY_TEST_DIMS": dims,
+        "_SUMPY_TEST_NSOURCES": nsources,
+        "_SUMPY_TEST_NTARGETS": ntargets,
+        "_SUMPY_TEST_MPOLES_ALLREDUCE": communicate_mpoles_via_allreduce
         })
 
 # }}}
 
 
 if __name__ == "__main__":
-    if "PYTEST" in os.environ:
-        if os.environ["PYTEST"] == "against_single_rank":
+    if "_SUMPY_TEST_NAME" in os.environ:
+        name = os.environ["_SUMPY_TEST_NAME"]
+        if name == "against_single_rank":
             # Run "test_against_single_rank" test case
-            dims = int(os.environ["dims"])
-            nsources = int(os.environ["nsources"])
-            ntargets = int(os.environ["ntargets"])
+            dims = int(os.environ["_SUMPY_TEST_DIMS"])
+            nsources = int(os.environ["_SUMPY_TEST_NSOURCES"])
+            ntargets = int(os.environ["_SUMPY_TEST_NTARGETS"])
 
             from distutils.util import strtobool
             communicate_mpoles_via_allreduce = bool(
-                strtobool(os.environ["communicate_mpoles_via_allreduce"]))
+                strtobool(os.environ["_SUMPY_TEST_MPOLES_ALLREDUCE"]))
 
             _test_against_single_rank(
                 dims, nsources, ntargets, np.float64,
                 communicate_mpoles_via_allreduce)
+        else:
+            raise ValueError(f"Invalid test name: {name!r}")
     else:
         # You can test individual routines by typing
         # $ python test_distributed.py

@@ -131,11 +131,7 @@ class P2PBase(KernelCacheMixin, KernelComputation):
             expr_sum = out_knl.postprocess_at_target(expr_sum, dvec)
             exprs.append(expr_sum)
 
-        if self.exclude_self:
-            result_name_prefix = "pair_result_tmp"
-        else:
-            result_name_prefix = "pair_result"
-
+        result_name_prefix = "pair_result_tmp" if self.exclude_self else "pair_result"
         result_names = [
             sac.add_assignment(f"{result_name_prefix}_{i}", expr)
             for i, expr in enumerate(exprs)

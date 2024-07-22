@@ -106,7 +106,7 @@ class LinearPDESystemOperator:
     def order(self) -> int:
         deg = 0
         for eq in self.eqs:
-            deg = max(deg, max(sum(ident.mi) for ident in eq.keys()))
+            deg = max(deg, max(sum(ident.mi) for ident in eq))
         return deg
 
     def __mul__(self, param: Number_ish) -> LinearPDESystemOperator:
@@ -148,10 +148,7 @@ class LinearPDESystemOperator:
 
     def __getitem__(self, idx: int | slice) -> LinearPDESystemOperator:
         item = self.eqs.__getitem__(idx)
-        if isinstance(item, tuple):
-            eqs = item
-        else:
-            eqs = (item,)
+        eqs = item if isinstance(item, tuple) else (item,)
         return LinearPDESystemOperator(self.dim, eqs)
 
     @property
@@ -170,7 +167,7 @@ class LinearPDESystemOperator:
         if fnames is None:
             noutputs = 0
             for eq in self.eqs:
-                for deriv_ident in eq.keys():
+                for deriv_ident in eq:
                     noutputs = max(noutputs, deriv_ident.vec_idx)
             fnames = [f"f{i}" for i in range(noutputs+1)]
 
@@ -210,7 +207,7 @@ def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> list[LinearPDESystemOp
     gens += [sympy.symbols(f"_t{i}") for i in range(pde.total_dims - pde.dim)]
 
     max_vec_idx = max(deriv_ident.vec_idx for eq in pde.eqs
-                      for deriv_ident in eq.keys())
+                      for deriv_ident in eq)
 
     pde_system_mat = sympy.zeros(len(pde.eqs), max_vec_idx + 1)
     for row, eq in enumerate(pde.eqs):
@@ -338,7 +335,7 @@ def as_scalar_pde(pde: LinearPDESystemOperator, comp_idx: int) \
     """
     indices = set()
     for eq in pde.eqs:
-        for deriv_ident in eq.keys():
+        for deriv_ident in eq:
             indices.add(deriv_ident.vec_idx)
 
     # this is already a scalar pde
@@ -435,7 +432,7 @@ def make_identity_diff_op(
     :arg noutput: number of output values of function
     :arg time_dependent: include time as a dimension
     """
-    if time_dependent:
+    if time_dependent:  # noqa: SIM108
         mi = tuple([0]*(ninput + 1))
     else:
         mi = tuple([0]*ninput)

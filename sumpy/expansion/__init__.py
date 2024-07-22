@@ -418,7 +418,7 @@ class FullExpansionTermsWrangler(ExpansionTermsWrangler):
         axis_permutation = list(reversed(list(range(self.dim))))
 
         def mi_key(ident):
-            if isinstance(ident, DerivativeIdentifier):
+            if isinstance(ident, DerivativeIdentifier):  # noqa: SIM108
                 mi = ident.mi
             else:
                 mi = ident
@@ -584,7 +584,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         from sumpy.expansion.diff_op import DerivativeIdentifier
 
         def mi_key(ident):
-            if isinstance(ident, DerivativeIdentifier):
+            if isinstance(ident, DerivativeIdentifier):  # noqa: SIM108
                 mi = ident.mi
             else:
                 mi = ident
@@ -696,7 +696,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 return mis, op
 
         ordering_key, _ = self._get_mi_ordering_key_and_axis_permutation()
-        max_mi = max((ident for ident in mi_to_coeff.keys()), key=ordering_key)
+        max_mi = max((ident for ident in mi_to_coeff), key=ordering_key)
         max_mi_coeff = mi_to_coeff[max_mi]
         max_mi_mult = -1/sym.sympify(max_mi_coeff)
 

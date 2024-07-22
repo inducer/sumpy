@@ -16,7 +16,7 @@ def make_fourier_mode_extender(m, n, dtype):
     result = np.zeros((m, n), dtype)
 
     # https://docs.scipy.org/doc/numpy/reference/routines.fft.html
-    if k % 2 == 0:
+    if k % 2 == 0:  # noqa: SIM108
         peak_pos_freq = k/2
     else:
         peak_pos_freq = (k-1)/2
