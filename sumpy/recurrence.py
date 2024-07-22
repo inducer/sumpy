@@ -1,9 +1,9 @@
 r"""
 With the functionality in this module, we aim to compute a recurrence for
 one-dimensional derivatives of functions :math:`f:\mathbb R^n \to \mathbb R`
-for functions :math:`f` satisfying two assumptions:
+for functions satisfying two assumptions:
 
-- :math:`f` satisfies a PDE is linear and has coefficients polynomial
+- :math:`f` satisfies a PDE that is linear and has coefficients polynomial
   in the coordinates.
 - :math:`f` only depends on the radius :math:`r`,
   i.e. :math:`f(\boldsymbol x)=f(|\boldsymbol x|_2)`.
@@ -146,7 +146,7 @@ def _generate_nd_derivative_relations(var: np.ndarray, ode_order: int) -> dict:
 def ode_in_r_to_x(ode_in_r: sp.Expr, var: np.ndarray, ode_order: int) -> sp.Expr:
     r"""
     Translates an ode in the variable r into an ode in the variable x
-    by replcaing the terms :math:`f, f_r, f_{rr}, \dots` as a linear combinations of
+    by replacing the terms :math:`f, f_r, f_{rr}, \dots` as a linear combinations of
     :math:`f, f_x, f_{xx}, \dots` using the chain rule.
 
     :arg ode_in_r: a linear combination of :math:`f, f_r, f_{rr}, \dots` represented
@@ -170,10 +170,12 @@ def ode_in_x_to_coeff_array(poly: sp.Poly, ode_order: int,
                                             var: np.ndarray) -> list:
     r"""
     Organizes the coefficients of an ODE in the :math:`x_0` variable into a 2D array.
+
     :arg poly: a sympy polynomial in
-        :math:`\partial_{x_0}^0 f, \partial_{x_0}^1 f,\cdots` of the form
-        :math:`(b_{00} x_0^0 + b_{01} x_0^1 + \cdots) \partial_{x_0}^0 f +
-        (b_{10} x_0^0 + b_{11} x_0^1 +\cdots) \partial_x^1 f`
+    :math:`\partial_{x_0}^0 f, \partial_{x_0}^1 f,\cdots` of the form
+    :math:`(b_{00} x_0^0 + b_{01} x_0^1 + \cdots) \partial_{x_0}^0 f +
+    (b_{10} x_0^0 + b_{11} x_0^1 +\cdots) \partial_x^1 f`
+
     :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
     :arg ode_order: the order of the input ODE we return a sequence
 
@@ -228,10 +230,8 @@ def recurrence_from_coeff_array(coeffs: list, var: np.ndarray) -> sp.Expr:
     A function that takes in as input an organized 2D coefficient array (see above)
     and outputs a recurrence relation.
 
-    :arg coeffs: a sequence of of sequences, with the outer sequence iterating
-        over derivative orders, and each inner sequence iterating over powers of
-        :math:`x_0`, so that, in terms of the above form, coeffs is
-        :math:`[[b_{00}, b_{01}, ...], [b_{10}, b_{11}, ...], ...]`
+    :arg coeffs: a sequence of of sequences, described in
+        :func:`ode_in_x_to_coeff_array`
     :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
     """
     final_recurrence = 0
@@ -249,7 +249,8 @@ def recurrence_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
     A function that takes in as input a sympy PDE and outputs a recurrence relation.
 
     :arg pde: a :class:`sumpy.expansion.diff_op.LinearSystemPDEOperator`
-        that must satisfy ``pde.eqs == 1`` and have polynomial coefficients.
+        that must satisfy ``pde.eqs == 1`` and have polynomial coefficients
+        in the coordinates.
     :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
     """
     ode_in_r, var, ode_order = pde_to_ode_in_r(pde)
