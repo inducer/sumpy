@@ -1,12 +1,15 @@
-include test/*.py
-include examples/*.py
-
 include doc/*.rst
 include doc/Makefile
-include doc/*.py
-include doc/images/*.png
-include doc/_static/*.css
-include doc/_templates/*.html
 
+include notes/*.tex
+include notes/*.pdf
+include notes/latexmkrc
+include notes/media/*.ipe
+include notes/media/*.eps
+
+include LICENSE
 include README.rst
-include requirements.txt
+
+prune .github
+exclude .gitlab-ci.yml
+exclude .gitignore
