@@ -179,9 +179,8 @@ if __name__ == "__main__":
             nsources = int(os.environ["_SUMPY_TEST_NSOURCES"])
             ntargets = int(os.environ["_SUMPY_TEST_NTARGETS"])
 
-            from distutils.util import strtobool
-            communicate_mpoles_via_allreduce = bool(
-                strtobool(os.environ["_SUMPY_TEST_MPOLES_ALLREDUCE"]))
+            communicate_mpoles_via_allreduce = (
+                os.environ["_SUMPY_TEST_MPOLES_ALLREDUCE"] == "True")
 
             _test_against_single_rank(
                 dims, nsources, ntargets, np.float64,
