@@ -286,10 +286,11 @@ class BesselDerivativeReplacer(CSECachingIdentityMapper, CallExternalRecMapper):
 
             # AS (9.1.31)
             # https://dlmf.nist.gov/10.6.7
-            if order >= 0:
-                order_str = str(order)
+            if order >= 0:  # noqa: SIM108
+                order_str = f"{order}"
             else:
-                order_str = "m"+str(-order)
+                order_str = f"m{-order}"
+
             k = n_derivs
             return prim.CommonSubexpression(
                     2**(-k)*sum(
@@ -662,7 +663,7 @@ def combine_mappers(*mappers):
     import types
     from functools import partial
     combine_mapper = CombinedMapper(all_methods)
-    for method_name in all_methods.keys():
+    for method_name in all_methods:
         setattr(combine_mapper, method_name,
                 types.MethodType(partial(_map, method_name), combine_mapper))
     return combine_mapper

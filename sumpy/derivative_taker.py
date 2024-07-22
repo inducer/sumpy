@@ -153,7 +153,7 @@ class ExprDerivativeTaker:
 
     def get_closest_cached_mi(self, mi):
         return min((other_mi
-                for other_mi in self.cache_by_mi.keys()
+                for other_mi in self.cache_by_mi
                 if (np.array(mi) >= np.array(other_mi)).all()),
             key=lambda other_mi: sum(self.mi_dist(mi, other_mi)))
 
@@ -371,8 +371,9 @@ class DifferentiatedExprDerivativeTaker:
         # :attr:`derivative_coeff_dict` which would multiply the
         # expression by more `rscale`s than necessary. This is corrected by
         # dividing by `rscale`.
-        max_order = max(sum(extra_mi) for extra_mi in
-                self.derivative_coeff_dict.keys())
+        max_order = max(
+                sum(extra_mi) for extra_mi in self.derivative_coeff_dict
+                )
 
         result = sum(
             coeff * self.taker.diff(add_mi(mi, extra_mi))

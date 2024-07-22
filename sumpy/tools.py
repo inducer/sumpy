@@ -777,10 +777,7 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
     for ilev, N1 in enumerate(list(reversed(factors))):  # noqa: N806
         nfft //= N1
         N2 = n // (nfft * N1)  # noqa: N806
-        if ilev == 0:
-            init_depends_on = "copy"
-        else:
-            init_depends_on = f"update_{ilev-1}"
+        init_depends_on = "copy" if ilev == 0 else f"update_{ilev-1}"
 
         temp = var("temp")
         exp_table = var("exp_table")
@@ -872,10 +869,7 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
         ]
 
     if name is None:
-        if inverse:
-            name = f"ifft_{n}"
-        else:
-            name = f"fft_{n}"
+        name = f"ifft_{n}" if inverse else f"fft_{n}"
 
     knl = lp.make_kernel(
         domains, insns,
@@ -1007,7 +1001,7 @@ def run_opencl_fft(
         # FIXME: use the public API once
         # https://github.com/vincefn/pyvkfft/pull/17 is in
         from pyvkfft.opencl import _vkfft_opencl
-        if inverse:
+        if inverse:  # noqa: SIM108
             meth = _vkfft_opencl.ifft
         else:
             meth = _vkfft_opencl.fft
@@ -1038,7 +1032,7 @@ _depr_name_to_replacement_and_obj = {
 
 
 def __getattr__(name):
-    replacement_and_obj = _depr_name_to_replacement_and_obj.get(name, None)
+    replacement_and_obj = _depr_name_to_replacement_and_obj.get(name)
     if replacement_and_obj is not None:
         replacement, obj, year = replacement_and_obj
         from warnings import warn

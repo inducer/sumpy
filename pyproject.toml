@@ -87,12 +87,10 @@ extend-select = [
     "N",   # pep8-naming
     "NPY", # numpy
     "Q",   # flake8-quotes
-    "UP",  # pyupgrade
     "RUF", # ruff
+    "SIM", # flake8-simplify
+    "UP",  # pyupgrade
     "W",   # pycodestyle
-
-    # TODO
-    # "SIM",
 ]
 extend-ignore = [
     "C90",  # McCabe complexity
@@ -109,11 +107,11 @@ multiline-quotes = "double"
 [tool.ruff.lint.isort]
 combine-as-imports = true
 known-first-party = [
-    "pytools",
-    "pymbolic",
     "arraycontext",
     "loopy",
+    "pymbolic",
     "pyopencl",
+    "pytools",
 ]
 known-local-folder = [
     "sumpy",

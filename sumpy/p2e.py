@@ -76,11 +76,7 @@ class P2EBase(KernelCacheMixin, KernelComputation):
         txr = TargetTransformationRemover()
         sxr = SourceTransformationRemover()
 
-        if kernels is None:
-            kernels = [txr(expansion.kernel)]
-        else:
-            kernels = kernels
-
+        kernels = [txr(expansion.kernel)] if kernels is None else kernels
         expansion = expansion.with_kernel(sxr(txr(expansion.kernel)))
 
         for knl in kernels:

@@ -578,11 +578,7 @@ class HelmholtzKernel(ExpressionKernel):
         return register_bessel_callables(loopy_knl)
 
     def get_args(self):
-        if self.allow_evanescent:
-            k_dtype = np.complex128
-        else:
-            k_dtype = np.float64
-
+        k_dtype = np.complex128 if self.allow_evanescent else np.float64
         return [
                 KernelArgument(
                     loopy_arg=lp.ValueArg(self.helmholtz_k_name, k_dtype),

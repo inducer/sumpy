@@ -94,7 +94,7 @@ class KernelInfo:
 
     @property
     def nderivs(self):
-        return max(sum(ident.mi) for ident in self.eq.keys())
+        return max(sum(ident.mi) for ident in self.eq)
 
 
 @pytest.mark.parametrize("knl_info", [

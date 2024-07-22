@@ -481,7 +481,7 @@ def tree_cse(exprs, symbols, opt_subs=None):
             if expr in opt_subs:
                 expr = opt_subs[expr]
 
-            if isinstance(expr, CSE_NO_DESCEND_CLASSES):
+            if isinstance(expr, CSE_NO_DESCEND_CLASSES):  # noqa: SIM108
                 args = ()
             else:
                 args = expr.args
@@ -544,7 +544,7 @@ def tree_cse(exprs, symbols, opt_subs=None):
 
     reduced_exprs = []
     for e in exprs:
-        if isinstance(e, Basic):
+        if isinstance(e, Basic):  # noqa: SIM108
             reduced_e = rebuild(e)
         else:
             reduced_e = e
@@ -586,7 +586,7 @@ def cse(exprs, symbols=None, optimizations=None):
     # Preprocess the expressions to give us better optimization opportunities.
     reduced_exprs = [preprocess_for_cse(e, optimizations) for e in exprs]
 
-    if symbols is None:
+    if symbols is None:  # noqa: SIM108
         symbols = numbered_symbols(cls=Symbol)
     else:
         # In case we get passed an iterable with an __iter__ method instead of
