@@ -1,5 +1,79 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = [
+    "setuptools>=63",
+]
+
+[project]
+name = "sumpy"
+version = "2022.1"
+description = "Fast summation in Python"
+readme = "README.rst"
+license = { text = "MIT" }
+authors = [
+    { name = "Andreas Kloeckner", email = "inform@tiker.net" },
+]
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Other Audience",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "arraycontext>=2021.1",
+    "boxtree>=2023.1",
+    "immutabledict",
+    "loopy>=2024.1",
+    "numpy",
+    "pyopencl>=2022.1",
+    "pytools>=2022.1",
+]
+
+[project.optional-dependencies]
+doc = [
+    "furo",
+    "sphinx-copybutton",
+    "sphinx>=4",
+]
+fmmlib = [
+    "pyfmmlib>=2023.1",
+]
+sympy = [
+    "sympy>=0.7.2",
+]
+symengine = [
+    "symengine>=0.9.0",
+]
+pyvkfft = [
+    "pyvkfft>=2024.1",
+]
+test = [
+    "pylint",
+    "pytest",
+    "ruff",
+]
+
+[project.urls]
+Documentation = "https://documen.tician.de/sumpy"
+Repository = "https://github.com/inducer/sumpy"
+
+[tool.setuptools.packages.find]
+include = [
+    "sumpy*",
+]
+
 [tool.ruff]
-target-version = "py38"
 preview = true
 
 [tool.ruff.lint]
@@ -76,23 +150,22 @@ warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
 module = [
-    "pyopencl.*",
-    "pymbolic.*",
-    "loopy.*",
-    "symengine.*",
     "boxtree.*",
-    "pyvkfft.*",
-    "pyfmmlib.*",
-    "mayavi.*",
-    "scipy.*",
-    "sympy.*",
+    "loopy.*",
     "matplotlib.*",
+    "mayavi.*",
+    "pyfmmlib.*",
+    "pymbolic.*",
+    "pyopencl.*",
     "pyvisfile.*",
+    "pyvkfft.*",
+    "scipy.*",
+    "symengine.*",
+    "sympy.*",
 ]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 markers = [
-    "mpi: test distributed FMM",
+    "mpi: tests distributed FMM",
 ]
-
