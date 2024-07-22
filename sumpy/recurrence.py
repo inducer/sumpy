@@ -184,21 +184,12 @@ def ode_in_x_to_coeff_array(poly: sp.Poly, ode_order: int,
         :math:`x_0`, so that, in terms of the above form, coeffs is
         :math:`[[b_{00}, b_{01}, ...], [b_{10}, b_{11}, ...], ...]`
     """
-    def tup(i, n=ode_order+1):
-        a = []
-        for j in range(n):
-            if j != i:
-                a.append(0)
-            else:
-                a.append(1)
-        return tuple(a)
+    def kronecker(i, n=ode_order+1):
+        return tuple(1 if i == j else 0 for j in range(n))
 
-    coeffs = []
-    for deriv_ind in range(ode_order+1):
-        coeffs.append(sp.Poly(poly.coeff_monomial(tup(deriv_ind)),
-                              var[0]).all_coeffs()[::-1])
-
-    return coeffs
+    return [
+        sp.Poly(poly.coeff_monomial(kronecker(deriv_ind)), var[0]).all_coeffs()[::-1]
+        for deriv_ind in range(ode_order+1)
 
 
 def _auto_product_rule_single_term(p: int, m: int, var: np.ndarray) -> sp.Expr:
@@ -256,6 +247,9 @@ def recurrence_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
     ode_in_r, var, ode_order = pde_to_ode_in_r(pde)
     ode_in_x = ode_in_r_to_x(ode_in_r, var, ode_order).simplify()
     ode_in_x_cleared = (ode_in_x * var[0]**(ode_order+1)).simplify()
+
+    assert is_actually_cleared()
+
     f_x_derivs = _make_sympy_vec("f_x", ode_order+1)
     poly = sp.Poly(ode_in_x_cleared, *f_x_derivs)
     coeffs = ode_in_x_to_coeff_array(poly, ode_order, var)
