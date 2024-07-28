@@ -486,7 +486,7 @@ class KernelCacheMixin(ABC):
         logger.info("%s: kernel cache miss", self.name)
         if CACHING_ENABLED and not (
                 NO_CACHE_KERNELS and self.name in NO_CACHE_KERNELS):
-            logger.info("%s: kernel cache miss [key=%d]",
+            logger.info("%s: kernel cache miss [key=%s]",
                 self.name, cache_key)
 
         from pytools import MinRecursionLimit
