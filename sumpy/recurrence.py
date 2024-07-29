@@ -28,6 +28,8 @@ The whole process can be automated using :func:`recurrence_from_pde`.
 
 from __future__ import annotations
 
+from typing import TypeVar
+
 
 __copyright__ = """
 Copyright (C) 2024 Hirish Chandrasekaran
@@ -54,11 +56,18 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import math
+
 import numpy as np
 import sympy as sp
+
 from pytools.obj_array import make_obj_array
+
 from sumpy.expansion.diff_op import (
-    DerivativeIdentifier, make_identity_diff_op, laplacian, LinearPDESystemOperator)
+    DerivativeIdentifier,
+    LinearPDESystemOperator,
+    laplacian,
+    make_identity_diff_op,
+)
 
 
 # similar to make_sym_vector in sumpy.symbolic, but returns an object array
@@ -166,8 +175,11 @@ def ode_in_r_to_x(ode_in_r: sp.Expr, var: np.ndarray, ode_order: int) -> sp.Expr
     return ode_in_x
 
 
+ODECoefficients = list[list[sp.Expr]]
+
+
 def ode_in_x_to_coeff_array(poly: sp.Poly, ode_order: int,
-                                            var: np.ndarray) -> list:
+                                            var: np.ndarray) -> ODECoefficients:
     r"""
     Organizes the coefficients of an ODE in the :math:`x_0` variable into a 2D array.
 
@@ -184,11 +196,26 @@ def ode_in_x_to_coeff_array(poly: sp.Poly, ode_order: int,
         :math:`x_0`, so that, in terms of the above form, coeffs is
         :math:`[[b_{00}, b_{01}, ...], [b_{10}, b_{11}, ...], ...]`
     """
-    def kronecker(i, n=ode_order+1):
-        return tuple(1 if i == j else 0 for j in range(n))
+    return [
+        # recast ODE coefficient obtained below as polynomial in x0
+        sp.Poly(
+            # get coefficient of deriv_ind'th derivative
+            poly.coeff_monomial(poly.gens[deriv_ind]),
 
-    return [sp.Poly(poly.coeff_monomial(kronecker(deriv_ind)),
-                    var[0]).all_coeffs()[::-1] for deriv_ind in range(ode_order+1)]
+            var[0])
+        # get poly coefficients in /ascending/ order
+        .all_coeffs()[::-1]
+        for deriv_ind in range(ode_order+1)]
+
+
+NumberT = TypeVar("NumberT", int, float, complex)
+
+
+def _falling_factorial(arg: NumberT, num_terms: int) -> NumberT:
+    result = 1
+    for i in range(num_terms):
+        result = result * (arg - i)
+    return result
 
 
 def _auto_product_rule_single_term(p: int, m: int, var: np.ndarray) -> sp.Expr:
@@ -198,21 +225,15 @@ def _auto_product_rule_single_term(p: int, m: int, var: np.ndarray) -> sp.Expr:
     variable.
     We let :math:`s(i)` represent the ith order derivative of f when
     we output the final result.
-    :arg p: see description
-    :arg m: see description
     :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
     """
     n = sp.symbols("n")
     s = sp.Function("s")
-    result = 0
-    for i in range(p+1):
-        temp = 1
-        for j in range(i):
-            temp *= (n - j)
-        # pylint: disable=not-callable
-        temp *= math.comb(p, i) * s(n-i+m) * var[0]**(p-i)
-        result += temp
-    return result
+    return sum(
+        _falling_factorial(n, i)
+        * math.comb(p, i) * s(n-i+m) * var[0]**(p-i)
+        for i in range(p+1)
+    )
 
 
 def recurrence_from_coeff_array(coeffs: list, var: np.ndarray) -> sp.Expr:
@@ -225,8 +246,8 @@ def recurrence_from_coeff_array(coeffs: list, var: np.ndarray) -> sp.Expr:
     :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
     """
     final_recurrence = 0
-    #Outer loop is derivative direction
-    #Inner is polynomial order of x_0
+    # Outer loop is derivative direction
+    # Inner is polynomial order of x_0
     for m, _ in enumerate(coeffs):
         for p, _ in enumerate(coeffs[m]):
             final_recurrence += coeffs[m][p] * _auto_product_rule_single_term(p,
@@ -246,7 +267,7 @@ def recurrence_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
     ode_in_r, var, ode_order = pde_to_ode_in_r(pde)
     ode_in_x = ode_in_r_to_x(ode_in_r, var, ode_order).simplify()
     ode_in_x_cleared = (ode_in_x * var[0]**(ode_order+1)).simplify()
-    #ode_in_x_cleared shouldn't have rational function coefficients in the coord.
+    # ode_in_x_cleared shouldn't have rational function coefficients in the coord.
     assert sp.together(ode_in_x_cleared) == ode_in_x_cleared
     f_x_derivs = _make_sympy_vec("f_x", ode_order+1)
     poly = sp.Poly(ode_in_x_cleared, *f_x_derivs)
@@ -311,8 +332,8 @@ def test_recurrence_finder_helmholtz_three_d():
     """
     Tests our recurrence relation generator for Helmhotlz 3D.
     """
-    #We are creating the recurrence relation for helmholtz3d which
-    #seems to be an order 5 recurrence relation
+    # We are creating the recurrence relation for helmholtz3d which
+    # seems to be an order 5 recurrence relation
     w = make_identity_diff_op(3)
     helmholtz3d = laplacian(w) + w
     r = recurrence_from_pde(helmholtz3d)
@@ -326,24 +347,27 @@ def test_recurrence_finder_helmholtz_three_d():
                         ) / (sp.sqrt(x**2 + y**2 + z**2))
         return sp.diff(true_f, x, i).subs(x, s_x).subs(
             y, s_y).subs(z, s_z)
-    #Create relevant symbols
+    # Create relevant symbols
     var = _make_sympy_vec("x", 3)
     n = sp.symbols("n")
     s = sp.Function("s")
 
-    #Create random source location
-    s_loc = np.random.rand(3)
+    rng = np.random.default_rng()
 
-    #Create random order to check
-    d = np.random.randint(0, 5)
+    # Create random source location
+    s_loc = rng.uniform(size=3)
 
-    #Substitute random location into recurrence relation and value of n = d
+    # Create random order to check
+    from random import randrange
+    d = randrange(0, 5)
+
+    # Substitute random location into recurrence relation and value of n = d
     r_loc = r.subs(var[0], s_loc[0])
     r_loc = r_loc.subs(var[1], s_loc[1])
     r_loc = r_loc.subs(var[2], s_loc[2])
     r_sub = r_loc.subs(n, d)
 
-    #Checking that the recurrence holds to some machine epsilon
+    # Checking that the recurrence holds to some machine epsilon
     for i in range(max(d-3, 0), d+3):
         # pylint: disable=not-callable
         r_sub = r_sub.subs(s(i), deriv_helmholtz_three_d(i, s_loc))
