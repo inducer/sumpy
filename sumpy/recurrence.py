@@ -11,7 +11,8 @@ for functions satisfying two assumptions:
 This process proceeds in multiple steps:
 
 - Convert from the PDE to an ODE in :math:`r`, using :func:`pde_to_ode_in_r`.
-- Convert from an ODE in :math:`r` to one in :math:`x`, using :func:`ode_in_r_to_x`.
+- Convert from an ODE in :math:`r` to one in :math:`x`,
+using :func:`ode_in_r_to_x`.
 - Sort general-form ODE in :math:`x` into a coefficient array, using
   :func:`ode_in_x_to_coeff_array`.
 - Finally, get an expression for the recurrence, using
@@ -88,7 +89,8 @@ def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
 
     :returns: a tuple ``(ode_in_r, var, ode_order)``, where
     - *ode_in_r* with derivatives given as :class:`sympy.Derivative`
-    - *var* is an object array of :class:`sympy.Symbol`, with successive variables
+    - *var* is an object array of :class:`sympy.Symbol`, with successive
+      variables
         representing the Cartesian coordinate directions.
     - *ode_order* the order of ODE that is returned
     """
@@ -105,7 +107,8 @@ def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
     rval = r + eps
     f = sp.Function("f")
 
-    def apply_deriv_id(expr: sp.Expr, deriv_id: DerivativeIdentifier) -> sp.Expr:
+    def apply_deriv_id(expr: sp.Expr,
+                       deriv_id: DerivativeIdentifier) -> sp.Expr:
         for i, nderivs in enumerate(deriv_id.mi):
             expr = expr.diff(var[i], nderivs)
         return expr
@@ -129,7 +132,8 @@ def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
 
 def _generate_nd_derivative_relations(var: np.ndarray, ode_order: int) -> dict:
     r"""
-    Using the chain rule outputs a vector that gives in each component respectively
+    Using the chain rule outputs a vector that gives in each component
+    respectively
     :math:`[f(r), f'(r), \dots, f^{(ode_order)}(r)]` as a linear combination of
     :math:`[f(x), f'(x), \dots, f^{(ode_order)}(x)]`
 
@@ -152,20 +156,23 @@ def _generate_nd_derivative_relations(var: np.ndarray, ode_order: int) -> dict:
     return sp.solve(system, *f_r_derivs, dict=True)[0]
 
 
-def ode_in_r_to_x(ode_in_r: sp.Expr, var: np.ndarray, ode_order: int) -> sp.Expr:
+def ode_in_r_to_x(ode_in_r: sp.Expr, var: np.ndarray,
+                  ode_order: int) -> sp.Expr:
     r"""
     Translates an ode in the variable r into an ode in the variable x
-    by replacing the terms :math:`f, f_r, f_{rr}, \dots` as a linear combinations of
+    by replacing the terms :math:`f, f_r, f_{rr}, \dots` as a linear
+    combinations of
     :math:`f, f_x, f_{xx}, \dots` using the chain rule.
 
-    :arg ode_in_r: a linear combination of :math:`f, f_r, f_{rr}, \dots` represented
-        by the sympy variables :math:`f_{r0}, f_{r1}, f_{r2}, \dots`
+    :arg ode_in_r: a linear combination of :math:`f, f_r, f_{rr}, \dots`
+    represented by the sympy variables :math:`f_{r0}, f_{r1}, f_{r2}, \dots`
     :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
     :arg ode_order: the order of the input ODE
 
     :returns: *ode_in_x* a linear combination of :math:`f, f_x, f_{xx}, \dots`
-        represented by the sympy variables :math:`f_{x0}, f_{x1}, f_{x2}, \dots`
-        with coefficients as rational functions in :math:`x_0, x_1, \dots`
+        represented by the sympy variables :math:`f_{x0}, f_{x1}, f_{x2},
+        \dots` with coefficients as rational functions in
+        :math:`x_0, x_1, \dots`
     """
     subme = _generate_nd_derivative_relations(var, ode_order+1)
     ode_in_x = ode_in_r
@@ -178,10 +185,11 @@ def ode_in_r_to_x(ode_in_r: sp.Expr, var: np.ndarray, ode_order: int) -> sp.Expr
 ODECoefficients = list[list[sp.Expr]]
 
 
-def ode_in_x_to_coeff_array(poly: sp.Poly, ode_order: int,
-                                            var: np.ndarray) -> ODECoefficients:
+def ode_in_x_to_coeff_array(poly: sp.Poly, ode_order: int,  var:
+                            np.ndarray) -> ODECoefficients:
     r"""
-    Organizes the coefficients of an ODE in the :math:`x_0` variable into a 2D array.
+    Organizes the coefficients of an ODE in the :math:`x_0` variable into a
+    2D array.
 
     :arg poly: a sympy polynomial in
     :math:`\partial_{x_0}^0 f, \partial_{x_0}^1 f,\cdots` of the form
@@ -191,10 +199,10 @@ def ode_in_x_to_coeff_array(poly: sp.Poly, ode_order: int,
     :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
     :arg ode_order: the order of the input ODE we return a sequence
 
-    :returns: *coeffs* a sequence of of sequences, with the outer sequence iterating
-        over derivative orders, and each inner sequence iterating over powers of
-        :math:`x_0`, so that, in terms of the above form, coeffs is
-        :math:`[[b_{00}, b_{01}, ...], [b_{10}, b_{11}, ...], ...]`
+    :returns: *coeffs* a sequence of of sequences, with the outer sequence
+        iterating over derivative orders, and each inner sequence iterating
+        over powers of :math:`x_0`, so that, in terms of the above form,
+        coeffs is :math:`[[b_{00}, b_{01}, ...], [b_{10}, b_{11}, ...], ...]`
     """
     return [
         # recast ODE coefficient obtained below as polynomial in x0
@@ -220,16 +228,18 @@ def _falling_factorial(arg: NumberT, num_terms: int) -> NumberT:
 
 def _auto_product_rule_single_term(p: int, m: int, var: np.ndarray) -> sp.Expr:
     r"""
-    We assume that we are given the expression :math:`x_0^p f^(m)(x_0)`. We then
-    output the nth order derivative of the expression where :math:`n` is a symbolic
-    variable.
+    We assume that we are given the expression :math:`x_0^p f^(m)(x_0)`. We
+    then output the nth order derivative of the expression where :math:`n` is
+    a symbolic variable.
     We let :math:`s(i)` represent the ith order derivative of f when
     we output the final result.
     :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
     """
     n = sp.symbols("n")
     s = sp.Function("s")
+
     return sum(
+        # pylint: disable=not-callable
         _falling_factorial(n, i)
         * math.comb(p, i) * s(n-i+m) * var[0]**(p-i)
         for i in range(p+1)
@@ -238,8 +248,8 @@ def _auto_product_rule_single_term(p: int, m: int, var: np.ndarray) -> sp.Expr:
 
 def recurrence_from_coeff_array(coeffs: list, var: np.ndarray) -> sp.Expr:
     r"""
-    A function that takes in as input an organized 2D coefficient array (see above)
-    and outputs a recurrence relation.
+    A function that takes in as input an organized 2D coefficient array (see
+    above) and outputs a recurrence relation.
 
     :arg coeffs: a sequence of of sequences, described in
         :func:`ode_in_x_to_coeff_array`
@@ -250,14 +260,15 @@ def recurrence_from_coeff_array(coeffs: list, var: np.ndarray) -> sp.Expr:
     # Inner is polynomial order of x_0
     for m, _ in enumerate(coeffs):
         for p, _ in enumerate(coeffs[m]):
-            final_recurrence += coeffs[m][p] * _auto_product_rule_single_term(p,
-                                                                             m, var)
+            final_recurrence += coeffs[m][p] * _auto_product_rule_single_term(
+                p, m, var)
     return final_recurrence
 
 
 def recurrence_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
     r"""
-    A function that takes in as input a sympy PDE and outputs a recurrence relation.
+    A function that takes in as input a sympy PDE and outputs a recurrence
+    relation.
 
     :arg pde: a :class:`sumpy.expansion.diff_op.LinearSystemPDEOperator`
         that must satisfy ``pde.eqs == 1`` and have polynomial coefficients
@@ -267,7 +278,7 @@ def recurrence_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
     ode_in_r, var, ode_order = pde_to_ode_in_r(pde)
     ode_in_x = ode_in_r_to_x(ode_in_r, var, ode_order).simplify()
     ode_in_x_cleared = (ode_in_x * var[0]**(ode_order+1)).simplify()
-    # ode_in_x_cleared shouldn't have rational function coefficients in the coord.
+    # ode_in_x_cleared shouldn't have rational function coefficients
     assert sp.together(ode_in_x_cleared) == ode_in_x_cleared
     f_x_derivs = _make_sympy_vec("f_x", ode_order+1)
     poly = sp.Poly(ode_in_x_cleared, *f_x_derivs)
