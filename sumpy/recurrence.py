@@ -58,10 +58,12 @@ THE SOFTWARE.
 """
 import math
 
+from random import randrange
 import numpy as np
 import sympy as sp
 
 from pytools.obj_array import make_obj_array
+
 
 from sumpy.expansion.diff_op import (
     DerivativeIdentifier,
@@ -369,7 +371,6 @@ def test_recurrence_finder_helmholtz_three_d():
     s_loc = rng.uniform(size=3)
 
     # Create random order to check
-    from random import randrange
     d = randrange(0, 5)
 
     # Substitute random location into recurrence relation and value of n = d
