@@ -245,6 +245,100 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
 
 @pytest.mark.parametrize("order", [4])
 @pytest.mark.parametrize(("base_knl", "expn_class"), [
+    (LaplaceKernel(2), VolumeTaylorMultipoleExpansion),
+    (LaplaceKernel(2), LaplaceConformingVolumeTaylorMultipoleExpansion),
+
+    (HelmholtzKernel(2), VolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2), HelmholtzConformingVolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2), H2DMultipoleExpansion),
+
+    (DirectionalSourceDerivative(BiharmonicKernel(2), "dir_vec"),
+        VolumeTaylorMultipoleExpansion),
+
+    (HelmholtzKernel(2, allow_evanescent=True), VolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2, allow_evanescent=True),
+     HelmholtzConformingVolumeTaylorMultipoleExpansion),
+    (HelmholtzKernel(2, allow_evanescent=True), H2DMultipoleExpansion),
+    ])
+@pytest.mark.parametrize("with_source_derivative", [
+    False,
+    True
+    ])
+# Sample: test_p2e_with_source_at_center_no_nans(
+# cl._csc, HelmholtzKernel(2), H2DMultipoleExpansion, 4, False)
+def test_p2e_with_source_at_center_no_nans(
+        ctx_factory, base_knl, expn_class, order, with_source_derivative):
+    """Test for absence of NaNs when forming multipole expansions if there is
+    a source at the expansion center.
+    """
+    from sympy.core.cache import clear_cache
+    clear_cache()
+
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    extra_kwargs = {}
+    if isinstance(base_knl, HelmholtzKernel):
+        if base_knl.allow_evanescent:
+            extra_kwargs["k"] = 0.2 * (0.707 + 0.707j)
+        else:
+            extra_kwargs["k"] = 0.2
+    if isinstance(base_knl, StokesletKernel):
+        extra_kwargs["mu"] = 0.2
+
+    if with_source_derivative:
+        knl = DirectionalSourceDerivative(base_knl, "dir_vec")
+    else:
+        knl = base_knl
+
+    out_kernels = [
+            knl,
+            AxisTargetDerivative(0, knl),
+            ]
+    expn = expn_class(knl, order=order)
+
+    from sumpy import P2EFromSingleBox
+    p2e = P2EFromSingleBox(ctx, expn, out_kernels)
+
+    nsources = 1
+    centers = np.array([2, 1, 0][:knl.dim], np.float64)
+    sources = (0.*(-0.5+np.random.rand(knl.dim, nsources).astype(np.float64))
+               + centers[:, np.newaxis])
+    centers = centers.reshape([knl.dim, -1])
+
+    strengths = np.ones(nsources, dtype=np.float64) * (1/nsources)
+
+    source_boxes = np.array([0], dtype=np.int32)
+    box_source_starts = np.array([0], dtype=np.int32)
+    box_source_counts_nonchild = np.array([nsources], dtype=np.int32)
+
+    extra_source_kwargs = extra_kwargs.copy()
+    if isinstance(knl, DirectionalSourceDerivative):
+        alpha = np.linspace(0, 2*np.pi, nsources, np.float64)
+        dir_vec = np.vstack([np.cos(alpha), np.sin(alpha)])
+        extra_source_kwargs["dir_vec"] = dir_vec
+
+    rscale = 0.5
+
+    evt, (mpoles,) = p2e(
+            queue,
+            source_boxes=source_boxes,
+            box_source_starts=box_source_starts,
+            box_source_counts_nonchild=box_source_counts_nonchild,
+            centers=centers,
+            sources=sources,
+            strengths=strengths,
+            nboxes=1,
+            tgt_base_ibox=0,
+            rscale=rscale,
+            #flags="print_hl_cl",
+            out_host=True, **extra_source_kwargs)
+
+    assert not np.any(np.isnan(mpoles))
+
+
+@pytest.mark.parametrize("order", [4])
+@pytest.mark.parametrize(("base_knl", "expn_class"), [
     (LaplaceKernel(2), VolumeTaylorLocalExpansion),
     (LaplaceKernel(2), VolumeTaylorMultipoleExpansion),
     (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion),
