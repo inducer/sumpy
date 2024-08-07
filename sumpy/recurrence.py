@@ -386,8 +386,3 @@ def test_recurrence_finder_helmholtz_three_d():
     err = abs(abs(r_sub).evalf())
     print(err)
     assert err <= 1e-10
-
-w = make_identity_diff_op(2)
-laplace2d = laplacian(w)
-r = recurrence_from_pde(laplace2d)
-print(r)
