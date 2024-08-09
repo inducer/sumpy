@@ -767,8 +767,8 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
     insns = [
         "exp_table[i] = exp(const * i) {id=exp_table}",
         lp.Assignment(
-            assignee=x[(*broadcast_dims, i2)],
-            expression=y[(*broadcast_dims, i2)],
+            assignee=x[*broadcast_dims, i2],
+            expression=y[*broadcast_dims, i2],
             id="copy",
             depends_on=frozenset(["exp_table"]),
         ),
@@ -793,12 +793,12 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
         insns += [
             lp.Assignment(
                 assignee=temp[i],
-                expression=x[(*broadcast_dims, i)],
+                expression=x[*broadcast_dims, i],
                 id=f"copy_{ilev}",
                 depends_on=frozenset([init_depends_on]),
             ),
             lp.Assignment(
-                assignee=x[(*broadcast_dims, i2)],
+                assignee=x[*broadcast_dims, i2],
                 expression=0,
                 id=f"reset_{ilev}",
                 depends_on=frozenset([f"copy_{ilev}"])),
@@ -817,8 +817,8 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
                     [*broadcast_dims, iN1_sum, iN1, iN2]}),
                 temp_var_type=lp.Optional(complex_dtype)),
             lp.Assignment(
-                assignee=x[(*broadcast_dims, ifft + nfft * (iN1*N2 + iN2))],
-                expression=(x[(*broadcast_dims, ifft + nfft*(iN1*N2 + iN2))]
+                assignee=x[*broadcast_dims, ifft + nfft * (iN1*N2 + iN2)],
+                expression=(x[*broadcast_dims, ifft + nfft*(iN1*N2 + iN2)]
                     + exp * temp[ifft + nfft * (iN2*N1 + iN1_sum)]),
                 id=f"update_{ilev}",
                 depends_on=frozenset([f"exp_{ilev}"])),
@@ -853,8 +853,8 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
         domains = domains[2:]
         insns = [
             lp.Assignment(
-                assignee=x[(*broadcast_dims, 0)],
-                expression=y[(*broadcast_dims, 0)],
+                assignee=x[*broadcast_dims, 0],
+                expression=y[*broadcast_dims, 0],
             ),
         ]
         kernel_data = kernel_data[:2]
@@ -862,8 +862,8 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
         domains += ["{[i3]: 0<=i3<n}"]
         insns += [
             lp.Assignment(
-                assignee=x[(*broadcast_dims, i3)],
-                expression=x[(*broadcast_dims, i3)] / n,
+                assignee=x[*broadcast_dims, i3],
+                expression=x[*broadcast_dims, i3] / n,
                 depends_on=frozenset([f"update_{len(factors) - 1}"]),
             ),
         ]
