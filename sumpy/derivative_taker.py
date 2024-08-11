@@ -262,7 +262,7 @@ class RadialDerivativeTaker(ExprDerivativeTaker):
             return ExprDerivativeTaker.diff(self, mi)
 
         try:
-            return self.cache_by_mi_q[(mi, q)]
+            return self.cache_by_mi_q[mi, q]
         except KeyError:
             pass
 
@@ -272,7 +272,7 @@ class RadialDerivativeTaker(ExprDerivativeTaker):
                 mi_minus_one[i] = 0
                 mi_minus_one = tuple(mi_minus_one)
                 expr = self.var_list_multiplied[i] * self.diff(mi_minus_one, q=q+1)
-                self.cache_by_mi_q[(mi, q)] = expr
+                self.cache_by_mi_q[mi, q] = expr
                 return expr
 
         for i in range(self.dim):
@@ -286,7 +286,7 @@ class RadialDerivativeTaker(ExprDerivativeTaker):
                 expr = (mi[i]-1)*self.diff(mi_minus_two, q=q+1) * self.rscale ** 2
                 expr += self.var_list_multiplied[i] * self.diff(mi_minus_one, q=q+1)
                 expr = add_to_sac(self.sac, expr)
-                self.cache_by_mi_q[(mi, q)] = expr
+                self.cache_by_mi_q[mi, q] = expr
                 return expr
 
         assert mi == (0,)*self.dim
@@ -298,7 +298,7 @@ class RadialDerivativeTaker(ExprDerivativeTaker):
         expr = prev_expr.diff(self.var_list[0])/self.var_list[0]
         # We need to distribute the division above
         expr = expr.expand(deep=False)
-        self.cache_by_mi_q[(mi, q)] = expr
+        self.cache_by_mi_q[mi, q] = expr
         return expr
 
 
@@ -316,7 +316,7 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
             return RadialDerivativeTaker.diff(self, mi, q)
 
         try:
-            return self.cache_by_mi_q[(mi, q)]
+            return self.cache_by_mi_q[mi, q]
         except KeyError:
             pass
 
@@ -333,7 +333,7 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
             k = (self.orig_expr * self.r).args[-1] / sym.I / self.r
             expr = (-(2*q - 1) * self.diff(mi, q - 1)
                     - k**2 * self.diff(mi, q - 2)) / self.r**2
-        self.cache_by_mi_q[(mi, q)] = expr
+        self.cache_by_mi_q[mi, q] = expr
         return expr
 
 
