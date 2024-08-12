@@ -267,6 +267,58 @@ def recurrence_from_coeff_array(coeffs: list, var: np.ndarray) -> sp.Expr:
     return final_recurrence
 
 
+def process_recurrence_relation(r: sp.Expr) -> tuple[int, sp.Expr]:
+    r"""
+    A function that takes in as input a recurrence and outputs a recurrence
+    relation that has the nth term in terms of the n-1th, n-2th etc.
+    Also returns the order of the recurrence relation.
+
+    :arg recurrence: a recurrence relation in :math:`s(n)`
+    """
+    terms = list(r.atoms(sp.Function))
+    terms = np.array(terms)
+
+    # Sort terms and create idx_l
+    idx_l = []
+    for i in range(len(terms)):
+        tms = list(terms[i].atoms(sp.Number))
+        if len(tms) == 1:
+            idx_l.append(tms[0])
+        else:
+            idx_l.append(0)
+    idx_l = np.array(idx_l, dtype='int')
+    idx_sort = idx_l.argsort()
+    idx_l = idx_l[idx_sort]
+    terms = terms[idx_sort]
+
+    # Order is the max difference between highest/lowest in idx_l
+    order = max(idx_l) - min(idx_l) + 1
+
+    # How much do we need to shift the recurrence relation
+    shift_idx = max(idx_l)
+
+    # Get the respective coefficients in the recurrence relation from r
+    n = sp.symbols("n")
+    s = sp.Function("s")
+    coeffs = sp.poly(r, list(terms)).coeffs()
+
+    # Re-arrange the recurrence relation so we get s(n) = ____
+    # in terms of s(n-1), ...
+    true_recurrence = sum([coeffs[i]/coeffs[-1] * terms[i]
+                           for i in range(0, len(terms)-1)])
+    true_recurrence1 = true_recurrence.subs(n, n-shift_idx)
+
+    # Replace s(n-1) with snm_1, s(n-2) with snm_2 etc.
+    # because pymbolic.substitute won't recognize it
+    last_syms = [sp.Symbol(f"snm{i+1}") for i in range(order-1)]
+    # pylint: disable=not-callable
+    true_recurrence2 = true_recurrence1.subs(s(n-1), last_syms[0])
+    true_recurrence2 = true_recurrence2.subs(s(n-2), last_syms[1])
+    true_recurrence2 = true_recurrence2.subs(s(n-3), last_syms[2])
+
+    return order, true_recurrence2
+
+
 def recurrence_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
     r"""
     A function that takes in as input a sympy PDE and outputs a recurrence
