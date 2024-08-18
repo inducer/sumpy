@@ -1054,7 +1054,7 @@ def loopy_translation_classes_dependent_data(tgt_expansion, src_expansion,
     vec_name = "m2l_translation_classes_dependent_data"
 
     tgt_coeff_names = [
-            sac.assign_unique("m2l_translation_classes_dependent_data%d" % i,
+            sac.assign_unique(f"m2l_translation_classes_dependent_data{i}",
                 coeff_i)
             for i, coeff_i in enumerate(derivatives)]
     sac.run_global_cse()
