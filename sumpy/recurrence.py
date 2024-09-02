@@ -340,6 +340,19 @@ def recurrence_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
     return recurrence_from_coeff_array(coeffs, var)
 
 
+def shift_recurrence(r: sp.Expr, var: np.ndarray) -> sp.Expr:
+    r"""
+    A function that "shifts" the recurrence so it's center is placed
+    at the origin and source is the input for the recurrence generated.
+
+    :arg recurrence: a recurrence relation in :math:`s(n)`
+    """
+    r0 = r
+    for i in range(len(var)):
+        r0 = r0.subs(var[i], -var[i])
+    return r0
+
+
 def test_recurrence_finder_laplace():
     """
     Tests our recurrence relation generator for Lapalace 2D.
