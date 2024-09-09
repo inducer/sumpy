@@ -267,7 +267,8 @@ def recurrence_from_coeff_array(coeffs: list, var: np.ndarray) -> sp.Expr:
     return final_recurrence
 
 
-def process_recurrence_relation(r: sp.Expr) -> tuple[int, sp.Expr]:
+def process_recurrence_relation(r: sp.Expr,
+                                replace=True) -> tuple[int, sp.Expr]:
     r"""
     A function that takes in as input a recurrence and outputs a recurrence
     relation that has the nth term in terms of the n-1th, n-2th etc.
@@ -308,15 +309,18 @@ def process_recurrence_relation(r: sp.Expr) -> tuple[int, sp.Expr]:
                            for i in range(0, len(terms)-1)])
     true_recurrence1 = true_recurrence.subs(n, n-shift_idx)
 
-    # Replace s(n-1) with snm_1, s(n-2) with snm_2 etc.
-    # because pymbolic.substitute won't recognize it
-    last_syms = [sp.Symbol(f"snm{i+1}") for i in range(order-1)]
-    # pylint: disable=not-callable
-    true_recurrence2 = true_recurrence1.subs(s(n-1), last_syms[0])
-    true_recurrence2 = true_recurrence2.subs(s(n-2), last_syms[1])
-    true_recurrence2 = true_recurrence2.subs(s(n-3), last_syms[2])
+    if replace:
+        # Replace s(n-1) with snm_1, s(n-2) with snm_2 etc.
+        # because pymbolic.substitute won't recognize it
+        last_syms = [sp.Symbol(f"anm{i+1}") for i in range(order-1)]
+        # pylint: disable=not-callable
+        # Assumes order > 1
+        true_recurrence2 = true_recurrence1.subs(s(n-1), last_syms[0])
+        for i in range(2, order):
+            true_recurrence2 = true_recurrence2.subs(s(n-i), last_syms[i-1])
+        return order, true_recurrence2
 
-    return order, true_recurrence2
+    return order, true_recurrence1
 
 
 def recurrence_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
