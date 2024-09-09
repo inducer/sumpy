@@ -274,6 +274,10 @@ def process_recurrence_relation(r: sp.Expr,
     relation that has the nth term in terms of the n-1th, n-2th etc.
     Also returns the order of the recurrence relation.
 
+    If replace=True then the recurrence is output in a form that is ideal
+    for pymbolic processing. If replace=False then a standard recurrence 
+    is output.
+
     :arg recurrence: a recurrence relation in :math:`s(n)`
     """
     terms = list(r.atoms(sp.Function))
@@ -322,6 +326,62 @@ def process_recurrence_relation(r: sp.Expr,
 
     return order, true_recurrence1
 
+def __check_neg_ind(r_n):
+    terms = list(r_n.atoms(sp.Function))
+    terms = np.array(terms)
+
+    idx_l = []
+    for i in range(len(terms)):
+        tms = list(terms[i].atoms(sp.Number))
+        if len(tms) == 1:
+            idx_l.append(tms[0])
+        else:
+            idx_l.append(0)
+    idx_l = np.array(idx_l, dtype='int')
+    idx_sort = idx_l.argsort()
+    idx_l = idx_l[idx_sort]
+    terms = terms[idx_sort]
+
+    return np.any(idx_l < 0)
+
+
+def get_lower_order_expressions(p, recurrence):
+    r"""
+    A function that takes in as input an order of expansion
+    and a recurrence relation and outputs an array of hardcoded recurrence
+    expressions for each order. If an expression for a certain order
+    doesn't exist 0 is output. Also returns the number of initial conditions
+    needed.
+
+    :arg recurrence: a recurrence relation in :math:`s(n)`
+    :arg p: number of orders needed for recurrence expressions
+    """
+    p = 5
+    initial_c = 0
+    recur_arr = [0] * p
+    n = sp.symbols("n")
+    for i in range(p):
+        r_c = recurrence.subs(n, i)
+        if __check_neg_ind(r_c):
+            recur_arr[i] = 0
+            initial_c = i
+        else:
+            recur_arr[i] = r_c
+    return initial_c, recur_arr
+
+
+def shift_recurrence(r: sp.Expr, var: np.ndarray) -> sp.Expr:
+    r"""
+    A function that "shifts" the recurrence so it's center is placed
+    at the origin and source is the input for the recurrence generated.
+
+    :arg recurrence: a recurrence relation in :math:`s(n)`
+    """
+    r0 = r
+    for i in range(len(var)):
+        r0 = r0.subs(var[i], -var[i])
+    return r0
+
 
 def recurrence_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
     r"""
@@ -342,19 +402,6 @@ def recurrence_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
     poly = sp.Poly(ode_in_x_cleared, *f_x_derivs)
     coeffs = ode_in_x_to_coeff_array(poly, ode_order, var)
     return recurrence_from_coeff_array(coeffs, var)
-
-
-def shift_recurrence(r: sp.Expr, var: np.ndarray) -> sp.Expr:
-    r"""
-    A function that "shifts" the recurrence so it's center is placed
-    at the origin and source is the input for the recurrence generated.
-
-    :arg recurrence: a recurrence relation in :math:`s(n)`
-    """
-    r0 = r
-    for i in range(len(var)):
-        r0 = r0.subs(var[i], -var[i])
-    return r0
 
 
 def test_recurrence_finder_laplace():
@@ -455,3 +502,23 @@ def test_recurrence_finder_helmholtz_three_d():
     err = abs(abs(r_sub).evalf())
     print(err)
     assert err <= 1e-10
+
+
+def test_get_lower_order_expressions_laplace_2D():
+    """
+    Tests our expression generator for Laplace 2D.
+    """
+    
+    w = make_identity_diff_op(2)
+    laplace2d = laplacian(w)
+    r = recurrence_from_pde(laplace2d)
+    var = _make_sympy_vec("x", 2)
+    r = shift_recurrence(r, var)
+    _, r_processed = process_recurrence_relation(r, False)
+
+    _, recur_arr = get_lower_order_expressions(5, r_processed)
+
+    print(recur_arr)
+
+
+test_get_lower_order_expressions_laplace_2D()
