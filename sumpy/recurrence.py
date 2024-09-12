@@ -366,7 +366,7 @@ def get_lower_order_expressions(p, recurrence):
             recur_arr[i] = 0
             initial_c = i
         else:
-            recur_arr[i] = r_c
+            recur_arr[i] = sp.cancel(r_c)
     return initial_c, recur_arr
 
 
