@@ -4,7 +4,7 @@ sumpy: n-body kernels and translation operators
 .. image:: https://gitlab.tiker.net/inducer/sumpy/badges/main/pipeline.svg
     :alt: Gitlab Build Status
     :target: https://gitlab.tiker.net/inducer/sumpy/commits/main
-.. image:: https://github.com/inducer/sumpy/workflows/CI/badge.svg?branch=main
+.. image:: https://github.com/inducer/sumpy/actions/workflows/ci.yml/badge.svg
     :alt: Github Build Status
     :target: https://github.com/inducer/sumpy/actions?query=branch%3Amain+workflow%3ACI
 .. image:: https://badge.fury.io/py/sumpy.png
