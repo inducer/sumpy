@@ -81,6 +81,8 @@ def plot_flops():
         orders = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         flops = [45, 194, 474, 931, 1650, 2632, 3925, 5591, 7706, 10272]
         filename = "helmholtz-m2l-complexity-2d.pdf"
+    else:
+        raise ValueError()
 
     if USE_MATPLOTLIB:
         plt.rc("font", size=16)
