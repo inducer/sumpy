@@ -111,7 +111,9 @@ class FieldPlotter:
                 slice(a[i], b[i], 1j*npoints[i])
                 for i in range(dim))
 
-        mgrid = np.mgrid[mgrid_index]
+        # np.asarray is technically unneeded, used to placate pylint
+        # https://github.com/pylint-dev/pylint/issues/9989
+        mgrid = np.asarray(np.mgrid[mgrid_index])
 
         # (axis, point x idx, point y idx, ...)
         self.nd_points = mgrid
