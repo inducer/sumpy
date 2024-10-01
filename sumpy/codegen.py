@@ -548,7 +548,7 @@ class VectorComponentRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
             name = match_obj.group(1)
             subscript = int(match_obj.group(2))
             if name in self.name_whitelist:
-                return prim.Variable(name).index(subscript)
+                return prim.Variable(name)[subscript]
             else:
                 return expr
         else:
