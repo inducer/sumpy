@@ -63,7 +63,7 @@ def draw_pot_figure(aspect_ratio,
     from sumpy.array_context import PyOpenCLArrayContext
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
-    actx = PyOpenCLArrayContext(queue, force_device_scalars=True)
+    actx = PyOpenCLArrayContext(queue)
 
     # {{{ make plot targets
 
