@@ -275,17 +275,18 @@ def find_power_of(base, prod):
     return result[power]
 
 
+@prim.expr_dataclass()
 class SpatialConstant(prim.Variable):
     """A symbolic constant to represent a symbolic variable that
-    is spatially constant, like for example the wave-number :math:`k`
-    in the setting of a constant-coefficient Helmholtz problem.
-    For use in :attr:`sumpy.kernel.ExpressionKernel.expression`.
+    is spatially constant.
+
+    For example the wave-number :math:`k` in the setting of a constant-coefficient
+    Helmholtz problem. For use in :attr:`sumpy.kernel.ExpressionKernel.expression`.
     Any variable occurring there that is not a :class:`SpatialConstant`
     is assumed to have a spatial dependency.
     """
 
     prefix = "_spatial_constant_"
-    mapper_method = "map_spatial_constant"
 
     def as_sympy(self):
         return sym.Symbol(f"{self.prefix}{self.name}")
