@@ -316,8 +316,9 @@ class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
         num_args = []
         den_args = []
         for child in expr.args:
-            if isinstance(child, Pow) and isinstance(child.exp, Integer) \
-                    and child.exp < 0:
+            if (isinstance(child, Pow)
+                    and isinstance(child.exp, Integer)
+                    and child.exp < 0):
                 den_args.append(self.rec(child.base)**(-self.rec(child.exp)))
             else:
                 num_args.append(self.rec(child))

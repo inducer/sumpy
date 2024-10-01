@@ -221,8 +221,8 @@ def _fp_contract_fast_preamble(preamble_info):
 def register_optimization_preambles(loopy_knl, device):
     if isinstance(loopy_knl.target, lp.PyOpenCLTarget):
         import pyopencl as cl
-        if device.platform.name == "Portable Computing Language" and \
-                (device.type & cl.device_type.GPU):
+        if (device.platform.name == "Portable Computing Language"
+                and (device.type & cl.device_type.GPU)):
             loopy_knl = lp.register_preamble_generators(loopy_knl,
                 [_fp_contract_fast_preamble])
     return loopy_knl
@@ -257,8 +257,8 @@ class BesselTopOrderGatherer(CSECachingIdentityMapper, CallExternalRecMapper):
         self.bessel_j_arg_to_top_order = {}
 
     def map_call(self, expr, rec_self=None, *args):
-        if isinstance(expr.function, prim.Variable) \
-                and expr.function.name == "bessel_j":
+        if (isinstance(expr.function, prim.Variable)
+                and expr.function.name == "bessel_j"):
             order, arg = expr.parameters
             self.rec(arg)
             assert isinstance(order, int)
@@ -588,11 +588,12 @@ class SumSignGrouper(CSECachingIdentityMapper, CallExternalRecMapper):
                 first_group.append(child)
 
         new_children = tuple(first_group + second_group)
-        if len(new_children) == len(expr.children) and \
-                all(child is orig_child for child, orig_child in
-                    zip(new_children, expr.children, strict=True)):
+        if (len(new_children) == len(expr.children)
+                and all(child is orig_child for child, orig_child
+                        in zip(new_children, expr.children, strict=True))):
             return expr
-        return prim.Sum(tuple(first_group+second_group))
+
+        return prim.Sum(tuple(first_group + second_group))
 
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
@@ -647,8 +648,7 @@ def combine_mappers(*mappers):
     class CombinedMapper(CSECachingIdentityMapper):
         def __init__(self, all_methods):
             self.all_methods = all_methods
-        map_common_subexpression_uncached = \
-                IdentityMapper.map_common_subexpression
+        map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
     def _map(method_name, self, expr, rec_self=None, *args):
         if method_name not in self.all_methods:
