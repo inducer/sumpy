@@ -100,7 +100,7 @@ if USE_SYMENGINE:
 else:
     import sympy as sym
 
-    from pymbolic.interop.sympy import (
+    from pymbolic.interop.sympy import (  # type: ignore[assignment]
         PymbolicToSympyMapper as PymbolicToSympyMapperBase,
         SympyToPymbolicMapper as SympyToPymbolicMapperBase,
     )
