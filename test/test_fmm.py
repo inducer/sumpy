@@ -450,7 +450,7 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory, use_fft, visualize=False)
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx,
         properties=cl.command_queue_properties.PROFILING_ENABLE)
-    actx = PyOpenCLArrayContext(queue, force_device_scalars=True)
+    actx = PyOpenCLArrayContext(queue)
 
     nsources = 500
     dtype = np.float64
