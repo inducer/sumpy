@@ -104,7 +104,8 @@ def make_e2p_loopy_kernel(
             idx = int(insn.assignee.name[len(result.name):])
             insns[i] = lp.Assignment(
                 assignee=result[idx],
-                expression=result[idx] + insn.expression,
+                # FIXME: this should be removed once loopy and pymbolic agree
+                expression=result[idx] + insn.expression,  # type: ignore[arg-type]
                 id=f"result_{idx}",
                 depends_on=insn.depends_on,
             )

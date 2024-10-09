@@ -394,14 +394,8 @@ class ExpressionKernel(Kernel):
 
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode("utf8"))
-        for name, value in zip(self.init_arg_names, self.__getinitargs__()):
-            if name in ["expression", "global_scaling_const"]:
-                from pymbolic.mapper.persistent_hash import (
-                    PersistentHashWalkMapper as PersistentHashWalkMapper,
-                )
-                PersistentHashWalkMapper(key_hash)(value)
-            else:
-                key_builder.rec(key_hash, value)
+        for _, value in zip(self.init_arg_names, self.__getinitargs__()):
+            key_builder.rec(key_hash, value)
 
     mapper_method = "map_expression_kernel"
 
@@ -754,13 +748,11 @@ class ElasticityKernel(ExpressionKernel):
         return (ElasticityKernel, self.__getinitargs__())
 
     def update_persistent_hash(self, key_hash, key_builder):
-        from pymbolic.mapper.persistent_hash import PersistentHashWalkMapper
         key_hash.update(type(self).__name__.encode())
         key_builder.rec(key_hash,
                 (self.dim, self.icomp, self.jcomp))
-        mapper = PersistentHashWalkMapper(key_hash)
-        mapper(self.viscosity_mu)
-        mapper(self.poisson_ratio)
+        key_builder.rec(key_hash, self.viscosity_mu)
+        key_builder.rec(key_hash, self.poisson_ratio)
 
     def __repr__(self):
         return f"ElasticityKnl{self.dim}D_{self.icomp}{self.jcomp}"
@@ -853,10 +845,7 @@ class StressletKernel(ExpressionKernel):
     def update_persistent_hash(self, key_hash, key_builder):
         key_hash.update(type(self).__name__.encode())
         key_builder.rec(key_hash, (self.dim, self.icomp, self.jcomp, self.kcomp))
-
-        from pymbolic.mapper.persistent_hash import PersistentHashWalkMapper
-        mapper = PersistentHashWalkMapper(key_hash)
-        mapper(self.viscosity_mu)
+        key_builder.rec(key_hash, self.viscosity_mu)
 
     def __repr__(self):
         return f"StressletKnl{self.dim}D_{self.icomp}{self.jcomp}{self.kcomp}"
@@ -929,12 +918,10 @@ class LineOfCompressionKernel(ExpressionKernel):
         return (self.dim, self.axis, self.viscosity_mu, self.poisson_ratio)
 
     def update_persistent_hash(self, key_hash, key_builder):
-        from pymbolic.mapper.persistent_hash import PersistentHashWalkMapper
         key_hash.update(type(self).__name__.encode())
         key_builder.rec(key_hash, (self.dim, self.axis))
-        mapper = PersistentHashWalkMapper(key_hash)
-        mapper(self.viscosity_mu)
-        mapper(self.poisson_ratio)
+        key_builder.rec(key_hash, self.viscosity_mu)
+        key_builder.rec(key_hash, self.poisson_ratio)
 
     def __repr__(self):
         return f"LineOfCompressionKnl{self.dim}D_{self.axis}"
@@ -1104,10 +1091,10 @@ class _VectorIndexAdder(CSECachingMapperMixin, IdentityMapper):
 
     def map_subscript(self, expr):
         from pymbolic.primitives import CommonSubexpression, cse_scope
-        if expr.aggregate.name == self.vec_name \
-                and isinstance(expr.index, int):
+        if (expr.aggregate.name == self.vec_name
+                and isinstance(expr.index, int)):
             return CommonSubexpression(
-                    expr.aggregate.index((expr.index, *self.additional_indices)),
+                    expr.aggregate[(expr.index, *self.additional_indices)],
                     prefix=None, scope=cse_scope.EVALUATION)
         else:
             return IdentityMapper.map_subscript(self, expr)
