@@ -39,9 +39,10 @@ __doc__ = """
 
 import logging
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
+import sympy as sp
 
 import pymbolic.primitives as prim
 from pymbolic.mapper import IdentityMapper as IdentityMapperBase
@@ -277,22 +278,28 @@ def find_power_of(base, prod):
 
 @prim.expr_dataclass()
 class SpatialConstant(prim.Variable):
-    """A symbolic constant to represent a symbolic variable that
-    is spatially constant.
+    """A symbolic constant to represent a symbolic variable that is spatially constant.
 
     For example the wave-number :math:`k` in the setting of a constant-coefficient
     Helmholtz problem. For use in :attr:`sumpy.kernel.ExpressionKernel.expression`.
-    Any variable occurring there that is not a :class:`SpatialConstant`
+    Any variable occurring there that is not a :class:`~sumpy.symbolic.SpatialConstant`
     is assumed to have a spatial dependency.
+
+    .. autoattribute:: prefix
+    .. automethod:: as_sympy
+    .. automethod:: from_sympy
     """
 
-    prefix = "_spatial_constant_"
+    prefix: ClassVar[str] = "_spatial_constant_"
+    """Prefix used in code generation for variables of this type."""
 
-    def as_sympy(self):
+    def as_sympy(self) -> sp.Symbol:
+        """Convert variable to a :mod:`sympy` expression."""
         return sym.Symbol(f"{self.prefix}{self.name}")
 
     @classmethod
-    def from_sympy(cls, expr):
+    def from_sympy(cls, expr: sp.Symbol) -> SpatialConstant:
+        """Convert :mod:`sympy` expression to a constant."""
         return cls(expr.name[len(cls.prefix):])
 
 
