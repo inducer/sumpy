@@ -67,9 +67,7 @@ from pytools.obj_array import make_obj_array
 
 from sumpy.expansion.diff_op import (
     DerivativeIdentifier,
-    LinearPDESystemOperator,
-    laplacian,
-    make_identity_diff_op,
+    LinearPDESystemOperator
 )
 
 
@@ -267,6 +265,27 @@ def recurrence_from_coeff_array(coeffs: list, var: np.ndarray) -> sp.Expr:
     return final_recurrence
 
 
+def recurrence_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
+    r"""
+    A function that takes in as input a sympy PDE and outputs a recurrence
+    relation.
+
+    :arg pde: a :class:`sumpy.expansion.diff_op.LinearSystemPDEOperator`
+        that must satisfy ``pde.eqs == 1`` and have polynomial coefficients
+        in the coordinates.
+    :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
+    """
+    ode_in_r, var, ode_order = pde_to_ode_in_r(pde)
+    ode_in_x = ode_in_r_to_x(ode_in_r, var, ode_order).simplify()
+    ode_in_x_cleared = (ode_in_x * var[0]**(ode_order+1)).simplify()
+    # ode_in_x_cleared shouldn't have rational function coefficients
+    assert sp.together(ode_in_x_cleared) == ode_in_x_cleared
+    f_x_derivs = _make_sympy_vec("f_x", ode_order+1)
+    poly = sp.Poly(ode_in_x_cleared, *f_x_derivs)
+    coeffs = ode_in_x_to_coeff_array(poly, ode_order, var)
+    return recurrence_from_coeff_array(coeffs, var)
+
+
 def process_recurrence_relation(r: sp.Expr,
                                 replace=True) -> tuple[int, sp.Expr]:
     r"""
@@ -326,9 +345,18 @@ def process_recurrence_relation(r: sp.Expr,
 
     return order, true_recurrence1
 
-def __check_neg_ind(r_n):
-    terms = list(r_n.atoms(sp.Function))
+
+def extract_idx_terms_from_recurrence(r: sp.Expr) -> tuple[np.ndarray,
+                                                           np.ndarray]:
+    r"""
+    Given a recurrence extracts the variables in the recurrence
+    as well as the indexes in sorted order.
+
+    :arg r: recurrence to extract terms from
+    """
+    terms = list(r.atoms(sp.Function))
     terms = np.array(terms)
+
 
     idx_l = []
     for i in range(len(terms)):
@@ -342,32 +370,32 @@ def __check_neg_ind(r_n):
     idx_l = idx_l[idx_sort]
     terms = terms[idx_sort]
 
+    return idx_l, terms
+
+
+def __check_neg_ind(r_n):
+    r"""
+    Simply checks if a negative index exists in a recurrence relation.
+    """
+
+    idx_l, _ = extract_idx_terms_from_recurrence(r_n)
+
     return np.any(idx_l < 0)
 
 
-def get_lower_order_expressions(p, recurrence):
+def __get_initial_c(recurrence):
     r"""
-    A function that takes in as input an order of expansion
-    and a recurrence relation and outputs an array of hardcoded recurrence
-    expressions for each order. If an expression for a certain order
-    doesn't exist 0 is output. Also returns the number of initial conditions
-    needed.
-
-    :arg recurrence: a recurrence relation in :math:`s(n)`
-    :arg p: number of orders needed for recurrence expressions
+    For a given recurrence checks how many initial conditions by
+    checking for non-negative indexed terms.
     """
-    p = 5
-    initial_c = 0
-    recur_arr = [0] * p
     n = sp.symbols("n")
-    for i in range(p):
+
+    i = 0
+    r_c = recurrence.subs(n, i)
+    while __check_neg_ind(r_c):
+        i += 1
         r_c = recurrence.subs(n, i)
-        if __check_neg_ind(r_c):
-            recur_arr[i] = 0
-            initial_c = i
-        else:
-            recur_arr[i] = sp.cancel(r_c)
-    return initial_c, recur_arr
+    return i
 
 
 def shift_recurrence(r: sp.Expr, var: np.ndarray) -> sp.Expr:
@@ -377,148 +405,203 @@ def shift_recurrence(r: sp.Expr, var: np.ndarray) -> sp.Expr:
 
     :arg recurrence: a recurrence relation in :math:`s(n)`
     """
-    r0 = r
-    for i in range(len(var)):
-        r0 = r0.subs(var[i], -var[i])
-    return r0
+    idx_l, terms = extract_idx_terms_from_recurrence(r)
+
+    r_ret = r
+
+    n = sp.symbols('n')
+    for i in range(len(idx_l)):
+        r_ret = r_ret.subs(terms[i], (-1)**(n+idx_l[i])*terms[i])
+
+    return r_ret*((-1)**(n+1))
 
 
-def recurrence_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
+def get_processed_recurrence_from_pde_shift(pde, ndim) -> tuple[int, int,
+                                                                sp.Expr]:
     r"""
-    A function that takes in as input a sympy PDE and outputs a recurrence
-    relation.
+    A function that "shifts" the recurrence so the expansion center is placed
+    at the origin and source is the input for the recurrence generated.
 
-    :arg pde: a :class:`sumpy.expansion.diff_op.LinearSystemPDEOperator`
-        that must satisfy ``pde.eqs == 1`` and have polynomial coefficients
-        in the coordinates.
-    :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
+    :arg recurrence: a recurrence relation in :math:`s(n)`
     """
-    ode_in_r, var, ode_order = pde_to_ode_in_r(pde)
-    ode_in_x = ode_in_r_to_x(ode_in_r, var, ode_order).simplify()
-    ode_in_x_cleared = (ode_in_x * var[0]**(ode_order+1)).simplify()
-    # ode_in_x_cleared shouldn't have rational function coefficients
-    assert sp.together(ode_in_x_cleared) == ode_in_x_cleared
-    f_x_derivs = _make_sympy_vec("f_x", ode_order+1)
-    poly = sp.Poly(ode_in_x_cleared, *f_x_derivs)
-    coeffs = ode_in_x_to_coeff_array(poly, ode_order, var)
-    return recurrence_from_coeff_array(coeffs, var)
+    r = recurrence_from_pde(pde)
+    var = _make_sympy_vec("x", ndim)
+    order, r_p = process_recurrence_relation(r, False)
+    n_initial = __get_initial_c(r_p)
+    r_s = shift_recurrence(r_p, var)
+    return n_initial, order, r_s
 
 
-def test_recurrence_finder_laplace():
+# ================ Transform/Rotate =================
+def __produce_orthogonal_basis(normals):
+    ndim, ncenters = normals.shape
+    orth_coordsys = [normals]
+    for i in range(1, ndim):
+        v = np.random.rand(ndim, ncenters)
+        v = v/np.linalg.norm(v, 2, axis=0)
+        for j in range(i):
+            v = v - np.einsum("dc,dc->c", v, orth_coordsys[j]) * orth_coordsys[j]
+        v = v/np.linalg.norm(v, 2, axis=0)
+        orth_coordsys.append(v)
+
+    return orth_coordsys
+
+
+def __compute_rotated_shifted_coordinates(sources, centers, normals):
+
+    cts = sources[:, None] - centers[:, :, None]
+    orth_coordsys = __produce_orthogonal_basis(normals)
+    cts_rotated_shifted = np.einsum("idc,dcs->ics", orth_coordsys, cts)
+
+    return cts_rotated_shifted
+
+
+# ================ Recurrence LP Eval =================
+def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
+                       p) -> np.ndarray:
+    r"""
+    A function that computes a single-layer potential using a recurrence.
+
+    :arg sources: a (ndim, nsources) array of source locations
+    :arg centers: a (ndim, ncenters) array of center locations
+    :arg normals: a (ndim, ncenters) array of normals
+    :arg strengths: array corresponding to quadrature weight multiplied by 
+    density
+    :arg radius: expansion radius
+    :arg pde: pde that we are computing layer potential for
+    :arg g_x_y: a green's function in (x0, x1, ...) source and 
+    (t0, t1, ...) target
+    :arg p: order of expansion computed
     """
-    Tests our recurrence relation generator for Lapalace 2D.
-    """
-    w = make_identity_diff_op(2)
-    laplace2d = laplacian(w)
-    r = recurrence_from_pde(laplace2d)
-    n = sp.symbols("n")
-    s = sp.Function("s")
 
-    def deriv_laplace(i):
-        x, y = sp.symbols("x,y")
-        var = _make_sympy_vec("x", 2)
-        true_f = sp.log(sp.sqrt(x**2 + y**2))
-        return sp.diff(true_f, x, i).subs(x, var[0]).subs(
-            y, var[1])
-    d = 6
-    # pylint: disable=not-callable
-
-    r_sub = r.subs(n, d)
-    for i in range(d-1, d+3):
-        r_sub = r_sub.subs(s(i), deriv_laplace(i))
-    r_sub = r_sub.simplify()
-
-    assert r_sub == 0
+    #------------- 2. Compute rotated/shifted coordinates
+    cts_r_s = __compute_rotated_shifted_coordinates(sources, centers, normals)
 
 
-def test_recurrence_finder_laplace_three_d():
-    """
-    Tests our recurrence relation generator for Laplace 3D.
-    """
-    w = make_identity_diff_op(3)
-    laplace3d = laplacian(w)
-    r = recurrence_from_pde(laplace3d)
-    n = sp.symbols("n")
-    s = sp.Function("s")
-
-    def deriv_laplace_three_d(i):
-        x, y, z = sp.symbols("x,y,z")
-        var = _make_sympy_vec("x", 3)
-        true_f = 1/(sp.sqrt(x**2 + y**2 + z**2))
-        return sp.diff(true_f, x, i).subs(x, var[0]).subs(
-            y, var[1]).subs(z, var[2])
-
-    d = 6
-    # pylint: disable=not-callable
-    r_sub = r.subs(n, d)
-    for i in range(d-1, d+3):
-        r_sub = r_sub.subs(s(i), deriv_laplace_three_d(i))
-    r_sub = r_sub.simplify()
-    assert r_sub == 0
-
-
-def test_recurrence_finder_helmholtz_three_d():
-    """
-    Tests our recurrence relation generator for Helmhotlz 3D.
-    """
-    # We are creating the recurrence relation for helmholtz3d which
-    # seems to be an order 5 recurrence relation
-    w = make_identity_diff_op(3)
-    helmholtz3d = laplacian(w) + w
-    r = recurrence_from_pde(helmholtz3d)
-
-    def deriv_helmholtz_three_d(i, s_loc):
-        s_x = s_loc[0]
-        s_y = s_loc[1]
-        s_z = s_loc[2]
-        x, y, z = sp.symbols("x,y,z")
-        true_f = sp.exp(1j * sp.sqrt(x**2 + y**2 + z**2)
-                        ) / (sp.sqrt(x**2 + y**2 + z**2))
-        return sp.diff(true_f, x, i).subs(x, s_x).subs(
-            y, s_y).subs(z, s_z)
-    # Create relevant symbols
-    var = _make_sympy_vec("x", 3)
-    n = sp.symbols("n")
-    s = sp.Function("s")
-
-    rng = np.random.default_rng()
-
-    # Create random source location
-    s_loc = rng.uniform(size=3)
-
-    # Create random order to check
-    d = randrange(0, 5)
-
-    # Substitute random location into recurrence relation and value of n = d
-    r_loc = r.subs(var[0], s_loc[0])
-    r_loc = r_loc.subs(var[1], s_loc[1])
-    r_loc = r_loc.subs(var[2], s_loc[2])
-    r_sub = r_loc.subs(n, d)
-
-    # Checking that the recurrence holds to some machine epsilon
-    for i in range(max(d-3, 0), d+3):
-        # pylint: disable=not-callable
-        r_sub = r_sub.subs(s(i), deriv_helmholtz_three_d(i, s_loc))
-    err = abs(abs(r_sub).evalf())
-    print(err)
-    assert err <= 1e-10
-
-
-def test_get_lower_order_expressions_laplace_2D():
-    """
-    Tests our expression generator for Laplace 2D.
-    """
-    
-    w = make_identity_diff_op(2)
-    laplace2d = laplacian(w)
-    r = recurrence_from_pde(laplace2d)
+    #------------- 4. Compute green's function expression
     var = _make_sympy_vec("x", 2)
-    r = shift_recurrence(r, var)
-    _, r_processed = process_recurrence_relation(r, False)
+    var_t = _make_sympy_vec("t", 2)
 
-    _, recur_arr = get_lower_order_expressions(5, r_processed)
+    #------------ 5. Compute recurrence
+    n_initial, order, recurrence = get_processed_recurrence_from_pde_shift(pde, ndim=2)
 
-    print(recur_arr)
+    #------------ 6. Set order p = 5
+    n_p = sources.shape[1]
+    storage = [np.zeros((n_p,n_p))] * order 
+
+    s = sp.Function("s")
+    r,n = sp.symbols("r,n")
+
+    def generate_lamb_expr(i, n_initial):
+        arg_list = []
+        for j in range(order,0,-1):
+            arg_list.append(s(i-j))
+        arg_list.append(var[0])
+        arg_list.append(var[1])
+        arg_list.append(r)
+        
+        if i < n_initial:
+            lamb_expr = sp.diff(g_x_y, var_t[0], i).subs(var_t[0], 0).subs(var_t[1], 0)
+        else:
+            lamb_expr = recurrence.subs(n, i)
+        return sp.lambdify(arg_list, lamb_expr) 
+
+    interactions_2d = 0
+    for i in range(p+1):
+        lamb_expr = generate_lamb_expr(i, n_initial)
+        a = storage[-4:] + [cts_r_s[0],cts_r_s[1],radius]
+        s_new = lamb_expr(*a)
+        interactions_2d += s_new * radius**i/math.factorial(i)
+
+        storage.pop(0)
+        storage.append(s_new)
+
+    exp_res = (interactions_2d * strengths[None, :]).sum(axis=1)
+
+    return exp_res
 
 
-test_get_lower_order_expressions_laplace_2D()
+# TEST CODE
+from sumpy.expansion.diff_op import (
+    laplacian,
+    make_identity_diff_op,
+)
+
+import numpy as np
+from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
+from sumpy.expansion.local import LineTaylorLocalExpansion, VolumeTaylorLocalExpansion
+
+
+actx_factory = _acf
+expn_class = LineTaylorLocalExpansion
+
+actx = actx_factory()
+
+from sumpy.kernel import LaplaceKernel
+lknl = LaplaceKernel(2)
+
+from sumpy.qbx import LayerPotential
+
+def qbx_lp_laplace_general(sources,targets,centers,radius,strengths,order):
+        lpot = LayerPotential(actx.context,
+        expansion=expn_class(lknl, order),
+        target_kernels=(lknl,),
+        source_kernels=(lknl,))
+
+        #print(lpot.get_kernel())
+        expansion_radii = actx.from_numpy(radius * np.ones(sources.shape[1]))
+        sources = actx.from_numpy(sources)
+        targets = actx.from_numpy(targets)
+        centers = actx.from_numpy(centers)
+
+        strengths = (strengths,)
+
+        _evt, (result_qbx,) = lpot(
+                actx.queue,
+                targets, sources, centers, strengths,
+                expansion_radii=expansion_radii)
+        result_qbx = actx.to_numpy(result_qbx)
+
+        return result_qbx
+
+def create_ellipse(n_p):
+    h = 9.688 / n_p
+    radius = 7*h
+    t = np.linspace(0, 2 * np.pi, n_p, endpoint=False)
+
+    unit_circle_param = np.exp(1j * t)
+    unit_circle = np.array([2 * unit_circle_param.real, unit_circle_param.imag])
+
+    sources = unit_circle
+    normals = np.array([unit_circle_param.real, 2*unit_circle_param.imag])
+    normals = normals / np.linalg.norm(normals, axis=0)
+    centers = sources - normals * radius
+
+    mode_nr = 25
+    density = np.cos(mode_nr * t)
+
+    return sources, centers, normals, density, h, radius
+
+def test_recurrence_laplace_2d_ellipse():
+
+    #------------- 1. Define PDE, Green's Function
+    w = make_identity_diff_op(2)
+    laplace2d = laplacian(w)
+
+    var = _make_sympy_vec("x", 2)
+    var_t = _make_sympy_vec("t", 2)
+    g_x_y = (-1/(2*np.pi)) * sp.log(sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2))
+
+    p = 4
+    err = []
+    for n_p in range(200, 1001, 200):
+        sources, centers, normals, density, h, radius = create_ellipse(n_p)
+        strengths = h * density
+        exp_res = recurrence_qbx_lp(sources, centers, normals, strengths, radius, laplace2d, g_x_y, p)
+        qbx_res = qbx_lp_laplace_general(sources, sources, centers, radius, strengths, p)
+        #qbx_res,_ = lpot_eval_circle(sources.shape[1], p)
+        err.append(np.max(exp_res - qbx_res))
+
+    print(err)
+
+test_recurrence_laplace_2d_ellipse()
