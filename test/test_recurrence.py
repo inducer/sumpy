@@ -2,6 +2,7 @@ from sumpy.expansion.diff_op import (
     laplacian,
     make_identity_diff_op,
 )
+from sumpy.recurrenceqbx import recurrence_qbx_lp, _make_sympy_vec
 
 import numpy as np
 from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
@@ -17,7 +18,7 @@ from sumpy.kernel import LaplaceKernel
 lknl = LaplaceKernel(2)
 
 from sumpy.qbx import LayerPotential
-from sumpy.recurrence import recurrence_qbx_lp, _make_sympy_vec
+
 
 def qbx_lp_laplace_general(sources,targets,centers,radius,strengths,order):
         lpot = LayerPotential(actx.context,
