@@ -25,6 +25,9 @@ The whole process can be automated using :func:`recurrence_from_pde`.
 .. autofunction:: ode_in_x_to_coeff_array
 .. autofunction:: recurrence_from_coeff_array
 .. autofunction:: recurrence_from_pde
+.. autofunction:: process_recurrence_relation
+.. autofunction:: shift_recurrence
+
 """
 
 from __future__ import annotations
@@ -293,28 +296,9 @@ def process_recurrence_relation(r: sp.Expr,
     relation that has the nth term in terms of the n-1th, n-2th etc.
     Also returns the order of the recurrence relation.
 
-    If replace=True then the recurrence is output in a form that is ideal
-    for pymbolic processing. If replace=False then a standard recurrence 
-    is output.
-
     :arg recurrence: a recurrence relation in :math:`s(n)`
     """
-    terms = list(r.atoms(sp.Function))
-    terms = np.array(terms)
-
-    # Sort terms and create idx_l
-    idx_l = []
-    for i in range(len(terms)):
-        tms = list(terms[i].atoms(sp.Number))
-        if len(tms) == 1:
-            idx_l.append(tms[0])
-        else:
-            idx_l.append(0)
-    idx_l = np.array(idx_l, dtype='int')
-    idx_sort = idx_l.argsort()
-    idx_l = idx_l[idx_sort]
-    terms = terms[idx_sort]
-
+    idx_l, terms = _extract_idx_terms_from_recurrence(r)
     # Order is the max difference between highest/lowest in idx_l
     order = max(idx_l) - min(idx_l) + 1
 
@@ -332,21 +316,10 @@ def process_recurrence_relation(r: sp.Expr,
                            for i in range(0, len(terms)-1)])
     true_recurrence1 = true_recurrence.subs(n, n-shift_idx)
 
-    if replace:
-        # Replace s(n-1) with snm_1, s(n-2) with snm_2 etc.
-        # because pymbolic.substitute won't recognize it
-        last_syms = [sp.Symbol(f"anm{i+1}") for i in range(order-1)]
-        # pylint: disable=not-callable
-        # Assumes order > 1
-        true_recurrence2 = true_recurrence1.subs(s(n-1), last_syms[0])
-        for i in range(2, order):
-            true_recurrence2 = true_recurrence2.subs(s(n-i), last_syms[i-1])
-        return order, true_recurrence2
-
     return order, true_recurrence1
 
 
-def extract_idx_terms_from_recurrence(r: sp.Expr) -> tuple[np.ndarray,
+def _extract_idx_terms_from_recurrence(r: sp.Expr) -> tuple[np.ndarray,
                                                            np.ndarray]:
     r"""
     Given a recurrence extracts the variables in the recurrence
@@ -398,7 +371,7 @@ def __get_initial_c(recurrence):
     return i
 
 
-def shift_recurrence(r: sp.Expr, var: np.ndarray) -> sp.Expr:
+def shift_recurrence(r: sp.Expr) -> sp.Expr:
     r"""
     A function that "shifts" the recurrence so it's center is placed
     at the origin and source is the input for the recurrence generated.
@@ -416,7 +389,7 @@ def shift_recurrence(r: sp.Expr, var: np.ndarray) -> sp.Expr:
     return r_ret*((-1)**(n+1))
 
 
-def get_processed_recurrence_from_pde_shift(pde, ndim) -> tuple[int, int,
+def get_processed_and_shifted_recurrence(pde) -> tuple[int, int,
                                                                 sp.Expr]:
     r"""
     A function that "shifts" the recurrence so the expansion center is placed
@@ -425,10 +398,9 @@ def get_processed_recurrence_from_pde_shift(pde, ndim) -> tuple[int, int,
     :arg recurrence: a recurrence relation in :math:`s(n)`
     """
     r = recurrence_from_pde(pde)
-    var = _make_sympy_vec("x", ndim)
-    order, r_p = process_recurrence_relation(r, False)
+    order, r_p = process_recurrence_relation(r)
     n_initial = __get_initial_c(r_p)
-    r_s = shift_recurrence(r_p, var)
+    r_s = shift_recurrence(r_p)
     return n_initial, order, r_s
 
 
