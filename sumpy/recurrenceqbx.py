@@ -9,7 +9,7 @@ import numpy as np
 import sympy as sp
 from sumpy.recurrence import (
     _make_sympy_vec, 
-    get_processed_recurrence_from_pde_shift)
+    get_processed_and_shifted_recurrence)
 
 # ================ Transform/Rotate =================
 def __produce_orthogonal_basis(normals):
@@ -57,12 +57,12 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
     cts_r_s = __compute_rotated_shifted_coordinates(sources, centers, normals)
 
 
-    #------------- 4. Compute green's function expression
+    #------------- 4. Define input variables for green's function expression
     var = _make_sympy_vec("x", 2)
     var_t = _make_sympy_vec("t", 2)
 
     #------------ 5. Compute recurrence
-    n_initial, order, recurrence = get_processed_recurrence_from_pde_shift(pde, ndim=2)
+    n_initial, order, recurrence = get_processed_and_shifted_recurrence(pde)
 
     #------------ 6. Set order p = 5
     n_p = sources.shape[1]

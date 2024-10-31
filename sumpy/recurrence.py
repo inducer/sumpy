@@ -27,7 +27,7 @@ The whole process can be automated using :func:`recurrence_from_pde`.
 .. autofunction:: recurrence_from_pde
 .. autofunction:: process_recurrence_relation
 .. autofunction:: shift_recurrence
-
+.. autofunction:: get_processed_and_shifted_recurrence
 """
 
 from __future__ import annotations
