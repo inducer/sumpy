@@ -289,8 +289,7 @@ def recurrence_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
     return recurrence_from_coeff_array(coeffs, var)
 
 
-def process_recurrence_relation(r: sp.Expr,
-                                replace=True) -> tuple[int, sp.Expr]:
+def process_recurrence_relation(r: sp.Expr) -> tuple[int, sp.Expr]:
     r"""
     A function that takes in as input a recurrence and outputs a recurrence
     relation that has the nth term in terms of the n-1th, n-2th etc.
@@ -307,7 +306,6 @@ def process_recurrence_relation(r: sp.Expr,
 
     # Get the respective coefficients in the recurrence relation from r
     n = sp.symbols("n")
-    s = sp.Function("s")
     coeffs = sp.poly(r, list(terms)).coeffs()
 
     # Re-arrange the recurrence relation so we get s(n) = ____
@@ -351,7 +349,7 @@ def __check_neg_ind(r_n):
     Simply checks if a negative index exists in a recurrence relation.
     """
 
-    idx_l, _ = extract_idx_terms_from_recurrence(r_n)
+    idx_l, _ = _extract_idx_terms_from_recurrence(r_n)
 
     return np.any(idx_l < 0)
 
@@ -378,7 +376,7 @@ def shift_recurrence(r: sp.Expr) -> sp.Expr:
 
     :arg recurrence: a recurrence relation in :math:`s(n)`
     """
-    idx_l, terms = extract_idx_terms_from_recurrence(r)
+    idx_l, terms = _extract_idx_terms_from_recurrence(r)
 
     r_ret = r
 
@@ -404,3 +402,4 @@ def get_processed_and_shifted_recurrence(pde) -> tuple[int, int,
     return n_initial, order, r_s
 
 
+print(_generate_nd_derivative_relations(_make_sympy_vec("x", 2), 3))
