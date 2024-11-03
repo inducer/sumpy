@@ -7,6 +7,34 @@ from sumpy.expansion.diff_op import (
     make_identity_diff_op,
 )
 
+
+
+def test_helmholtz_3D():
+    w = make_identity_diff_op(3)
+    helmholtz3d = laplacian(w) + w
+    _,_, r = get_processed_and_shifted_recurrence(helmholtz3d)
+
+    n = sp.symbols("n")
+    s = sp.Function("s")
+
+    var = _make_sympy_vec("x", 3)
+    var_t = _make_sympy_vec("t", 3)
+    abs_dist = sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2 + (var[2]-var_t[2])**2)
+    g_x_y = sp.exp(1j * abs_dist) / abs_dist
+    derivs = [sp.diff(g_x_y, var_t[0], i).subs(var_t[0], 0).subs(var_t[1], 0).subs(var_t[2], 0) for i in range(6)]
+
+
+    check_2_s = r.subs(n, 2).subs(s(1), derivs[1]).subs(s(0), derivs[0]) - derivs[2]
+    assert abs(check_2_s.subs(var[0], np.random.rand()).subs(var[1], np.random.rand()).subs(var[2], np.random.rand())) <= 1e-12
+    
+
+test_helmholtz_3D()
+
+
+
+
+
+
 def test_laplace_2D():
     w = make_identity_diff_op(2)
     laplace2d = laplacian(w)
@@ -31,4 +59,3 @@ def test_laplace_2D():
     assert abs(check_5_s.subs(var[0], np.random.rand()).subs(var[1], np.random.rand())) <= 1e-12
 
 
-test_laplace_2D()
