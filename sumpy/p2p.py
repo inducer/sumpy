@@ -705,7 +705,7 @@ class P2PFromCSR(P2PBase):
             # as vec for the first dimension
             for i, (array_name, array_size, array_dtype) in \
                     enumerate(zip(local_arrays, local_array_sizes,
-                                  local_array_dtypes)):
+                                  local_array_dtypes, strict=True)):
                 if issubclass(array_dtype.type, np.complexfloating):
                     # pyopencl does not support complex data type vectors
                     continue
@@ -721,7 +721,8 @@ class P2PFromCSR(P2PBase):
 
             # We need to split isrc_prefetch and isrc_offset into chunks.
             nsources = (max_nsources_in_one_box + nprefetch - 1) // nprefetch
-            for local_array, axis in zip(local_arrays, local_array_isrc_axis):
+            for local_array, axis in zip(local_arrays, local_array_isrc_axis,
+                                         strict=True):
                 knl = lp.split_array_axis(knl, local_array, axis, nsources)
             knl = lp.split_iname(knl, "isrc_prefetch", nsources,
                     outer_iname="iprefetch")

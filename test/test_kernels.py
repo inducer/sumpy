@@ -672,14 +672,14 @@ def test_m2m_and_l2l_exprs_simpler(base_knl, local_expn_class, mpole_expn_class,
     slower_m2m = mpole_expn.translate_from(mpole_expn, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, _fast_version=False)
 
-    for expr1, expr2 in zip(faster_m2m, slower_m2m):
+    for expr1, expr2 in zip(faster_m2m, slower_m2m, strict=True):
         assert float(sym.doit(expr1 - expr2).expand()) == 0.0
 
     faster_l2l = local_expn.translate_from(local_expn, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale)
     slower_l2l = local_expn.translate_from(local_expn, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, _fast_version=False)
-    for expr1, expr2 in zip(faster_l2l, slower_l2l):
+    for expr1, expr2 in zip(faster_l2l, slower_l2l, strict=True):
         assert float(sym.doit(expr1 - expr2).expand()) == 0.0
 
 # }}}
@@ -712,7 +712,7 @@ def _m2l_translate_simple(tgt_expansion, src_expansion, src_coeff_exprs, src_rsc
         local_result = []
         for coeff, term in zip(
                 src_coeff_exprs,
-                src_expansion.get_coefficient_identifiers()):
+                src_expansion.get_coefficient_identifiers(), strict=True):
 
             kernel_deriv = taker.diff(add_mi(deriv, term)) / src_rscale**sum(deriv)
 
@@ -750,7 +750,7 @@ def test_m2l_toeplitz():
         src_rscale, dvec, tgt_rscale, sac=None)
 
     replace_dict = {d: rng.random() for d in dvec}
-    for sym_a, sym_b in zip(expected_output, actual_output):
+    for sym_a, sym_b in zip(expected_output, actual_output, strict=True):
         num_a = sym_a.xreplace(replace_dict)
         num_b = sym_b.xreplace(replace_dict)
 
@@ -801,7 +801,7 @@ def test_m2m_compressed_error_helmholtz(actx_factory, dim, order):
         furthest_source = np.max(np.abs(sources - mpole_center))
         m2m_vals = [0, 0]
         for i, (mpole_expn_class, local_expn_class) in \
-                enumerate(zip(mpole_expn_classes, local_expn_classes)):
+                enumerate(zip(mpole_expn_classes, local_expn_classes, strict=True)):
             tctx = toys.ToyContext(
                 actx.context,
                 knl,

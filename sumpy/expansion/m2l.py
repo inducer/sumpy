@@ -420,7 +420,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
 
         # Add zero values needed to make the translation matrix circulant
         derivatives_full = [0]*len(circulant_matrix_mis)
-        for expr, mi in zip(vector, needed_vector_terms):
+        for expr, mi in zip(vector, needed_vector_terms, strict=True):
             derivatives_full[circulant_matrix_ident_to_index[mi]] = expr
 
         return derivatives_full
@@ -437,7 +437,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         input_vector = [0] * len(circulant_matrix_mis)
         for coeff, term in zip(
                 src_coeff_exprs,
-                src_expansion.get_coefficient_identifiers()):
+                src_expansion.get_coefficient_identifiers(), strict=True):
             input_vector[circulant_matrix_ident_to_index[term]] = \
                     add_to_sac(sac, coeff)
 
@@ -760,7 +760,7 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
         assert translation_classes_dependent_data
         derivatives = translation_classes_dependent_data
         assert len(src_coeff_exprs) == len(derivatives)
-        result = [a*b for a, b in zip(derivatives, src_coeff_exprs)]
+        result = [a*b for a, b in zip(derivatives, src_coeff_exprs, strict=True)]
         return result
 
     def translation_classes_dependent_data(self, tgt_expansion, src_expansion,
@@ -981,7 +981,7 @@ class FourierBesselM2LWithFFT(FourierBesselM2LWithPreprocessedMultipoles):
         assert translation_classes_dependent_data is not None
         derivatives = translation_classes_dependent_data
         assert len(derivatives) == len(src_coeff_exprs)
-        return [a * b for a, b in zip(derivatives, src_coeff_exprs)]
+        return [a * b for a, b in zip(derivatives, src_coeff_exprs, strict=True)]
 
     def loopy_translate(self, tgt_expansion, src_expansion):
         raise NotImplementedError

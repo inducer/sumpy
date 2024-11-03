@@ -118,7 +118,7 @@ Profiling
 
 def add_mi(mi1: Sequence[int], mi2: Sequence[int]) -> tuple[int, ...]:
     # NOTE: these are used a lot and `tuple([])` is faster
-    return tuple([mi1i + mi2i for mi1i, mi2i in zip(mi1, mi2)])  # noqa: C409
+    return tuple([mi1i + mi2i for mi1i, mi2i in zip(mi1, mi2, strict=True)])  # noqa: C409
 
 
 def mi_factorial(mi: Sequence[int]) -> int:
@@ -147,7 +147,7 @@ def mi_power(
         vector: Sequence[Any], mi: Sequence[int],
         evaluate: bool = True) -> Any:
     result = 1
-    for mi_i, vec_i in zip(mi, vector):
+    for mi_i, vec_i in zip(mi, vector, strict=True):
         if mi_i == 1:
             result *= vec_i
         elif evaluate:
@@ -367,7 +367,7 @@ class KernelComputation(ABC):
                     temp_var_type=lp.Optional(dtype),
                     tags=frozenset([ScalingAssignmentTag()]))
                 for i, (kernel, dtype) in enumerate(
-                    zip(self.target_kernels, self.value_dtypes))]
+                    zip(self.target_kernels, self.value_dtypes, strict=True))]
 
     @abstractmethod
     def get_kernel(self):
@@ -654,7 +654,7 @@ def fft_toeplitz_upper_triangular(first_row, x, sac=None):
 
     v_fft = fft(v, sac)
     x_fft = fft(x, sac)
-    res_fft = [add_to_sac(sac, a * b) for a, b in zip(v_fft, x_fft)]
+    res_fft = [add_to_sac(sac, a * b) for a, b in zip(v_fft, x_fft, strict=True)]
     res = fft(res_fft, inverse=True, sac=sac)
     return list(reversed(res[:n]))
 

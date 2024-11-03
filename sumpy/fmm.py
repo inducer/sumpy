@@ -691,7 +691,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 **kwargs)
         events.append(evt)
 
-        for pot_i, pot_res_i in zip(pot, pot_res):
+        for pot_i, pot_res_i in zip(pot, pot_res, strict=True):
             assert pot_i is pot_res_i
             pot_i.add_event(evt)
 
@@ -957,7 +957,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
             wait_for = [evt]
 
-            for pot_i, pot_res_i in zip(pot, pot_res):
+            for pot_i, pot_res_i in zip(pot, pot_res, strict=True):
                 assert pot_i is pot_res_i
 
         if events:
@@ -1089,7 +1089,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     **kwargs)
             events.append(evt)
 
-            for pot_i, pot_res_i in zip(pot, pot_res):
+            for pot_i, pot_res_i in zip(pot, pot_res, strict=True):
                 assert pot_i is pot_res_i
 
         return (pot, SumpyTimingFuture(queue, events))

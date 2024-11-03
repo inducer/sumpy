@@ -162,7 +162,7 @@ class ExpansionBase(ABC):
             the coefficients of the expansion.
         """
         result = [0]*len(self)
-        for knl, weight in zip(kernels, weights):
+        for knl, weight in zip(kernels, weights, strict=True):
             coeffs = self.coefficients_from_source(knl, avec, bvec, rscale, sac=sac)
             for i in range(len(result)):
                 result[i] += weight * coeffs[i]

@@ -590,7 +590,7 @@ class SumSignGrouper(CSECachingIdentityMapper, CallExternalRecMapper):
         new_children = tuple(first_group + second_group)
         if len(new_children) == len(expr.children) and \
                 all(child is orig_child for child, orig_child in
-                    zip(new_children, expr.children)):
+                    zip(new_children, expr.children, strict=True)):
             return expr
         return prim.Sum(tuple(first_group+second_group))
 
