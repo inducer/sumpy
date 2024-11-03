@@ -24,7 +24,7 @@ THE SOFTWARE.
 """
 
 import os
-from typing import Hashable
+from collections.abc import Hashable
 
 import loopy as lp
 from pytools.persistent_dict import WriteOncePersistentDict

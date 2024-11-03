@@ -25,7 +25,8 @@ THE SOFTWARE.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar, Hashable, Sequence
+from collections.abc import Hashable, Sequence
+from typing import Any, ClassVar
 
 import loopy as lp
 import pymbolic.primitives as prim

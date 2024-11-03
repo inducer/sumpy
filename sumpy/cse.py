@@ -460,7 +460,7 @@ def tree_cse(exprs, symbols, opt_subs=None):
     excluded_symbols = set()
 
     def find_repeated(expr):
-        if not isinstance(expr, (Basic, Unevaluated)):
+        if not isinstance(expr, Basic | Unevaluated):
             return
 
         if isinstance(expr, Basic) and expr.is_Atom:
@@ -505,7 +505,7 @@ def tree_cse(exprs, symbols, opt_subs=None):
     subs = {}
 
     def rebuild(expr):
-        if not isinstance(expr, (Basic, Unevaluated)):
+        if not isinstance(expr, Basic | Unevaluated):
             return expr
 
         if not expr.args:

@@ -39,7 +39,7 @@ __doc__ = """
 """
 
 import logging
-from typing import Any, Dict, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -341,7 +341,7 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
 
 # {{{ DifferentiatedExprDerivativeTaker
 
-DerivativeCoeffDict = Dict[Tuple[int, ...], Any]
+DerivativeCoeffDict = dict[tuple[int, ...], Any]
 
 
 @tag_dataclass

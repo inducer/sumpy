@@ -511,7 +511,7 @@ class ComplexRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
     def map_constant(self, expr, rec_self=None):
         """Convert complex values to numpy types
         """
-        if not isinstance(expr, (complex, np.complex64, np.complex128)):
+        if not isinstance(expr, complex | np.complex64 | np.complex128):
             return IdentityMapper.map_constant(rec_self or self, expr,
                     rec_self=rec_self)
 

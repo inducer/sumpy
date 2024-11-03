@@ -28,9 +28,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from collections.abc import Sequence
 from functools import partial
 from numbers import Number
-from typing import TYPE_CHECKING, Sequence, Union
+from typing import TYPE_CHECKING
 
 from pytools import memoize_method
 
@@ -481,7 +482,7 @@ def _m2l(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
 
 # {{{ potential source classes
 
-Number_ish = Union[int, float, complex, np.number]
+Number_ish = int | float | complex | np.number
 
 
 class PotentialSource:
@@ -516,7 +517,7 @@ class PotentialSource:
 
     def __add__(self, other: Number_ish | PotentialSource
                 ) -> PotentialSource:
-        if isinstance(other, (Number, np.number)):
+        if isinstance(other, Number | np.number):
             other = ConstantPotential(self.toy_ctx, other)
         elif not isinstance(other, PotentialSource):
             return NotImplemented
@@ -538,7 +539,7 @@ class PotentialSource:
 
     def __mul__(self,
                 other: Number_ish | PotentialSource) -> PotentialSource:
-        if isinstance(other, (Number, np.number)):
+        if isinstance(other, Number | np.number):
             other = ConstantPotential(self.toy_ctx, other)
         elif not isinstance(other, PotentialSource):
             return NotImplemented

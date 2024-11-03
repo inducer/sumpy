@@ -179,7 +179,7 @@ class CalculusPatch:
         """
 
         from numbers import Number
-        if isinstance(f_values, (np.number, Number)):
+        if isinstance(f_values, np.number | Number):
             # constants differentiate to 0
             return 0
 

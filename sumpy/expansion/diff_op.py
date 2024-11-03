@@ -26,9 +26,9 @@ THE SOFTWARE.
 """
 
 import logging
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from itertools import accumulate
-from typing import Mapping, Sequence, Union
 
 import numpy as np
 import sympy as sp
@@ -74,7 +74,7 @@ class DerivativeIdentifier:
     """
 
 
-Number_ish = Union[int, float, complex, np.number]
+Number_ish = int | float | complex | np.number
 
 
 @dataclass(frozen=True, eq=True)
