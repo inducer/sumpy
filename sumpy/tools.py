@@ -31,8 +31,9 @@ import enum
 import logging
 import warnings
 from abc import ABC, abstractmethod
+from collections.abc import Hashable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Hashable, Sequence
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -161,7 +162,7 @@ def add_to_sac(sac, expr):
         return expr
 
     from numbers import Number
-    if isinstance(expr, (Number, sym.Number, sym.Symbol)):
+    if isinstance(expr, Number | sym.Number | sym.Symbol):
         return expr
 
     name = sac.assign_temp("temp", expr)
@@ -228,7 +229,7 @@ def vector_from_device(queue, vec):
 
     def from_dev(ary):
         from numbers import Number
-        if isinstance(ary, (np.number, Number)):
+        if isinstance(ary, np.number | Number):
             # zero, most likely
             return ary
 
@@ -318,7 +319,7 @@ class KernelComputation(ABC):
                 else:
                     value_dtypes.append(np.dtype(np.float64))
 
-        if not isinstance(value_dtypes, (list, tuple)):
+        if not isinstance(value_dtypes, list | tuple):
             value_dtypes = [np.dtype(value_dtypes)] * len(target_kernels)
         value_dtypes = [np.dtype(vd) for vd in value_dtypes]
 
@@ -515,7 +516,7 @@ KernelCacheWrapper = KernelCacheMixin
 
 def is_obj_array_like(ary):
     return (
-            isinstance(ary, (tuple, list))
+            isinstance(ary, tuple | list)
             or (isinstance(ary, np.ndarray) and ary.dtype.char == "O"))
 
 
@@ -559,12 +560,12 @@ def reduced_row_echelon_form(m, atol=0):
 
         pivot_cols.append(i)
         scale = mat[index, i]
-        if isinstance(scale, (int, sym.Integer)):
+        if isinstance(scale, int | sym.Integer):
             scale = int(scale)
 
         for j in range(mat.shape[1]):
             elem = mat[index, j]
-            if isinstance(scale, int) and isinstance(elem, (int, sym.Integer)):
+            if isinstance(scale, int) and isinstance(elem, int | sym.Integer):
                 quo = int(elem) // scale
                 if quo * scale == elem:
                     mat[index, j] = quo

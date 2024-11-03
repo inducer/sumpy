@@ -137,7 +137,7 @@ class SimpleExpansionOrderFinder:
     def __call__(self, kernel, kernel_args, tree, level):
         from sumpy.kernel import HelmholtzKernel, LaplaceKernel
 
-        assert isinstance(kernel, (LaplaceKernel, HelmholtzKernel))
+        assert isinstance(kernel, LaplaceKernel | HelmholtzKernel)
 
         laplace_order = int(np.ceil(
                 (np.log(self.tol) - np.log(self.err_const_laplace))
