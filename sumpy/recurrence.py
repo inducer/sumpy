@@ -400,6 +400,3 @@ def get_processed_and_shifted_recurrence(pde) -> tuple[int, int,
     n_initial = __get_initial_c(r_p)
     r_s = shift_recurrence(r_p)
     return n_initial, order, r_s
-
-
-print(_generate_nd_derivative_relations(_make_sympy_vec("x", 2), 3))
