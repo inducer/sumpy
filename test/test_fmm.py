@@ -407,7 +407,8 @@ def test_unified_single_and_double(actx_factory, visualize=False):
     dir_vec = actx.from_numpy(np.vstack([np.cos(alpha), np.sin(alpha)]))
 
     results = []
-    for source_kernels, strength_usage in zip(source_kernel_vecs, strength_usages):
+    for source_kernels, strength_usage in zip(
+            source_kernel_vecs, strength_usages, strict=True):
         source_extra_kwargs = {}
         if deriv_knl in source_kernels:
             source_extra_kwargs["dir_vec"] = dir_vec

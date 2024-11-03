@@ -126,7 +126,7 @@ class LinearPDESystemOperator:
         assert self.dim == other_diff_op.dim
         assert len(self.eqs) == len(other_diff_op.eqs)
         eqs: list[Mapping[DerivativeIdentifier, sp.Expr]] = []
-        for eq, other_eq in zip(self.eqs, other_diff_op.eqs):
+        for eq, other_eq in zip(self.eqs, other_diff_op.eqs, strict=True):
             res = dict(eq)
             for k, v in other_eq.items():
                 if k in res:
@@ -267,7 +267,7 @@ def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> list[LinearPDESystemOp
         scalar_pde = min(scalar_pdes, key=lambda x: x.degree()).monic()
         pde_dict = {
             DerivativeIdentifier(mi, 0): sym.sympify(coeff.as_expr().simplify()) for
-            (mi, coeff) in zip(scalar_pde.monoms(), scalar_pde.coeffs())
+            (mi, coeff) in zip(scalar_pde.monoms(), scalar_pde.coeffs(), strict=True)
         }
         results.append(LinearPDESystemOperator(pde.dim, (immutabledict(pde_dict),)))
 

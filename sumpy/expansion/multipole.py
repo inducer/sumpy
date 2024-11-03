@@ -73,7 +73,7 @@ class VolumeTaylorMultipoleExpansionBase(
             rscale = 1
 
         result = [0]*len(self.get_full_coefficient_identifiers())
-        for kernel, weight in zip(kernels, weights):
+        for kernel, weight in zip(kernels, weights, strict=True):
             if isinstance(kernel, KernelWrapper):
                 coeffs = [
                         kernel.postprocess_at_source(mi_power(avec, mi), avec)
@@ -109,7 +109,7 @@ class VolumeTaylorMultipoleExpansionBase(
         taker = kernel.postprocess_at_target(base_taker, bvec)
 
         result = []
-        for coeff, mi in zip(coeffs, self.get_coefficient_identifiers()):
+        for coeff, mi in zip(coeffs, self.get_coefficient_identifiers(), strict=True):
             result.append(coeff * taker.diff(mi, lambda x: add_to_sac(sac, x)))
 
         result = sym.Add(*tuple(result))
@@ -289,7 +289,7 @@ class VolumeTaylorMultipoleExpansionBase(
                     for mi_i in range(tgt_mi[d]+1):
                         input_mi = mi_set_axis(tgt_mi, d, mi_i)
                         contrib = cur_dim_input_coeffs[tgt_mi_to_index[input_mi]]
-                        for n, k, dist in zip(tgt_mi, input_mi, dvec):
+                        for n, k, dist in zip(tgt_mi, input_mi, dvec, strict=True):
                             assert n >= k
                             contrib /= math.factorial(n-k)
                             contrib *= \

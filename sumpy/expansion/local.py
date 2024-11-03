@@ -199,7 +199,7 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
         base_taker = base_kernel.get_derivative_taker(avec, rscale, sac)
         result = [0]*len(self)
 
-        for knl, weight in zip(kernels, weights):
+        for knl, weight in zip(kernels, weights, strict=True):
             taker = knl.postprocess_at_source(base_taker, avec)
             # Following is a hack to make sure cse works.
             if 1:
@@ -237,7 +237,8 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
             * mi_power(bvec_scaled, mi, evaluate=False)
             / mi_factorial(mi)
             for coeff, mi in zip(
-                    evaluated_coeffs, self.get_full_coefficient_identifiers()))
+                    evaluated_coeffs, self.get_full_coefficient_identifiers(),
+                    strict=True))
 
         return kernel.postprocess_at_target(result, bvec)
 

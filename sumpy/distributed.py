@@ -51,7 +51,7 @@ class DistributedSumpyExpansionWrangler(
         local_src_weight_vecs_device = [
             cl.array.to_device(src_weight.queue, local_src_weight)
             for local_src_weight, src_weight in
-            zip(local_src_weight_vecs_host, src_weight_vecs)]
+            zip(local_src_weight_vecs_host, src_weight_vecs, strict=True)]
 
         return local_src_weight_vecs_device
 
@@ -70,7 +70,7 @@ class DistributedSumpyExpansionWrangler(
             return make_obj_array([
                 cl.array.to_device(potentials_dev.queue, gathered_potentials_host)
                 for gathered_potentials_host, potentials_dev in
-                zip(gathered_potentials_host_vec, potentials)])
+                zip(gathered_potentials_host_vec, potentials, strict=True)])
         else:
             return None
 

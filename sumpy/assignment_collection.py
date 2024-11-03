@@ -205,14 +205,14 @@ class SymbolicAssignmentCollection:
         new_assign_exprs = new_exprs[:len(assign_exprs)]
         new_extra_exprs = new_exprs[len(assign_exprs):]
 
-        for name, new_expr in zip(assign_names, new_assign_exprs):
+        for name, new_expr in zip(assign_names, new_assign_exprs, strict=True):
             self.assignments[name] = new_expr
 
         for name, value in new_assignments:
             assert isinstance(name, sym.Symbol)
             self.add_assignment(name.name, value)
 
-        for name, new_expr in zip(assign_names, new_assign_exprs):
+        for name, new_expr in zip(assign_names, new_assign_exprs, strict=True):
             # We want the assignment collection to be ordered correctly
             # to make it easier for loopy to schedule.
             # Deleting the original assignments and adding them again
