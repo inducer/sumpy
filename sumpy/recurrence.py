@@ -393,6 +393,11 @@ def get_processed_and_shifted_recurrence(pde) -> tuple[int, int,
     Also processes the recurrence so s(n) is in terms of s(n-1), etc.
 
     :arg recurrence: a recurrence relation in :math:`s(n)`
+
+    :returns: a tuple ``(n_initial, order, r_s)``, where
+    - *n_initial* is the number of initial derivatives needed
+    - *order* is the order of the recurrence r_s
+    - *r_s* is the shifted/processed recurrence
     """
     r = recurrence_from_pde(pde)
     order, r_p = process_recurrence_relation(r)
