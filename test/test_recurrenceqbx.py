@@ -4,10 +4,35 @@ With the functionality in this module, we aim to test recurrence
 """
 from __future__ import annotations
 
+
+__copyright__ = """
+Copyright (C) 2024 Hirish Chandrasekaran
+Copyright (C) 2024 Andreas Kloeckner
+"""
+
+__license__ = """
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+"""
 import numpy as np
 import sympy as sp
-
 from sympy import hankel1
+
 from sumpy.array_context import _acf
 from sumpy.expansion.diff_op import (
     laplacian,
@@ -40,7 +65,6 @@ def _qbx_lp_helmholtz_general(sources, targets, centers, radius, strengths, orde
     centers = actx.from_numpy(centers)
 
     strengths = (strengths,)
-    extra_kernel_kwargs = {"k": 1}
     _evt, (result_qbx,) = lpot(
             actx.queue,
             targets, sources, centers, strengths,
@@ -143,9 +167,7 @@ def test_recurrence_helmholtz_2d_ellipse():
         strengths = h * density
         exp_res = recurrence_qbx_lp(sources, centers, normals, strengths,
         radius, helmholtz2d, g_x_y, 2, p)
-        qbx_res = _qbx_lp_helmholtz_general(sources, sources, centers, radius, strengths, p)
-        #qbx_res,_ = lpot_eval_circle(sources.shape[1], p)
+        qbx_res = _qbx_lp_helmholtz_general(sources, sources,
+                                            centers, radius, strengths, p)
         err.append(np.max(np.abs(exp_res - qbx_res)))
     assert np.max(err) <= 1e-13
-
-# test_recurrence_helmholtz_2d_ellipse()
