@@ -7,7 +7,7 @@ from __future__ import annotations
 import numpy as np
 import sympy as sp
 
-# from sympy import hankel1
+from sympy import hankel1
 from sumpy.array_context import _acf
 from sumpy.expansion.diff_op import (
     laplacian,
@@ -45,7 +45,7 @@ def _qbx_lp_helmholtz_general(sources, targets, centers, radius, strengths, orde
             actx.queue,
             targets, sources, centers, strengths,
             expansion_radii=expansion_radii,
-            kwargs=extra_kernel_kwargs)
+            k=1)
     result_qbx = actx.to_numpy(result_qbx)
 
     return result_qbx
@@ -125,6 +125,7 @@ def test_recurrence_laplace_2d_ellipse():
 def test_recurrence_helmholtz_2d_ellipse():
     r"""
     Tests recurrence code for orders up to 6 laplace3d.
+    """
     # ------------- 1. Define PDE, Green's Function
     w = make_identity_diff_op(2)
     helmholtz2d = laplacian(w) + w
@@ -136,16 +137,15 @@ def test_recurrence_helmholtz_2d_ellipse():
     g_x_y = (1j/4) * hankel1(0, k * abs_dist)
 
     p = 4
-    # err = []
+    err = []
     for n_p in range(200, 1001, 200):
         sources, centers, normals, density, h, radius = _create_ellipse(n_p)
         strengths = h * density
         exp_res = recurrence_qbx_lp(sources, centers, normals, strengths,
         radius, helmholtz2d, g_x_y, 2, p)
-        #qbx_res = _qbx_lp_helmholtz_general(sources, sources, centers,
-        # radius, strengths, p)
+        qbx_res = _qbx_lp_helmholtz_general(sources, sources, centers, radius, strengths, p)
         #qbx_res,_ = lpot_eval_circle(sources.shape[1], p)
-        #err.append(np.max(np.abs(exp_res - qbx_res)))
-    #assert np.max(err) <= 1e-13
-    """
-    print("Hello")
+        err.append(np.max(np.abs(exp_res - qbx_res)))
+    assert np.max(err) <= 1e-13
+
+test_recurrence_helmholtz_2d_ellipse()
