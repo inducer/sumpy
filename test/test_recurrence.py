@@ -131,7 +131,7 @@ def test_helmholtz2d():
     """
     w = make_identity_diff_op(2)
     helmholtz2d = laplacian(w) + w
-    _, _, r = get_processed_and_shifted_recurrence(helmholtz2d)
+    n_init, _, r = get_processed_and_shifted_recurrence(helmholtz2d)
 
     n = sp.symbols("n")
     s = sp.Function("s")
@@ -152,24 +152,22 @@ def test_helmholtz2d():
 
     # pylint: disable-next=not-callable
     subs_dict = {s(0): derivs[0], s(1): derivs[1]}
-    check_2_s = r.subs(n, 2).subs(subs_dict) - derivs[2]
-    # pylint: disable-next=not-callable
-    subs_dict[s(2)] = derivs[2]
-    check_3_s = r.subs(n, 3).subs(subs_dict) - derivs[3]
-    # pylint: disable-next=not-callable
-    subs_dict[s(3)] = derivs[3]
-    check_4_s = r.subs(n, 4).subs(subs_dict) - derivs[4]
-    # pylint: disable-next=not-callable
-    subs_dict[s(4)] = derivs[4]
-    check_5_s = r.subs(n, 5).subs(subs_dict) - derivs[5]
+    check = []
 
-    f2 = sp.lambdify([var[0], var[1]], check_2_s)
+    assert n_init == 2
+    max_order_check = 6
+    for i in range(n_init, max_order_check):
+        check.append(r.subs(n, i).subs(subs_dict) - derivs[i])
+        # pylint: disable-next=not-callable
+        subs_dict[s(i)] = derivs[i]
+
+    f2 = sp.lambdify([var[0], var[1]], check[0])
     assert abs(f2(x_coord, y_coord)) <= 1e-13
-    f3 = sp.lambdify([var[0], var[1]], check_3_s)
+    f3 = sp.lambdify([var[0], var[1]], check[1])
     assert abs(f3(x_coord, y_coord)) <= 1e-13
-    f4 = sp.lambdify([var[0], var[1]], check_4_s)
+    f4 = sp.lambdify([var[0], var[1]], check[2])
     assert abs(f4(x_coord, y_coord)) <= 1e-13
-    f5 = sp.lambdify([var[0], var[1]], check_5_s)
+    f5 = sp.lambdify([var[0], var[1]], check[3])
     assert abs(f5(x_coord, y_coord)) <= 1e-12
 
 
@@ -179,7 +177,7 @@ def test_laplace2d():
     """
     w = make_identity_diff_op(2)
     laplace2d = laplacian(w)
-    _, _, r = get_processed_and_shifted_recurrence(laplace2d)
+    n_init, _, r = get_processed_and_shifted_recurrence(laplace2d)
 
     n = sp.symbols("n")
     s = sp.Function("s")
@@ -193,22 +191,18 @@ def test_laplace2d():
 
     # pylint: disable-next=not-callable
     subs_dict = {s(0): derivs[0], s(1): derivs[1]}
-    check_2_s = r.subs(n, 2).subs(subs_dict) - derivs[2]
-    # pylint: disable-next=not-callable
-    subs_dict[s(2)] = derivs[2]
-    check_3_s = r.subs(n, 3).subs(subs_dict) - derivs[3]
-    # pylint: disable-next=not-callable
-    subs_dict[s(3)] = derivs[3]
-    check_4_s = r.subs(n, 4).subs(subs_dict) - derivs[4]
-    # pylint: disable-next=not-callable
-    subs_dict[s(4)] = derivs[4]
-    check_5_s = r.subs(n, 5).subs(subs_dict) - derivs[5]
+    check = []
+
+    assert n_init == 2
+    max_order_check = 6
+    for i in range(n_init, max_order_check):
+        check.append(r.subs(n, i).subs(subs_dict) - derivs[i])
+        # pylint: disable-next=not-callable
+        subs_dict[s(i)] = derivs[i]
 
     x_coord = np.random.rand()  # noqa: NPY002
     y_coord = np.random.rand()  # noqa: NPY002
     coord_dict = {var[0]: x_coord, var[1]: y_coord}
 
-    assert abs(abs(check_2_s.subs(coord_dict))) <= 1e-15
-    assert abs(abs(check_3_s.subs(coord_dict))) <= 1e-14
-    assert abs(abs(check_4_s.subs(coord_dict))) <= 1e-12
-    assert abs(abs(check_5_s.subs(coord_dict))) <= 1e-12
+    check = np.array([check[i].subs(coord_dict) for i in range(len(check))])
+    assert max(abs(abs(check))) <= 1e-12
