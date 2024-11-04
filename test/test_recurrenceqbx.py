@@ -1,6 +1,6 @@
 r"""
 With the functionality in this module, we aim to test recurrence
-code.
++ qbx code.
 """
 from __future__ import annotations
 
@@ -95,7 +95,7 @@ def _create_ellipse(n_p):
 
 def test_recurrence_laplace_2d_ellipse():
     r"""
-    Tests recurrence code for orders up to 6 laplace3d.
+    Tests recurrence + qbx code for orders up to 6 laplace3d.
     """
 
     # ------------- 1. Define PDE, Green's Function
