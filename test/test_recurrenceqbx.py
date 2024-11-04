@@ -148,4 +148,4 @@ def test_recurrence_helmholtz_2d_ellipse():
         err.append(np.max(np.abs(exp_res - qbx_res)))
     assert np.max(err) <= 1e-13
 
-test_recurrence_helmholtz_2d_ellipse()
+# test_recurrence_helmholtz_2d_ellipse()

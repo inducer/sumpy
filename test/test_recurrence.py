@@ -193,9 +193,3 @@ def test_laplace2d():
     assert abs(abs(check_3_s.subs(coord_dict))) <= 1e-14
     assert abs(abs(check_4_s.subs(coord_dict))) <= 1e-12
     assert abs(abs(check_5_s.subs(coord_dict))) <= 1e-12
-
-
-test_laplace2d()
-test_helmholtz2d()
-test_helmholtz3d()
-test_laplace3d()
