@@ -61,8 +61,8 @@ def test_helmholtz_3D():
 
 def test_helmholtz_2D():
     w = make_identity_diff_op(2)
-    laplace2d = laplacian(w) + w
-    _,_, r = get_processed_and_shifted_recurrence(laplace2d)
+    helmholtz2d = laplacian(w) + w
+    _,_, r = get_processed_and_shifted_recurrence(helmholtz2d)
 
     n = sp.symbols("n")
     s = sp.Function("s")
