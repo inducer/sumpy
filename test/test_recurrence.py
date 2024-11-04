@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import numpy as np
 import sympy as sp
+from sympy import hankel1
 
-# from sympy import hankel1
 from sumpy.expansion.diff_op import (
     laplacian,
     make_identity_diff_op,
@@ -109,6 +109,7 @@ def test_helmholtz3d():
 def test_helmholtz2d():
     r"""
     Tests recurrence code for orders up to 6 helmholtz2d.
+    """
     w = make_identity_diff_op(2)
     helmholtz2d = laplacian(w) + w
     _, _, r = get_processed_and_shifted_recurrence(helmholtz2d)
@@ -118,17 +119,39 @@ def test_helmholtz2d():
 
     var = _make_sympy_vec("x", 2)
     var_t = _make_sympy_vec("t", 2)
+    abs_dist = sp.sqrt((var[0]-var_t[0])**2 +
+                       (var[1]-var_t[1])**2)
     k = 1
-    abs_dist = sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2)
     g_x_y = (1j/4) * hankel1(0, k * abs_dist)
-    x_coord = np.random.rand()
-    y_coord = np.random.rand()
-    derivs = [sp.diff(g_x_y, var_t[0], i).subs(var_t[0], 0).subs(var_t[1], 0)
-    for i in range(6)]
-    derivs = [derivs[i].subs(var[0], x_coord).subs(var[1], y_coord).evalf()
-    for i in range(6)]
-    """
-    print("HELLO!")
+    derivs = [sp.diff(g_x_y,
+                      var_t[0], i).subs(var_t[0], 0).subs(var_t[1], 0)
+                                               for i in range(6)]
+    x_coord = np.random.rand()  # noqa: NPY002
+    y_coord = np.random.rand()  # noqa: NPY002
+    coord_dict = {var[0]: x_coord, var[1]: y_coord}
+    derivs = [derivs[i].subs(coord_dict) for i in range(6)]
+
+    # pylint: disable-next=not-callable
+    subs_dict = {s(0): derivs[0], s(1): derivs[1]}
+    check_2_s = r.subs(n, 2).subs(subs_dict) - derivs[2]
+    # pylint: disable-next=not-callable
+    subs_dict[s(2)] = derivs[2]
+    check_3_s = r.subs(n, 3).subs(subs_dict) - derivs[3]
+    # pylint: disable-next=not-callable
+    subs_dict[s(3)] = derivs[3]
+    check_4_s = r.subs(n, 4).subs(subs_dict) - derivs[4]
+    # pylint: disable-next=not-callable
+    subs_dict[s(4)] = derivs[4]
+    check_5_s = r.subs(n, 5).subs(subs_dict) - derivs[5]
+
+    f2 = sp.lambdify([var[0], var[1]], check_2_s)
+    assert abs(f2(x_coord, y_coord)) <= 1e-13
+    f3 = sp.lambdify([var[0], var[1]], check_3_s)
+    assert abs(f3(x_coord, y_coord)) <= 1e-13
+    f4 = sp.lambdify([var[0], var[1]], check_4_s)
+    assert abs(f4(x_coord, y_coord)) <= 1e-13
+    f5 = sp.lambdify([var[0], var[1]], check_5_s)
+    assert abs(f5(x_coord, y_coord)) <= 1e-12
 
 
 def test_laplace2d():
@@ -173,3 +196,6 @@ def test_laplace2d():
 
 
 test_laplace2d()
+test_helmholtz2d()
+test_helmholtz3d()
+test_laplace3d()

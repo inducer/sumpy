@@ -323,6 +323,7 @@ def _extract_idx_terms_from_recurrence(r: sp.Expr) -> tuple[np.ndarray,
 
     :arg r: recurrence to extract terms from
     """
+    # We're assuming here that s(...) are the only function calls.
     terms = list(r.atoms(sp.Function))
     terms = np.array(terms)
 
