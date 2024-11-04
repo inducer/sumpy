@@ -1,4 +1,5 @@
 import numpy as np
+import sympy as sp
 
 from sumpy.expansion.diff_op import (
     laplacian,
@@ -71,10 +72,10 @@ def test_recurrence_laplace_2d_ellipse():
     for n_p in range(200, 1001, 200):
         sources, centers, normals, density, h, radius = _create_ellipse(n_p)
         strengths = h * density
-        exp_res = recurrence_qbx_lp(sources, centers, normals, strengths, radius, laplace2d, g_x_y, p)
+        exp_res = recurrence_qbx_lp(sources, centers, normals, strengths, radius, laplace2d, g_x_y, 2, p)
         qbx_res = _qbx_lp_laplace_general(sources, sources, centers, radius, strengths, p)
         #qbx_res,_ = lpot_eval_circle(sources.shape[1], p)
-        err.append(np.max(exp_res - qbx_res))
+        err.append(np.max(np.abs(exp_res - qbx_res)))
+    assert np.max(err) <= 1e-13
 
-    print(err)
-
+test_recurrence_laplace_2d_ellipse()

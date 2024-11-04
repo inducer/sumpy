@@ -7,12 +7,14 @@ Green's function. See recurrence.py.
 """
 import numpy as np
 import sympy as sp
+import math
 from sumpy.recurrence import (
     _make_sympy_vec, 
     get_processed_and_shifted_recurrence)
 
+
 # ================ Transform/Rotate =================
-def __produce_orthogonal_basis(normals):
+def _produce_orthogonal_basis(normals):
     ndim, ncenters = normals.shape
     orth_coordsys = [normals]
     for i in range(1, ndim):
@@ -26,10 +28,10 @@ def __produce_orthogonal_basis(normals):
     return orth_coordsys
 
 
-def __compute_rotated_shifted_coordinates(sources, centers, normals):
+def _compute_rotated_shifted_coordinates(sources, centers, normals):
 
     cts = sources[:, None] - centers[:, :, None]
-    orth_coordsys = __produce_orthogonal_basis(normals)
+    orth_coordsys = _produce_orthogonal_basis(normals)
     cts_rotated_shifted = np.einsum("idc,dcs->ics", orth_coordsys, cts)
 
     return cts_rotated_shifted
@@ -37,7 +39,7 @@ def __compute_rotated_shifted_coordinates(sources, centers, normals):
 
 # ================ Recurrence LP Eval =================
 def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
-                       p) -> np.ndarray:
+                       ndim, p) -> np.ndarray:
     r"""
     A function that computes a single-layer potential using a recurrence.
 
@@ -50,16 +52,17 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
     :arg pde: pde that we are computing layer potential for
     :arg g_x_y: a green's function in (x0, x1, ...) source and 
     (t0, t1, ...) target
+    :arg ndim: number of spatial variables
     :arg p: order of expansion computed
     """
 
     #------------- 2. Compute rotated/shifted coordinates
-    cts_r_s = __compute_rotated_shifted_coordinates(sources, centers, normals)
+    cts_r_s = _compute_rotated_shifted_coordinates(sources, centers, normals)
 
 
     #------------- 4. Define input variables for green's function expression
-    var = _make_sympy_vec("x", 2)
-    var_t = _make_sympy_vec("t", 2)
+    var = _make_sympy_vec("x", ndim)
+    var_t = _make_sympy_vec("t", ndim)
 
     #------------ 5. Compute recurrence
     n_initial, order, recurrence = get_processed_and_shifted_recurrence(pde)
@@ -80,21 +83,23 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
         arg_list.append(r)
         
         if i < n_initial:
-            lamb_expr = sp.diff(g_x_y, var_t[0], i).subs(var_t[0], 0).subs(var_t[1], 0)
+            lamb_expr = sp.diff(g_x_y, var_t[0], i)
+            for j in range(ndim):
+                lamb_expr = lamb_expr.subs(var_t[j], 0)
         else:
             lamb_expr = recurrence.subs(n, i)
         return sp.lambdify(arg_list, lamb_expr) 
 
-    interactions_2d = 0
+    interactions = 0
     for i in range(p+1):
         lamb_expr = generate_lamb_expr(i, n_initial)
-        a = storage[-4:] + [cts_r_s[0],cts_r_s[1],radius]
+        a = storage + [cts_r_s[0],cts_r_s[1],radius]
         s_new = lamb_expr(*a)
-        interactions_2d += s_new * radius**i/math.factorial(i)
+        interactions += s_new * radius**i/math.factorial(i)
 
         storage.pop(0)
         storage.append(s_new)
 
-    exp_res = (interactions_2d * strengths[None, :]).sum(axis=1)
+    exp_res = (interactions * strengths[None, :]).sum(axis=1)
 
     return exp_res
