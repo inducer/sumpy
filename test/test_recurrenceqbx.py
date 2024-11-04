@@ -95,7 +95,7 @@ def _create_ellipse(n_p):
 
 def test_recurrence_laplace_2d_ellipse():
     r"""
-    Tests recurrence + qbx code for orders up to 6 laplace3d.
+    Tests recurrence + qbx code.
     """
 
     # ------------- 1. Define PDE, Green's Function
@@ -124,7 +124,7 @@ def test_recurrence_laplace_2d_ellipse():
 
 def test_recurrence_helmholtz_2d_ellipse():
     r"""
-    Tests recurrence code for orders up to 6 laplace3d.
+    Tests recurrence + qbx code.
     """
     # ------------- 1. Define PDE, Green's Function
     w = make_identity_diff_op(2)
