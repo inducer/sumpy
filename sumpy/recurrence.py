@@ -32,8 +32,6 @@ The whole process can be automated using :func:`recurrence_from_pde`.
 
 from __future__ import annotations
 
-from typing import TypeVar
-
 
 __copyright__ = """
 Copyright (C) 2024 Hirish Chandrasekaran
@@ -60,6 +58,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import math
+from typing import TypeVar
 
 import numpy as np
 import sympy as sp

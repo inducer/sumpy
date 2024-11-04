@@ -8,6 +8,7 @@ Green's function. See recurrence.py.
 from __future__ import annotations  # noqa: I001
 
 import math
+from typing import Sequence
 
 import numpy as np
 import sympy as sp
@@ -19,7 +20,7 @@ from sumpy.recurrence import (
 
 
 # ================ Transform/Rotate =================
-def _produce_orthogonal_basis(normals):
+def _produce_orthogonal_basis(normals: np.ndarray) -> Sequence[np.ndarray]:
     ndim, ncenters = normals.shape
     orth_coordsys = [normals]
     for i in range(1, ndim):
@@ -34,8 +35,11 @@ def _produce_orthogonal_basis(normals):
     return orth_coordsys
 
 
-def _compute_rotated_shifted_coordinates(sources, centers, normals):
-
+def _compute_rotated_shifted_coordinates(
+            sources: np.ndarray,
+            centers: np.ndarray,
+            normals: np.ndarray
+        ) -> np.ndarray:
     cts = sources[:, None] - centers[:, :, None]
     orth_coordsys = _produce_orthogonal_basis(normals)
     cts_rotated_shifted = np.einsum("idc,dcs->ics", orth_coordsys, cts)
