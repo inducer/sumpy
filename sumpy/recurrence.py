@@ -61,16 +61,14 @@ THE SOFTWARE.
 """
 import math
 
-from random import randrange
 import numpy as np
 import sympy as sp
 
 from pytools.obj_array import make_obj_array
 
-
 from sumpy.expansion.diff_op import (
     DerivativeIdentifier,
-    LinearPDESystemOperator
+    LinearPDESystemOperator,
 )
 
 
@@ -188,7 +186,7 @@ def ode_in_r_to_x(ode_in_r: sp.Expr, var: np.ndarray,
 ODECoefficients = list[list[sp.Expr]]
 
 
-def ode_in_x_to_coeff_array(poly: sp.Poly, ode_order: int,  var:
+def ode_in_x_to_coeff_array(poly: sp.Poly, ode_order: int, var:
                             np.ndarray) -> ODECoefficients:
     r"""
     Organizes the coefficients of an ODE in the :math:`x_0` variable into a
@@ -310,15 +308,15 @@ def process_recurrence_relation(r: sp.Expr) -> tuple[int, sp.Expr]:
 
     # Re-arrange the recurrence relation so we get s(n) = ____
     # in terms of s(n-1), ...
-    true_recurrence = sum([coeffs[i]/coeffs[-1] * terms[i]
-                           for i in range(0, len(terms)-1)])
+    true_recurrence = sum(coeffs[i]/coeffs[-1] * terms[i]
+                          for i in range(0, len(terms)-1))
     true_recurrence1 = true_recurrence.subs(n, n-shift_idx)
 
     return order, true_recurrence1
 
 
 def _extract_idx_terms_from_recurrence(r: sp.Expr) -> tuple[np.ndarray,
-                                                           np.ndarray]:
+                                                            np.ndarray]:
     r"""
     Given a recurrence extracts the variables in the recurrence
     as well as the indexes in sorted order.
@@ -328,7 +326,6 @@ def _extract_idx_terms_from_recurrence(r: sp.Expr) -> tuple[np.ndarray,
     terms = list(r.atoms(sp.Function))
     terms = np.array(terms)
 
-
     idx_l = []
     for i in range(len(terms)):
         tms = list(terms[i].atoms(sp.Number))
@@ -336,7 +333,7 @@ def _extract_idx_terms_from_recurrence(r: sp.Expr) -> tuple[np.ndarray,
             idx_l.append(tms[0])
         else:
             idx_l.append(0)
-    idx_l = np.array(idx_l, dtype='int')
+    idx_l = np.array(idx_l, dtype="int")
     idx_sort = idx_l.argsort()
     idx_l = idx_l[idx_sort]
     terms = terms[idx_sort]
@@ -380,7 +377,7 @@ def shift_recurrence(r: sp.Expr) -> sp.Expr:
 
     r_ret = r
 
-    n = sp.symbols('n')
+    n = sp.symbols("n")
     for i in range(len(idx_l)):
         r_ret = r_ret.subs(terms[i], (-1)**(n+idx_l[i])*terms[i])
 
@@ -388,7 +385,7 @@ def shift_recurrence(r: sp.Expr) -> sp.Expr:
 
 
 def get_processed_and_shifted_recurrence(pde) -> tuple[int, int,
-                                                                sp.Expr]:
+                                                       sp.Expr]:
     r"""
     A function that "shifts" the recurrence so the expansion center is placed
     at the origin and source is the input for the recurrence generated.
