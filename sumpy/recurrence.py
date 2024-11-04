@@ -319,7 +319,7 @@ def _extract_idx_terms_from_recurrence(r: sp.Expr) -> tuple[np.ndarray,
                                                             np.ndarray]:
     r"""
     Given a recurrence extracts the variables in the recurrence
-    as well as the indexes in sorted order.
+    as well as the indexes, both in sorted order.
 
     :arg r: recurrence to extract terms from
     """
@@ -342,7 +342,7 @@ def _extract_idx_terms_from_recurrence(r: sp.Expr) -> tuple[np.ndarray,
     return idx_l, terms
 
 
-def __check_neg_ind(r_n):
+def _check_neg_ind(r_n):
     r"""
     Simply checks if a negative index exists in a recurrence relation.
     """
@@ -352,7 +352,7 @@ def __check_neg_ind(r_n):
     return np.any(idx_l < 0)
 
 
-def __get_initial_c(recurrence):
+def _get_initial_c(recurrence):
     r"""
     For a given recurrence checks how many initial conditions by
     checking for non-negative indexed terms.
@@ -361,7 +361,7 @@ def __get_initial_c(recurrence):
 
     i = 0
     r_c = recurrence.subs(n, i)
-    while __check_neg_ind(r_c):
+    while _check_neg_ind(r_c):
         i += 1
         r_c = recurrence.subs(n, i)
     return i
@@ -391,10 +391,12 @@ def get_processed_and_shifted_recurrence(pde) -> tuple[int, int,
     A function that "shifts" the recurrence so the expansion center is placed
     at the origin and source is the input for the recurrence generated.
 
+    Also processes the recurrence so s(n) is in terms of s(n-1), etc.
+
     :arg recurrence: a recurrence relation in :math:`s(n)`
     """
     r = recurrence_from_pde(pde)
     order, r_p = process_recurrence_relation(r)
-    n_initial = __get_initial_c(r_p)
+    n_initial = _get_initial_c(r_p)
     r_s = shift_recurrence(r_p)
     return n_initial, order, r_s
