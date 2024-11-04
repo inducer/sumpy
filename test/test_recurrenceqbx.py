@@ -1,26 +1,22 @@
+import numpy as np
+
 from sumpy.expansion.diff_op import (
     laplacian,
     make_identity_diff_op,
 )
 from sumpy.recurrenceqbx import recurrence_qbx_lp, _make_sympy_vec
-
-import numpy as np
 from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
 from sumpy.expansion.local import LineTaylorLocalExpansion, VolumeTaylorLocalExpansion
-
+from sumpy.kernel import LaplaceKernel
+from sumpy.qbx import LayerPotential
 
 actx_factory = _acf
 expn_class = LineTaylorLocalExpansion
 
 actx = actx_factory()
-
-from sumpy.kernel import LaplaceKernel
 lknl = LaplaceKernel(2)
 
-from sumpy.qbx import LayerPotential
-
-
-def qbx_lp_laplace_general(sources,targets,centers,radius,strengths,order):
+def _qbx_lp_laplace_general(sources,targets,centers,radius,strengths,order):
         lpot = LayerPotential(actx.context,
         expansion=expn_class(lknl, order),
         target_kernels=(lknl,),
@@ -42,7 +38,7 @@ def qbx_lp_laplace_general(sources,targets,centers,radius,strengths,order):
 
         return result_qbx
 
-def create_ellipse(n_p):
+def _create_ellipse(n_p):
     h = 9.688 / n_p
     radius = 7*h
     t = np.linspace(0, 2 * np.pi, n_p, endpoint=False)
@@ -73,10 +69,10 @@ def test_recurrence_laplace_2d_ellipse():
     p = 4
     err = []
     for n_p in range(200, 1001, 200):
-        sources, centers, normals, density, h, radius = create_ellipse(n_p)
+        sources, centers, normals, density, h, radius = _create_ellipse(n_p)
         strengths = h * density
         exp_res = recurrence_qbx_lp(sources, centers, normals, strengths, radius, laplace2d, g_x_y, p)
-        qbx_res = qbx_lp_laplace_general(sources, sources, centers, radius, strengths, p)
+        qbx_res = _qbx_lp_laplace_general(sources, sources, centers, radius, strengths, p)
         #qbx_res,_ = lpot_eval_circle(sources.shape[1], p)
         err.append(np.max(exp_res - qbx_res))
 
