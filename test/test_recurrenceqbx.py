@@ -160,7 +160,7 @@ def test_recurrence_helmholtz_2d_ellipse():
     abs_dist = sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2)
     g_x_y = (1j/4) * hankel1(0, k * abs_dist)
 
-    p = 4
+    p = 5
     err = []
     for n_p in range(200, 1001, 200):
         sources, centers, normals, density, h, radius = _create_ellipse(n_p)
