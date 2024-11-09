@@ -76,8 +76,7 @@ def _qbx_lp_laplace_general3d(sources, targets, centers, radius, strengths, orde
     _evt, (result_qbx,) = lpot(
             actx.queue,
             targets, sources, centers, strengths,
-            expansion_radii=expansion_radii,
-            k=1)
+            expansion_radii=expansion_radii)
     result_qbx = actx.to_numpy(result_qbx)
 
     return result_qbx
@@ -173,6 +172,33 @@ def _create_sphere(refinment_rounds=1, exp_radius=0.01):
     centers = sources - radius * normals
 
     return sources, centers, normals, area_weight, radius
+
+
+def test_recurrence_laplace_3d_ellipse():
+    sources, centers, normals, area_weight, radius = _create_sphere(1)
+    radius =  0.001
+    out =_qbx_lp_laplace_general3d(sources, sources, centers, radius,
+                                   np.ones(area_weight.shape), 0)
+
+    w = make_identity_diff_op(3)
+    laplace3d = laplacian(w)
+    var = _make_sympy_vec("x", 3)
+    var_t = _make_sympy_vec("t", 3)
+    abs_dist = sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2
+                       + (var[2]-var_t[2])**2)
+    g_x_y = 1/(4*np.pi) * 1/abs_dist
+
+    exp_res = recurrence_qbx_lp(sources, centers, normals, np.ones(area_weight.shape),
+                                radius, laplace3d, g_x_y, 3, 0)
+
+    print(exp_res)
+    print(out)
+    print(sources[:,0],centers[:,0])
+    print(1/(4*np.pi) * 1/np.linalg.norm(sources[:,0] - centers[:,0]))
+    #print(np.max(abs(exp_res-out)))
+
+
+test_recurrence_laplace_3d_ellipse()
 
 
 def test_recurrence_laplace_2d_ellipse():

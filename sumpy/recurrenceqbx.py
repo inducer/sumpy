@@ -88,8 +88,8 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
         for j in range(order, 0, -1):
             # pylint: disable-next=not-callable
             arg_list.append(s(i-j))
-        arg_list.append(var[0])
-        arg_list.append(var[1])
+        for j in range(ndim):
+            arg_list.append(var[j])
         arg_list.append(r)
 
         if i < n_initial:
@@ -103,7 +103,8 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
     interactions = 0
     for i in range(p+1):
         lamb_expr = generate_lamb_expr(i, n_initial)
-        a = [*storage, cts_r_s[0], cts_r_s[1], radius]
+        coord = [cts_r_s[i] for i in range(ndim)]
+        a = [*storage, *coord, radius]
         s_new = lamb_expr(*a)
         interactions += s_new * radius**i/math.factorial(i)
 
