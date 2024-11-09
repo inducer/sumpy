@@ -29,15 +29,15 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-import meshmode.mesh.generation as mgen
+import meshmode.mesh.generation as mgen  # type: ignore
 import numpy as np
 import sympy as sp
-from meshmode import _acf as _acf_meshmode
-from meshmode.discretization import Discretization
-from meshmode.discretization.poly_element import (
+from meshmode import _acf as _acf_meshmode  # type: ignore
+from meshmode.discretization import Discretization  # type: ignore
+from meshmode.discretization.poly_element import (  # type: ignore
     default_simplex_group_factory,
 )
-from pytential import bind, sym
+from pytential import bind, sym  # type: ignore
 from sympy import hankel1
 
 from sumpy.array_context import _acf
@@ -58,8 +58,6 @@ actx = actx_factory()
 lknl = LaplaceKernel(2)
 hlknl = HelmholtzKernel(2, "k")
 lnkl3d = LaplaceKernel(3)
-
-
 
 
 def _qbx_lp_laplace_general3d(sources, targets, centers, radius, strengths, order):
@@ -154,11 +152,13 @@ def _create_sphere(refinment_rounds=1, exp_radius=0.01):
     target_order = 4
 
     actx_m = _acf_meshmode()
-    mesh = mgen.generate_sphere(1.0, target_order, uniform_refinement_rounds=refinment_rounds)
+    mesh = mgen.generate_sphere(1.0, target_order,
+                                uniform_refinement_rounds=refinment_rounds)
     grp_factory = default_simplex_group_factory(3, target_order)
     discr = Discretization(actx_m, mesh, grp_factory)
     nodes = actx_m.to_numpy(discr.nodes())
-    sources = np.array([nodes[0][0].reshape(-1),nodes[1][0].reshape(-1),nodes[2][0].reshape(-1)])
+    sources = np.array([nodes[0][0].reshape(-1),
+                        nodes[1][0].reshape(-1), nodes[2][0].reshape(-1)])
 
     area_weight_a = bind(discr, sym.QWeight()*sym.area_element(3))(actx_m)
     area_weight = actx_m.to_numpy(area_weight_a)[0]
@@ -166,13 +166,13 @@ def _create_sphere(refinment_rounds=1, exp_radius=0.01):
 
     normals_a = bind(discr, sym.normal(3))(actx_m).as_vector(dtype=object)
     normals_a = actx_m.to_numpy(normals_a)
-    normals = np.array([normals_a[0][0].reshape(-1), normals_a[1][0].reshape(-1), normals_a[2][0].reshape(-1)])
+    normals = np.array([normals_a[0][0].reshape(-1), normals_a[1][0].reshape(-1),
+                        normals_a[2][0].reshape(-1)])
 
     radius = exp_radius
     centers = sources - radius * normals
 
     return sources, centers, normals, area_weight, radius
-
 
 
 def test_recurrence_laplace_2d_ellipse():
