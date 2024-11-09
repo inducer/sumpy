@@ -29,8 +29,15 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import meshmode.mesh.generation as mgen
 import numpy as np
 import sympy as sp
+from meshmode import _acf as _acf_meshmode
+from meshmode.discretization import Discretization
+from meshmode.discretization.poly_element import (
+    default_simplex_group_factory,
+)
+from pytential import bind, sym
 from sympy import hankel1
 
 from sumpy.array_context import _acf
@@ -50,9 +57,35 @@ ExpnClass = LineTaylorLocalExpansion
 actx = actx_factory()
 lknl = LaplaceKernel(2)
 hlknl = HelmholtzKernel(2, "k")
+lnkl3d = LaplaceKernel(3)
 
 
-def _qbx_lp_helmholtz_general(sources, targets, centers, radius, strengths, order):
+
+
+def _qbx_lp_laplace_general3d(sources, targets, centers, radius, strengths, order):
+    lpot = LayerPotential(actx.context,
+    expansion=ExpnClass(lnkl3d, order),
+    target_kernels=(lnkl3d,),
+    source_kernels=(lnkl3d,))
+
+    # print(lpot.get_kernel())
+    expansion_radii = actx.from_numpy(radius * np.ones(sources.shape[1]))
+    sources = actx.from_numpy(sources)
+    targets = actx.from_numpy(targets)
+    centers = actx.from_numpy(centers)
+
+    strengths = (strengths,)
+    _evt, (result_qbx,) = lpot(
+            actx.queue,
+            targets, sources, centers, strengths,
+            expansion_radii=expansion_radii,
+            k=1)
+    result_qbx = actx.to_numpy(result_qbx)
+
+    return result_qbx
+
+
+def _qbx_lp_helmholtz_general2d(sources, targets, centers, radius, strengths, order):
     lpot = LayerPotential(actx.context,
     expansion=ExpnClass(hlknl, order),
     target_kernels=(hlknl,),
@@ -75,7 +108,7 @@ def _qbx_lp_helmholtz_general(sources, targets, centers, radius, strengths, orde
     return result_qbx
 
 
-def _qbx_lp_laplace_general(sources, targets, centers, radius, strengths, order):
+def _qbx_lp_laplace_general2d(sources, targets, centers, radius, strengths, order):
     lpot = LayerPotential(actx.context,
     expansion=ExpnClass(lknl, order),
     target_kernels=(lknl,),
@@ -117,6 +150,28 @@ def _create_ellipse(n_p):
     return sources, centers, normals, density, h, radius
 
 
+
+target_order = 4
+
+actx_m = _acf_meshmode()
+mesh = mgen.generate_sphere(1.0, target_order,
+    uniform_refinement_rounds=1)
+grp_factory = default_simplex_group_factory(3, target_order)
+discr = Discretization(actx_m, mesh, grp_factory)
+nodes = actx_m.to_numpy(discr.nodes())[0]
+
+area_weight_a = bind(discr, sym.QWeight()*sym.area_element(3))(actx_m)
+area_weight = actx_m.to_numpy(area_weight_a)[0]
+
+normals_a = bind(discr, sym.normal(3))(actx_m).as_vector(dtype=object)
+normals = actx_m.to_numpy(normals_a)
+
+print(area_weight.shape)
+print(normals.shape)
+
+
+
+
 def test_recurrence_laplace_2d_ellipse():
     r"""
     Tests recurrence + qbx code.
@@ -139,7 +194,7 @@ def test_recurrence_laplace_2d_ellipse():
         exp_res = recurrence_qbx_lp(sources, centers, normals,
                                     strengths, radius, laplace2d,
                                     g_x_y, 2, p)
-        qbx_res = _qbx_lp_laplace_general(sources, sources, centers,
+        qbx_res = _qbx_lp_laplace_general2d(sources, sources, centers,
                                           radius, strengths, p)
         # qbx_res,_ = lpot_eval_circle(sources.shape[1], p)
         err.append(np.max(np.abs(exp_res - qbx_res)))
@@ -167,7 +222,7 @@ def test_recurrence_helmholtz_2d_ellipse():
         strengths = h * density
         exp_res = recurrence_qbx_lp(sources, centers, normals, strengths,
         radius, helmholtz2d, g_x_y, 2, p)
-        qbx_res = _qbx_lp_helmholtz_general(sources, sources,
+        qbx_res = _qbx_lp_helmholtz_general2d(sources, sources,
                                             centers, radius, strengths, p)
         err.append(np.max(np.abs(exp_res - qbx_res)))
     assert np.max(err) <= 1e-13
