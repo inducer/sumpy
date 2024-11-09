@@ -90,21 +90,20 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
             arg_list.append(s(i-j))
         for j in range(ndim):
             arg_list.append(var[j])
-        arg_list.append(r)
 
         if i < n_initial:
-            lamb_expr = sp.diff(g_x_y, var_t[0], i)
+            lamb_expr_symb = sp.diff(g_x_y, var_t[0], i)
             for j in range(ndim):
-                lamb_expr = lamb_expr.subs(var_t[j], 0)
+                lamb_expr_symb = lamb_expr_symb.subs(var_t[j], 0)
         else:
-            lamb_expr = recurrence.subs(n, i)
-        return sp.lambdify(arg_list, lamb_expr)
+            lamb_expr_symb = recurrence.subs(n, i)
+        return sp.lambdify(arg_list, lamb_expr_symb)
 
     interactions = 0
     for i in range(p+1):
         lamb_expr = generate_lamb_expr(i, n_initial)
-        coord = [cts_r_s[i] for i in range(ndim)]
-        a = [*storage, *coord, radius]
+        coord = [cts_r_s[j] for j in range(ndim)]
+        a = [*storage, *coord]
         s_new = lamb_expr(*a)
         interactions += s_new * radius**i/math.factorial(i)
 

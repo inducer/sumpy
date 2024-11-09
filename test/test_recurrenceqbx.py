@@ -193,8 +193,8 @@ def test_recurrence_laplace_3d_ellipse():
 
     print(exp_res)
     print(out)
-    print(sources[:,0],centers[:,0])
-    print(1/(4*np.pi) * 1/np.linalg.norm(sources[:,0] - centers[:,0]))
+    #print(sources[:,0], centers[:,0])
+    #print(1/(4*np.pi) * 1/np.linalg.norm(sources[:,0] - centers[:,0]))
     #print(np.max(abs(exp_res-out)))
 
 
