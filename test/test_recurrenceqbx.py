@@ -150,25 +150,28 @@ def _create_ellipse(n_p):
     return sources, centers, normals, density, h, radius
 
 
+def _create_sphere(refinment_rounds=1, exp_radius=0.01):
+    target_order = 4
 
-target_order = 4
+    actx_m = _acf_meshmode()
+    mesh = mgen.generate_sphere(1.0, target_order, uniform_refinement_rounds=refinment_rounds)
+    grp_factory = default_simplex_group_factory(3, target_order)
+    discr = Discretization(actx_m, mesh, grp_factory)
+    nodes = actx_m.to_numpy(discr.nodes())
+    sources = np.array([nodes[0][0].reshape(-1),nodes[1][0].reshape(-1),nodes[2][0].reshape(-1)])
 
-actx_m = _acf_meshmode()
-mesh = mgen.generate_sphere(1.0, target_order,
-    uniform_refinement_rounds=1)
-grp_factory = default_simplex_group_factory(3, target_order)
-discr = Discretization(actx_m, mesh, grp_factory)
-nodes = actx_m.to_numpy(discr.nodes())[0]
+    area_weight_a = bind(discr, sym.QWeight()*sym.area_element(3))(actx_m)
+    area_weight = actx_m.to_numpy(area_weight_a)[0]
+    area_weight = area_weight.reshape(-1)
 
-area_weight_a = bind(discr, sym.QWeight()*sym.area_element(3))(actx_m)
-area_weight = actx_m.to_numpy(area_weight_a)[0]
+    normals_a = bind(discr, sym.normal(3))(actx_m).as_vector(dtype=object)
+    normals_a = actx_m.to_numpy(normals_a)
+    normals = np.array([normals_a[0][0].reshape(-1), normals_a[1][0].reshape(-1), normals_a[2][0].reshape(-1)])
 
-normals_a = bind(discr, sym.normal(3))(actx_m).as_vector(dtype=object)
-normals = actx_m.to_numpy(normals_a)
+    radius = exp_radius
+    centers = sources - radius * normals
 
-print(area_weight.shape)
-print(normals.shape)
-
+    return sources, centers, normals, area_weight, radius
 
 
 
