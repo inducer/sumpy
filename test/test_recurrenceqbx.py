@@ -48,7 +48,7 @@ from sumpy.expansion.diff_op import (
 from sumpy.expansion.local import LineTaylorLocalExpansion
 from sumpy.kernel import HelmholtzKernel, LaplaceKernel
 from sumpy.qbx import LayerPotential
-from sumpy.recurrenceqbx import _make_sympy_vec, recurrence_qbx_lp
+from sumpy.recurrenceqbx import _make_sympy_vec, recurrence_qbx_lp, _compute_rotated_shifted_coordinates
 
 
 actx_factory = _acf
@@ -174,11 +174,22 @@ def _create_sphere(refinment_rounds=1, exp_radius=0.01):
     return sources, centers, normals, area_weight, radius
 
 
+def test_compute_rotated_shifted_coordinates():
+    r"""
+    Tests rotated shifted code.
+    """
+    sources = np.array([[1], [2], [2]])
+    centers = np.array([[0], [0], [0]])
+    normals = np.array([[1], [0], [0]])
+    cts = _compute_rotated_shifted_coordinates(sources, centers, normals)
+    assert np.sqrt(cts[1]**2 + cts[2]**2) - np.sqrt(8) <= 1e-12
+
+
 def test_recurrence_laplace_3d_ellipse():
     sources, centers, normals, area_weight, radius = _create_sphere(1)
-    radius =  0.001
+    radius = 0.0001
     out =_qbx_lp_laplace_general3d(sources, sources, centers, radius,
-                                   np.ones(area_weight.shape), 0)
+                                   np.ones(area_weight.shape), 1)
 
     w = make_identity_diff_op(3)
     laplace3d = laplacian(w)
@@ -189,14 +200,22 @@ def test_recurrence_laplace_3d_ellipse():
     g_x_y = 1/(4*np.pi) * 1/abs_dist
 
     exp_res = recurrence_qbx_lp(sources, centers, normals, np.ones(area_weight.shape),
-                                radius, laplace3d, g_x_y, 3, 0)
+                                radius, laplace3d, g_x_y, 3, 1)
 
-    print(exp_res)
-    print(out)
-    #print(sources[:,0], centers[:,0])
-    #print(1/(4*np.pi) * 1/np.linalg.norm(sources[:,0] - centers[:,0]))
-    #print(np.max(abs(exp_res-out)))
+    
+    res = 0
+    for i in range(sources.shape[1]):
+        #c2s = sources[:,i] - centers[:,0]
+        #res += 1/(4*np.pi) * 1/np.linalg.norm(c2s)
+        subs_dict = {var_t[0]:centers[0,0], var_t[1]:centers[1,0], var_t[2]:centers[2,0],
+                    var[0]:sources[0,i], var[1]:sources[1,i], var[2]:sources[2,i]}
+        res += g_x_y.subs(subs_dict)
+        grad = sp.diff(g_x_y, var_t[0], 1) * normals[0,0] + sp.diff(g_x_y, var_t[1], 1) * normals[1,0] + sp.diff(g_x_y, var_t[2], 1) * normals[2,0]
+        res += grad.subs(subs_dict) * radius
 
+    print(exp_res[0])
+    print(out[0])
+    print(res)
 
 test_recurrence_laplace_3d_ellipse()
 

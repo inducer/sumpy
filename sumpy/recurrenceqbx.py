@@ -100,9 +100,9 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
         return sp.lambdify(arg_list, lamb_expr_symb)
 
     interactions = 0
+    coord = [cts_r_s[j] for j in range(ndim)]
     for i in range(p+1):
         lamb_expr = generate_lamb_expr(i, n_initial)
-        coord = [cts_r_s[j] for j in range(ndim)]
         a = [*storage, *coord]
         s_new = lamb_expr(*a)
         interactions += s_new * radius**i/math.factorial(i)
