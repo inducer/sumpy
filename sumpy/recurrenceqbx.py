@@ -112,4 +112,6 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
 
     exp_res = (interactions * strengths[None, :]).sum(axis=1)
 
+
+
     return exp_res

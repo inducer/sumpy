@@ -147,7 +147,7 @@ def _create_ellipse(n_p):
     return sources, centers, normals, density, h, radius
 
 
-def _create_sphere(refinment_rounds=1, exp_radius=0.01):
+def _create_sphere(refinment_rounds, exp_radius):
     target_order = 4
 
     actx_m = _acf_meshmode()
@@ -186,9 +186,10 @@ def test_compute_rotated_shifted_coordinates():
 
 
 def test_recurrence_laplace_3d_ellipse():
-    sources, centers, normals, area_weight, radius = _create_sphere(1)
     radius = 0.0001
-    out =_qbx_lp_laplace_general3d(sources, sources, centers, radius,
+    sources, centers, normals, area_weight, radius = _create_sphere(1, radius)
+
+    out = _qbx_lp_laplace_general3d(sources, sources, centers, radius,
                                    np.ones(area_weight.shape), 1)
 
     w = make_identity_diff_op(3)
@@ -199,23 +200,19 @@ def test_recurrence_laplace_3d_ellipse():
                        + (var[2]-var_t[2])**2)
     g_x_y = 1/(4*np.pi) * 1/abs_dist
 
+
     exp_res = recurrence_qbx_lp(sources, centers, normals, np.ones(area_weight.shape),
                                 radius, laplace3d, g_x_y, 3, 1)
 
-    
-    res = 0
-    for i in range(sources.shape[1]):
-        #c2s = sources[:,i] - centers[:,0]
-        #res += 1/(4*np.pi) * 1/np.linalg.norm(c2s)
-        subs_dict = {var_t[0]:centers[0,0], var_t[1]:centers[1,0], var_t[2]:centers[2,0],
-                    var[0]:sources[0,i], var[1]:sources[1,i], var[2]:sources[2,i]}
-        res += g_x_y.subs(subs_dict)
-        grad = sp.diff(g_x_y, var_t[0], 1) * normals[0,0] + sp.diff(g_x_y, var_t[1], 1) * normals[1,0] + sp.diff(g_x_y, var_t[2], 1) * normals[2,0]
-        res += grad.subs(subs_dict) * radius
 
-    print(exp_res[0])
-    print(out[0])
-    print(res)
+    assert(np.max(exp_res-out) <= 1e-8)
+
+def test_recurrence_helmholtz_3d_ellipse():
+    radius = 0.0001
+    sources, centers, normals, area_weight, radius = _create_sphere(1, radius)
+
+    
+
 
 test_recurrence_laplace_3d_ellipse()
 
