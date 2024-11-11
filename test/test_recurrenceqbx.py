@@ -48,23 +48,29 @@ from sumpy.expansion.diff_op import (
 from sumpy.expansion.local import LineTaylorLocalExpansion
 from sumpy.kernel import HelmholtzKernel, LaplaceKernel
 from sumpy.qbx import LayerPotential
-from sumpy.recurrenceqbx import _make_sympy_vec, recurrence_qbx_lp, _compute_rotated_shifted_coordinates
+from sumpy.recurrenceqbx import (
+    _compute_rotated_shifted_coordinates,
+    _make_sympy_vec,
+    recurrence_qbx_lp,
+)
 
 
 actx_factory = _acf
 ExpnClass = LineTaylorLocalExpansion
 
 actx = actx_factory()
-lknl = LaplaceKernel(2)
-hlknl = HelmholtzKernel(2, "k")
-lnkl3d = LaplaceKernel(3)
+lknl2d = LaplaceKernel(2)
+hknl2d = HelmholtzKernel(2)
+lknl3d = LaplaceKernel(3)
+hknl3d = HelmholtzKernel(3)
 
 
-def _qbx_lp_laplace_general3d(sources, targets, centers, radius, strengths, order):
+def _qbx_lp_general(knl, sources, targets, centers, radius,
+                                strengths, order, k=0):
     lpot = LayerPotential(actx.context,
-    expansion=ExpnClass(lnkl3d, order),
-    target_kernels=(lnkl3d,),
-    source_kernels=(lnkl3d,))
+    expansion=ExpnClass(knl, order),
+    target_kernels=(knl,),
+    source_kernels=(knl,))
 
     # print(lpot.get_kernel())
     expansion_radii = actx.from_numpy(radius * np.ones(sources.shape[1]))
@@ -73,56 +79,18 @@ def _qbx_lp_laplace_general3d(sources, targets, centers, radius, strengths, orde
     centers = actx.from_numpy(centers)
 
     strengths = (strengths,)
-    _evt, (result_qbx,) = lpot(
-            actx.queue,
-            targets, sources, centers, strengths,
-            expansion_radii=expansion_radii)
-    result_qbx = actx.to_numpy(result_qbx)
+    if k == 0:
+        _evt, (result_qbx,) = lpot(
+                actx.queue,
+                targets, sources, centers, strengths,
+                expansion_radii=expansion_radii)
+    else:
+        _evt, (result_qbx,) = lpot(
+                actx.queue,
+                targets, sources, centers, strengths,
+                expansion_radii=expansion_radii,
+                k=1)
 
-    return result_qbx
-
-
-def _qbx_lp_helmholtz_general2d(sources, targets, centers, radius, strengths, order):
-    lpot = LayerPotential(actx.context,
-    expansion=ExpnClass(hlknl, order),
-    target_kernels=(hlknl,),
-    source_kernels=(hlknl,))
-
-    # print(lpot.get_kernel())
-    expansion_radii = actx.from_numpy(radius * np.ones(sources.shape[1]))
-    sources = actx.from_numpy(sources)
-    targets = actx.from_numpy(targets)
-    centers = actx.from_numpy(centers)
-
-    strengths = (strengths,)
-    _evt, (result_qbx,) = lpot(
-            actx.queue,
-            targets, sources, centers, strengths,
-            expansion_radii=expansion_radii,
-            k=1)
-    result_qbx = actx.to_numpy(result_qbx)
-
-    return result_qbx
-
-
-def _qbx_lp_laplace_general2d(sources, targets, centers, radius, strengths, order):
-    lpot = LayerPotential(actx.context,
-    expansion=ExpnClass(lknl, order),
-    target_kernels=(lknl,),
-    source_kernels=(lknl,))
-
-    # print(lpot.get_kernel())
-    expansion_radii = actx.from_numpy(radius * np.ones(sources.shape[1]))
-    sources = actx.from_numpy(sources)
-    targets = actx.from_numpy(targets)
-    centers = actx.from_numpy(centers)
-
-    strengths = (strengths,)
-
-    _evt, (result_qbx,) = lpot(
-            actx.queue,
-            targets, sources, centers, strengths,
-            expansion_radii=expansion_radii)
     result_qbx = actx.to_numpy(result_qbx)
 
     return result_qbx
@@ -185,11 +153,14 @@ def test_compute_rotated_shifted_coordinates():
     assert np.sqrt(cts[1]**2 + cts[2]**2) - np.sqrt(8) <= 1e-12
 
 
-def test_recurrence_laplace_3d_ellipse():
+def test_recurrence_laplace_3d_sphere():
+    r"""
+    Tests reccurrence + qbx laplace 3d on sphere
+    """
     radius = 0.0001
     sources, centers, normals, area_weight, radius = _create_sphere(1, radius)
 
-    out = _qbx_lp_laplace_general3d(sources, sources, centers, radius,
+    out = _qbx_lp_general(lknl3d, sources, sources, centers, radius,
                                    np.ones(area_weight.shape), 1)
 
     w = make_identity_diff_op(3)
@@ -200,21 +171,34 @@ def test_recurrence_laplace_3d_ellipse():
                        + (var[2]-var_t[2])**2)
     g_x_y = 1/(4*np.pi) * 1/abs_dist
 
-
     exp_res = recurrence_qbx_lp(sources, centers, normals, np.ones(area_weight.shape),
                                 radius, laplace3d, g_x_y, 3, 1)
 
+    assert np.max(exp_res-out) <= 1e-8
 
-    assert(np.max(exp_res-out) <= 1e-8)
 
-def test_recurrence_helmholtz_3d_ellipse():
+def test_recurrence_helmholtz_3d_sphere():
+    r"""
+    Tests reccurrence + qbx helmholtz 3d on sphere
+    """
     radius = 0.0001
     sources, centers, normals, area_weight, radius = _create_sphere(1, radius)
 
-    
+    out = _qbx_lp_general(hknl3d, sources, sources, centers, radius,
+                                   np.ones(area_weight.shape), 1, 1)
 
+    w = make_identity_diff_op(3)
+    helmholtz3d = laplacian(w) + w
+    var = _make_sympy_vec("x", 3)
+    var_t = _make_sympy_vec("t", 3)
+    abs_dist = sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2
+                       + (var[2]-var_t[2])**2)
+    g_x_y = (1/(4*np.pi)) * sp.exp(1j * abs_dist) / abs_dist
 
-test_recurrence_laplace_3d_ellipse()
+    exp_res = recurrence_qbx_lp(sources, centers, normals, np.ones(area_weight.shape),
+                                radius, helmholtz3d, g_x_y, 3, 1)
+
+    assert np.max(abs(out - exp_res)) <= 1e-8
 
 
 def test_recurrence_laplace_2d_ellipse():
@@ -239,7 +223,7 @@ def test_recurrence_laplace_2d_ellipse():
         exp_res = recurrence_qbx_lp(sources, centers, normals,
                                     strengths, radius, laplace2d,
                                     g_x_y, 2, p)
-        qbx_res = _qbx_lp_laplace_general2d(sources, sources, centers,
+        qbx_res = _qbx_lp_general(lknl2d, sources, sources, centers,
                                           radius, strengths, p)
         # qbx_res,_ = lpot_eval_circle(sources.shape[1], p)
         err.append(np.max(np.abs(exp_res - qbx_res)))
@@ -267,7 +251,7 @@ def test_recurrence_helmholtz_2d_ellipse():
         strengths = h * density
         exp_res = recurrence_qbx_lp(sources, centers, normals, strengths,
         radius, helmholtz2d, g_x_y, 2, p)
-        qbx_res = _qbx_lp_helmholtz_general2d(sources, sources,
-                                            centers, radius, strengths, p)
+        qbx_res = _qbx_lp_general(hknl2d, sources, sources,
+                                  centers, radius, strengths, p, 1)
         err.append(np.max(np.abs(exp_res - qbx_res)))
     assert np.max(err) <= 1e-13

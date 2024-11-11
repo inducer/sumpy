@@ -81,7 +81,7 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
     storage = [np.zeros((n_p, n_p))] * order
 
     s = sp.Function("s")
-    r, n = sp.symbols("r,n")
+    n = sp.symbols("n")
 
     def generate_lamb_expr(i, n_initial):
         arg_list = []
@@ -111,7 +111,5 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
         storage.append(s_new)
 
     exp_res = (interactions * strengths[None, :]).sum(axis=1)
-
-
 
     return exp_res
