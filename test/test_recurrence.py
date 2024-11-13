@@ -148,7 +148,7 @@ def test_helmholtz2d():
     x_coord = np.random.rand()  # noqa: NPY002
     y_coord = np.random.rand()  # noqa: NPY002
     coord_dict = {var[0]: x_coord, var[1]: y_coord}
-    derivs = [derivs[i].subs(coord_dict) for i in range(6)]
+    derivs = [d.subs(coord_dict) for d in derivs]
 
     # pylint: disable-next=not-callable
     subs_dict = {s(0): derivs[0], s(1): derivs[1]}

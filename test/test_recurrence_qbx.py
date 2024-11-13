@@ -1,5 +1,5 @@
 r"""
-With the functionality in this module, we aim to test recurrence
+With the functionality in this module, we test recurrence
 + qbx code.
 """
 from __future__ import annotations
@@ -48,7 +48,7 @@ from sumpy.expansion.diff_op import (
 from sumpy.expansion.local import LineTaylorLocalExpansion
 from sumpy.kernel import HelmholtzKernel, LaplaceKernel
 from sumpy.qbx import LayerPotential
-from sumpy.recurrenceqbx import (
+from sumpy.recurrence_qbx import (
     _compute_rotated_shifted_coordinates,
     _make_sympy_vec,
     recurrence_qbx_lp,
@@ -161,7 +161,7 @@ def test_recurrence_laplace_3d_sphere():
     sources, centers, normals, area_weight, radius = _create_sphere(1, radius)
 
     out = _qbx_lp_general(lknl3d, sources, sources, centers, radius,
-                                   np.ones(area_weight.shape), 1)
+                                   area_weight, 4)
 
     w = make_identity_diff_op(3)
     laplace3d = laplacian(w)
@@ -171,21 +171,25 @@ def test_recurrence_laplace_3d_sphere():
                        + (var[2]-var_t[2])**2)
     g_x_y = 1/(4*np.pi) * 1/abs_dist
 
-    exp_res = recurrence_qbx_lp(sources, centers, normals, np.ones(area_weight.shape),
-                                radius, laplace3d, g_x_y, 3, 1)
+    exp_res = recurrence_qbx_lp(sources, centers, normals, area_weight,
+                                radius, laplace3d, g_x_y, 3, 4)
 
-    assert np.max(exp_res-out) <= 1e-8
+    assert (np.max(exp_res-out)/np.max(abs(exp_res))) <= 1e-12
 
 
 def test_recurrence_helmholtz_3d_sphere():
     r"""
     Tests reccurrence + qbx helmholtz 3d on sphere
     """
+    # import time
     radius = 0.0001
-    sources, centers, normals, area_weight, radius = _create_sphere(1, radius)
+    sources, centers, normals, area_weight, radius = _create_sphere(2, radius)
 
+    # start = time.time()
     out = _qbx_lp_general(hknl3d, sources, sources, centers, radius,
                                    np.ones(area_weight.shape), 1, 1)
+    # end = time.time()
+    # length1 = end - start
 
     w = make_identity_diff_op(3)
     helmholtz3d = laplacian(w) + w
@@ -195,8 +199,12 @@ def test_recurrence_helmholtz_3d_sphere():
                        + (var[2]-var_t[2])**2)
     g_x_y = (1/(4*np.pi)) * sp.exp(1j * abs_dist) / abs_dist
 
+    # start = time.time()
     exp_res = recurrence_qbx_lp(sources, centers, normals, np.ones(area_weight.shape),
                                 radius, helmholtz3d, g_x_y, 3, 1)
+    # end = time.time()
+    # length2 = end - start
+    # print(sources.shape[1], length1, length2)
 
     assert np.max(abs(out - exp_res)) <= 1e-8
 
