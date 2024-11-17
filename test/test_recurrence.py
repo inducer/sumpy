@@ -213,6 +213,7 @@ def _plot_laplace_2d(max_order_check, max_abs):
     w = make_identity_diff_op(2)
     laplace2d = laplacian(w)
     n_init, _, r = get_processed_and_shifted_recurrence(laplace2d)
+    print(r)
 
     n = sp.symbols("n")
     s = sp.Function("s")
@@ -234,15 +235,18 @@ def _plot_laplace_2d(max_order_check, max_abs):
         # pylint: disable-next=not-callable
         subs_dict[s(i)] = derivs[i]
 
-    x_coord = np.random.rand()*max_abs  # noqa: NPY002
-    y_coord = np.random.rand()*max_abs  # noqa: NPY002
+    x_coord = abs(np.random.rand()*max_abs) + 3  # noqa: NPY002
+    y_coord = abs(np.random.rand()*max_abs) + 3  # noqa: NPY002
     coord_dict = {var[0]: x_coord, var[1]: y_coord}
 
     return np.array([check[i].subs(coord_dict) for i in range(len(check))])
 
-plot_me = _plot_laplace_2d(6, 0.001)
-plt.title("Recurrence Accuracy, Random Source Point")
-plt.scatter([i+2 for i in range(len(plot_me))], plot_me)
+plot_me = _plot_laplace_2d(20, 1)
+
+fig = plt.figure()
+ax = fig.add_subplot(1, 1, 1)
+line, = ax.plot([i+2 for i in range(len(plot_me))], plot_me)
+ax.set_yscale('log')
 plt.ylabel("Error")
 plt.xlabel("Order")
 plt.show()
