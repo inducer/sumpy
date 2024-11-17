@@ -263,3 +263,47 @@ def test_recurrence_helmholtz_2d_ellipse():
                                   centers, radius, strengths, p, 1)
         err.append(np.max(np.abs(exp_res - qbx_res)))
     assert np.max(err) <= 1e-13
+
+
+# ============ Plotting Functionality
+def _construct_laplace_axis_2d(orders, resolutions):
+    w = make_identity_diff_op(2)
+    laplace2d = laplacian(w)
+
+    var = _make_sympy_vec("x", 2)
+    var_t = _make_sympy_vec("t", 2)
+    g_x_y = (-1/(2*np.pi)) * sp.log(sp.sqrt((var[0]-var_t[0])**2 +
+                                            (var[1]-var_t[1])**2))
+
+    err = []
+    for p in orders:
+        err_per_order = []
+        for n_p in resolutions:
+            sources, centers, normals, density, h, radius = _create_ellipse(n_p)
+            strengths = h * density
+            exp_res = recurrence_qbx_lp(sources, centers, normals,
+                                        strengths, radius, laplace2d,
+                                        g_x_y, 2, p)
+            qbx_res = _qbx_lp_general(lknl2d, sources, sources, centers,
+                                            radius, strengths, p)
+            # qbx_res,_ = lpot_eval_circle(sources.shape[1], p)
+            err_per_order.append(np.max(np.abs(exp_res - qbx_res)/
+                                        np.max(np.abs(qbx_res))))
+        err.append(err_per_order)
+
+    return err
+
+import matplotlib.pyplot as plt
+orders = [7]
+resolutions = range(400, 1401, 200)
+err_mat = _construct_laplace_axis_2d(orders, resolutions)
+for i in range(len(orders)):
+    plt.plot(resolutions, err_mat[i], label="order ="+str(orders[i]))
+plt.xlabel("Number of Nodes")
+plt.ylabel("Error")
+plt.title("2D Ellipse LP Eval Error")
+plt.legend()
+plt.show()
+
+
+

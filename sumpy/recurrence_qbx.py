@@ -120,6 +120,8 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
                 lamb_expr_symb = lamb_expr_symb.subs(var_t[j], 0)
         else:
             lamb_expr_symb = recurrence.subs(n, i)
+        print("=============== ORDER = " + str(i))
+        print(lamb_expr_symb)
         return sp.lambdify(arg_list, lamb_expr_symb)
 
     interactions = 0

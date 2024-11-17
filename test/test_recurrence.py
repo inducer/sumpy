@@ -206,3 +206,43 @@ def test_laplace2d():
 
     check = np.array([check[i].subs(coord_dict) for i in range(len(check))])
     assert max(abs(abs(check))) <= 1e-12
+
+
+import matplotlib.pyplot as plt
+def _plot_laplace_2d(max_order_check, max_abs):
+    w = make_identity_diff_op(2)
+    laplace2d = laplacian(w)
+    n_init, _, r = get_processed_and_shifted_recurrence(laplace2d)
+
+    n = sp.symbols("n")
+    s = sp.Function("s")
+
+    var = _make_sympy_vec("x", 2)
+    var_t = _make_sympy_vec("t", 2)
+    g_x_y = sp.log(sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2))
+    derivs = [sp.diff(g_x_y,
+                      var_t[0], i).subs(var_t[0], 0).subs(var_t[1], 0)
+                      for i in range(max_order_check)]
+
+    # pylint: disable-next=not-callable
+    subs_dict = {s(0): derivs[0], s(1): derivs[1]}
+    check = []
+
+    assert n_init == 2
+    for i in range(n_init, max_order_check):
+        check.append(abs(r.subs(n, i).subs(subs_dict) - derivs[i]))
+        # pylint: disable-next=not-callable
+        subs_dict[s(i)] = derivs[i]
+
+    x_coord = np.random.rand()*max_abs  # noqa: NPY002
+    y_coord = np.random.rand()*max_abs  # noqa: NPY002
+    coord_dict = {var[0]: x_coord, var[1]: y_coord}
+
+    return np.array([check[i].subs(coord_dict) for i in range(len(check))])
+
+plot_me = _plot_laplace_2d(6, 0.001)
+plt.title("Recurrence Accuracy, Random Source Point")
+plt.scatter([i+2 for i in range(len(plot_me))], plot_me)
+plt.ylabel("Error")
+plt.xlabel("Order")
+plt.show()
