@@ -234,7 +234,7 @@ def test_recurrence_laplace_2d_ellipse():
         qbx_res = _qbx_lp_general(lknl2d, sources, sources, centers,
                                           radius, strengths, p)
         # qbx_res,_ = lpot_eval_circle(sources.shape[1], p)
-        err.append(np.max(np.abs(exp_res - qbx_res)))
+        err.append(np.max(np.abs(exp_res - qbx_res))/np.max(np.abs(qbx_res)))
     assert np.max(err) <= 1e-13
 
 
@@ -294,8 +294,8 @@ def _construct_laplace_axis_2d(orders, resolutions):
     return err
 
 import matplotlib.pyplot as plt
-orders = [7]
-resolutions = range(400, 1401, 200)
+orders = [6,7]
+resolutions = range(2000, 3001, 200)
 err_mat = _construct_laplace_axis_2d(orders, resolutions)
 for i in range(len(orders)):
     plt.plot(resolutions, err_mat[i], label="order ="+str(orders[i]))

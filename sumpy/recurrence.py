@@ -307,7 +307,7 @@ def process_recurrence_relation(r: sp.Expr) -> tuple[int, sp.Expr]:
 
     # Re-arrange the recurrence relation so we get s(n) = ____
     # in terms of s(n-1), ...
-    true_recurrence = sum(coeffs[i]/coeffs[-1] * terms[i]
+    true_recurrence = sum(sp.cancel(coeffs[i]/coeffs[-1]) * terms[i]
                           for i in range(0, len(terms)-1))
     true_recurrence1 = true_recurrence.subs(n, n-shift_idx)
 

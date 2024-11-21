@@ -213,7 +213,6 @@ def _plot_laplace_2d(max_order_check, max_abs):
     w = make_identity_diff_op(2)
     laplace2d = laplacian(w)
     n_init, _, r = get_processed_and_shifted_recurrence(laplace2d)
-    print(r)
 
     n = sp.symbols("n")
     s = sp.Function("s")
@@ -231,17 +230,17 @@ def _plot_laplace_2d(max_order_check, max_abs):
 
     assert n_init == 2
     for i in range(n_init, max_order_check):
-        check.append(abs(r.subs(n, i).subs(subs_dict) - derivs[i]))
+        check.append(abs(r.subs(n, i).subs(subs_dict) - derivs[i])/abs(derivs[i]))
         # pylint: disable-next=not-callable
         subs_dict[s(i)] = derivs[i]
 
-    x_coord = abs(np.random.rand()*max_abs) + 3  # noqa: NPY002
-    y_coord = abs(np.random.rand()*max_abs) + 3  # noqa: NPY002
+    x_coord = abs(np.random.rand()*max_abs)  # noqa: NPY002
+    y_coord = abs(np.random.rand()*max_abs)  # noqa: NPY002
     coord_dict = {var[0]: x_coord, var[1]: y_coord}
 
     return np.array([check[i].subs(coord_dict) for i in range(len(check))])
 
-plot_me = _plot_laplace_2d(20, 1)
+plot_me = _plot_laplace_2d(13, 1)
 
 fig = plt.figure()
 ax = fig.add_subplot(1, 1, 1)
