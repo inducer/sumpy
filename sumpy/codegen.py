@@ -537,7 +537,7 @@ class ComplexRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
 
 # {{{ vector component rewriter
 
-INDEXED_VAR_RE = re.compile("^([a-zA-Z_]+)([0-9]+)$")
+INDEXED_VAR_RE = re.compile(r"^([a-zA-Z_]+)([0-9]+)$")
 
 
 class VectorComponentRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
