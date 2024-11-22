@@ -33,6 +33,7 @@ import loopy as lp
 import pymbolic.primitives as prim
 from loopy.kernel.instruction import make_assignment
 from pymbolic.mapper import CSECachingMapperMixin, IdentityMapper
+from pymbolic.typing import Expression
 from pytools import memoize_method
 
 from sumpy.symbolic import SympyToPymbolicMapper as SympyToPymbolicMapperBase
@@ -48,8 +49,11 @@ Conversion of :mod:`sympy` expressions to :mod:`loopy`
 
 .. autoclass:: SympyToPymbolicMapper
 .. autofunction:: to_loopy_insns
-
 """
+
+
+def wrap_in_cse(expr: Expression, prefix: str | None = None) -> Expression:
+    return prim.make_common_subexpression(expr, prefix, wrap_vars=False)
 
 
 # {{{ sympy -> pymbolic mapper
@@ -325,7 +329,7 @@ class BesselSubstitutor(CSECachingIdentityMapper):
         return super().map_call(expr)
 
     def wrap_in_cse(self, expr, prefix):
-        cse = prim.wrap_in_cse(expr, prefix)
+        cse = wrap_in_cse(expr, prefix)
         return self.cse_cache.setdefault(expr, cse)
 
     # {{{ bessel implementation
@@ -411,17 +415,17 @@ class PowerRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
     def map_power(self, expr, rec_self=None, *args):
         exp = expr.exponent
         if isinstance(exp, int):
-            new_base = prim.wrap_in_cse(expr.base)
+            new_base = wrap_in_cse(expr.base)
 
             if exp > 2 and exp % 2 == 0:
-                square = prim.wrap_in_cse(new_base*new_base)
-                return self.rec(prim.wrap_in_cse(square**(exp//2)),
+                square = wrap_in_cse(new_base*new_base)
+                return self.rec(wrap_in_cse(square**(exp//2)),
                         rec_self, *args)
             elif exp == 2:
                 return new_base * new_base
             elif exp > 1 and exp % 2 == 1:
-                square = prim.wrap_in_cse(new_base*new_base)
-                return self.rec(prim.wrap_in_cse(square**((exp-1)//2))*new_base,
+                square = wrap_in_cse(new_base*new_base)
+                return self.rec(wrap_in_cse(square**((exp-1)//2))*new_base,
                         rec_self, *args)
             elif exp == 1:
                 return new_base
@@ -444,10 +448,10 @@ class PowerRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
                 assert p != 0
 
                 if p > 0:
-                    orig_base = prim.wrap_in_cse(expr.base)
-                    new_base = prim.wrap_in_cse(prim.Variable("sqrt")(orig_base))
+                    orig_base = wrap_in_cse(expr.base)
+                    new_base = wrap_in_cse(prim.Variable("sqrt")(orig_base))
                 else:
-                    new_base = prim.wrap_in_cse(prim.Variable("rsqrt")(expr.base))
+                    new_base = wrap_in_cse(prim.Variable("rsqrt")(expr.base))
                     p *= -1
 
                 return self.rec(new_base**p, rec_self, *args)
