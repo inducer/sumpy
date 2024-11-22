@@ -37,7 +37,8 @@ dependencies = [
     "loopy>=2024.1",
     "numpy",
     "pyopencl>=2022.1",
-    "pytools>=2022.1",
+    "pytools>=2024.1",
+    "pymbolic>=2024.2",
     "sympy>=0.7.2",
 ]
 
