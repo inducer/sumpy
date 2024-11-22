@@ -314,6 +314,30 @@ def process_recurrence_relation(r: sp.Expr) -> tuple[int, sp.Expr]:
     return order, true_recurrence1
 
 
+def get_recurrence(r: sp.Expr, n_val) -> tuple[int, sp.Expr]:
+    r"""
+    A function that takes in as input a recurrence and outputs a recurrence
+    relation that has the nth term in terms of the n-1th, n-2th etc.
+    Also returns the order of the recurrence relation.
+
+    :arg recurrence: a recurrence relation in :math:`s(n)`
+    """
+    n = sp.symbols("n")
+    _, terms = _extract_idx_terms_from_recurrence(r.subs(n, n_val))
+    # Order is the max difference between highest/lowest in idx_l
+
+    # Get the respective coefficients in the recurrence relation from r
+
+    coeffs = sp.poly(r.subs(n, n_val), list(terms)).coeffs()
+
+    # Re-arrange the recurrence relation so we get s(n) = ____
+    # in terms of s(n-1), ...
+    true_recurrence = sum(sp.cancel(coeffs[i]) * terms[i]
+                          for i in range(0, len(terms)))
+
+    return true_recurrence
+
+
 def _extract_idx_terms_from_recurrence(r: sp.Expr) -> tuple[np.ndarray,
                                                             np.ndarray]:
     r"""
