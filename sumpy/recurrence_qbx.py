@@ -114,22 +114,28 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
         for j in range(ndim):
             arg_list.append(var[j])
 
+        lamb_expr_symb_deriv = sp.diff(g_x_y, var_t[0], i)
+        for j in range(ndim):
+            lamb_expr_symb_deriv = lamb_expr_symb_deriv.subs(var_t[j], 0)
+        
         if i < n_initial:
-            lamb_expr_symb = sp.diff(g_x_y, var_t[0], i)
-            for j in range(ndim):
-                lamb_expr_symb = lamb_expr_symb.subs(var_t[j], 0)
+            lamb_expr_symb = lamb_expr_symb_deriv
         else:
             lamb_expr_symb = recurrence.subs(n, i)
-        print("=============== ORDER = " + str(i))
-        print(lamb_expr_symb)
-        return sp.lambdify(arg_list, lamb_expr_symb)
+        #print("=============== ORDER = " + str(i))
+        #print(lamb_expr_symb)
+        return sp.lambdify(arg_list, lamb_expr_symb), sp.lambdify(arg_list, lamb_expr_symb_deriv)
 
     interactions = 0
     coord = [cts_r_s[j] for j in range(ndim)]
     for i in range(p+1):
-        lamb_expr = generate_lamb_expr(i, n_initial)
+        lamb_expr, true_lamb_expr = generate_lamb_expr(i, n_initial)
         a = [*storage, *coord]
         s_new = lamb_expr(*a)
+        s_new_true = true_lamb_expr(*a)
+        arg_max = np.argmax(np.max(s_new-s_new_true))
+        print(np.max(s_new-s_new_true)/s_new_true.reshape(-1)[arg_max])
+        print("x:", coord[0].reshape(-1)[arg_max], "y:", coord[1].reshape(-1)[arg_max])
         interactions += s_new * radius**i/math.factorial(i)
 
         storage.pop(0)
