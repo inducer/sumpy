@@ -294,8 +294,8 @@ def _construct_laplace_axis_2d(orders, resolutions):
     return err
 
 import matplotlib.pyplot as plt
-orders = [6,7]
-resolutions = range(2000, 3001, 200)
+orders = [8]
+resolutions = range(200, 800, 200)
 err_mat = _construct_laplace_axis_2d(orders, resolutions)
 for i in range(len(orders)):
     plt.plot(resolutions, err_mat[i], label="order ="+str(orders[i]))
