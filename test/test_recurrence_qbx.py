@@ -98,7 +98,7 @@ def _qbx_lp_general(knl, sources, targets, centers, radius,
 
 def _create_ellipse(n_p):
     h = 9.688 / n_p
-    radius = 7*h
+    radius = 7*h * 1/40
     t = np.linspace(0, 2 * np.pi, n_p, endpoint=False)
 
     unit_circle_param = np.exp(1j * t)

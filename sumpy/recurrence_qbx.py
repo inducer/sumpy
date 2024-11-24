@@ -133,9 +133,10 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
         a = [*storage, *coord]
         s_new = lamb_expr(*a)
         s_new_true = true_lamb_expr(*a)
-        arg_max = np.argmax(np.max(s_new-s_new_true))
-        print(np.max(s_new-s_new_true)/s_new_true.reshape(-1)[arg_max])
-        print("x:", coord[0].reshape(-1)[arg_max], "y:", coord[1].reshape(-1)[arg_max])
+        arg_max = np.argmax(abs(s_new-s_new_true)/abs(s_new_true))
+        print((s_new-s_new_true).reshape(-1)[arg_max]/s_new_true.reshape(-1)[arg_max])
+        print("x:", coord[0].reshape(-1)[arg_max], "y:", coord[1].reshape(-1)[arg_max],
+              "s_recur:", s_new.reshape(-1)[arg_max], "s_true:", s_new_true.reshape(-1)[arg_max], "order: ", i)
         interactions += s_new * radius**i/math.factorial(i)
 
         storage.pop(0)
