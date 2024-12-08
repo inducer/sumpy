@@ -517,8 +517,9 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
                     pymbolic.primitives.Comparison(sum(v), "<=", order),
                     pymbolic.primitives.Comparison(v[slowest_idx], "<", c),
                 ]),
-                depends_on=frozenset([f"set_x{i}" for i in range(dim)]
-                    + ["input_copy"]),
+                happens_after=frozenset(
+                    [f"set_x{i}" for i in range(dim)] + ["input_copy"]
+                ),
             )
         ]
 
@@ -599,13 +600,13 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
                 assignee=rscale_arr[0],
                 expression=1,
                 id="rscale_arr0",
-                depends_on="rscale_ratio",
+                happens_after=frozenset(["rscale_ratio"]),
             ),
             lp.Assignment(
                 assignee=rscale_arr[iorder],
                 expression=rscale_arr[iorder - 1]*rscale_ratio,
                 id="rscale_arr",
-                depends_on="rscale_arr0",
+                happens_after=frozenset(["rscale_arr0"]),
             ),
         ]
 
@@ -645,7 +646,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
                 expression=(result_func(input_coeffs[src_idx_sym[output_icoeff_sym]])
                     * rscale_arr[rscale_idx_arr_sym[output_icoeff_sym]]),
                 id="coeff_insn",
-                depends_on=frozenset(["rscale_arr"]),
+                happens_after=frozenset(["rscale_arr"]),
             )
         ]
 
@@ -1070,7 +1071,7 @@ def loopy_translation_classes_dependent_data(tgt_expansion, src_expansion,
             )
 
     data = pymbolic.var("m2l_translation_classes_dependent_data")
-    depends_on = None
+    happens_after = None
     for i in range(len(insns)):
         insn = insns[i]
         if isinstance(insn, lp.Assignment) and \
@@ -1080,9 +1081,9 @@ def loopy_translation_classes_dependent_data(tgt_expansion, src_expansion,
                 assignee=data[idx],
                 expression=insn.expression,
                 id=f"data_{idx}",
-                depends_on=depends_on,
+                happens_after=happens_after,
             )
-            depends_on = frozenset([f"data_{idx}"])
+            happens_after = frozenset([f"data_{idx}"])
 
     knl = lp.make_function([], insns,
         kernel_data=[
