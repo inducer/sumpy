@@ -76,9 +76,7 @@ def make_field_plotter_from_bbox(bbox, h, extend_factor=0):
 
     from math import ceil
 
-    npoints = tuple(
-            int(ceil(extent[i] / h[i]))
-            for i in range(dimensions))
+    npoints = tuple(ceil(extent[i] / h[i]) for i in range(dimensions))
 
     return FieldPlotter(center, extent, npoints)
 
