@@ -773,14 +773,14 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
             assignee=x[index],
             expression=y[index],
             id="copy",
-            depends_on=frozenset(["exp_table"]),
+            happens_after=frozenset(["exp_table"]),
         ),
     ]
 
     for ilev, N1 in enumerate(list(reversed(factors))):  # noqa: N806
         nfft //= N1
         N2 = n // (nfft * N1)  # noqa: N806
-        init_depends_on = "copy" if ilev == 0 else f"update_{ilev-1}"
+        init_happens_after = "copy" if ilev == 0 else f"update_{ilev-1}"
 
         temp = var("temp")
         exp_table = var("exp_table")
@@ -802,24 +802,24 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
                 assignee=temp[i],
                 expression=x[i_bcast],
                 id=f"copy_{ilev}",
-                depends_on=frozenset([init_depends_on]),
+                happens_after=frozenset([init_happens_after]),
             ),
             lp.Assignment(
                 assignee=x[i2_bcast],
                 expression=0,
                 id=f"reset_{ilev}",
-                depends_on=frozenset([f"copy_{ilev}"])),
+                happens_after=frozenset([f"copy_{ilev}"])),
             lp.Assignment(
                 assignee=table_idx,
                 expression=nfft*iN1_sum*(iN2 + N2*iN1),
                 id=f"idx_{ilev}",
-                depends_on=frozenset([f"reset_{ilev}"]),
+                happens_after=frozenset([f"reset_{ilev}"]),
                 temp_var_type=lp.Optional(np.uint32)),
             lp.Assignment(
                 assignee=exp,
                 expression=exp_table[table_idx % n],
                 id=f"exp_{ilev}",
-                depends_on=frozenset([f"idx_{ilev}"]),
+                happens_after=frozenset([f"idx_{ilev}"]),
                 within_inames=frozenset({x.name for x in
                     [*broadcast_dims, iN1_sum, iN1, iN2]}),
                 temp_var_type=lp.Optional(complex_dtype)),
@@ -828,7 +828,7 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
                 expression=(x[iN_bcast]
                     + exp * temp[ifft + nfft * (iN2*N1 + iN1_sum)]),
                 id=f"update_{ilev}",
-                depends_on=frozenset([f"exp_{ilev}"])),
+                happens_after=frozenset([f"exp_{ilev}"])),
         ]
 
         domains += [
@@ -873,7 +873,7 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
             lp.Assignment(
                 assignee=x[index],
                 expression=x[index] / n,
-                depends_on=frozenset([f"update_{len(factors) - 1}"]),
+                happens_after=frozenset([f"update_{len(factors) - 1}"]),
             ),
         ]
 

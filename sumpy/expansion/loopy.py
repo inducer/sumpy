@@ -106,7 +106,7 @@ def make_e2p_loopy_kernel(
                 assignee=result[idx],
                 expression=result[idx] + insn.expression,
                 id=f"result_{idx}",
-                depends_on=insn.depends_on,
+                happens_after=insn.happens_after,
             )
 
     loopy_knl = lp.make_function(domains, insns,
@@ -204,7 +204,7 @@ def make_p2e_loopy_kernel(
                 assignee=coeffs[idx],
                 expression=coeffs[idx] + insn.expression,
                 id=f"coeff_{idx}",
-                depends_on=insn.depends_on,
+                happens_after=insn.happens_after,
             )
 
     loopy_knl = lp.make_function(domains, insns,
