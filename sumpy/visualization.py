@@ -144,7 +144,7 @@ class FieldPlotter:
 
         if max_val is not None:
             squeezed_fld[squeezed_fld > max_val] = max_val
-            squeezed_fld[squeezed_fld < -max_val] = -max_val  # pylint: disable=E1130
+            squeezed_fld[squeezed_fld < -max_val] = -max_val
 
         squeezed_fld = squeezed_fld[..., ::-1]
 
@@ -185,7 +185,7 @@ class FieldPlotter:
     def show_scalar_in_mayavi(self, fld, max_val=None, **kwargs):
         if max_val is not None:
             fld[fld > max_val] = max_val
-            fld[fld < -max_val] = -max_val  # pylint: disable=E1130
+            fld[fld < -max_val] = -max_val
 
         if len(fld.shape) == 1:
             fld = fld.reshape(self.nd_points.shape[1:])
