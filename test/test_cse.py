@@ -149,8 +149,9 @@ def test_cse_not_possible():
     assert substs == []
     assert reduced == [x + y]
     # issue 6329
-    eq = (meijerg((1, 2), (y, 4), (5,), [], x)  # pylint: disable=possibly-used-before-assignment
-          + meijerg((1, 3), (y, 4), (5,), [], x))  # pylint: disable=possibly-used-before-assignment
+    eq = (
+        meijerg((1, 2), (y, 4), (5,), [], x)  # pylint: disable=possibly-used-before-assignment
+        + meijerg((1, 3), (y, 4), (5,), [], x))
     assert cse(eq) == ([], [eq])
 
 # }}}
@@ -187,7 +188,7 @@ def test_subtraction_opt():
     n = -1 + 1/x
     e = n/x/(-n)**2 - 1/n/x
     assert cse(e, optimizations=[
-               (cse_opts.sub_pre, cse_opts.sub_post)]  # pylint: disable=possibly-used-before-assignment
+               (cse_opts.sub_pre, cse_opts.sub_post)]
                ) == ([], [0])
 
 # }}}
