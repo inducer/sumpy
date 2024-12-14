@@ -390,6 +390,26 @@ def _get_initial_c(recurrence):
     return i
 
 
+def get_shifted_recurrence_exp_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
+    r"""
+    A function that "shifts" the recurrence so it's center is placed
+    at the origin and source is the input for the recurrence generated.
+
+    :arg recurrence: a recurrence relation in :math:`s(n)`
+    """
+    r = recurrence_from_pde(pde)
+
+    idx_l, terms = _extract_idx_terms_from_recurrence(r)
+
+    r_ret = r
+
+    n = sp.symbols("n")
+    for i in range(len(idx_l)):
+        r_ret = r_ret.subs(terms[i], (-1)**(n+idx_l[i])*terms[i])
+
+    return r_ret
+
+
 def shift_recurrence(r: sp.Expr) -> sp.Expr:
     r"""
     A function that "shifts" the recurrence so it's center is placed
