@@ -401,13 +401,19 @@ def get_shifted_recurrence_exp_from_pde(pde: LinearPDESystemOperator) -> sp.Expr
 
     idx_l, terms = _extract_idx_terms_from_recurrence(r)
 
-    r_ret = r
+    # How much do we need to shift the recurrence relation
+    shift_idx = max(idx_l)
 
     n = sp.symbols("n")
+    r = r.subs(n, n-shift_idx)
+
+    idx_l, terms = _extract_idx_terms_from_recurrence(r)
+
+    r_ret = r
     for i in range(len(idx_l)):
         r_ret = r_ret.subs(terms[i], (-1)**(n+idx_l[i])*terms[i])
 
-    return r_ret
+    return r_ret, (max(idx_l)+1-min(idx_l))
 
 
 def shift_recurrence(r: sp.Expr) -> sp.Expr:
