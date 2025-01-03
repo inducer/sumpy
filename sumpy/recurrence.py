@@ -394,6 +394,8 @@ def get_shifted_recurrence_exp_from_pde(pde: LinearPDESystemOperator) -> sp.Expr
     r"""
     A function that "shifts" the recurrence so it's center is placed
     at the origin and source is the input for the recurrence generated.
+    Outputs an expression that evaluates to 0 rather than s(n) in terms
+    of s(n-1), etc.
 
     :arg recurrence: a recurrence relation in :math:`s(n)`
     """
