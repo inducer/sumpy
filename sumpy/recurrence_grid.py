@@ -64,6 +64,15 @@ from matplotlib import cm, ticker
 
 
 def get_grid(recur, order):
+    r"""
+    A function that takes in a recurrence as a polynomial
+    in s(n), s(n-1), ..., and gets the coefficients of this polynomial as
+    a polynomial in 1, x_0, x_0^2, ... where x_i is the source location.
+
+    :arg recur: A recurrence for derivatives s(n), etc. where s(n) represents
+    the nth derivative of the Green's function w/respect to the target at the origin.
+    :arg order: The order of the input recurrence
+    """
     poly_in_s_n = sp.poly(recur, [s(n-i) for i in range(order)])
     coeff_s_n = [poly_in_s_n.coeff_monomial(poly_in_s_n.gens[i]) for i in range(order)]
 
@@ -75,6 +84,9 @@ def get_grid(recur, order):
 
 
 def convert(grid):
+    r"""
+    Given a grid of coefficients, produce a grid recurrence.
+    """
     recur_exp = 0
     i = sp.symbols("i")
     s_terms = []
