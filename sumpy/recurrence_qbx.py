@@ -1,5 +1,5 @@
 r"""
-With the functionality in this module, we aim to compute layer potentials
+With the functionality in this module, we compute layer potentials
 using a recurrence for one-dimensional derivatives of the corresponding
 Green's function. See recurrence.py.
 
