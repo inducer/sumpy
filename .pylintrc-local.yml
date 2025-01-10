@@ -3,3 +3,6 @@
 
 - arg: extension-pkg-whitelist
   val: mayavi
+- arg: ignored-modules
+  val:
+  - symengine
