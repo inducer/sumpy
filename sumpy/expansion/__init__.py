@@ -283,7 +283,7 @@ class ExpansionTermsWrangler(ABC):
     # }}}
 
     @memoize_method
-    def get_full_coefficient_identifiers(self) -> list[Hashable]:
+    def get_full_coefficient_identifiers(self) -> Sequence[Hashable]:
         """
         Returns identifiers for every coefficient in the complete expansion.
         """

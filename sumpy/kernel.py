@@ -31,7 +31,8 @@ import numpy as np
 import sympy as sp
 
 import loopy as lp
-from pymbolic import var
+import pymbolic.primitives as prim
+from pymbolic import Expression, var
 from pymbolic.mapper import CSECachingMapperMixin, IdentityMapper
 from pymbolic.primitives import make_sym_vector
 from pytools import memoize_method
@@ -1084,7 +1085,7 @@ class AxisTargetDerivative(DerivativeBase):
     mapper_method = "map_axis_target_derivative"
 
 
-class _VectorIndexAdder(CSECachingMapperMixin, IdentityMapper):
+class _VectorIndexAdder(CSECachingMapperMixin[Expression, []], IdentityMapper[[]]):
     def __init__(self, vec_name, additional_indices):
         self.vec_name = vec_name
         self.additional_indices = additional_indices
@@ -1099,7 +1100,14 @@ class _VectorIndexAdder(CSECachingMapperMixin, IdentityMapper):
         else:
             return IdentityMapper.map_subscript(self, expr)
 
-    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+    def map_common_subexpression_uncached(self,
+                expr: prim.CommonSubexpression) -> Expression:
+        result = self.rec(expr.child)
+        if result is expr.child:
+            return expr
+
+        return type(expr)(
+                      result, expr.prefix, expr.scope, **expr.get_extra_properties())
 
 
 class DirectionalDerivative(DerivativeBase):
