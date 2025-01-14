@@ -8,8 +8,8 @@ for functions satisfying two assumptions:
 - :math:`f` only depends on the radius :math:`r`,
   i.e. :math:`f(\boldsymbol x)=f(|\boldsymbol x|_2)`.
 
-  However, unlike recurrence.py, the recurrences produced here are numerically
-  stable in a different source-location space.
+However, unlike recurrence.py, the recurrences produced here are numerically
+stable in a different source-location space.
 
 .. autofunction:: get_grid
 .. autofunction:: convert
