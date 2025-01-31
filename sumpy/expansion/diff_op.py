@@ -33,7 +33,7 @@ from itertools import accumulate
 import numpy as np
 import sympy as sp
 import sympy.polys.agca.modules as sp_modules
-from immutabledict import immutabledict
+from constantdict import constantdict
 
 from pytools import memoize
 
@@ -115,7 +115,8 @@ class LinearPDESystemOperator:
             deriv_ident_to_coeff = {}
             for k, v in eq.items():
                 deriv_ident_to_coeff[k] = v * param
-            eqs.append(immutabledict(deriv_ident_to_coeff))
+            eqs.append(constantdict(deriv_ident_to_coeff))
+
         return LinearPDESystemOperator(self.dim, tuple(eqs))
 
     __rmul__ = __mul__
@@ -125,6 +126,7 @@ class LinearPDESystemOperator:
             ) -> LinearPDESystemOperator:
         assert self.dim == other_diff_op.dim
         assert len(self.eqs) == len(other_diff_op.eqs)
+
         eqs: list[Mapping[DerivativeIdentifier, sp.Expr]] = []
         for eq, other_eq in zip(self.eqs, other_diff_op.eqs, strict=True):
             res = dict(eq)
@@ -133,7 +135,8 @@ class LinearPDESystemOperator:
                     res[k] += v
                 else:
                     res[k] = v
-            eqs.append(immutabledict(res))
+            eqs.append(constantdict(res))
+
         return LinearPDESystemOperator(self.dim, tuple(eqs))
 
     __radd__ = __add__
@@ -269,7 +272,7 @@ def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> list[LinearPDESystemOp
             DerivativeIdentifier(mi, 0): sym.sympify(coeff.as_expr().simplify()) for
             (mi, coeff) in zip(scalar_pde.monoms(), scalar_pde.coeffs(), strict=True)
         }
-        results.append(LinearPDESystemOperator(pde.dim, (immutabledict(pde_dict),)))
+        results.append(LinearPDESystemOperator(pde.dim, (constantdict(pde_dict),)))
 
     return results
 
@@ -347,8 +350,8 @@ def as_scalar_pde(pde: LinearPDESystemOperator, comp_idx: int) \
 
 def laplacian(diff_op: LinearPDESystemOperator) -> LinearPDESystemOperator:
     dim = diff_op.dim
-    empty: tuple[Mapping[DerivativeIdentifier, sp.Expr], ...] = \
-        (immutabledict(),) * len(diff_op.eqs)
+    empty: tuple[Mapping[DerivativeIdentifier, sp.Expr], ...] = (
+        (constantdict(),) * len(diff_op.eqs))
     res = LinearPDESystemOperator(dim, empty)
     for j in range(dim):
         mi = [0]*diff_op.total_dims
@@ -366,17 +369,20 @@ def diff(
         for deriv_ident, v in eq.items():
             new_mi = add_mi(deriv_ident.mi, mi)
             res[DerivativeIdentifier(new_mi, deriv_ident.vec_idx)] = v
-        eqs.append(immutabledict(res))
+        eqs.append(constantdict(res))
+
     return LinearPDESystemOperator(diff_op.dim, tuple(eqs))
 
 
 def divergence(diff_op: LinearPDESystemOperator) -> LinearPDESystemOperator:
     assert len(diff_op.eqs) == diff_op.dim
-    res = LinearPDESystemOperator(diff_op.dim, (immutabledict(),))
+
+    res = LinearPDESystemOperator(diff_op.dim, (constantdict(),))
     for i in range(diff_op.dim):
         mi = [0]*diff_op.total_dims
         mi[i] = 1
         res += diff(diff_op[i], tuple(mi))
+
     return res
 
 
@@ -436,6 +442,6 @@ def make_identity_diff_op(
         mi = tuple([0]*(ninput + 1))
     else:
         mi = tuple([0]*ninput)
-    return LinearPDESystemOperator(ninput, tuple(immutabledict(
-                    {DerivativeIdentifier(mi, i): sp.sympify(1)})
-                    for i in range(noutput)))
+    return LinearPDESystemOperator(ninput, tuple(
+            constantdict({DerivativeIdentifier(mi, i): sp.sympify(1)})
+            for i in range(noutput)))
