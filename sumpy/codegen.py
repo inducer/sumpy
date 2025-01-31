@@ -28,7 +28,7 @@ import logging
 import re
 
 import numpy as np
-from immutabledict import immutabledict
+from constantdict import constantdict
 
 import loopy as lp
 import pymbolic.primitives as prim
@@ -142,7 +142,7 @@ class BesselJvvp1(lp.ScalarCallable):
 
         if z_dtype.numpy_dtype.kind == "c":
             return (self.copy(name_in_target="bessel_jv_two_complex",
-                              arg_id_to_dtype=immutabledict({
+                              arg_id_to_dtype=constantdict({
                                   -2: NumpyType(np.complex128),
                                   -1: NumpyType(np.complex128),
                                   0: NumpyType(np.int32),
@@ -151,7 +151,7 @@ class BesselJvvp1(lp.ScalarCallable):
                     clbl_inf_ctx)
         else:
             return (self.copy(name_in_target="bessel_jv_two",
-                              arg_id_to_dtype=immutabledict({
+                              arg_id_to_dtype=constantdict({
                                   -2: NumpyType(np.float64),
                                   -1: NumpyType(np.float64),
                                   0: NumpyType(np.int32),
@@ -184,7 +184,7 @@ class Hankel1_01(lp.ScalarCallable):  # noqa: N801
 
         if z_dtype.numpy_dtype.kind == "c":
             return (self.copy(name_in_target="hank1_01_complex",
-                              arg_id_to_dtype=immutabledict({
+                              arg_id_to_dtype=constantdict({
                                   -2: NumpyType(np.complex128),
                                   -1: NumpyType(np.complex128),
                                   0: NumpyType(np.complex128),
@@ -192,7 +192,7 @@ class Hankel1_01(lp.ScalarCallable):  # noqa: N801
                     clbl_inf_ctx)
         else:
             return (self.copy(name_in_target="hank1_01",
-                              arg_id_to_dtype=immutabledict({
+                              arg_id_to_dtype=constantdict({
                                   -2: NumpyType(np.complex128),
                                   -1: NumpyType(np.complex128),
                                   0: NumpyType(np.float64),

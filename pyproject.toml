@@ -31,7 +31,7 @@ classifiers = [
 dependencies = [
     "arraycontext>=2021.1",
     "boxtree>=2023.1",
-    "immutabledict",
+    "constantdict>=2024.4",
     "loopy>=2024.1",
     "numpy",
     "pyopencl>=2022.1",
