@@ -74,9 +74,9 @@ def _build_subset_indices(actx, ntargets, nsources, factor):
     rng = np.random.default_rng()
     if abs(factor - 1.0) > 1.0e-14:
         tgtindices = rng.choice(tgtindices,
-                size=int(factor * ntargets), replace=False)
+            size=int(factor * ntargets), replace=False)
         srcindices = rng.choice(srcindices,
-                size=int(factor * nsources), replace=False)
+            size=int(factor * nsources), replace=False)
     else:
         rng.shuffle(tgtindices)
         rng.shuffle(srcindices)
@@ -115,60 +115,62 @@ def test_qbx_direct(actx_factory, factor, lpot_id, visualize=False):
     expn = LineTaylorLocalExpansion(knl, order)
 
     from sumpy.qbx import LayerPotential
-    lpot = LayerPotential(actx.context, expansion=expn, source_kernels=(knl,),
-            target_kernels=(base_knl,))
+    lpot = LayerPotential(
+        expansion=expn,
+        source_kernels=(knl,),
+        target_kernels=(base_knl,))
 
     from sumpy.qbx import LayerPotentialMatrixGenerator
-    mat_gen = LayerPotentialMatrixGenerator(actx.context,
-            expansion=expn,
-            source_kernels=(knl,),
-            target_kernels=(base_knl,))
+    mat_gen = LayerPotentialMatrixGenerator(
+        expansion=expn,
+        source_kernels=(knl,),
+        target_kernels=(base_knl,))
 
     from sumpy.qbx import LayerPotentialMatrixSubsetGenerator
-    blk_gen = LayerPotentialMatrixSubsetGenerator(actx.context,
-            expansion=expn,
-            source_kernels=(knl,),
-            target_kernels=(base_knl,))
+    blk_gen = LayerPotentialMatrixSubsetGenerator(
+        expansion=expn,
+        source_kernels=(knl,),
+        target_kernels=(base_knl,))
 
     for n in [200, 300, 400]:
-        targets, sources, centers, expansion_radii, sigma = \
-                _build_geometry(actx, n, n, mode_nr, target_radius=1.2)
+        targets, sources, centers, expansion_radii, sigma = (
+            _build_geometry(actx, n, n, mode_nr, target_radius=1.2))
 
         h = 2 * np.pi / n
         strengths = (sigma * h,)
-        tgtindices, srcindices = _build_subset_indices(actx,
-                ntargets=n, nsources=n, factor=factor)
+        tgtindices, srcindices = (
+            _build_subset_indices(actx, ntargets=n, nsources=n, factor=factor))
 
         extra_kwargs = {}
         if lpot_id == 2:
             from pytools.obj_array import make_obj_array
             extra_kwargs["dsource_vec"] = (
-                    actx.from_numpy(make_obj_array(np.ones((ndim, n))))
-                    )
+                actx.from_numpy(make_obj_array(np.ones((ndim, n))))
+                )
 
-        _, (result_lpot,) = lpot(actx.queue,
-                targets=targets,
-                sources=sources,
-                centers=centers,
-                expansion_radii=expansion_radii,
-                strengths=strengths, **extra_kwargs)
+        result_lpot, = lpot(actx,
+            targets=targets,
+            sources=sources,
+            centers=centers,
+            expansion_radii=expansion_radii,
+            strengths=strengths, **extra_kwargs)
         result_lpot = actx.to_numpy(result_lpot)
 
-        _, (mat,) = mat_gen(actx.queue,
-                targets=targets,
-                sources=sources,
-                centers=centers,
-                expansion_radii=expansion_radii, **extra_kwargs)
+        mat, = mat_gen(actx,
+            targets=targets,
+            sources=sources,
+            centers=centers,
+            expansion_radii=expansion_radii, **extra_kwargs)
         mat = actx.to_numpy(mat)
         result_mat = mat @ actx.to_numpy(strengths[0])
 
-        _, (blk,) = blk_gen(actx.queue,
-                targets=targets,
-                sources=sources,
-                centers=centers,
-                expansion_radii=expansion_radii,
-                tgtindices=tgtindices,
-                srcindices=srcindices, **extra_kwargs)
+        blk, = blk_gen(actx,
+            targets=targets,
+            sources=sources,
+            centers=centers,
+            expansion_radii=expansion_radii,
+            tgtindices=tgtindices,
+            srcindices=srcindices, **extra_kwargs)
         blk = actx.to_numpy(blk)
 
         tgtindices = actx.to_numpy(tgtindices)
@@ -205,14 +207,15 @@ def test_p2p_direct(actx_factory, exclude_self, factor, lpot_id, visualize=False
         raise ValueError(f"unknown lpot_id: '{lpot_id}'")
 
     from sumpy.p2p import P2P
-    lpot = P2P(actx.context, [lknl], exclude_self=exclude_self)
+    lpot = P2P(target_kernels=[lknl], exclude_self=exclude_self)
 
     from sumpy.p2p import P2PMatrixGenerator
-    mat_gen = P2PMatrixGenerator(actx.context, [lknl], exclude_self=exclude_self)
+    mat_gen = P2PMatrixGenerator(
+        target_kernels=[lknl], exclude_self=exclude_self)
 
     from sumpy.p2p import P2PMatrixSubsetGenerator
     blk_gen = P2PMatrixSubsetGenerator(
-        actx.context, [lknl], exclude_self=exclude_self)
+        target_kernels=[lknl], exclude_self=exclude_self)
 
     for n in [200, 300, 400]:
         targets, sources, _, _, sigma = (
@@ -220,8 +223,8 @@ def test_p2p_direct(actx_factory, exclude_self, factor, lpot_id, visualize=False
 
         h = 2 * np.pi / n
         strengths = (sigma * h,)
-        tgtindices, srcindices = _build_subset_indices(actx,
-                ntargets=n, nsources=n, factor=factor)
+        tgtindices, srcindices = (
+            _build_subset_indices(actx, ntargets=n, nsources=n, factor=factor))
 
         extra_kwargs = {}
         if exclude_self:
@@ -231,25 +234,25 @@ def test_p2p_direct(actx_factory, exclude_self, factor, lpot_id, visualize=False
         if lpot_id == 2:
             from pytools.obj_array import make_obj_array
             extra_kwargs["dsource_vec"] = (
-                    actx.from_numpy(make_obj_array(np.ones((ndim, n)))))
+                actx.from_numpy(make_obj_array(np.ones((ndim, n)))))
 
-        _, (result_lpot,) = lpot(actx.queue,
+        result_lpot, = lpot(actx,
                 targets=targets,
                 sources=sources,
                 strength=strengths, **extra_kwargs)
         result_lpot = actx.to_numpy(result_lpot)
 
-        _, (mat,) = mat_gen(actx.queue,
-                targets=targets,
-                sources=sources, **extra_kwargs)
+        mat, = mat_gen(actx,
+            targets=targets,
+            sources=sources, **extra_kwargs)
         mat = actx.to_numpy(mat)
         result_mat = mat @ actx.to_numpy(strengths[0])
 
-        _, (blk,) = blk_gen(actx.queue,
-                targets=targets,
-                sources=sources,
-                tgtindices=tgtindices,
-                srcindices=srcindices, **extra_kwargs)
+        blk, = blk_gen(actx,
+            targets=targets,
+            sources=sources,
+            tgtindices=tgtindices,
+            srcindices=srcindices, **extra_kwargs)
         blk = actx.to_numpy(blk)
 
         tgtindices = actx.to_numpy(tgtindices)

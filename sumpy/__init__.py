@@ -61,8 +61,8 @@ __all__ = [
 ]
 
 
-code_cache: WriteOncePersistentDict[Hashable, lp.TranslationUnit] = \
-        WriteOncePersistentDict("sumpy-code-cache-v6-"+VERSION_TEXT, safe_sync=False)
+code_cache: WriteOncePersistentDict[Hashable, lp.TranslationUnit] = (
+    WriteOncePersistentDict(f"sumpy-code-cache-v7-{VERSION_TEXT}", safe_sync=False))
 
 
 # {{{ optimization control

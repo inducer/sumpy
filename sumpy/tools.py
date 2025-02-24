@@ -38,12 +38,12 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 import loopy as lp
-import pyopencl as cl
 from pymbolic.mapper import WalkMapper
 from pytools import memoize_method
 from pytools.tag import Tag, tag_dataclass
 
 import sumpy.symbolic as sym
+from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
 
 
 if TYPE_CHECKING:
@@ -214,30 +214,6 @@ def build_matrix(op, dtype=None, shape=None):
     return mat
 
 
-def vector_to_device(queue, vec):
-    from pyopencl.array import to_device
-    from pytools.obj_array import obj_array_vectorize
-
-    def to_dev(ary):
-        return to_device(queue, ary)
-
-    return obj_array_vectorize(to_dev, vec)
-
-
-def vector_from_device(queue, vec):
-    from pytools.obj_array import obj_array_vectorize
-
-    def from_dev(ary):
-        from numbers import Number
-        if isinstance(ary, np.number | Number):
-            # zero, most likely
-            return ary
-
-        return ary.get(queue=queue)
-
-    return obj_array_vectorize(from_dev, vec)
-
-
 def _merge_kernel_arguments(dictionary, arg):
     # Check for strict equality until there's a usecase
     if dictionary.setdefault(arg.name, arg) != arg:
@@ -289,13 +265,12 @@ class KernelComputation(ABC):
     .. automethod:: get_kernel
     """
 
-    def __init__(self, ctx: Any,
+    def __init__(self,
             target_kernels: list[Kernel],
             source_kernels: list[Kernel],
             strength_usage: list[int] | None = None,
             value_dtypes: list[numpy.dtype[Any]] | None = None,
-            name: str | None = None,
-            device: Any | None = None) -> None:
+            name: str | None = None) -> None:
         """
         :arg target_kernels: list of :class:`~sumpy.kernel.Kernel` instances,
             with :class:`sumpy.kernel.DirectionalTargetDerivative` as
@@ -336,12 +311,6 @@ class KernelComputation(ABC):
 
         # }}}
 
-        if device is None:
-            device = ctx.devices[0]
-
-        self.context = ctx
-        self.device = device
-
         self.source_kernels = tuple(source_kernels)
         self.target_kernels = tuple(target_kernels)
         self.value_dtypes = value_dtypes
@@ -349,6 +318,10 @@ class KernelComputation(ABC):
         self.strength_count = strength_count
 
         self.name = name or self.default_name
+
+    @property
+    def nresults(self):
+        return len(self.target_kernels)
 
     @property
     @abstractmethod
@@ -447,7 +420,6 @@ class OrderedSet(MutableSet):
 
 
 class KernelCacheMixin(ABC):
-    context: cl.Context
     name: str
 
     @abstractmethod
@@ -455,11 +427,11 @@ class KernelCacheMixin(ABC):
         ...
 
     @abstractmethod
-    def get_kernel(self, **kwargs: Any) -> lp.TranslationUnit:
+    def get_kernel(self, **kwargs) -> lp.TranslationUnit:
         ...
 
     @abstractmethod
-    def get_optimized_kernel(self, **kwargs: Any) -> lp.TranslationUnit:
+    def get_optimized_kernel(self, **kwargs) -> lp.TranslationUnit:
         ...
 
     @memoize_method
@@ -749,7 +721,6 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
         factors.append(N1)
 
     nfft = n
-
     broadcast_dims = tuple(var(f"j{d}") for d in range(len(shape) - 1))
 
     domains = [
@@ -880,12 +851,11 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
     if name is None:
         name = f"ifft_{n}" if inverse else f"fft_{n}"
 
-    knl = lp.make_kernel(
+    knl = make_loopy_program(
         domains, insns,
         kernel_data=kernel_data,
         name=name,
         fixed_parameters=fixed_parameters,
-        lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
         index_dtype=index_dtype,
     )
 
@@ -944,7 +914,7 @@ def _get_fft_backend(queue: pyopencl.CommandQueue) -> FFTBackend:
 
 
 def get_opencl_fft_app(
-        queue: pyopencl.CommandQueue,
+        actx: PyOpenCLArrayContext,
         shape: tuple[int, ...],
         dtype: numpy.dtype[Any],
         inverse: bool) -> Any:
@@ -954,21 +924,23 @@ def get_opencl_fft_app(
     assert dtype.type in (np.float32, np.float64, np.complex64,
                            np.complex128)
 
-    backend = _get_fft_backend(queue)
+    backend = _get_fft_backend(actx.queue)
 
     if backend == FFTBackend.loopy:
         return loopy_fft(shape, inverse=inverse, complex_dtype=dtype.type), backend
     elif backend == FFTBackend.pyvkfft:
         from pyvkfft.opencl import VkFFTApp
-        app = VkFFTApp(shape=shape, dtype=dtype, queue=queue, ndim=1, inplace=False)
+        app = VkFFTApp(
+            shape=shape, dtype=dtype,
+            queue=actx.queue, ndim=1, inplace=False)
         return app, backend
     else:
         raise RuntimeError(f"Unsupported FFT backend {backend}")
 
 
 def run_opencl_fft(
+        actx: PyOpenCLArrayContext,
         fft_app: tuple[Any, FFTBackend],
-        queue: pyopencl.CommandQueue,
         input_vec: Any,
         inverse: bool = False,
         wait_for: list[pyopencl.Event] | None = None
@@ -981,15 +953,15 @@ def run_opencl_fft(
     app, backend = fft_app
 
     if backend == FFTBackend.loopy:
-        evt, (output_vec,) = app(queue, y=input_vec, wait_for=wait_for)
-        return (evt, output_vec)
+        evt, output_vec = app(actx.queue, y=input_vec, wait_for=wait_for)
+        return (evt, output_vec["x"])
     elif backend == FFTBackend.pyvkfft:
         if wait_for is None:
             wait_for = []
 
         import pyopencl as cl
-        import pyopencl.array as cla
 
+        queue = actx.queue
         if queue.device.platform.name == "NVIDIA CUDA":
             # NVIDIA OpenCL gives wrong event profile values with wait_for
             # Not passing wait_for will wait for all events queued before
@@ -1005,7 +977,7 @@ def run_opencl_fft(
         if app.inplace:
             raise RuntimeError("inplace fft is not supported")
         else:
-            output_vec = cla.empty_like(input_vec, queue)
+            output_vec = actx.np.empty_like(input_vec)
 
         # FIXME: use the public API once
         # https://github.com/vincefn/pyvkfft/pull/17 is in
@@ -1016,7 +988,7 @@ def run_opencl_fft(
             meth = _vkfft_opencl.fft
 
         meth(app.app, int(input_vec.data.int_ptr),
-            int(output_vec.data.int_ptr), int(queue.int_ptr))
+            int(output_vec.data.int_ptr), int(actx.queue.int_ptr))
 
         if queue.device.platform.name == "NVIDIA CUDA":
             end_evt = cl.enqueue_marker(queue)

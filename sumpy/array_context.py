@@ -23,36 +23,73 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from boxtree.array_context import PyOpenCLArrayContext as PyOpenCLArrayContextBase
+from typing import Any
+
+import numpy as np
 
 from arraycontext.pytest import (
     _PytestPyOpenCLArrayContextFactoryWithClass,
     register_pytest_array_context_factory,
 )
+from boxtree.array_context import PyOpenCLArrayContext as PyOpenCLArrayContextBase
+from pytools.tag import ToTagSetConvertible
 
 
 __doc__ = """
 Array Context
 -------------
 
+.. autofunction:: make_loopy_program
 .. autoclass:: PyOpenCLArrayContext
 """
 
 
 # {{{ PyOpenCLArrayContext
 
+def make_loopy_program(
+        domains, statements,
+        kernel_data: list[Any] | None = None, *,
+        name: str = "sumpy_loopy_kernel",
+        silenced_warnings: list[str] | str | None = None,
+        assumptions: list[str] | str | None = None,
+        fixed_parameters: dict[str, Any] | None = None,
+        index_dtype: np.dtype[Any] | None = None,
+        tags: ToTagSetConvertible = None):
+    """Return a :class:`loopy.LoopKernel` suitable for use with
+    :meth:`arraycontext.ArrayContext.call_loopy`.
+    """
+    if kernel_data is None:
+        kernel_data = [...]
+
+    if silenced_warnings is None:
+        silenced_warnings = []
+
+    import loopy as lp
+    from arraycontext.loopy import _DEFAULT_LOOPY_OPTIONS
+
+    return lp.make_kernel(
+            domains,
+            statements,
+            kernel_data=kernel_data,
+            options=_DEFAULT_LOOPY_OPTIONS,
+            default_offset=lp.auto,
+            name=name,
+            lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
+            assumptions=assumptions,
+            fixed_parameters=fixed_parameters,
+            silenced_warnings=silenced_warnings,
+            index_dtype=index_dtype,
+            tags=tags)
+
+
 class PyOpenCLArrayContext(PyOpenCLArrayContextBase):
     def transform_loopy_program(self, t_unit):
-        default_ep = t_unit.default_entrypoint
-        options = default_ep.options
+        return t_unit
 
-        if not (options.return_dict and options.no_numpy):
-            raise ValueError("Loopy kernel passed to call_loopy must "
-                    "have return_dict and no_numpy options set. "
-                    "Did you use arraycontext.make_loopy_program "
-                    "to create this kernel?")
 
-        return super().transform_loopy_program(t_unit)
+def is_cl_cpu(actx: PyOpenCLArrayContext) -> bool:
+    import pyopencl as cl
+    return all(dev.type & cl.device_type.CPU for dev in actx.context.devices)
 
 # }}}
 
