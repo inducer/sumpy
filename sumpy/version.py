@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2014 Andreas Kloeckner"
 
 __license__ = """
@@ -20,29 +23,22 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-# {{{ find install- or run-time git revision
+from importlib import metadata
 
-import os
-if os.environ.get("AKPYTHON_EXEC_FROM_WITHIN_WITHIN_SETUP_PY") is not None:
-    # We're just being exec'd by setup.py. We can't import anything.
-    _git_rev = None
-
-else:
-    import sumpy._git_rev as _git_rev_mod
-    _git_rev = _git_rev_mod.GIT_REVISION
-
-    # If we're running from a dev tree, the last install (and hence the most
-    # recent update of the above git rev) could have taken place very long ago.
-    from pytools import find_module_git_revision
-    _runtime_git_rev = find_module_git_revision(__file__, n_levels_up=1)
-    if _runtime_git_rev is not None:
-        _git_rev = _runtime_git_rev
-
-# }}}
+from pytools import find_module_git_revision
 
 
-VERSION = (2022, 1)
-VERSION_STATUS = ""
-VERSION_TEXT = ".".join(str(x) for x in VERSION) + VERSION_STATUS
+def _parse_version(version: str) -> tuple[tuple[int, ...], str]:
+    import re
 
-KERNEL_VERSION = (VERSION, _git_rev, 0)
+    m = re.match(r"^([0-9.]+)([a-z0-9]*?)$", VERSION_TEXT)
+    assert m is not None
+
+    return tuple(int(nr) for nr in m.group(1).split(".")), m.group(2)
+
+
+VERSION_TEXT = metadata.version("sumpy")
+VERSION, VERSION_STATUS = _parse_version(VERSION_TEXT)
+
+_GIT_REVISION = find_module_git_revision(__file__, n_levels_up=1)
+KERNEL_VERSION = (*VERSION, _GIT_REVISION, 0)

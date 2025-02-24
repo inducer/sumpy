@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -21,20 +24,22 @@ THE SOFTWARE.
 """
 
 
+import logging
 import re
 
 import numpy as np
+from constantdict import constantdict
+
 import loopy as lp
-from loopy.kernel.instruction import make_assignment
-
-from pymbolic.mapper import IdentityMapper, CSECachingMapperMixin
 import pymbolic.primitives as prim
-
+from loopy.kernel.instruction import make_assignment
+from pymbolic.mapper import CSECachingMapperMixin, IdentityMapper
+from pymbolic.typing import Expression
 from pytools import memoize_method
 
-from sumpy.symbolic import (SympyToPymbolicMapper as SympyToPymbolicMapperBase)
+from sumpy.symbolic import SympyToPymbolicMapper as SympyToPymbolicMapperBase
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,13 +50,18 @@ Conversion of :mod:`sympy` expressions to :mod:`loopy`
 
 .. autoclass:: SympyToPymbolicMapper
 .. autofunction:: to_loopy_insns
-
 """
+
+
+def wrap_in_cse(expr: Expression, prefix: str | None = None) -> Expression:
+    return prim.make_common_subexpression(expr, prefix, wrap_vars=False)
 
 
 # {{{ sympy -> pymbolic mapper
 
 import sumpy.symbolic as sym
+
+
 _SPECIAL_FUNCTION_NAMES = frozenset(dir(sym.functions))
 
 
@@ -132,21 +142,21 @@ class BesselJvvp1(lp.ScalarCallable):
 
         if z_dtype.numpy_dtype.kind == "c":
             return (self.copy(name_in_target="bessel_jv_two_complex",
-                              arg_id_to_dtype={
+                              arg_id_to_dtype=constantdict({
                                   -2: NumpyType(np.complex128),
                                   -1: NumpyType(np.complex128),
                                   0: NumpyType(np.int32),
                                   1: NumpyType(np.complex128),
-                                  }),
+                                  })),
                     clbl_inf_ctx)
         else:
             return (self.copy(name_in_target="bessel_jv_two",
-                              arg_id_to_dtype={
+                              arg_id_to_dtype=constantdict({
                                   -2: NumpyType(np.float64),
                                   -1: NumpyType(np.float64),
                                   0: NumpyType(np.int32),
                                   1: NumpyType(np.float64),
-                                  }),
+                                  })),
                     clbl_inf_ctx)
 
     def generate_preambles(self, target):
@@ -174,19 +184,19 @@ class Hankel1_01(lp.ScalarCallable):  # noqa: N801
 
         if z_dtype.numpy_dtype.kind == "c":
             return (self.copy(name_in_target="hank1_01_complex",
-                              arg_id_to_dtype={
+                              arg_id_to_dtype=constantdict({
                                   -2: NumpyType(np.complex128),
                                   -1: NumpyType(np.complex128),
                                   0: NumpyType(np.complex128),
-                                  }),
+                                  })),
                     clbl_inf_ctx)
         else:
             return (self.copy(name_in_target="hank1_01",
-                              arg_id_to_dtype={
+                              arg_id_to_dtype=constantdict({
                                   -2: NumpyType(np.complex128),
                                   -1: NumpyType(np.complex128),
                                   0: NumpyType(np.float64),
-                                  }),
+                                  })),
                     clbl_inf_ctx)
 
     def generate_preambles(self, target):
@@ -216,8 +226,8 @@ def _fp_contract_fast_preamble(preamble_info):
 def register_optimization_preambles(loopy_knl, device):
     if isinstance(loopy_knl.target, lp.PyOpenCLTarget):
         import pyopencl as cl
-        if device.platform.name == "Portable Computing Language" and \
-                (device.type & cl.device_type.GPU):
+        if (device.platform.name == "Portable Computing Language"
+                and (device.type & cl.device_type.GPU)):
             loopy_knl = lp.register_preamble_generators(loopy_knl,
                 [_fp_contract_fast_preamble])
     return loopy_knl
@@ -252,8 +262,8 @@ class BesselTopOrderGatherer(CSECachingIdentityMapper, CallExternalRecMapper):
         self.bessel_j_arg_to_top_order = {}
 
     def map_call(self, expr, rec_self=None, *args):
-        if isinstance(expr.function, prim.Variable) \
-                and expr.function.name == "bessel_j":
+        if (isinstance(expr.function, prim.Variable)
+                and expr.function.name == "bessel_j"):
             order, arg = expr.parameters
             self.rec(arg)
             assert isinstance(order, int)
@@ -281,10 +291,11 @@ class BesselDerivativeReplacer(CSECachingIdentityMapper, CallExternalRecMapper):
 
             # AS (9.1.31)
             # https://dlmf.nist.gov/10.6.7
-            if order >= 0:
-                order_str = str(order)
+            if order >= 0:  # noqa: SIM108
+                order_str = f"{order}"
             else:
-                order_str = "m"+str(-order)
+                order_str = f"m{-order}"
+
             k = n_derivs
             return prim.CommonSubexpression(
                     2**(-k)*sum(
@@ -319,7 +330,7 @@ class BesselSubstitutor(CSECachingIdentityMapper):
         return super().map_call(expr)
 
     def wrap_in_cse(self, expr, prefix):
-        cse = prim.wrap_in_cse(expr, prefix)
+        cse = wrap_in_cse(expr, prefix)
         return self.cse_cache.setdefault(expr, cse)
 
     # {{{ bessel implementation
@@ -405,17 +416,17 @@ class PowerRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
     def map_power(self, expr, rec_self=None, *args):
         exp = expr.exponent
         if isinstance(exp, int):
-            new_base = prim.wrap_in_cse(expr.base)
+            new_base = wrap_in_cse(expr.base)
 
             if exp > 2 and exp % 2 == 0:
-                square = prim.wrap_in_cse(new_base*new_base)
-                return self.rec(prim.wrap_in_cse(square**(exp//2)),
+                square = wrap_in_cse(new_base*new_base)
+                return self.rec(wrap_in_cse(square**(exp//2)),
                         rec_self, *args)
             elif exp == 2:
                 return new_base * new_base
             elif exp > 1 and exp % 2 == 1:
-                square = prim.wrap_in_cse(new_base*new_base)
-                return self.rec(prim.wrap_in_cse(square**((exp-1)//2))*new_base,
+                square = wrap_in_cse(new_base*new_base)
+                return self.rec(wrap_in_cse(square**((exp-1)//2))*new_base,
                         rec_self, *args)
             elif exp == 1:
                 return new_base
@@ -438,10 +449,10 @@ class PowerRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
                 assert p != 0
 
                 if p > 0:
-                    orig_base = prim.wrap_in_cse(expr.base)
-                    new_base = prim.wrap_in_cse(prim.Variable("sqrt")(orig_base))
+                    orig_base = wrap_in_cse(expr.base)
+                    new_base = wrap_in_cse(prim.Variable("sqrt")(orig_base))
                 else:
-                    new_base = prim.wrap_in_cse(prim.Variable("rsqrt")(expr.base))
+                    new_base = wrap_in_cse(prim.Variable("rsqrt")(expr.base))
                     p *= -1
 
                 return self.rec(new_base**p, rec_self, *args)
@@ -481,7 +492,7 @@ class BigIntegerKiller(CSECachingIdentityMapper, CallExternalRecMapper):
             if int(expr_as_float) != int(expr):
                 from warnings import warn
                 warn(f"Converting '{expr}' to "
-                     f"'{self.float_type.__name__}' loses digits")
+                     f"'{self.float_type.__name__}' loses digits", stacklevel=1)
 
             # Suppress further warnings.
             self.warn = False
@@ -502,12 +513,12 @@ class ComplexRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
         super().__init__()
         self.complex_dtype = complex_dtype
 
-    def map_constant(self, expr, rec_self=None, *args, **kwargs):
+    def map_constant(self, expr, rec_self=None):
         """Convert complex values to numpy types
         """
-        if not isinstance(expr, (complex, np.complex64, np.complex128)):
+        if not isinstance(expr, complex | np.complex64 | np.complex128):
             return IdentityMapper.map_constant(rec_self or self, expr,
-                    rec_self=rec_self, *args, **kwargs)
+                    rec_self=rec_self)
 
         complex_dtype = self.complex_dtype
         if complex_dtype is None:
@@ -527,7 +538,7 @@ class ComplexRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
 
 # {{{ vector component rewriter
 
-INDEXED_VAR_RE = re.compile("^([a-zA-Z_]+)([0-9]+)$")
+INDEXED_VAR_RE = re.compile(r"^([a-zA-Z_]+)([0-9]+)$")
 
 
 class VectorComponentRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
@@ -542,7 +553,7 @@ class VectorComponentRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
             name = match_obj.group(1)
             subscript = int(match_obj.group(2))
             if name in self.name_whitelist:
-                return prim.Variable(name).index(subscript)
+                return prim.Variable(name)[subscript]
             else:
                 return expr
         else:
@@ -582,11 +593,12 @@ class SumSignGrouper(CSECachingIdentityMapper, CallExternalRecMapper):
                 first_group.append(child)
 
         new_children = tuple(first_group + second_group)
-        if len(new_children) == len(expr.children) and \
-                all(child is orig_child for child, orig_child in
-                    zip(new_children, expr.children)):
+        if (len(new_children) == len(expr.children)
+                and all(child is orig_child for child, orig_child
+                        in zip(new_children, expr.children, strict=True))):
             return expr
-        return prim.Sum(tuple(first_group+second_group))
+
+        return prim.Sum(tuple(first_group + second_group))
 
     map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
@@ -641,8 +653,7 @@ def combine_mappers(*mappers):
     class CombinedMapper(CSECachingIdentityMapper):
         def __init__(self, all_methods):
             self.all_methods = all_methods
-        map_common_subexpression_uncached = \
-                IdentityMapper.map_common_subexpression
+        map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
     def _map(method_name, self, expr, rec_self=None, *args):
         if method_name not in self.all_methods:
@@ -654,10 +665,10 @@ def combine_mappers(*mappers):
                 return self.rec(new_expr)
         return expr
 
-    from functools import partial
     import types
+    from functools import partial
     combine_mapper = CombinedMapper(all_methods)
-    for method_name in all_methods.keys():
+    for method_name in all_methods:
         setattr(combine_mapper, method_name,
                 types.MethodType(partial(_map, method_name), combine_mapper))
     return combine_mapper

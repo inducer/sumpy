@@ -8,26 +8,45 @@ on:
         - cron:  '17 3 * * 0'
 
 jobs:
-    flake8:
-        name: Flake8
+    ruff:
+        name: Ruff
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v3
-        -
-            uses: actions/setup-python@v4
-            with:
-                # matches compat target in setup.py
-                python-version: '3.8'
+        -   uses: actions/checkout@v4
         -   name: "Main Script"
             run: |
-                curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-flake8.sh
-                . ./prepare-and-run-flake8.sh "$(basename $GITHUB_REPOSITORY)" test examples benchmarks
+                pipx install ruff
+                ruff check
+
+    typos:
+        name: Typos
+        runs-on: ubuntu-latest
+        steps:
+        -   uses: actions/checkout@v4
+        -   uses: crate-ci/typos@master
+
+    mypy:
+        name: Mypy
+        runs-on: ubuntu-latest
+        steps:
+        -   uses: actions/checkout@v4
+        -
+            uses: actions/setup-python@v5
+            with:
+                python-version: '3.x'
+        -   name: "Main Script"
+            run: |
+                curl -L -O https://tiker.net/ci-support-v0
+                . ./ci-support-v0
+                build_py_project_in_conda_env
+                python -m pip install mypy
+                mypy $(get_proj_name)
 
     pylint:
         name: Pylint
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v3
+        -   uses: actions/checkout@v4
         -   name: "Main Script"
             run: |
                 USE_CONDA_BUILD=1
@@ -35,13 +54,13 @@ jobs:
                 curl -L -O https://tiker.net/ci-support-v0
                 . ci-support-v0
                 build_py_project
-                run_pylint "$(basename $GITHUB_REPOSITORY)" examples/*.py, test/*.py
+                run_pylint "$(basename $GITHUB_REPOSITORY)" examples/*.py test/*.py
 
     docs:
         name: Documentation
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v3
+        -   uses: actions/checkout@v4
         -   name: "Main Script"
             run: |
                 CONDA_ENVIRONMENT=.test-conda-env-py3.yml
@@ -54,7 +73,7 @@ jobs:
         name: Conda Pytest
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v3
+        -   uses: actions/checkout@v4
         -   name: "Main Script"
             run: |
                 grep -v symengine .test-conda-env-py3.yml > .test-conda-env.yml
@@ -66,7 +85,7 @@ jobs:
         name: Conda Pytest Symengine
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v3
+        -   uses: actions/checkout@v4
         -   name: "Main Script"
             run: |
                 curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project-within-miniconda.sh
@@ -76,7 +95,7 @@ jobs:
         name: Conda Examples
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v3
+        -   uses: actions/checkout@v4
         -   name: "Main Script"
             run: |
                 grep -v symengine .test-conda-env-py3.yml > .test-conda-env.yml
@@ -94,7 +113,7 @@ jobs:
         name: Tests for downstream project ${{ matrix.downstream_project }}
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v3
+        -   uses: actions/checkout@v4
         -   name: "Main Script"
             env:
                 DOWNSTREAM_PROJECT: ${{ matrix.downstream_project }}

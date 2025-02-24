@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2017 Andreas Kloeckner"
 
 __license__ = """
@@ -22,7 +25,9 @@ THE SOFTWARE.
 
 import numpy as np
 import numpy.linalg as la
+
 from pytools import memoize_method
+
 
 __doc__ = """
 .. autoclass:: CalculusPatch
@@ -119,8 +124,9 @@ class CalculusPatch:
             a high-order interpolation basis on the :py:attr:`points`.
         """
 
+        from scipy.special import eval_chebyt  # pylint: disable=no-name-in-module
+
         from pytools import indices_in_shape
-        from scipy.special import eval_chebyt   # pylint: disable=no-name-in-module
 
         def eval_basis(ind, x):
             result = 1
@@ -173,7 +179,7 @@ class CalculusPatch:
         """
 
         from numbers import Number
-        if isinstance(f_values, (np.number, Number)):
+        if isinstance(f_values, np.number | Number):
             # constants differentiate to 0
             return 0
 
@@ -297,7 +303,7 @@ def frequency_domain_maxwell(cpatch, e, h, k):
 
     # https://en.wikipedia.org/w/index.php?title=Maxwell%27s_equations&oldid=798940325#Macroscopic_formulation
     # assumed time dependence exp(-1j*omega*t)
-    # Agrees with Jackson, Third Ed., (8.16)
+    # This agrees with Jackson, Third Ed., (8.16)
     resid_faraday = cpatch.curl(e) - 1j * omega * b
     resid_ampere = cpatch.curl(h) + 1j * omega * d
 

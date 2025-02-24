@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -20,42 +23,45 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import sys
-import pytest
+import logging
 from functools import partial
 
 import numpy as np
 import numpy.linalg as la
+import pytest
 
-from pytools.obj_array import make_obj_array
-from pytools.convergence import PConvergenceVerifier
 from arraycontext import pytest_generate_tests_for_array_contexts
-from sumpy.array_context import (                                 # noqa: F401
-        PytestPyOpenCLArrayContextFactory, _acf)
+from pytools.convergence import PConvergenceVerifier
+from pytools.obj_array import make_obj_array
 
 import sumpy.symbolic as sym
-from sumpy.expansion.multipole import (
-    VolumeTaylorMultipoleExpansion,
-    H2DMultipoleExpansion,
-    VolumeTaylorMultipoleExpansionBase,
-    LinearPDEConformingVolumeTaylorMultipoleExpansion)
-from sumpy.expansion.local import (
-    VolumeTaylorLocalExpansion,
-    H2DLocalExpansion,
-    LinearPDEConformingVolumeTaylorLocalExpansion)
-from sumpy.expansion.m2l import (NonFFTM2LTranslationClassFactory,
-    FFTM2LTranslationClassFactory)
-from sumpy.kernel import (
-    LaplaceKernel,
-    HelmholtzKernel,
-    BiharmonicKernel,
-    StokesletKernel,
-    AxisTargetDerivative,
-    DirectionalSourceDerivative)
-
 import sumpy.toys as t
+from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
+from sumpy.expansion.local import (
+    H2DLocalExpansion,
+    LinearPDEConformingVolumeTaylorLocalExpansion,
+    VolumeTaylorLocalExpansion,
+)
+from sumpy.expansion.m2l import (
+    FFTM2LTranslationClassFactory,
+    NonFFTM2LTranslationClassFactory,
+)
+from sumpy.expansion.multipole import (
+    H2DMultipoleExpansion,
+    LinearPDEConformingVolumeTaylorMultipoleExpansion,
+    VolumeTaylorMultipoleExpansion,
+    VolumeTaylorMultipoleExpansionBase,
+)
+from sumpy.kernel import (
+    AxisTargetDerivative,
+    BiharmonicKernel,
+    DirectionalSourceDerivative,
+    HelmholtzKernel,
+    LaplaceKernel,
+    StokesletKernel,
+)
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 pytest_generate_tests = pytest_generate_tests_for_array_contexts([
@@ -291,7 +297,8 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
             ]
     expn = expn_class(knl, order=order)
 
-    from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P
+    from sumpy import P2P, E2PFromSingleBox, P2EFromSingleBox
+
     p2e = P2EFromSingleBox(expn, kernels=[knl])
     e2p = E2PFromSingleBox(expn, kernels=target_kernels)
     p2p = P2P(target_kernels, exclude_self=False)
@@ -551,7 +558,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
     del eval_offset
 
-    if knl.dim == 2:
+    if knl.dim == 2:  # noqa: SIM108
         orders = [2, 3, 4]
     else:
         orders = [3, 4, 5]
@@ -666,14 +673,14 @@ def test_m2m_and_l2l_exprs_simpler(base_knl, local_expn_class, mpole_expn_class,
     slower_m2m = mpole_expn.translate_from(mpole_expn, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, _fast_version=False)
 
-    for expr1, expr2 in zip(faster_m2m, slower_m2m):
+    for expr1, expr2 in zip(faster_m2m, slower_m2m, strict=True):
         assert float(sym.doit(expr1 - expr2).expand()) == 0.0
 
     faster_l2l = local_expn.translate_from(local_expn, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale)
     slower_l2l = local_expn.translate_from(local_expn, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, _fast_version=False)
-    for expr1, expr2 in zip(faster_l2l, slower_l2l):
+    for expr1, expr2 in zip(faster_l2l, slower_l2l, strict=True):
         assert float(sym.doit(expr1 - expr2).expand()) == 0.0
 
 # }}}
@@ -706,7 +713,7 @@ def _m2l_translate_simple(tgt_expansion, src_expansion, src_coeff_exprs, src_rsc
         local_result = []
         for coeff, term in zip(
                 src_coeff_exprs,
-                src_expansion.get_coefficient_identifiers()):
+                src_expansion.get_coefficient_identifiers(), strict=True):
 
             kernel_deriv = taker.diff(add_mi(deriv, term)) / src_rscale**sum(deriv)
 
@@ -744,7 +751,7 @@ def test_m2l_toeplitz():
         src_rscale, dvec, tgt_rscale, sac=None)
 
     replace_dict = {d: rng.random() for d in dvec}
-    for sym_a, sym_b in zip(expected_output, actual_output):
+    for sym_a, sym_b in zip(expected_output, actual_output, strict=True):
         num_a = sym_a.xreplace(replace_dict)
         num_b = sym_b.xreplace(replace_dict)
 
@@ -795,7 +802,7 @@ def test_m2m_compressed_error_helmholtz(actx_factory, dim, order):
         furthest_source = np.max(np.abs(sources - mpole_center))
         m2m_vals = [0, 0]
         for i, (mpole_expn_class, local_expn_class) in \
-                enumerate(zip(mpole_expn_classes, local_expn_classes)):
+                enumerate(zip(mpole_expn_classes, local_expn_classes, strict=True)):
             tctx = toys.ToyContext(
                 knl,
                 extra_kernel_kwargs=extra_kernel_kwargs,
@@ -832,6 +839,8 @@ def test_m2m_compressed_error_helmholtz(actx_factory, dim, order):
 # $ python test_kernels.py 'test_p2p(_acf, True)'
 
 if __name__ == "__main__":
+    import sys
+
     if len(sys.argv) > 1:
         exec(sys.argv[1])
     else:

@@ -1,3 +1,8 @@
+# mypy: disallow-untyped-defs
+
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2019 Isuru Fernando"
 
 __license__ = """
@@ -20,14 +25,21 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from collections import namedtuple
-from pyrsistent import pmap
-from pytools import memoize
-from sumpy.tools import add_mi
-from itertools import accumulate
-import sumpy.symbolic as sym
 import logging
-from typing import List
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from itertools import accumulate
+
+import numpy as np
+import sympy as sp
+import sympy.polys.agca.modules as sp_modules
+from constantdict import constantdict
+
+from pytools import memoize
+
+import sumpy.symbolic as sym
+from sumpy.tools import add_mi
+
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +53,31 @@ Differential operator interface
 .. autofunction:: as_scalar_pde
 """
 
-DerivativeIdentifier = namedtuple("DerivativeIdentifier", ["mi", "vec_idx"])
+
+@dataclass(frozen=True)
+class DerivativeIdentifier:
+    """
+    .. autoattribute:: mi
+    .. autoattribute: vec_idx
+    """
+
+    mi: tuple[int, ...]
+    """
+    Multi-index of the derivative being taken, a tuple with a number of entries
+    corresponding to the dimension.
+    """
+
+    vec_idx: int
+    """
+    In a PDE system of :math:`n` variables, an integer between :math:`0` and :math:`n-1`
+    indicating which variable is being differentiated.
+    """
 
 
+Number_ish = int | float | complex | np.number
+
+
+@dataclass(frozen=True, eq=True)
 class LinearPDESystemOperator:
     r"""
     Represents a constant-coefficient linear differential operator of a
@@ -52,85 +86,91 @@ class LinearPDESystemOperator:
     :class:`DerivativeIdentifier` to the coefficient. This object is immutable.
     Optionally supports a time variable as the last variable in the multi-index
     of the :class:`DerivativeIdentifier`.
+
+    .. autoattribute:: dim
+    .. autoattribute:: eqs
+
+    .. autoattribute:: order
+    .. autoattribute:: total_dims
+    .. automethod:: to_sym
     """
-    def __init__(self, dim, *eqs):
-        """
-        :arg dim: Number of spatial dimensions of the LinearPDESystemOperator
-        :arg eqs: A list of dictionaries mapping a :class:`DerivativeIdentifier`
-                  to a coefficient.
-        """
-        self.dim = dim
-        self.eqs = tuple(eqs)
 
-    def __eq__(self, other):
-        return self.dim == other.dim and self.eqs == other.eqs
+    dim: int
+    eqs: tuple[Mapping[DerivativeIdentifier, sp.Expr], ...]
 
-    def __hash__(self):
-        return hash((self.dim, self.eqs))
+    if __debug__:
+        def __post_init__(self) -> None:
+            hash(self)
 
     @property
-    def order(self):
+    def order(self) -> int:
         deg = 0
         for eq in self.eqs:
-            deg = max(deg, max(sum(ident.mi) for ident in eq.keys()))
+            deg = max(deg, max(sum(ident.mi) for ident in eq))
         return deg
 
-    def __mul__(self, param):
-        eqs = []
+    def __mul__(self, param: Number_ish) -> LinearPDESystemOperator:
+        eqs: list[Mapping[DerivativeIdentifier, sp.Expr]] = []
         for eq in self.eqs:
             deriv_ident_to_coeff = {}
             for k, v in eq.items():
                 deriv_ident_to_coeff[k] = v * param
-            eqs.append(pmap(deriv_ident_to_coeff))
-        return LinearPDESystemOperator(self.dim, *eqs)
+            eqs.append(constantdict(deriv_ident_to_coeff))
+
+        return LinearPDESystemOperator(self.dim, tuple(eqs))
 
     __rmul__ = __mul__
 
-    def __add__(self, other_diff_op):
+    def __add__(
+                self, other_diff_op: LinearPDESystemOperator
+            ) -> LinearPDESystemOperator:
         assert self.dim == other_diff_op.dim
         assert len(self.eqs) == len(other_diff_op.eqs)
-        eqs = []
-        for eq, other_eq in zip(self.eqs, other_diff_op.eqs):
+
+        eqs: list[Mapping[DerivativeIdentifier, sp.Expr]] = []
+        for eq, other_eq in zip(self.eqs, other_diff_op.eqs, strict=True):
             res = dict(eq)
             for k, v in other_eq.items():
                 if k in res:
                     res[k] += v
                 else:
                     res[k] = v
-            eqs.append(pmap(res))
-        return LinearPDESystemOperator(self.dim, *eqs)
+            eqs.append(constantdict(res))
+
+        return LinearPDESystemOperator(self.dim, tuple(eqs))
 
     __radd__ = __add__
 
-    def __sub__(self, other_diff_op):
+    def __sub__(
+                self, other_diff_op: LinearPDESystemOperator
+            ) -> LinearPDESystemOperator:
         return self + (-1)*other_diff_op
 
-    def __repr__(self):
-        return f"LinearPDESystemOperator({self.dim}, {repr(self.eqs)})"
+    def __repr__(self) -> str:
+        return f"LinearPDESystemOperator({self.dim}, {self.eqs!r})"
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int | slice) -> LinearPDESystemOperator:
         item = self.eqs.__getitem__(idx)
-        if not isinstance(item, tuple):
-            item = (item,)
-        return LinearPDESystemOperator(self.dim, *item)
+        eqs = item if isinstance(item, tuple) else (item,)
+        return LinearPDESystemOperator(self.dim, eqs)
 
     @property
-    def total_dims(self):
+    def total_dims(self) -> int:
         """
         Returns the total number of dimensions including time
         """
         did = next(iter(self.eqs[0].keys()))
         return len(did.mi)
 
-    def to_sym(self, fnames=None):
-        from sumpy.symbolic import make_sym_vector, Function
+    def to_sym(self, fnames: Sequence[str] | None = None) -> list[sp.Expr]:
+        from sumpy.symbolic import Function, make_sym_vector
         x = list(make_sym_vector("x", self.dim))
         x += list(make_sym_vector("t", self.total_dims - self.dim))
 
         if fnames is None:
             noutputs = 0
             for eq in self.eqs:
-                for deriv_ident in eq.keys():
+                for deriv_ident in eq:
                     noutputs = max(noutputs, deriv_ident.vec_idx)
             fnames = [f"f{i}" for i in range(noutputs+1)]
 
@@ -138,7 +178,7 @@ class LinearPDESystemOperator:
 
         res = []
         for eq in self.eqs:
-            sym_eq = 0
+            sym_eq: sp.Expr = sp.sympify(0)
             for deriv_ident, coeff in eq.items():
                 expr = funcs[deriv_ident.vec_idx]
                 for i, val in enumerate(deriv_ident.mi):
@@ -149,7 +189,10 @@ class LinearPDESystemOperator:
         return res
 
 
-def convert_module_to_matrix(module, generators):
+def convert_module_to_matrix(
+            module: Sequence[sp_modules.FreeModuleElement],
+            generators: Sequence[sp.Expr]
+        ) -> sp.Matrix:
     import sympy
     # poly is a sympy DMP (dense multi-variate polynomial)
     # type and we convert it to a sympy expression because
@@ -160,15 +203,14 @@ def convert_module_to_matrix(module, generators):
 
 
 @memoize
-def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> \
-        List[LinearPDESystemOperator]:
+def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> list[LinearPDESystemOperator]:
     import sympy
     from sympy.polys.orderings import grevlex
     gens = [sympy.symbols(f"_x{i}") for i in range(pde.dim)]
     gens += [sympy.symbols(f"_t{i}") for i in range(pde.total_dims - pde.dim)]
 
     max_vec_idx = max(deriv_ident.vec_idx for eq in pde.eqs
-                      for deriv_ident in eq.keys())
+                      for deriv_ident in eq)
 
     pde_system_mat = sympy.zeros(len(pde.eqs), max_vec_idx + 1)
     for row, eq in enumerate(pde.eqs):
@@ -194,7 +236,10 @@ def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> \
     # for each column we calculate the intersection of the left modules and the
     # right modules. This requires only $3*(n-2)$ work.
 
-    def intersect(a, b):
+    def intersect(
+                a: sp_modules.SubModulePolyRing,
+                b: sp_modules.SubModulePolyRing,
+            ) -> sp_modules.SubModulePolyRing:
         return a.intersect(b)
 
     left_intersections = list(accumulate(column_syzygy_modules, func=intersect))
@@ -225,9 +270,9 @@ def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> \
         scalar_pde = min(scalar_pdes, key=lambda x: x.degree()).monic()
         pde_dict = {
             DerivativeIdentifier(mi, 0): sym.sympify(coeff.as_expr().simplify()) for
-            (mi, coeff) in zip(scalar_pde.monoms(), scalar_pde.coeffs())
+            (mi, coeff) in zip(scalar_pde.monoms(), scalar_pde.coeffs(), strict=True)
         }
-        results.append(LinearPDESystemOperator(pde.dim, pmap(pde_dict)))
+        results.append(LinearPDESystemOperator(pde.dim, (constantdict(pde_dict),)))
 
     return results
 
@@ -293,20 +338,21 @@ def as_scalar_pde(pde: LinearPDESystemOperator, comp_idx: int) \
     """
     indices = set()
     for eq in pde.eqs:
-        for deriv_ident in eq.keys():
+        for deriv_ident in eq:
             indices.add(deriv_ident.vec_idx)
 
     # this is already a scalar pde
-    if len(indices) == 1 and list(indices)[0] == comp_idx:
+    if len(indices) == 1 and next(iter(indices)) == comp_idx:
         return pde
 
     return _get_all_scalar_pdes(pde)[comp_idx]
 
 
-def laplacian(diff_op):
+def laplacian(diff_op: LinearPDESystemOperator) -> LinearPDESystemOperator:
     dim = diff_op.dim
-    empty = [pmap()] * len(diff_op.eqs)
-    res = LinearPDESystemOperator(dim, *empty)
+    empty: tuple[Mapping[DerivativeIdentifier, sp.Expr], ...] = (
+        (constantdict(),) * len(diff_op.eqs))
+    res = LinearPDESystemOperator(dim, empty)
     for j in range(dim):
         mi = [0]*diff_op.total_dims
         mi[j] = 2
@@ -314,28 +360,33 @@ def laplacian(diff_op):
     return res
 
 
-def diff(diff_op, mi):
-    eqs = []
+def diff(
+            diff_op: LinearPDESystemOperator, mi: tuple[int, ...]
+        ) -> LinearPDESystemOperator:
+    eqs: list[Mapping[DerivativeIdentifier, sp.Expr]] = []
     for eq in diff_op.eqs:
         res = {}
         for deriv_ident, v in eq.items():
             new_mi = add_mi(deriv_ident.mi, mi)
             res[DerivativeIdentifier(new_mi, deriv_ident.vec_idx)] = v
-        eqs.append(pmap(res))
-    return LinearPDESystemOperator(diff_op.dim, *eqs)
+        eqs.append(constantdict(res))
+
+    return LinearPDESystemOperator(diff_op.dim, tuple(eqs))
 
 
-def divergence(diff_op):
+def divergence(diff_op: LinearPDESystemOperator) -> LinearPDESystemOperator:
     assert len(diff_op.eqs) == diff_op.dim
-    res = LinearPDESystemOperator(diff_op.dim, pmap())
+
+    res = LinearPDESystemOperator(diff_op.dim, (constantdict(),))
     for i in range(diff_op.dim):
         mi = [0]*diff_op.total_dims
         mi[i] = 1
         res += diff(diff_op[i], tuple(mi))
+
     return res
 
 
-def gradient(diff_op):
+def gradient(diff_op: LinearPDESystemOperator) -> LinearPDESystemOperator:
     assert len(diff_op.eqs) == 1
     eqs = []
     dim = diff_op.dim
@@ -343,29 +394,28 @@ def gradient(diff_op):
         mi = [0]*diff_op.total_dims
         mi[i] = 1
         eqs.append(diff(diff_op, tuple(mi)).eqs[0])
-    return LinearPDESystemOperator(dim, *eqs)
+    return LinearPDESystemOperator(dim, tuple(eqs))
 
 
-def curl(pde):
-    assert len(pde.eqs) == 3
-    assert pde.dim == 3
+def curl(diff_op: LinearPDESystemOperator) -> LinearPDESystemOperator:
+    assert len(diff_op.eqs) == 3
+    assert diff_op.dim == 3
     eqs = []
     mis = []
     for i in range(3):
-        mi = [0]*pde.total_dims
+        mi = [0]*diff_op.total_dims
         mi[i] = 1
         mis.append(tuple(mi))
 
     for i in range(3):
-        new_pde = diff(pde[(i+2) % 3], mis[(i+1) % 3]) - \
-            diff(pde[(i+1) % 3], mis[(i+2) % 3])
+        new_pde = diff(diff_op[(i+2) % 3], mis[(i+1) % 3]) - \
+            diff(diff_op[(i+1) % 3], mis[(i+2) % 3])
         eqs.append(new_pde.eqs[0])
 
-    return LinearPDESystemOperator(pde.dim, *eqs)
+    return LinearPDESystemOperator(diff_op.dim, tuple(eqs))
 
 
-def concat(*ops):
-    ops = list(ops)
+def concat(*ops: LinearPDESystemOperator) -> LinearPDESystemOperator:
     assert len(ops) >= 1
     dim = ops[0].dim
     for op in ops:
@@ -373,10 +423,12 @@ def concat(*ops):
     eqs = list(ops[0].eqs)
     for op in ops[1:]:
         eqs.extend(list(op.eqs))
-    return LinearPDESystemOperator(dim, *eqs)
+    return LinearPDESystemOperator(dim, tuple(eqs))
 
 
-def make_identity_diff_op(ninput, noutput=1, time_dependent=False):
+def make_identity_diff_op(
+            ninput: int, noutput: int = 1, time_dependent: bool = False
+        ) -> LinearPDESystemOperator:
     """
     Returns the identity as a linear PDE system operator.
     if *include_time* is true, then the last dimension of the
@@ -386,9 +438,10 @@ def make_identity_diff_op(ninput, noutput=1, time_dependent=False):
     :arg noutput: number of output values of function
     :arg time_dependent: include time as a dimension
     """
-    if time_dependent:
+    if time_dependent:  # noqa: SIM108
         mi = tuple([0]*(ninput + 1))
     else:
         mi = tuple([0]*ninput)
-    eqs = [pmap({DerivativeIdentifier(mi, i): 1}) for i in range(noutput)]
-    return LinearPDESystemOperator(ninput, *eqs)
+    return LinearPDESystemOperator(ninput, tuple(
+            constantdict({DerivativeIdentifier(mi, i): sp.sympify(1)})
+            for i in range(noutput)))

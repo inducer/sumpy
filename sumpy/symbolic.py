@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -34,12 +37,17 @@ __doc__ = """
 """
 
 
-import numpy as np
-from pymbolic.mapper import IdentityMapper as IdentityMapperBase
-import pymbolic.primitives as prim
-import math
-
 import logging
+import math
+from typing import TYPE_CHECKING, ClassVar
+
+import numpy as np
+import sympy as sp
+
+import pymbolic.primitives as prim
+from pymbolic.mapper import IdentityMapper as IdentityMapperBase
+
+
 logger = logging.getLogger(__name__)
 
 USE_SYMENGINE = False
@@ -85,14 +93,18 @@ _find_symbolic_backend()
 
 if USE_SYMENGINE:
     import symengine as sym
+
     from pymbolic.interop.symengine import (
         PymbolicToSymEngineMapper as PymbolicToSympyMapperBase,
-        SymEngineToPymbolicMapper as SympyToPymbolicMapperBase)
+        SymEngineToPymbolicMapper as SympyToPymbolicMapperBase,
+    )
 else:
     import sympy as sym
-    from pymbolic.interop.sympy import (
+
+    from pymbolic.interop.sympy import (  # type: ignore[assignment]
         PymbolicToSympyMapper as PymbolicToSympyMapperBase,
-        SympyToPymbolicMapper as SympyToPymbolicMapperBase)
+        SympyToPymbolicMapper as SympyToPymbolicMapperBase,
+    )
 
 # Symbolic API common to SymEngine and sympy.
 # Before adding a function here, make sure it's present in both modules.
@@ -128,14 +140,14 @@ def _coeff_isneg(a):
     return a.is_Number and a.is_negative
 
 
-if USE_SYMENGINE:
-    def UnevaluatedExpr(x):  # noqa: F811, N802
+if TYPE_CHECKING or USE_SYMENGINE:
+    def UnevaluatedExpr(x):  # noqa: N802
         return x
 else:
     try:
         from sympy import UnevaluatedExpr
     except ImportError:
-        def UnevaluatedExpr(x):  # noqa: F811, N802
+        def UnevaluatedExpr(x):  # noqa: N802
             return x
 
 
@@ -192,7 +204,7 @@ def _get_assignments_in_maxima(assignments, prefix=""):
                 assignments[name].subs(prefix_subst_dict))))))
         written_assignments.add(name)
 
-    for name in assignments.keys():
+    for name in assignments:
         if name not in written_assignments:
             write_assignment(name)
 
@@ -264,23 +276,30 @@ def find_power_of(base, prod):
     return result[power]
 
 
+@prim.expr_dataclass()
 class SpatialConstant(prim.Variable):
-    """A symbolic constant to represent a symbolic variable that
-    is spatially constant, like for example the wave-number :math:`k`
-    in the setting of a constant-coefficient Helmholtz problem.
-    For use in :attr:`sumpy.kernel.ExpressionKernel.expression`.
-    Any variable occurring there that is not a :class:`SpatialConstant`
+    """A symbolic constant to represent a symbolic variable that is spatially constant.
+
+    For example the wave-number :math:`k` in the setting of a constant-coefficient
+    Helmholtz problem. For use in :attr:`sumpy.kernel.ExpressionKernel.expression`.
+    Any variable occurring there that is not a :class:`~sumpy.symbolic.SpatialConstant`
     is assumed to have a spatial dependency.
+
+    .. autoattribute:: prefix
+    .. automethod:: as_sympy
+    .. automethod:: from_sympy
     """
 
-    prefix = "_spatial_constant_"
-    mapper_method = "map_spatial_constant"
+    prefix: ClassVar[str] = "_spatial_constant_"
+    """Prefix used in code generation for variables of this type."""
 
-    def as_sympy(self):
+    def as_sympy(self) -> sp.Symbol:
+        """Convert variable to a :mod:`sympy` expression."""
         return sym.Symbol(f"{self.prefix}{self.name}")
 
     @classmethod
-    def from_sympy(cls, expr):
+    def from_sympy(cls, expr: sp.Symbol) -> SpatialConstant:
+        """Convert :mod:`sympy` expression to a constant."""
         return cls(expr.name[len(cls.prefix):])
 
 
@@ -305,8 +324,9 @@ class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
         num_args = []
         den_args = []
         for child in expr.args:
-            if isinstance(child, Pow) and isinstance(child.exp, Integer) \
-                    and child.exp < 0:
+            if (isinstance(child, Pow)
+                    and isinstance(child.exp, Integer)
+                    and child.exp < 0):
                 den_args.append(self.rec(child.base)**(-self.rec(child.exp)))
             else:
                 num_args.append(self.rec(child))
@@ -372,7 +392,7 @@ class Hankel1(_BesselOrHankel):
 _SympyBesselJ = BesselJ
 _SympyHankel1 = Hankel1
 
-if USE_SYMENGINE:
+if not TYPE_CHECKING and USE_SYMENGINE:
     def BesselJ(*args):   # noqa: N802  # pylint: disable=function-redefined
         return sym.sympify(_SympyBesselJ(*args))
 

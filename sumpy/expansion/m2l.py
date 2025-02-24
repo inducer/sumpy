@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2022 Isuru Fernando"
 
 __license__ = """
@@ -20,17 +23,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from abc import ABC, abstractmethod
-from typing import Any, ClassVar, Tuple
-
-import pymbolic
-import loopy as lp
-import numpy as np
-import sumpy.symbolic as sym
-from sumpy.tools import (
-        add_to_sac, matvec_toeplitz_upper_triangular)
-
 import logging
+from abc import ABC, abstractmethod
+from typing import Any, ClassVar
+
+import numpy as np
+
+import loopy as lp
+import pymbolic
+
+import sumpy.symbolic as sym
+from sumpy.tools import add_to_sac, matvec_toeplitz_upper_triangular
+
+
 logger = logging.getLogger(__name__)
 
 __doc__ = """
@@ -69,8 +74,10 @@ class NonFFTM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
         """Returns a subclass of :class:`M2LTranslationBase` suitable for
         *base_kernel* and *local_expansion_class*.
         """
-        from sumpy.expansion.local import (VolumeTaylorLocalExpansionBase,
-            _FourierBesselLocalExpansion)
+        from sumpy.expansion.local import (
+            VolumeTaylorLocalExpansionBase,
+            _FourierBesselLocalExpansion,
+        )
         if issubclass(local_expansion_class, VolumeTaylorLocalExpansionBase):
             return VolumeTaylorM2LTranslation
         elif issubclass(local_expansion_class, _FourierBesselLocalExpansion):
@@ -89,8 +96,10 @@ class FFTM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
         """Returns a subclass of :class:`M2LTranslationBase` suitable for
         *base_kernel* and *local_expansion_class*.
         """
-        from sumpy.expansion.local import (VolumeTaylorLocalExpansionBase,
-            _FourierBesselLocalExpansion)
+        from sumpy.expansion.local import (
+            VolumeTaylorLocalExpansionBase,
+            _FourierBesselLocalExpansion,
+        )
         if issubclass(local_expansion_class, VolumeTaylorLocalExpansionBase):
             return VolumeTaylorM2LWithFFT
         elif issubclass(local_expansion_class, _FourierBesselLocalExpansion):
@@ -104,8 +113,10 @@ class DefaultM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
     """An implementation of :class:`M2LTranslationClassFactoryBase` that gives the
     'best known' translation type for each kernel and local expansion class"""
     def get_m2l_translation_class(self, base_kernel, local_expansion_class):
-        from sumpy.expansion.local import (VolumeTaylorLocalExpansionBase,
-            _FourierBesselLocalExpansion)
+        from sumpy.expansion.local import (
+            VolumeTaylorLocalExpansionBase,
+            _FourierBesselLocalExpansion,
+        )
         if issubclass(local_expansion_class, VolumeTaylorLocalExpansionBase):
             return VolumeTaylorM2LWithFFT
         elif issubclass(local_expansion_class, _FourierBesselLocalExpansion):
@@ -156,7 +167,7 @@ class M2LTranslationBase(ABC):
             f"{src_expansion} to {tgt_expansion} using {self} is not implemented.")
 
     def translation_classes_dependent_data(self, tgt_expansion, src_expansion,
-            src_rscale, dvec, sac) -> Tuple[Any]:
+            src_rscale, dvec, sac) -> tuple[Any, ...]:
         """Return an iterable of expressions that needs to be precomputed
         for multipole-to-local translations that depend only on the
         distance between the multipole center and the local center which
@@ -307,6 +318,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         latter.
         """
         from pytools import generate_nonnegative_integer_tuples_below as gnitb
+
         from sumpy.tools import add_mi
 
         dim = tgt_expansion.dim
@@ -408,7 +420,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
 
         # Add zero values needed to make the translation matrix circulant
         derivatives_full = [0]*len(circulant_matrix_mis)
-        for expr, mi in zip(vector, needed_vector_terms):
+        for expr, mi in zip(vector, needed_vector_terms, strict=True):
             derivatives_full[circulant_matrix_ident_to_index[mi]] = expr
 
         return derivatives_full
@@ -425,7 +437,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         input_vector = [0] * len(circulant_matrix_mis)
         for coeff, term in zip(
                 src_coeff_exprs,
-                src_expansion.get_coefficient_identifiers()):
+                src_expansion.get_coefficient_identifiers(), strict=True):
             input_vector[circulant_matrix_ident_to_index[term]] = \
                     add_to_sac(sac, coeff)
 
@@ -440,7 +452,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
     def loopy_preprocess_multipole(self, tgt_expansion, src_expansion,
             result_dtype):
 
-        circulant_matrix_mis, _, max_mi = \
+        _circulant_matrix_mis, _, max_mi = \
             self._translation_classes_dependent_data_mis(tgt_expansion,
                 src_expansion)
 
@@ -505,8 +517,9 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
                     pymbolic.primitives.Comparison(sum(v), "<=", order),
                     pymbolic.primitives.Comparison(v[slowest_idx], "<", c),
                 ]),
-                depends_on=frozenset([f"set_x{i}" for i in range(dim)]
-                    + ["input_copy"]),
+                happens_after=frozenset(
+                    [f"set_x{i}" for i in range(dim)] + ["input_copy"]
+                ),
             )
         ]
 
@@ -555,7 +568,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
 
     def loopy_postprocess_local(self, tgt_expansion, src_expansion,
             result_dtype):
-        circulant_matrix_mis, needed_vector_terms, _ = \
+        circulant_matrix_mis, _needed_vector_terms, _ = \
             self._translation_classes_dependent_data_mis(tgt_expansion,
                 src_expansion)
         circulant_matrix_ident_to_index = {ident: i for i, ident in
@@ -587,13 +600,13 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
                 assignee=rscale_arr[0],
                 expression=1,
                 id="rscale_arr0",
-                depends_on="rscale_ratio",
+                happens_after=frozenset(["rscale_ratio"]),
             ),
             lp.Assignment(
                 assignee=rscale_arr[iorder],
                 expression=rscale_arr[iorder - 1]*rscale_ratio,
                 id="rscale_arr",
-                depends_on="rscale_arr0",
+                happens_after=frozenset(["rscale_arr0"]),
             ),
         ]
 
@@ -633,7 +646,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
                 expression=(result_func(input_coeffs[src_idx_sym[output_icoeff_sym]])
                     * rscale_arr[rscale_idx_arr_sym[output_icoeff_sym]]),
                 id="coeff_insn",
-                depends_on=frozenset(["rscale_arr"]),
+                happens_after=frozenset(["rscale_arr"]),
             )
         ]
 
@@ -748,7 +761,7 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
         assert translation_classes_dependent_data
         derivatives = translation_classes_dependent_data
         assert len(src_coeff_exprs) == len(derivatives)
-        result = [a*b for a, b in zip(derivatives, src_coeff_exprs)]
+        result = [a*b for a, b in zip(derivatives, src_coeff_exprs, strict=True)]
         return result
 
     def translation_classes_dependent_data(self, tgt_expansion, src_expansion,
@@ -837,7 +850,7 @@ class FourierBesselM2LTranslation(M2LTranslationBase):
     def translation_classes_dependent_data(self, tgt_expansion, src_expansion,
             src_rscale, dvec, sac):
 
-        from sumpy.symbolic import sym_real_norm_2, Hankel1
+        from sumpy.symbolic import Hankel1, sym_real_norm_2
 
         dvec_len = sym_real_norm_2(dvec)
         new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
@@ -969,7 +982,7 @@ class FourierBesselM2LWithFFT(FourierBesselM2LWithPreprocessedMultipoles):
         assert translation_classes_dependent_data is not None
         derivatives = translation_classes_dependent_data
         assert len(derivatives) == len(src_coeff_exprs)
-        return [a * b for a, b in zip(derivatives, src_coeff_exprs)]
+        return [a * b for a, b in zip(derivatives, src_coeff_exprs, strict=True)]
 
     def loopy_translate(self, tgt_expansion, src_expansion):
         raise NotImplementedError
@@ -1042,7 +1055,7 @@ def loopy_translation_classes_dependent_data(tgt_expansion, src_expansion,
     vec_name = "m2l_translation_classes_dependent_data"
 
     tgt_coeff_names = [
-            sac.assign_unique("m2l_translation_classes_dependent_data%d" % i,
+            sac.assign_unique(f"m2l_translation_classes_dependent_data{i}",
                 coeff_i)
             for i, coeff_i in enumerate(derivatives)]
     sac.run_global_cse()
@@ -1058,7 +1071,7 @@ def loopy_translation_classes_dependent_data(tgt_expansion, src_expansion,
             )
 
     data = pymbolic.var("m2l_translation_classes_dependent_data")
-    depends_on = None
+    happens_after = None
     for i in range(len(insns)):
         insn = insns[i]
         if isinstance(insn, lp.Assignment) and \
@@ -1068,9 +1081,9 @@ def loopy_translation_classes_dependent_data(tgt_expansion, src_expansion,
                 assignee=data[idx],
                 expression=insn.expression,
                 id=f"data_{idx}",
-                depends_on=depends_on,
+                happens_after=happens_after,
             )
-            depends_on = frozenset([f"data_{idx}"])
+            happens_after = frozenset([f"data_{idx}"])
 
     knl = lp.make_function([], insns,
         kernel_data=[

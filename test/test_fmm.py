@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2013 Andreas Kloeckner"
 
 __license__ = """
@@ -20,39 +23,34 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import pytest
-import sys
+import logging
 import os
+import sys
 from functools import partial
 
 import numpy as np
 import numpy.linalg as la
+import pytest
 
 from arraycontext import pytest_generate_tests_for_array_contexts
-from sumpy.array_context import (                                 # noqa: F401
-        PytestPyOpenCLArrayContextFactory, _acf)
 
-from sumpy.kernel import (
-    LaplaceKernel,
-    HelmholtzKernel,
-    YukawaKernel,
-    BiharmonicKernel)
-from sumpy.expansion.multipole import (
-    VolumeTaylorMultipoleExpansion,
-    H2DMultipoleExpansion,
-    Y2DMultipoleExpansion,
-    LinearPDEConformingVolumeTaylorMultipoleExpansion)
+from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
 from sumpy.expansion.local import (
-    VolumeTaylorLocalExpansion,
     H2DLocalExpansion,
+    LinearPDEConformingVolumeTaylorLocalExpansion,
+    VolumeTaylorLocalExpansion,
     Y2DLocalExpansion,
-    LinearPDEConformingVolumeTaylorLocalExpansion)
-from sumpy.fmm import (
-    SumpyTreeIndependentDataForWrangler,
-    SumpyExpansionWrangler)
+)
+from sumpy.expansion.multipole import (
+    H2DMultipoleExpansion,
+    LinearPDEConformingVolumeTaylorMultipoleExpansion,
+    VolumeTaylorMultipoleExpansion,
+    Y2DMultipoleExpansion,
+)
+from sumpy.fmm import SumpyExpansionWrangler, SumpyTreeIndependentDataForWrangler
+from sumpy.kernel import BiharmonicKernel, HelmholtzKernel, LaplaceKernel, YukawaKernel
 
 
-import logging
 logger = logging.getLogger(__name__)
 
 pytest_generate_tests = pytest_generate_tests_for_array_contexts([
@@ -392,7 +390,7 @@ def test_unified_single_and_double(actx_factory, visualize=False):
     dtype = np.float64
     order = 3
 
-    from sumpy.kernel import DirectionalSourceDerivative, AxisTargetDerivative
+    from sumpy.kernel import AxisTargetDerivative, DirectionalSourceDerivative
 
     deriv_knl = DirectionalSourceDerivative(knl, "dir_vec")
 
@@ -404,7 +402,8 @@ def test_unified_single_and_double(actx_factory, visualize=False):
     dir_vec = actx.from_numpy(np.vstack([np.cos(alpha), np.sin(alpha)]))
 
     results = []
-    for source_kernels, strength_usage in zip(source_kernel_vecs, strength_usages):
+    for source_kernels, strength_usage in zip(
+            source_kernel_vecs, strength_usages, strict=True):
         source_extra_kwargs = {}
         if deriv_knl in source_kernels:
             source_extra_kwargs["dir_vec"] = actx.from_numpy(dir_vec)
@@ -440,12 +439,13 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory, use_fft, visualize=False)
         logging.basicConfig(level=logging.INFO)
 
     import pyopencl as cl
+
     from sumpy.array_context import PyOpenCLArrayContext
 
     ctx = ctx_factory()
     queue = cl.CommandQueue(ctx,
         properties=cl.command_queue_properties.PROFILING_ENABLE)
-    actx = PyOpenCLArrayContext(queue, force_device_scalars=True)
+    actx = PyOpenCLArrayContext(queue)
 
     nsources = 500
     dtype = np.float64
@@ -492,7 +492,7 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory, use_fft, visualize=False)
             fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order)
     from boxtree.fmm import drive_fmm
 
-    pot, = drive_fmm(actx, wrangler, (weights,))
+    _pot, = drive_fmm(actx, wrangler, (weights,))
 
 
 def test_sumpy_fmm_exclude_self(actx_factory, visualize=False):
@@ -594,7 +594,7 @@ def test_sumpy_axis_source_derivative(actx_factory, visualize=False):
     target_to_source = actx.from_numpy(np.arange(tree.ntargets, dtype=np.int32))
     self_extra_kwargs = {"target_to_source": target_to_source}
 
-    from sumpy.kernel import AxisTargetDerivative, AxisSourceDerivative
+    from sumpy.kernel import AxisSourceDerivative, AxisTargetDerivative
 
     pots = []
     for tgt_knl, src_knl in [
@@ -662,7 +662,7 @@ def test_sumpy_target_point_multiplier(actx_factory, deriv_axes, visualize=False
     target_to_source = actx.from_numpy(np.arange(tree.ntargets, dtype=np.int32))
     self_extra_kwargs = {"target_to_source": target_to_source}
 
-    from sumpy.kernel import TargetPointMultiplier, AxisTargetDerivative
+    from sumpy.kernel import AxisTargetDerivative, TargetPointMultiplier
 
     tgt_knls = [TargetPointMultiplier(0, knl), knl, knl]
     for axis in deriv_axes:

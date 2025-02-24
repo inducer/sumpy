@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -21,9 +24,11 @@ THE SOFTWARE.
 """
 
 
+import logging
+
 import sumpy.symbolic as sym
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 __doc__ = """
@@ -191,7 +196,7 @@ class SymbolicAssignmentCollection:
         #   Uses maxima to verify.
         # - sym.cse: The sympy thing.
         # - sumpy.cse.cse: Based on sympy, designed to go faster.
-        #from sumpy.symbolic import checked_cse
+        # from sumpy.symbolic import checked_cse
 
         from sumpy.cse import cse
         new_assignments, new_exprs = cse(assign_exprs + extra_exprs,
@@ -200,14 +205,14 @@ class SymbolicAssignmentCollection:
         new_assign_exprs = new_exprs[:len(assign_exprs)]
         new_extra_exprs = new_exprs[len(assign_exprs):]
 
-        for name, new_expr in zip(assign_names, new_assign_exprs):
+        for name, new_expr in zip(assign_names, new_assign_exprs, strict=True):
             self.assignments[name] = new_expr
 
         for name, value in new_assignments:
             assert isinstance(name, sym.Symbol)
             self.add_assignment(name.name, value)
 
-        for name, new_expr in zip(assign_names, new_assign_exprs):
+        for name, new_expr in zip(assign_names, new_assign_exprs, strict=True):
             # We want the assignment collection to be ordered correctly
             # to make it easier for loopy to schedule.
             # Deleting the original assignments and adding them again
@@ -216,8 +221,8 @@ class SymbolicAssignmentCollection:
             del self.assignments[name]
             self.assignments[name] = new_expr
 
-        logger.info("common subexpression elimination: done after {dur:.2f} s"
-                    .format(dur=time.time() - start_time))
+        logger.info("common subexpression elimination: done after %.2f s",
+                    time.time() - start_time)
         return new_extra_exprs
 
 # }}}

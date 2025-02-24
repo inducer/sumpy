@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = """
 Copyright (C) 2012 Andreas Kloeckner
 Copyright (C) 2018 Alexandru Fikl
@@ -23,20 +26,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Tuple, Union
+import logging
 
 import numpy as np
-import loopy as lp
 
+import loopy as lp
+import pymbolic as prim
 from pytools import memoize_method
 from pytools.obj_array import make_obj_array
 
-from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program, is_cl_cpu
-from sumpy.tools import KernelComputation, KernelCacheMixin, is_obj_array_like
+from sumpy.array_context import PyOpenCLArrayContext, is_cl_cpu, make_loopy_program
+from sumpy.tools import KernelCacheMixin, KernelComputation, is_obj_array_like
 
-import logging
+
 logger = logging.getLogger(__name__)
-
 
 __doc__ = """
 
@@ -51,7 +54,7 @@ QBX for Layer Potentials
 """
 
 
-def stringify_expn_index(i: Union[Tuple[int, ...], int]) -> str:
+def stringify_expn_index(i: tuple[int, ...] | int) -> str:
     if isinstance(i, tuple):
         return "_".join(stringify_expn_index(i_i) for i_i in i)
     else:
@@ -90,6 +93,7 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
 
     def _expand(self, sac, avec, bvec, rscale, isrc):
         from sumpy.symbolic import PymbolicToSympyMapper
+
         conv = PymbolicToSympyMapper()
         strengths = [conv(self.get_strength_or_not(isrc, idx))
                      for idx in range(len(self.source_kernels))]
@@ -133,7 +137,7 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
         logger.info("compute expansion expressions: start")
 
         import sumpy.symbolic as sym
-        import pymbolic as prim
+
         rscale = sym.Symbol("rscale")
         isrc_sym = prim.var("isrc")
 
@@ -160,11 +164,9 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
         return loopy_insns, result_names
 
     def get_strength_or_not(self, isrc, kernel_idx):
-        import pymbolic as prim
         return prim.var(f"strength_{self.strength_usage[kernel_idx]}_isrc")
 
     def get_kernel_exprs(self, result_names):
-        import pymbolic as prim
         exprs = [prim.var(name) for i, name in enumerate(result_names)]
 
         return [lp.Assignment(id=None,
@@ -175,7 +177,7 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
 
     def get_default_src_tgt_arguments(self):
         from sumpy.tools import gather_loopy_source_arguments
-        return ([
+        return [
                 lp.GlobalArg("sources", None,
                     shape=(self.dim, "nsources"), order="C"),
                 lp.GlobalArg("targets", None,
@@ -185,8 +187,9 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
                 lp.GlobalArg("expansion_radii",
                     None, shape="ntargets"),
                 lp.ValueArg("nsources", None),
-                lp.ValueArg("ntargets", None)]
-                + gather_loopy_source_arguments(self.source_kernels))
+                lp.ValueArg("ntargets", None),
+                *gather_loopy_source_arguments(self.source_kernels)
+            ]
 
     def get_kernel(self):
         raise NotImplementedError
@@ -220,7 +223,7 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
             from warnings import warn
             warn(
                 "Do not know how to tune layer potential computation for "
-                "non-CPU targets")
+                "non-CPU targets", stacklevel=2)
             loopy_knl = lp.split_iname(loopy_knl, itgt_name, 128, outer_tag="g.0")
 
         loopy_knl = self._allow_redundant_execution_of_knl_scaling(loopy_knl)
@@ -271,11 +274,11 @@ class LayerPotential(LayerPotentialBase):
             + [f"<> strength_{i}_isrc = strength_{i}[isrc]" for i in
                     range(self.strength_count)]
             + loopy_insns + kernel_exprs
-            + ["""
-                result_{i}[itgt] = knl_{i}_scaling * \
-                    simul_reduce(sum, isrc, pair_result_{i}) \
+            + [f"""
+                result_{iknl}[itgt] = knl_{iknl}_scaling * \
+                    simul_reduce(sum, isrc, pair_result_{iknl}) \
                         {{id_prefix=write_lpot,inames=itgt}}
-                """.format(i=iknl)
+                """
                 for iknl in range(len(self.target_kernels))]
             + ["end"],
             kernel_data=arguments,
@@ -357,11 +360,11 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
             + ["<> b[idim] = targets[idim, itgt] - center[idim, itgt] {dup=idim}"]
             + ["<> rscale = expansion_radii[itgt]"]
             + loopy_insns + kernel_exprs
-            + ["""
-                result_{i}[itgt, isrc] = \
-                    knl_{i}_scaling * pair_result_{i} \
+            + [f"""
+                result_{iknl}[itgt, isrc] = \
+                    knl_{iknl}_scaling * pair_result_{iknl} \
                         {{inames=isrc:itgt}}
-                """.format(i=iknl)
+                """
                 for iknl in range(len(self.target_kernels))]
             + ["end"],
             kernel_data=arguments,
@@ -445,10 +448,10 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
                     <> rscale = expansion_radii[itgt]
             """]
             + loopy_insns + kernel_exprs
-            + ["""
-                    result_{i}[imat] = knl_{i}_scaling * pair_result_{i} \
+            + [f"""
+                    result_{iknl}[imat] = knl_{iknl}_scaling * pair_result_{iknl} \
                             {{id_prefix=write_lpot}}
-                """.format(i=iknl)
+                """
                 for iknl in range(len(self.target_kernels))]
             + ["end"],
             kernel_data=arguments,
@@ -531,11 +534,12 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
 
 def find_jump_term(kernel, arg_provider):
     from sumpy.kernel import (
-            AxisSourceDerivative,
-            AxisTargetDerivative,
-            DirectionalSourceDerivative,
-            DirectionalTargetDerivative,
-            DerivativeBase)
+        AxisSourceDerivative,
+        AxisTargetDerivative,
+        DerivativeBase,
+        DirectionalSourceDerivative,
+        DirectionalTargetDerivative,
+    )
 
     tgt_derivatives = []
     src_derivatives = []
@@ -604,7 +608,7 @@ def find_jump_term(kernel, arg_provider):
         elif tgt_count == 1:
             from warnings import warn
             warn("jump terms for mixed derivatives (1 src+1 tgt) only available "
-                    "for the double-layer potential")
+                    "for the double-layer potential", stacklevel=1)
             i, = tgt_derivatives
             assert isinstance(i, int)
             return (
@@ -638,7 +642,6 @@ class _JumpTermSymbolicArgumentProvider:
     @property
     @memoize_method
     def density(self):
-        import pymbolic as prim
         self.arguments[self.density_var_name] = \
                 lp.GlobalArg(self.density_var_name, self.density_dtype,
                         shape="ntargets", order="C")
@@ -647,7 +650,6 @@ class _JumpTermSymbolicArgumentProvider:
     @property
     @memoize_method
     def density_prime(self):
-        import pymbolic as prim
         prime_var_name = f"{self.density_var_name}_prime"
         self.arguments[prime_var_name] = (
                 lp.GlobalArg(prime_var_name, self.density_dtype,
@@ -657,7 +659,6 @@ class _JumpTermSymbolicArgumentProvider:
     @property
     @memoize_method
     def side(self):
-        import pymbolic as prim
         self.arguments["side"] = (
                 lp.GlobalArg("side", self.geometry_dtype, shape="ntargets"))
         return prim.parse("side[itgt]")
@@ -665,7 +666,6 @@ class _JumpTermSymbolicArgumentProvider:
     @property
     @memoize_method
     def normal(self):
-        import pymbolic as prim
         self.arguments["normal"] = (
                 lp.GlobalArg("normal", self.geometry_dtype,
                              shape=("ntargets", self.dim), order="C"))
@@ -676,7 +676,6 @@ class _JumpTermSymbolicArgumentProvider:
     @property
     @memoize_method
     def tangent(self):
-        import pymbolic as prim
         self.arguments["tangent"] = (
                 lp.GlobalArg("tangent", self.geometry_dtype,
                              shape=("ntargets", self.dim), order="C"))
@@ -687,7 +686,6 @@ class _JumpTermSymbolicArgumentProvider:
     @property
     @memoize_method
     def mean_curvature(self):
-        import pymbolic as prim
         self.arguments["mean_curvature"] = (
                 lp.GlobalArg("mean_curvature",
                              self.geometry_dtype, shape="ntargets",
@@ -697,7 +695,6 @@ class _JumpTermSymbolicArgumentProvider:
     @property
     @memoize_method
     def src_derivative_dir(self):
-        import pymbolic as prim
         self.arguments["src_derivative_dir"] = (
                 lp.GlobalArg("src_derivative_dir",
                              self.geometry_dtype, shape=("ntargets", self.dim),
@@ -709,7 +706,6 @@ class _JumpTermSymbolicArgumentProvider:
     @property
     @memoize_method
     def tgt_derivative_dir(self):
-        import pymbolic as prim
         self.arguments["tgt_derivative_dir"] = (
                 lp.GlobalArg("tgt_derivative_dir",
                              self.geometry_dtype, shape=("ntargets", self.dim),

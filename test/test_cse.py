@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = """
 Copyright (C) 2017 Matt Wala
 Copyright (C) 2006-2016 SymPy Development Team
@@ -64,18 +67,22 @@ DAMAGE.
 
 # }}}
 
-import pytest
 import sys
 
+import pytest
+
 import sumpy.symbolic as sym
-from sumpy.cse import cse, preprocess_for_cse, postprocess_for_cse
+from sumpy.cse import cse, postprocess_for_cse, preprocess_for_cse
+
 
 if not sym.USE_SYMENGINE:
-    from sympy.simplify.cse_opts import sub_pre, sub_post
     from sympy.functions.special.hyper import meijerg
     from sympy.simplify import cse_opts
+    from sympy.simplify.cse_opts import sub_post, sub_pre
 
 import logging
+
+
 logger = logging.getLogger(__name__)
 
 w, x, y, z = sym.symbols("w,x,y,z")
@@ -142,8 +149,9 @@ def test_cse_not_possible():
     assert substs == []
     assert reduced == [x + y]
     # issue 6329
-    eq = (meijerg((1, 2), (y, 4), (5,), [], x)
-          + meijerg((1, 3), (y, 4), (5,), [], x))
+    eq = (
+        meijerg((1, 2), (y, 4), (5,), [], x)  # pylint: disable=possibly-used-before-assignment
+        + meijerg((1, 3), (y, 4), (5,), [], x))
     assert cse(eq) == ([], [eq])
 
 # }}}
@@ -168,7 +176,7 @@ def test_subtraction_opt():
     # Make sure subtraction is optimized.
     e = (x - y)*(z - y) + sym.exp((x - y)*(z - y))
     substs, reduced = cse(
-        [e], optimizations=[(cse_opts.sub_pre, cse_opts.sub_post)])
+        [e], optimizations=[(cse_opts.sub_pre, cse_opts.sub_post)])  # pylint: disable=possibly-used-before-assignment
     assert substs == [(x0, (x - y)*(y - z))]
     assert reduced == [-x0 + sym.exp(-x0)]
     e = -(x - y)*(z - y) + sym.exp(-(x - y)*(z - y))
@@ -179,8 +187,9 @@ def test_subtraction_opt():
     # issue 4077
     n = -1 + 1/x
     e = n/x/(-n)**2 - 1/n/x
-    assert cse(e, optimizations=[(cse_opts.sub_pre, cse_opts.sub_post)]) == \
-        ([], [0])
+    assert cse(e, optimizations=[
+               (cse_opts.sub_pre, cse_opts.sub_post)]
+               ) == ([], [0])
 
 # }}}
 
@@ -234,7 +243,7 @@ def test_dont_cse_subs():
     f = sym.Function("f")
     g = sym.Function("g")
 
-    name_val, (expr,) = cse(f(x+y).diff(x) + g(x+y).diff(x))
+    name_val, (_expr,) = cse(f(x+y).diff(x) + g(x+y).diff(x))
 
     assert name_val == []
 
@@ -286,8 +295,8 @@ def test_pow_invpow():
 @sympyonly
 def test_issue_4499():
     # previously, this gave 16 constants
+    from sympy import S, Tuple
     from sympy.abc import a, b
-    from sympy import Tuple, S
 
     B = sym.Function("B")   # noqa: N806
     G = sym.Function("G")   # noqa: N806
@@ -331,7 +340,7 @@ def test_issue_6169():
     assert cse(r) == ([], [r])
     # and a check that the right thing is done with the new
     # mechanism
-    assert sub_post(sub_pre((-x - y)*z - x - y)) == -z*(x + y) - x - y
+    assert sub_post(sub_pre((-x - y)*z - x - y)) == -z*(x + y) - x - y  # pylint: disable=possibly-used-before-assignment
 
 # }}}
 
@@ -340,7 +349,7 @@ def test_issue_6169():
 
 @sympyonly
 def test_cse_indexed():
-    from sympy import IndexedBase, Idx
+    from sympy import Idx, IndexedBase
     len_y = 5
     y = IndexedBase("y", shape=(len_y,))
     x = IndexedBase("x", shape=(len_y,))
@@ -348,7 +357,7 @@ def test_cse_indexed():
 
     expr1 = (y[i+1]-y[i])/(x[i+1]-x[i])
     expr2 = 1/(x[i+1]-x[i])
-    replacements, reduced_exprs = cse([expr1, expr2])
+    replacements, _reduced_exprs = cse([expr1, expr2])
     assert len(replacements) > 0
 
 # }}}
@@ -358,7 +367,7 @@ def test_cse_indexed():
 
 @sympyonly
 def test_piecewise():
-    from sympy import Piecewise, Eq
+    from sympy import Eq, Piecewise
     f = Piecewise((-z + x*y, Eq(y, 0)), (-z - x*y, True))
     ans = cse(f)
     actual_ans = ([(x0, -z), (x1, x*y)],

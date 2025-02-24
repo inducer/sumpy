@@ -1,16 +1,17 @@
 import numpy as np
-import loopy as lp
 
+import loopy as lp
 import pyopencl as cl
 
-from sumpy.kernel import LaplaceKernel, HelmholtzKernel
-from sumpy.expansion.local import (
-        LinearPDEConformingVolumeTaylorLocalExpansion,
-        )
-from sumpy.expansion.multipole import (
-        LinearPDEConformingVolumeTaylorMultipoleExpansion,
-        )
 from sumpy.e2e import E2EFromCSR
+from sumpy.expansion.local import (
+    LinearPDEConformingVolumeTaylorLocalExpansion,
+)
+from sumpy.expansion.multipole import (
+    LinearPDEConformingVolumeTaylorMultipoleExpansion,
+)
+from sumpy.kernel import HelmholtzKernel, LaplaceKernel
+
 
 try:
     import matplotlib.pyplot as plt
@@ -23,7 +24,7 @@ def find_flops():
     from sumpy.array_context import PyOpenCLArrayContext
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
-    actx = PyOpenCLArrayContext(queue, force_device_scalars=True)
+    actx = PyOpenCLArrayContext(queue)
 
     if 0:
         knl = LaplaceKernel(2)
@@ -80,6 +81,8 @@ def plot_flops():
         orders = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         flops = [45, 194, 474, 931, 1650, 2632, 3925, 5591, 7706, 10272]
         filename = "helmholtz-m2l-complexity-2d.pdf"
+    else:
+        raise ValueError()
 
     if USE_MATPLOTLIB:
         plt.rc("font", size=16)

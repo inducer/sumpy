@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = """
 Copyright (C) 2012 Andreas Kloeckner
 Copyright (C) 2020 Isuru Fernando
@@ -35,15 +38,16 @@ __doc__ = """
  .. autoclass:: DifferentiatedExprDerivativeTaker
 """
 
-from pytools.tag import tag_dataclass
+import logging
+from typing import Any
 
 import numpy as np
+
+from pytools.tag import tag_dataclass
+
 import sumpy.symbolic as sym
-from sumpy.tools import add_to_sac, add_mi
+from sumpy.tools import add_mi, add_to_sac
 
-from typing import Dict, Tuple, Any
-
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -142,14 +146,14 @@ class ExprDerivativeTaker:
     def get_derivative_taking_sequence(self, start_mi, end_mi):
         current_mi = np.array(start_mi, dtype=int)
         for idx, (mi_i, vec_i) in enumerate(
-                zip(self.mi_dist(end_mi, start_mi), self.var_list)):
+                zip(self.mi_dist(end_mi, start_mi), self.var_list, strict=True)):
             for _ in range(1, 1 + mi_i):
                 current_mi[idx] += 1
                 yield vec_i, tuple(current_mi)
 
     def get_closest_cached_mi(self, mi):
         return min((other_mi
-                for other_mi in self.cache_by_mi.keys()
+                for other_mi in self.cache_by_mi
                 if (np.array(mi) >= np.array(other_mi)).all()),
             key=lambda other_mi: sum(self.mi_dist(mi, other_mi)))
 
@@ -258,7 +262,7 @@ class RadialDerivativeTaker(ExprDerivativeTaker):
             return ExprDerivativeTaker.diff(self, mi)
 
         try:
-            return self.cache_by_mi_q[(mi, q)]
+            return self.cache_by_mi_q[mi, q]
         except KeyError:
             pass
 
@@ -268,7 +272,7 @@ class RadialDerivativeTaker(ExprDerivativeTaker):
                 mi_minus_one[i] = 0
                 mi_minus_one = tuple(mi_minus_one)
                 expr = self.var_list_multiplied[i] * self.diff(mi_minus_one, q=q+1)
-                self.cache_by_mi_q[(mi, q)] = expr
+                self.cache_by_mi_q[mi, q] = expr
                 return expr
 
         for i in range(self.dim):
@@ -282,7 +286,7 @@ class RadialDerivativeTaker(ExprDerivativeTaker):
                 expr = (mi[i]-1)*self.diff(mi_minus_two, q=q+1) * self.rscale ** 2
                 expr += self.var_list_multiplied[i] * self.diff(mi_minus_one, q=q+1)
                 expr = add_to_sac(self.sac, expr)
-                self.cache_by_mi_q[(mi, q)] = expr
+                self.cache_by_mi_q[mi, q] = expr
                 return expr
 
         assert mi == (0,)*self.dim
@@ -294,7 +298,7 @@ class RadialDerivativeTaker(ExprDerivativeTaker):
         expr = prev_expr.diff(self.var_list[0])/self.var_list[0]
         # We need to distribute the division above
         expr = expr.expand(deep=False)
-        self.cache_by_mi_q[(mi, q)] = expr
+        self.cache_by_mi_q[mi, q] = expr
         return expr
 
 
@@ -312,7 +316,7 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
             return RadialDerivativeTaker.diff(self, mi, q)
 
         try:
-            return self.cache_by_mi_q[(mi, q)]
+            return self.cache_by_mi_q[mi, q]
         except KeyError:
             pass
 
@@ -329,7 +333,7 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
             k = (self.orig_expr * self.r).args[-1] / sym.I / self.r
             expr = (-(2*q - 1) * self.diff(mi, q - 1)
                     - k**2 * self.diff(mi, q - 2)) / self.r**2
-        self.cache_by_mi_q[(mi, q)] = expr
+        self.cache_by_mi_q[mi, q] = expr
         return expr
 
 
@@ -337,7 +341,7 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
 
 # {{{ DifferentiatedExprDerivativeTaker
 
-DerivativeCoeffDict = Dict[Tuple[int], Any]
+DerivativeCoeffDict = dict[tuple[int, ...], Any]
 
 
 @tag_dataclass
@@ -367,8 +371,9 @@ class DifferentiatedExprDerivativeTaker:
         # :attr:`derivative_coeff_dict` which would multiply the
         # expression by more `rscale`s than necessary. This is corrected by
         # dividing by `rscale`.
-        max_order = max(sum(extra_mi) for extra_mi in
-                self.derivative_coeff_dict.keys())
+        max_order = max(
+                sum(extra_mi) for extra_mi in self.derivative_coeff_dict
+                )
 
         result = sum(
             coeff * self.taker.diff(add_mi(mi, extra_mi))
@@ -389,7 +394,7 @@ def diff_derivative_coeff_dict(derivative_coeff_dict: DerivativeCoeffDict,
     and return a new derivative transformation dictionary.
     """
     from collections import defaultdict
-    new_derivative_coeff_dict = defaultdict(lambda: 0)
+    new_derivative_coeff_dict: DerivativeCoeffDict = defaultdict(lambda: 0)
 
     for mi, coeff in derivative_coeff_dict.items():
         # In the case where we have x * u.diff(x), the result should

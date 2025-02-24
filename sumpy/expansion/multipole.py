@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -20,18 +23,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import logging
 import math
 from abc import abstractmethod
 
 import sumpy.symbolic as sym
 from sumpy.expansion import (
     ExpansionBase,
+    LinearPDEConformingVolumeTaylorExpansion,
     VolumeTaylorExpansion,
     VolumeTaylorExpansionMixin,
-    LinearPDEConformingVolumeTaylorExpansion)
-from sumpy.tools import mi_set_axis, add_to_sac, mi_power, mi_factorial
+)
+from sumpy.tools import add_to_sac, mi_factorial, mi_power, mi_set_axis
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -68,7 +73,7 @@ class VolumeTaylorMultipoleExpansionBase(
             rscale = 1
 
         result = [0]*len(self.get_full_coefficient_identifiers())
-        for kernel, weight in zip(kernels, weights):
+        for kernel, weight in zip(kernels, weights, strict=True):
             if isinstance(kernel, KernelWrapper):
                 coeffs = [
                         kernel.postprocess_at_source(mi_power(avec, mi), avec)
@@ -104,7 +109,7 @@ class VolumeTaylorMultipoleExpansionBase(
         taker = kernel.postprocess_at_target(base_taker, bvec)
 
         result = []
-        for coeff, mi in zip(coeffs, self.get_coefficient_identifiers()):
+        for coeff, mi in zip(coeffs, self.get_coefficient_identifiers(), strict=True):
             result.append(coeff * taker.diff(mi, lambda x: add_to_sac(sac, x)))
 
         result = sym.Add(*tuple(result))
@@ -284,7 +289,7 @@ class VolumeTaylorMultipoleExpansionBase(
                     for mi_i in range(tgt_mi[d]+1):
                         input_mi = mi_set_axis(tgt_mi, d, mi_i)
                         contrib = cur_dim_input_coeffs[tgt_mi_to_index[input_mi]]
-                        for n, k, dist in zip(tgt_mi, input_mi, dvec):
+                        for n, k, dist in zip(tgt_mi, input_mi, dvec, strict=True):
                             assert n >= k
                             contrib /= math.factorial(n-k)
                             contrib *= \
@@ -418,7 +423,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
         if kernel is None:
             kernel = self.kernel
 
-        from sumpy.symbolic import sym_real_norm_2, BesselJ
+        from sumpy.symbolic import BesselJ, sym_real_norm_2
         avec_len = sym_real_norm_2(avec)
 
         arg_scale = self.get_bessel_arg_scaling()
@@ -437,7 +442,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
         if not self.use_rscale:
             rscale = 1
 
-        from sumpy.symbolic import sym_real_norm_2, Hankel1
+        from sumpy.symbolic import Hankel1, sym_real_norm_2
         bvec_len = sym_real_norm_2(bvec)
         target_angle_rel_center = sym.atan2(bvec[1], bvec[0])
 
@@ -461,7 +466,7 @@ class _HankelBased2DMultipoleExpansion(MultipoleExpansionBase):
             src_rscale = 1
             tgt_rscale = 1
 
-        from sumpy.symbolic import sym_real_norm_2, BesselJ
+        from sumpy.symbolic import BesselJ, sym_real_norm_2
         dvec_len = sym_real_norm_2(dvec)
         new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
 

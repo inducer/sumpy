@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2022 Isuru Fernando"
 
 __license__ = """
@@ -20,17 +23,21 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Sequence
-import pymbolic
-import loopy as lp
+import logging
+from collections.abc import Sequence
+
 import numpy as np
-from sumpy.expansion import ExpansionBase
-from sumpy.kernel import Kernel
+
+import loopy as lp
+import pymbolic
+
 import sumpy.symbolic as sym
 from sumpy.assignment_collection import SymbolicAssignmentCollection
+from sumpy.expansion import ExpansionBase
+from sumpy.kernel import Kernel
 from sumpy.tools import gather_loopy_arguments, gather_loopy_source_arguments
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -64,7 +71,7 @@ def make_e2p_loopy_kernel(
             expression="target[idim]-center[idim]",
             temp_var_type=lp.Optional(None),
         ))
-    target_args = gather_loopy_arguments((expansion,) + tuple(kernels))
+    target_args = gather_loopy_arguments((expansion, *tuple(kernels)))
 
     coeff_exprs = sym.make_sym_vector("coeffs", ncoeffs)
     coeff_names = [
@@ -99,7 +106,7 @@ def make_e2p_loopy_kernel(
                 assignee=result[idx],
                 expression=result[idx] + insn.expression,
                 id=f"result_{idx}",
-                depends_on=insn.depends_on,
+                happens_after=insn.happens_after,
             )
 
     loopy_knl = lp.make_function(domains, insns,
@@ -159,7 +166,7 @@ def make_p2e_loopy_kernel(
             expression="center[idim]-source[idim]",
             temp_var_type=lp.Optional(None),
         ))
-    source_args = gather_loopy_source_arguments((expansion,) + tuple(kernels))
+    source_args = gather_loopy_source_arguments((expansion, *tuple(kernels)))
 
     all_strengths = sym.make_sym_vector("strength", nstrengths)
     strengths = [all_strengths[i] for i in strength_usage]
@@ -197,7 +204,7 @@ def make_p2e_loopy_kernel(
                 assignee=coeffs[idx],
                 expression=coeffs[idx] + insn.expression,
                 id=f"coeff_{idx}",
-                depends_on=insn.depends_on,
+                happens_after=insn.happens_after,
             )
 
     loopy_knl = lp.make_function(domains, insns,

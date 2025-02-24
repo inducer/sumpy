@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2020 Isuru Fernando"
 
 __license__ = """
@@ -20,23 +23,24 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import pytest
+import logging
 import sys
 
 import numpy as np
+import pytest
 
 from arraycontext import pytest_generate_tests_for_array_contexts
-from sumpy.array_context import (                                 # noqa: F401
-        PytestPyOpenCLArrayContextFactory, _acf)
 
 import sumpy.symbolic as sym
+from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
 from sumpy.tools import (
+    fft,
     fft_toeplitz_upper_triangular,
-    matvec_toeplitz_upper_triangular,
     loopy_fft,
-    fft)
+    matvec_toeplitz_upper_triangular,
+)
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 pytest_generate_tests = pytest_generate_tests_for_array_contexts([

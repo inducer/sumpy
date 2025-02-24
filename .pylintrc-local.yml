@@ -1,2 +1,8 @@
+- arg: py-version
+  val: '3.10'
+
 - arg: extension-pkg-whitelist
   val: mayavi
+- arg: ignored-modules
+  val:
+  - symengine

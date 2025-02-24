@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -20,6 +23,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import logging
 import math
 from abc import abstractmethod
 
@@ -27,13 +31,14 @@ from pytools import single_valued
 
 import sumpy.symbolic as sym
 from sumpy.expansion import (
-        ExpansionBase,
-        VolumeTaylorExpansion,
-        VolumeTaylorExpansionMixin,
-        LinearPDEConformingVolumeTaylorExpansion)
+    ExpansionBase,
+    LinearPDEConformingVolumeTaylorExpansion,
+    VolumeTaylorExpansion,
+    VolumeTaylorExpansionMixin,
+)
 from sumpy.tools import add_to_sac, mi_increment_axis
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 __doc__ = """
@@ -194,7 +199,7 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
         base_taker = base_kernel.get_derivative_taker(avec, rscale, sac)
         result = [0]*len(self)
 
-        for knl, weight in zip(kernels, weights):
+        for knl, weight in zip(kernels, weights, strict=True):
             taker = knl.postprocess_at_source(base_taker, avec)
             # Following is a hack to make sure cse works.
             if 1:
@@ -225,14 +230,15 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
                 coeffs, rscale, sac=sac))
 
         bvec_scaled = [b*rscale**-1 for b in bvec]
-        from sumpy.tools import mi_power, mi_factorial
+        from sumpy.tools import mi_factorial, mi_power
 
         result = sum(
             coeff
             * mi_power(bvec_scaled, mi, evaluate=False)
             / mi_factorial(mi)
             for coeff, mi in zip(
-                    evaluated_coeffs, self.get_full_coefficient_identifiers()))
+                    evaluated_coeffs, self.get_full_coefficient_identifiers(),
+                    strict=True))
 
         return kernel.postprocess_at_target(result, bvec)
 
@@ -340,8 +346,7 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
         for axis in {d for d, _ in tgt_split}:
             # Use the axis as the first dimension to vary so that the below
             # algorithm is O(p^{d+1}) for full and O(p^{d}) for compressed
-            dims = [axis] + list(range(axis)) + \
-                    list(range(axis+1, self.dim))
+            dims = [axis, *list(range(axis)), *list(range(axis + 1, self.dim))]
             # Start with source coefficients. Gets updated after each axis.
             cur_dim_input_coeffs = src_coeffs
             # O(1) iterations
@@ -491,7 +496,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         if not self.use_rscale:
             rscale = 1
 
-        from sumpy.symbolic import sym_real_norm_2, Hankel1
+        from sumpy.symbolic import Hankel1, sym_real_norm_2
 
         arg_scale = self.get_bessel_arg_scaling()
 
@@ -508,7 +513,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
         if not self.use_rscale:
             rscale = 1
 
-        from sumpy.symbolic import sym_real_norm_2, BesselJ
+        from sumpy.symbolic import BesselJ, sym_real_norm_2
         bvec_len = sym_real_norm_2(bvec)
         target_angle_rel_center = sym.atan2(bvec[1], bvec[0])
 
@@ -523,7 +528,7 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, m2l_translation_classes_dependent_data=None):
-        from sumpy.symbolic import sym_real_norm_2, BesselJ
+        from sumpy.symbolic import BesselJ, sym_real_norm_2
 
         if not self.use_rscale:
             src_rscale = 1

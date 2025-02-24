@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = """
 Copyright (C) 2012 Andreas Kloeckner
 Copyright (C) 2018 Alexandru Fikl
@@ -28,11 +31,14 @@ import enum
 import logging
 import warnings
 from abc import ABC, abstractmethod
+from collections.abc import Hashable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any
+
+import numpy as np
 
 import loopy as lp
-import numpy as np
+import pyopencl as cl
 from pymbolic.mapper import WalkMapper
 from pytools import memoize_method
 from pytools.tag import Tag, tag_dataclass
@@ -40,8 +46,10 @@ from pytools.tag import Tag, tag_dataclass
 import sumpy.symbolic as sym
 from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
 
+
 if TYPE_CHECKING:
     import numpy
+
     import pyopencl
 
     from sumpy.kernel import Kernel
@@ -109,8 +117,9 @@ Profiling
 
 # {{{ multi_index helpers
 
-def add_mi(mi1: Sequence[int], mi2: Sequence[int]) -> Tuple[int, ...]:
-    return tuple([mi1i + mi2i for mi1i, mi2i in zip(mi1, mi2)])
+def add_mi(mi1: Sequence[int], mi2: Sequence[int]) -> tuple[int, ...]:
+    # NOTE: these are used a lot and `tuple([])` is faster
+    return tuple([mi1i + mi2i for mi1i, mi2i in zip(mi1, mi2, strict=True)])  # noqa: C409
 
 
 def mi_factorial(mi: Sequence[int]) -> int:
@@ -123,13 +132,13 @@ def mi_factorial(mi: Sequence[int]) -> int:
 
 def mi_increment_axis(
         mi: Sequence[int], axis: int, increment: int
-        ) -> Tuple[int, ...]:
+        ) -> tuple[int, ...]:
     new_mi = list(mi)
     new_mi[axis] += increment
     return tuple(new_mi)
 
 
-def mi_set_axis(mi: Sequence[int], axis: int, value: int) -> Tuple[int, ...]:
+def mi_set_axis(mi: Sequence[int], axis: int, value: int) -> tuple[int, ...]:
     new_mi = list(mi)
     new_mi[axis] = value
     return tuple(new_mi)
@@ -139,7 +148,7 @@ def mi_power(
         vector: Sequence[Any], mi: Sequence[int],
         evaluate: bool = True) -> Any:
     result = 1
-    for mi_i, vec_i in zip(mi, vector):
+    for mi_i, vec_i in zip(mi, vector, strict=True):
         if mi_i == 1:
             result *= vec_i
         elif evaluate:
@@ -154,7 +163,7 @@ def add_to_sac(sac, expr):
         return expr
 
     from numbers import Number
-    if isinstance(expr, (Number, sym.Number, sym.Symbol)):
+    if isinstance(expr, Number | sym.Number | sym.Symbol):
         return expr
 
     name = sac.assign_temp("temp", expr)
@@ -186,7 +195,7 @@ def build_matrix(op, dtype=None, shape=None):
     dtype = dtype or op.dtype
     from pytools import ProgressBar
     shape = shape or op.shape
-    rows, cols = shape
+    _rows, cols = shape
     pb = ProgressBar("matrix", cols)
     mat = np.zeros(shape, dtype)
 
@@ -257,12 +266,12 @@ class KernelComputation(ABC):
     .. automethod:: get_kernel
     """
 
-    def __init__(self,
-            target_kernels: List["Kernel"],
-            source_kernels: List["Kernel"],
-            strength_usage: Optional[List[int]] = None,
-            value_dtypes: Optional[List["numpy.dtype[Any]"]] = None,
-            name: Optional[str] = None) -> None:
+    def __init__(self, ctx: Any,
+            target_kernels: list[Kernel],
+            source_kernels: list[Kernel],
+            strength_usage: list[int] | None = None,
+            value_dtypes: list[numpy.dtype[Any]] | None = None,
+            name: str | None = None) -> None:
         """
         :arg target_kernels: list of :class:`~sumpy.kernel.Kernel` instances,
             with :class:`sumpy.kernel.DirectionalTargetDerivative` as
@@ -282,11 +291,11 @@ class KernelComputation(ABC):
             value_dtypes = []
             for knl in target_kernels:
                 if knl.is_complex_valued:
-                    value_dtypes.append(np.complex128)
+                    value_dtypes.append(np.dtype(np.complex128))
                 else:
-                    value_dtypes.append(np.float64)
+                    value_dtypes.append(np.dtype(np.float64))
 
-        if not isinstance(value_dtypes, (list, tuple)):
+        if not isinstance(value_dtypes, list | tuple):
             value_dtypes = [np.dtype(value_dtypes)] * len(target_kernels)
         value_dtypes = [np.dtype(vd) for vd in value_dtypes]
 
@@ -332,7 +341,7 @@ class KernelComputation(ABC):
                     temp_var_type=lp.Optional(dtype),
                     tags=frozenset([ScalingAssignmentTag()]))
                 for i, (kernel, dtype) in enumerate(
-                    zip(self.target_kernels, self.value_dtypes))]
+                    zip(self.target_kernels, self.value_dtypes, strict=True))]
 
     @abstractmethod
     def get_kernel(self):
@@ -411,15 +420,21 @@ class OrderedSet(MutableSet):
 # }}}
 
 
-class KernelCacheMixin:
-    def get_cached_optimized_kernel(self, **kwargs):
-        from warnings import warn
-        warn("get_cached_optimized_kernel is deprecated. "
-             "Use get_cached_kernel_executor instead. "
-             "This will stop working in October 2023.",
-             DeprecationWarning, stacklevel=2)
+class KernelCacheMixin(ABC):
+    context: cl.Context
+    name: str
 
-        return self.get_cached_kernel_executor(**kwargs)
+    @abstractmethod
+    def get_cache_key(self) -> tuple[Hashable, ...]:
+        ...
+
+    @abstractmethod
+    def get_kernel(self, **kwargs: Any) -> lp.TranslationUnit:
+        ...
+
+    @abstractmethod
+    def get_optimized_kernel(self, **kwargs: Any) -> lp.TranslationUnit:
+        ...
 
     @memoize_method
     def get_cached_kernel_executor(self, **kwargs) -> lp.ExecutorBase:
@@ -447,8 +462,8 @@ class KernelCacheMixin:
         logger.info("%s: kernel cache miss", self.name)
         if CACHING_ENABLED and not (
                 NO_CACHE_KERNELS and self.name in NO_CACHE_KERNELS):
-            logger.info("{}: kernel cache miss [key={}]".format(
-                self.name, cache_key))
+            logger.info("%s: kernel cache miss [key=%s]",
+                self.name, cache_key)
 
         from pytools import MinRecursionLimit
         with MinRecursionLimit(3000):
@@ -475,7 +490,7 @@ KernelCacheWrapper = KernelCacheMixin
 
 def is_obj_array_like(ary):
     return (
-            isinstance(ary, (tuple, list))
+            isinstance(ary, tuple | list)
             or (isinstance(ary, np.ndarray) and ary.dtype.char == "O"))
 
 
@@ -519,12 +534,12 @@ def reduced_row_echelon_form(m, atol=0):
 
         pivot_cols.append(i)
         scale = mat[index, i]
-        if isinstance(scale, (int, sym.Integer)):
+        if isinstance(scale, int | sym.Integer):
             scale = int(scale)
 
         for j in range(mat.shape[1]):
             elem = mat[index, j]
-            if isinstance(scale, int) and isinstance(elem, (int, sym.Integer)):
+            if isinstance(scale, int) and isinstance(elem, int | sym.Integer):
                 quo = int(elem) // scale
                 if quo * scale == elem:
                     mat[index, j] = quo
@@ -613,7 +628,7 @@ def fft_toeplitz_upper_triangular(first_row, x, sac=None):
 
     v_fft = fft(v, sac)
     x_fft = fft(x, sac)
-    res_fft = [add_to_sac(sac, a * b) for a, b in zip(v_fft, x_fft)]
+    res_fft = [add_to_sac(sac, a * b) for a, b in zip(v_fft, x_fft, strict=True)]
     res = fft(res_fft, inverse=True, sac=sac)
     return list(reversed(res[:n]))
 
@@ -623,7 +638,7 @@ def matvec_toeplitz_upper_triangular(first_row, vector):
     assert len(vector) == n
     output = [0]*n
     for row in range(n):
-        terms = tuple([first_row[col-row]*vector[col] for col in range(row, n)])
+        terms = tuple(first_row[col-row]*vector[col] for col in range(row, n))
         output[row] = sym.Add(*terms)
     return output
 
@@ -640,8 +655,8 @@ def to_complex_dtype(dtype):
     np_type = np.dtype(dtype).type
     try:
         return to_complex_type_dict[np_type]
-    except KeyError:
-        raise RuntimeError(f"Unknown dtype: {dtype}")
+    except KeyError as err:
+        raise RuntimeError(f"Unknown dtype: {dtype}") from err
 
 
 @dataclass(frozen=True)
@@ -724,23 +739,21 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
 
     fixed_parameters = {"const": complex_dtype(sign*(-2j)*pi/n), "n": n}
 
+    index = (*broadcast_dims, i2)
     insns = [
         "exp_table[i] = exp(const * i) {id=exp_table}",
         lp.Assignment(
-            assignee=x[(*broadcast_dims, i2)],
-            expression=y[(*broadcast_dims, i2)],
+            assignee=x[index],
+            expression=y[index],
             id="copy",
-            depends_on=frozenset(["exp_table"]),
+            happens_after=frozenset(["exp_table"]),
         ),
     ]
 
     for ilev, N1 in enumerate(list(reversed(factors))):  # noqa: N806
         nfft //= N1
         N2 = n // (nfft * N1)  # noqa: N806
-        if ilev == 0:
-            init_depends_on = "copy"
-        else:
-            init_depends_on = f"update_{ilev-1}"
+        init_happens_after = "copy" if ilev == 0 else f"update_{ilev-1}"
 
         temp = var("temp")
         exp_table = var("exp_table")
@@ -753,38 +766,42 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
         table_idx = var(f"table_idx_{ilev}")
         exp = var(f"exp_{ilev}")
 
+        i_bcast = (*broadcast_dims, i)
+        i2_bcast = (*broadcast_dims, i2)
+        iN_bcast = (*broadcast_dims, ifft + nfft * (iN1 * N2 + iN2))  # noqa: N806
+
         insns += [
             lp.Assignment(
                 assignee=temp[i],
-                expression=x[(*broadcast_dims, i)],
+                expression=x[i_bcast],
                 id=f"copy_{ilev}",
-                depends_on=frozenset([init_depends_on]),
+                happens_after=frozenset([init_happens_after]),
             ),
             lp.Assignment(
-                assignee=x[(*broadcast_dims, i2)],
+                assignee=x[i2_bcast],
                 expression=0,
                 id=f"reset_{ilev}",
-                depends_on=frozenset([f"copy_{ilev}"])),
+                happens_after=frozenset([f"copy_{ilev}"])),
             lp.Assignment(
                 assignee=table_idx,
                 expression=nfft*iN1_sum*(iN2 + N2*iN1),
                 id=f"idx_{ilev}",
-                depends_on=frozenset([f"reset_{ilev}"]),
+                happens_after=frozenset([f"reset_{ilev}"]),
                 temp_var_type=lp.Optional(np.uint32)),
             lp.Assignment(
                 assignee=exp,
                 expression=exp_table[table_idx % n],
                 id=f"exp_{ilev}",
-                depends_on=frozenset([f"idx_{ilev}"]),
+                happens_after=frozenset([f"idx_{ilev}"]),
                 within_inames=frozenset({x.name for x in
                     [*broadcast_dims, iN1_sum, iN1, iN2]}),
                 temp_var_type=lp.Optional(complex_dtype)),
             lp.Assignment(
-                assignee=x[(*broadcast_dims, ifft + nfft * (iN1*N2 + iN2))],
-                expression=(x[(*broadcast_dims, ifft + nfft*(iN1*N2 + iN2))]
+                assignee=x[iN_bcast],
+                expression=(x[iN_bcast]
                     + exp * temp[ifft + nfft * (iN2*N1 + iN1_sum)]),
                 id=f"update_{ilev}",
-                depends_on=frozenset([f"exp_{ilev}"])),
+                happens_after=frozenset([f"exp_{ilev}"])),
         ]
 
         domains += [
@@ -814,28 +831,27 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
 
     if n == 1:
         domains = domains[2:]
+        index = (*broadcast_dims, 0)
         insns = [
             lp.Assignment(
-                assignee=x[(*broadcast_dims, 0)],
-                expression=y[(*broadcast_dims, 0)],
+                assignee=x[index],
+                expression=y[index],
             ),
         ]
         kernel_data = kernel_data[:2]
     elif inverse:
         domains += ["{[i3]: 0<=i3<n}"]
+        index = (*broadcast_dims, i3)
         insns += [
             lp.Assignment(
-                assignee=x[(*broadcast_dims, i3)],
-                expression=x[(*broadcast_dims, i3)] / n,
-                depends_on=frozenset([f"update_{len(factors) - 1}"]),
+                assignee=x[index],
+                expression=x[index] / n,
+                happens_after=frozenset([f"update_{len(factors) - 1}"]),
             ),
         ]
 
     if name is None:
-        if inverse:
-            name = f"ifft_{n}"
-        else:
-            name = f"fft_{n}"
+        name = f"ifft_{n}" if inverse else f"fft_{n}"
 
     knl = make_loopy_program(
         domains, insns,
@@ -859,7 +875,7 @@ class FFTBackend(enum.Enum):
     loopy = 2
 
 
-def _get_fft_backend(queue: "pyopencl.CommandQueue") -> FFTBackend:
+def _get_fft_backend(queue: pyopencl.CommandQueue) -> FFTBackend:
     import os
 
     env_val = os.environ.get("SUMPY_FFT_BACKEND")
@@ -901,8 +917,8 @@ def _get_fft_backend(queue: "pyopencl.CommandQueue") -> FFTBackend:
 
 def get_opencl_fft_app(
         actx: PyOpenCLArrayContext,
-        shape: Tuple[int, ...],
-        dtype: "numpy.dtype[Any]",
+        shape: tuple[int, ...],
+        dtype: numpy.dtype[Any],
         inverse: bool) -> Any:
     """Setup an object for out-of-place FFT on with given shape and dtype
     on given queue.
@@ -926,10 +942,11 @@ def get_opencl_fft_app(
 
 def run_opencl_fft(
         actx: PyOpenCLArrayContext,
-        fft_app: Tuple[Any, FFTBackend],
-        input_vec: Any, *,
+        fft_app: tuple[Any, FFTBackend],
+        input_vec: Any,
         inverse: bool = False,
-        wait_for: List["pyopencl.Event"] = None) -> Tuple["pyopencl.Event", Any]:
+        wait_for: list[pyopencl.Event] | None = None
+    ) -> tuple[pyopencl.Event, Any]:
     """Runs an FFT on input_vec and returns a :class:`MarkerBasedProfilingEvent`
     that indicate the end and start of the operations carried out and the output
     vector.
@@ -967,7 +984,7 @@ def run_opencl_fft(
         # FIXME: use the public API once
         # https://github.com/vincefn/pyvkfft/pull/17 is in
         from pyvkfft.opencl import _vkfft_opencl
-        if inverse:
+        if inverse:  # noqa: SIM108
             meth = _vkfft_opencl.ifft
         else:
             meth = _vkfft_opencl.fft
@@ -998,7 +1015,7 @@ _depr_name_to_replacement_and_obj = {
 
 
 def __getattr__(name):
-    replacement_and_obj = _depr_name_to_replacement_and_obj.get(name, None)
+    replacement_and_obj = _depr_name_to_replacement_and_obj.get(name)
     if replacement_and_obj is not None:
         replacement, obj, year = replacement_and_obj
         from warnings import warn

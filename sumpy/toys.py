@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from sumpy.expansion.m2l import M2LTranslationClassFactoryBase
+
+
 __copyright__ = """
 Copyright (C) 2017 Andreas Kloeckner
 Copyright (C) 2017 Matt Wala
@@ -25,22 +28,25 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from numbers import Number
+import logging
+from collections.abc import Sequence
 from functools import partial
-from typing import Any, Sequence, Union, Optional, TYPE_CHECKING
+from numbers import Number
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from pytools import memoize_method
-from sumpy.kernel import TargetTransformationRemover
-from sumpy.array_context import PyOpenCLArrayContext
 
-import logging
-logger = logging.getLogger(__name__)
+from sumpy.array_context import PyOpenCLArrayContext
+from sumpy.kernel import TargetTransformationRemover
+
 
 if TYPE_CHECKING:
     from sumpy.kernel import Kernel
     from sumpy.visualization import FieldPlotter
+
+logger = logging.getLogger(__name__)
 
 __doc__ = """
 
@@ -94,7 +100,7 @@ class ToyContext:
     .. automethod:: __init__
     """
 
-    def __init__(self, kernel: "Kernel",
+    def __init__(self, kernel: Kernel,
             mpole_expn_class=None,
             local_expn_class=None,
             expansion_factory=None,
@@ -115,10 +121,12 @@ class ToyContext:
         if local_expn_class is None:
             from sumpy.expansion.m2l import (
                 FFTM2LTranslationClassFactory,
-                NonFFTM2LTranslationClassFactory)
+                NonFFTM2LTranslationClassFactory,
+            )
 
             if m2l_use_fft:
-                m2l_translation_class_factory = FFTM2LTranslationClassFactory()
+                m2l_translation_class_factory: M2LTranslationClassFactoryBase = \
+                    FFTM2LTranslationClassFactory()
             else:
                 m2l_translation_class_factory = NonFFTM2LTranslationClassFactory()
             local_expn_class = \
@@ -383,6 +391,8 @@ def _m2l(actx: PyOpenCLArrayContext,
                 src_rscale=np.float64(psource.rscale),
                 **toy_ctx.extra_kernel_kwargs)
 
+        from sumpy.tools import get_opencl_fft_app, run_opencl_fft
+
         if toy_ctx.use_fft:
             from sumpy.tools import get_opencl_fft_app, run_opencl_fft
 
@@ -437,7 +447,7 @@ def _m2l(actx: PyOpenCLArrayContext,
                                dtype=coeffs.dtype)
 
         if toy_ctx.use_fft:
-            evt, local_before = run_opencl_fft(
+            local_before = run_opencl_fft(
                 actx, ifft_app,
                 local_before, inverse=True)
 
@@ -465,6 +475,9 @@ def _m2l(actx: PyOpenCLArrayContext,
 # }}}
 
 # {{{ potential source classes
+
+Number_ish = int | float | complex | np.number
+
 
 class PotentialSource:
     """A base class for all classes representing potentials that can be
@@ -496,9 +509,9 @@ class PotentialSource:
     def __neg__(self) -> PotentialSource:
         return -1*self
 
-    def __add__(self, other: Union[Number, np.number, PotentialSource]
+    def __add__(self, other: Number_ish | PotentialSource
                 ) -> PotentialSource:
-        if isinstance(other, (Number, np.number)):
+        if isinstance(other, Number | np.number):
             other = ConstantPotential(self.toy_ctx, other)
         elif not isinstance(other, PotentialSource):
             return NotImplemented
@@ -508,16 +521,18 @@ class PotentialSource:
     __radd__ = __add__
 
     def __sub__(self,
-                other: Union[Number, np.number, PotentialSource]) -> PotentialSource:
+                other: Number_ish | PotentialSource) -> PotentialSource:
         return self.__add__(-other)
 
-    def __rsub__(self, other: Union[Number, np.number, PotentialSource]
-                 ) -> PotentialSource:
+    def __rsub__(
+            self,
+            other: Number | np.number | PotentialSource
+            ) -> PotentialSource:
         return (-self).__add__(other)
 
     def __mul__(self,
-                other: Union[Number, np.number, PotentialSource]) -> PotentialSource:
-        if isinstance(other, (Number, np.number)):
+                other: Number_ish | PotentialSource) -> PotentialSource:
+        if isinstance(other, Number | np.number):
             other = ConstantPotential(self.toy_ctx, other)
         elif not isinstance(other, PotentialSource):
             return NotImplemented
@@ -597,7 +612,7 @@ class PointSources(PotentialSource):
 
     def __init__(self,
                  toy_ctx: ToyContext, points: np.ndarray, weights: np.ndarray,
-                 center: Optional[np.ndarray] = None):
+                 center: np.ndarray | None = None):
         super().__init__(toy_ctx)
 
         self.points = points
@@ -694,7 +709,7 @@ class PotentialExpressionNode(PotentialSource):
     def center(self) -> np.ndarray:
         for psource in self.psources:
             try:
-                return psource.center
+                return psource.center  # type: ignore[attr-defined]
             except AttributeError:
                 pass
 
@@ -733,7 +748,7 @@ def multipole_expand(
         actx: PyOpenCLArrayContext,
         psource: PotentialSource,
         center: np.ndarray, *,
-        order: Optional[int] = None,
+        order: int | None = None,
         rscale: float = 1,
         **expn_kwargs: Any) -> MultipoleExpansion:
     if isinstance(psource, PointSources):
@@ -760,7 +775,7 @@ def local_expand(
         actx: PyOpenCLArrayContext,
         psource: PotentialSource,
         center: np.ndarray, *,
-        order: Optional[int] = None,
+        order: int | None = None,
         rscale: float = 1,
         **expn_kwargs: Any) -> LocalExpansion:
     if isinstance(psource, PointSources):
@@ -812,7 +827,7 @@ def local_expand(
 
 def logplot(
         actx: PyOpenCLArrayContext,
-        fp: "FieldPlotter",
+        fp: FieldPlotter,
         psource: PotentialSource, **kwargs) -> None:
     fp.show_scalar_in_matplotlib(
             np.log10(np.abs(psource.eval(actx, fp.points) + 1e-15)), **kwargs)
@@ -821,11 +836,13 @@ def logplot(
 def combine_inner_outer(
         psource_inner: PotentialSource,
         psource_outer: PotentialSource,
-        radius: Optional[float],
-        center: Optional[np.ndarray] = None) -> PotentialSource:
+        radius: float | None,
+        center: np.ndarray | None = None) -> PotentialSource:
     if center is None:
+        assert isinstance(psource_inner, ExpansionPotentialSource)
         center = psource_inner.center
     if radius is None:
+        assert isinstance(psource_inner, ExpansionPotentialSource)
         radius = psource_inner.radius
 
     ball_one = OneOnBallPotential(psource_inner.toy_ctx, center, radius)
@@ -836,8 +853,9 @@ def combine_inner_outer(
 
 def combine_halfspace(psource_pos: PotentialSource,
                       psource_neg: PotentialSource, axis: int,
-                      center: Optional[np.ndarray] = None) -> PotentialSource:
+                      center: np.ndarray | None = None) -> PotentialSource:
     if center is None:
+        assert isinstance(psource_pos, ExpansionPotentialSource)
         center = psource_pos.center
 
     halfspace_one = HalfspaceOnePotential(psource_pos.toy_ctx, center, axis)
@@ -850,12 +868,14 @@ def combine_halfspace_and_outer(
         psource_pos: PotentialSource,
         psource_neg: PotentialSource,
         psource_outer: PotentialSource,
-        axis: int, radius: Optional[Number] = None,
-        center: Optional[np.ndarray] = None) -> PotentialSource:
+        axis: int, radius: float | None = None,
+        center: np.ndarray | None = None) -> PotentialSource:
 
     if center is None:
+        assert isinstance(psource_pos, ExpansionPotentialSource)
         center = psource_pos.center
     if radius is None:
+        assert isinstance(psource_pos, ExpansionPotentialSource)
         center = psource_pos.radius
 
     return combine_inner_outer(
@@ -864,9 +884,10 @@ def combine_halfspace_and_outer(
 
 
 def l_inf(actx: PyOpenCLArrayContext, psource: PotentialSource, radius: float,
-          center: Optional[np.ndarray] = None, npoints: int = 100,
+          center: np.ndarray | None = None, npoints: int = 100,
           debug: bool = False) -> np.number:
     if center is None:
+        assert isinstance(psource, ExpansionPotentialSource)
         center = psource.center
 
     restr = psource * OneOnBallPotential(psource.toy_ctx, center, radius)
@@ -900,7 +921,7 @@ def draw_box(el, eh, **kwargs):
         (Path.CLOSEPOLY, (el[0], el[1])),
         ]
 
-    codes, verts = zip(*pathdata)
+    codes, verts = zip(*pathdata, strict=True)
     path = Path(verts, codes)
     patch = mpatches.PathPatch(path, **kwargs)
     pt.gca().add_patch(patch)

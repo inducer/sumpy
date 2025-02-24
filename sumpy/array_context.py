@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2022 Alexandru Fikl"
 
 __license__ = """
@@ -20,15 +23,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
 
-from boxtree.array_context import PyOpenCLArrayContext as PyOpenCLArrayContextBase
 from arraycontext.pytest import (
-        _PytestPyOpenCLArrayContextFactoryWithClass,
-        register_pytest_array_context_factory)
+    _PytestPyOpenCLArrayContextFactoryWithClass,
+    register_pytest_array_context_factory,
+)
+from boxtree.array_context import PyOpenCLArrayContext as PyOpenCLArrayContextBase
 from pytools.tag import ToTagSetConvertible
+
 
 __doc__ = """
 Array Context
@@ -43,12 +48,12 @@ Array Context
 
 def make_loopy_program(
         domains, statements,
-        kernel_data: Optional[List[Any]] = None, *,
+        kernel_data: list[Any] | None = None, *,
         name: str = "sumpy_loopy_kernel",
-        silenced_warnings: Optional[Union[List[str], str]] = None,
-        assumptions: Optional[Union[List[str], str]] = None,
-        fixed_parameters: Optional[Dict[str, Any]] = None,
-        index_dtype: Optional["np.dtype"] = None,
+        silenced_warnings: list[str] | str | None = None,
+        assumptions: list[str] | str | None = None,
+        fixed_parameters: dict[str, Any] | None = None,
+        index_dtype: np.dtype[Any] | None = None,
         tags: ToTagSetConvertible = None):
     """Return a :class:`loopy.LoopKernel` suitable for use with
     :meth:`arraycontext.ArrayContext.call_loopy`.
@@ -96,7 +101,7 @@ def _acf():
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
 
-    return PyOpenCLArrayContext(queue, force_device_scalars=True)
+    return PyOpenCLArrayContext(queue)
 
 
 class PytestPyOpenCLArrayContextFactory(

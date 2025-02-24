@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2018 Alexandru Fikl"
 
 __license__ = """
@@ -20,17 +23,18 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import pytest
+import logging
 import sys
 
 import numpy as np
 import numpy.linalg as la
+import pytest
 
 from arraycontext import pytest_generate_tests_for_array_contexts
-from sumpy.array_context import (                                 # noqa: F401
-        PytestPyOpenCLArrayContextFactory, _acf)
 
-import logging
+from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
+
+
 logger = logging.getLogger(__name__)
 
 pytest_generate_tests = pytest_generate_tests_for_array_contexts([
@@ -97,7 +101,7 @@ def test_qbx_direct(actx_factory, factor, lpot_id, visualize=False):
     order = 12
     mode_nr = 25
 
-    from sumpy.kernel import LaplaceKernel, DirectionalSourceDerivative
+    from sumpy.kernel import DirectionalSourceDerivative, LaplaceKernel
     if lpot_id == 1:
         base_knl = LaplaceKernel(ndim)
         knl = base_knl
@@ -193,7 +197,7 @@ def test_p2p_direct(actx_factory, exclude_self, factor, lpot_id, visualize=False
     ndim = 2
     mode_nr = 25
 
-    from sumpy.kernel import LaplaceKernel, DirectionalSourceDerivative
+    from sumpy.kernel import DirectionalSourceDerivative, LaplaceKernel
     if lpot_id == 1:
         lknl = LaplaceKernel(ndim)
     elif lpot_id == 2:

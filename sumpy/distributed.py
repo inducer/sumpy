@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2022 Hao Gao"
 
 __license__ = """
@@ -22,8 +25,8 @@ THE SOFTWARE.
 
 from boxtree.distributed.calculation import DistributedExpansionWranglerMixin
 
-from sumpy.fmm import SumpyExpansionWrangler
 from sumpy.array_context import PyOpenCLArrayContext
+from sumpy.fmm import SumpyExpansionWrangler
 
 
 class DistributedSumpyExpansionWrangler(
@@ -86,8 +89,9 @@ class DistributedSumpyExpansionWrangler(
 
     def reorder_potentials(self, potentials):
         if self.is_mpi_root:
-            from pytools.obj_array import obj_array_vectorize
             import numpy as np
+
+            from pytools.obj_array import obj_array_vectorize
             assert (
                     isinstance(potentials, np.ndarray)
                     and potentials.dtype.char == "O")

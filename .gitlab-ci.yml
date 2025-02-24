@@ -118,13 +118,13 @@ Documentation:
   tags:
   - linux
 
-Flake8:
+Ruff:
   stage: test
   script:
-  - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-flake8.sh
-  - . ./prepare-and-run-flake8.sh "$CI_PROJECT_NAME" test examples benchmarks
+  - pipx install ruff
+  - ruff check
   tags:
-  - python3
+  - docker-runner
   except:
   - tags
 
@@ -134,7 +134,19 @@ Pylint:
   - curl -L -O https://tiker.net/ci-support-v0
   - . ci-support-v0
   - build_py_project
-  - run_pylint "$(basename $GITHUB_REPOSITORY)" examples/*.py, test/*.py
+  - run_pylint "$(get_proj_name)" examples/*.py test/*.py
+  tags:
+  - python3
+  except:
+  - tags
+
+Mypy:
+  script: |
+    curl -L -O https://tiker.net/ci-support-v0
+    . ./ci-support-v0
+    build_py_project_in_venv
+    python -m pip install mypy
+    mypy $(get_proj_name)
   tags:
   - python3
   except:
