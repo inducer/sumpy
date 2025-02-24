@@ -266,7 +266,7 @@ class KernelComputation(ABC):
     .. automethod:: get_kernel
     """
 
-    def __init__(self, ctx: Any,
+    def __init__(self,
             target_kernels: list[Kernel],
             source_kernels: list[Kernel],
             strength_usage: list[int] | None = None,
@@ -421,7 +421,6 @@ class OrderedSet(MutableSet):
 
 
 class KernelCacheMixin(ABC):
-    context: cl.Context
     name: str
 
     @abstractmethod

@@ -89,7 +89,7 @@ def _test_against_single_rank(
         actx, multipole_expansion_factory, local_expansion_factory, [kernel])
 
     global_tree_dev = None
-    sources_weights = actx.empty(0, dtype=dtype)
+    sources_weights = actx.np.empty(0, dtype=dtype)
 
     if mpi_rank == 0:
         # Generate random particles and source weights
