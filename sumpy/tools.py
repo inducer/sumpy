@@ -448,11 +448,11 @@ class KernelCacheMixin(ABC):
         ...
 
     @abstractmethod
-    def get_kernel(self) -> lp.TranslationUnit:
+    def get_kernel(self, **kwargs: Any) -> lp.TranslationUnit:
         ...
 
     @abstractmethod
-    def get_optimized_kernel(self) -> lp.TranslationUnit:
+    def get_optimized_kernel(self, **kwargs: Any) -> lp.TranslationUnit:
         ...
 
     @memoize_method

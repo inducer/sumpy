@@ -24,6 +24,7 @@ THE SOFTWARE.
 """
 
 import os
+from typing import TYPE_CHECKING
 
 from pytools.persistent_dict import WriteOncePersistentDict
 
@@ -40,6 +41,12 @@ from sumpy.e2p import E2PFromCSR, E2PFromSingleBox
 from sumpy.p2e import P2EFromCSR, P2EFromSingleBox
 from sumpy.p2p import P2P, P2PFromCSR
 from sumpy.version import VERSION_TEXT
+
+
+if TYPE_CHECKING:
+    from collections.abc import Hashable
+
+    import loopy as lp
 
 
 __all__ = [
@@ -59,8 +66,8 @@ __all__ = [
 ]
 
 
-code_cache = WriteOncePersistentDict(
-     f"sumpy-code-cache-v6-{VERSION_TEXT}", safe_sync=False)
+code_cache: WriteOncePersistentDict[Hashable, lp.TranslationUnit] = (
+    WriteOncePersistentDict(f"sumpy-code-cache-v8-{VERSION_TEXT}", safe_sync=False))
 
 
 # {{{ optimization control
@@ -79,8 +86,6 @@ def set_optimization_enabled(flag):
 
 
 # {{{ cache control
-
-CACHING_ENABLED = True
 
 CACHING_ENABLED = (
     "SUMPY_NO_CACHE" not in os.environ

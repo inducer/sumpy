@@ -76,6 +76,7 @@ if TYPE_CHECKING:
     from boxtree.traversal import FMMTraversalInfo
     from numpy.typing import DTypeLike
 
+    import pyopencl
     from arraycontext import Array
 
     from sumpy.array_context import PyOpenCLArrayContext
@@ -811,7 +812,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             local_exps_view_func = self.local_expansions_view
 
         for lev in range(self.tree.nlevels):
-            wait_for = []
+            wait_for: list[pyopencl.Event] = []
 
             start, stop = level_start_target_box_nrs[lev:lev+2]
             if start == stop:
