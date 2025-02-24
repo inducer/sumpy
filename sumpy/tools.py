@@ -440,7 +440,6 @@ class OrderedSet(MutableSet):
 
 
 class KernelCacheMixin(ABC):
-    context: cl.Context
     name: str
 
     @abstractmethod

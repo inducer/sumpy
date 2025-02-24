@@ -51,7 +51,6 @@ Expansion-to-expansion
 .. autoclass:: E2EFromCSR
 .. autoclass:: E2EFromParent
 .. autoclass:: E2EFromChildren
-
 """
 
 
