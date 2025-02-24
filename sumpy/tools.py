@@ -429,11 +429,11 @@ class KernelCacheMixin(ABC):
         ...
 
     @abstractmethod
-    def get_kernel(self, **kwargs: Any) -> lp.TranslationUnit:
+    def get_kernel(self, **kwargs) -> lp.TranslationUnit:
         ...
 
     @abstractmethod
-    def get_optimized_kernel(self, **kwargs: Any) -> lp.TranslationUnit:
+    def get_optimized_kernel(self, **kwargs) -> lp.TranslationUnit:
         ...
 
     @memoize_method

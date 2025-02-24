@@ -183,7 +183,10 @@ class P2PBase(KernelCacheMixin, KernelComputation):
                     if self.exclude_self else [])
                 + gather_loopy_source_arguments(self.source_kernels))
 
-    def get_optimized_kernel(self, targets_is_obj_array, sources_is_obj_array):
+    def get_optimized_kernel(self, *,
+                             targets_is_obj_array: bool = False,
+                             sources_is_obj_array: bool = False,
+                             **kwargs: Any) -> lp.TranslationUnit:
         # FIXME
         knl = self.get_kernel()
 
@@ -194,10 +197,8 @@ class P2PBase(KernelCacheMixin, KernelComputation):
 
         knl = lp.split_iname(knl, "itgt", 1024, outer_tag="g.0")
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
-        knl = lp.set_options(knl,
-                enforce_variable_access_ordered="no_check")
+        knl = lp.set_options(knl, enforce_variable_access_ordered="no_check")
 
-        knl = register_optimization_preambles(knl, self.device)
         return knl
 
 
@@ -475,9 +476,11 @@ class P2PFromCSR(P2PBase):
     def default_name(self):
         return "p2p_from_csr"
 
-    def get_kernel(self,
-            max_nsources_in_one_box: int, max_ntargets_in_one_box: int, *,
-            work_items_per_group: int = 32, is_gpu: bool = False):
+    def get_kernel(self, *,
+            max_nsources_in_one_box: int = 32,
+            max_ntargets_in_one_box: int = 32,
+            work_items_per_group: int = 32,
+            is_gpu: bool = False, **kwargs: Any) -> lp.TranslationUnit:
         loopy_insns, _result_names = self.get_loopy_insns_and_result_names()
         arguments = [
                 *self.get_default_src_tgt_arguments(),
@@ -674,8 +677,10 @@ class P2PFromCSR(P2PBase):
                 "noutputs": len(self.target_kernels)},
             )
 
-        loopy_knl = lp.add_dtypes(
-                loopy_knl, {"nsources": np.int32, "ntargets": np.int32})
+        loopy_knl = lp.add_dtypes(loopy_knl, {
+            "nsources": np.dtype(np.int32),
+            "ntargets": np.dtype(np.int32),
+            })
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, "istrength*:unr")
@@ -687,19 +692,24 @@ class P2PFromCSR(P2PBase):
 
         return loopy_knl
 
-    def get_optimized_kernel(self,
-            max_nsources_in_one_box: int,
-            max_ntargets_in_one_box: int,
-            strength_dtype: np.dtype[Any],
-            source_dtype: np.dtype[Any],
-            local_mem_size: int,
-            is_gpu: bool):
+    def get_optimized_kernel(self, *,
+            max_nsources_in_one_box: int = 32,
+            max_ntargets_in_one_box: int = 32,
+            strength_dtype: np.dtype[Any] | None = None,
+            source_dtype: np.dtype[Any] | None = None,
+            local_mem_size: int = 32,
+            is_gpu: bool = False, **kwargs) -> lp.TranslationUnit:
         if not is_gpu:
-            knl = self.get_kernel(max_nsources_in_one_box,
-                    max_ntargets_in_one_box, is_gpu=is_gpu)
+            knl = self.get_kernel(
+                    max_nsources_in_one_box=max_nsources_in_one_box,
+                    max_ntargets_in_one_box=max_ntargets_in_one_box,
+                    is_gpu=is_gpu)
             knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
             knl = self._allow_redundant_execution_of_knl_scaling(knl)
         else:
+            assert strength_dtype is not None
+            assert source_dtype is not None
+
             dtype_size = np.dtype(strength_dtype).alignment
             work_items_per_group = min(256, max_ntargets_in_one_box)
             total_local_mem = max_nsources_in_one_box * \
@@ -708,8 +718,9 @@ class P2PFromCSR(P2PBase):
             # can be scheduled at the same time for latency hiding
             nprefetch = (2 * total_local_mem - 1) // local_mem_size + 1
 
-            knl = self.get_kernel(max_nsources_in_one_box,
-                    max_ntargets_in_one_box,
+            knl = self.get_kernel(
+                    max_nsources_in_one_box=max_nsources_in_one_box,
+                    max_ntargets_in_one_box=max_ntargets_in_one_box,
                     work_items_per_group=work_items_per_group,
                     is_gpu=is_gpu)
             knl = lp.tag_inames(knl, {"itgt_box": "g.0", "inner": "l.0"})
@@ -771,12 +782,8 @@ class P2PFromCSR(P2PBase):
             knl = lp.add_inames_to_insn(knl,
                     "inner", "id:init_* or id:*_scaling or id:src_box_insn_*")
             knl = lp.add_inames_to_insn(knl, "itgt_box", "id:*_scaling")
-            # knl = lp.set_options(knl, write_code=True)
 
-        knl = lp.set_options(knl,
-                enforce_variable_access_ordered="no_check")
-
-        knl = register_optimization_preambles(knl, self.device)
+        knl = lp.set_options(knl, enforce_variable_access_ordered="no_check")
         return knl
 
     def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
@@ -786,8 +793,8 @@ class P2PFromCSR(P2PBase):
 
         is_gpu = not is_cl_cpu(actx)
         if is_gpu:
-            source_dtype = kwargs.get("sources")[0].dtype
-            strength_dtype = kwargs.get("strength").dtype
+            source_dtype = kwargs["sources"][0].dtype
+            strength_dtype = kwargs["strength"].dtype
         else:
             # these are unused for not GPU and defeats the caching
             # set them to None to keep the caching across dtypes

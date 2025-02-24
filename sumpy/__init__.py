@@ -24,7 +24,9 @@ THE SOFTWARE.
 """
 
 import os
+from collections.abc import Hashable
 
+import loopy as lp
 from pytools.persistent_dict import WriteOncePersistentDict
 
 from sumpy.e2e import (
@@ -59,7 +61,7 @@ __all__ = [
 ]
 
 
-code_cache = (
+code_cache: WriteOncePersistentDict[Hashable, lp.TranslationUnit] = (
     WriteOncePersistentDict(f"sumpy-code-cache-v7-{VERSION_TEXT}", safe_sync=False))
 
 

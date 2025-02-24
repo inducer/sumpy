@@ -27,6 +27,7 @@ THE SOFTWARE.
 """
 
 import logging
+from typing import Any
 
 import numpy as np
 
@@ -195,14 +196,14 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
         raise NotImplementedError
 
     def get_optimized_kernel(self, *,
-            is_cpu: bool,
-            targets_is_obj_array: bool,
-            sources_is_obj_array: bool,
-            centers_is_obj_array: bool,
+            is_cpu: bool = True,
+            targets_is_obj_array: bool = False,
+            sources_is_obj_array: bool = False,
+            centers_is_obj_array: bool = False,
             # Used by pytential to override the name of the loop to be
             # parallelized. In the case of QBX, that's the loop over QBX
             # targets (not global targets).
-            itgt_name: str = "itgt"):
+            itgt_name: str = "itgt", **kwargs: Any) -> lp.TranslationUnit:
         # FIXME specialize/tune for GPU/CPU
         loopy_knl = self.get_kernel()
 

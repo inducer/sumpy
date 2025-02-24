@@ -509,8 +509,7 @@ class PotentialSource:
     def __neg__(self) -> PotentialSource:
         return -1*self
 
-    def __add__(self, other: Number_ish | PotentialSource
-                ) -> PotentialSource:
+    def __add__(self, other: Number_ish | PotentialSource) -> PotentialSource:
         if isinstance(other, Number | np.number):
             other = ConstantPotential(self.toy_ctx, other)
         elif not isinstance(other, PotentialSource):
@@ -520,18 +519,14 @@ class PotentialSource:
 
     __radd__ = __add__
 
-    def __sub__(self,
-                other: Number_ish | PotentialSource) -> PotentialSource:
+    def __sub__(self, other: Number_ish | PotentialSource) -> PotentialSource:
         return self.__add__(-other)
 
-    def __rsub__(
-            self,
-            other: Number | np.number | PotentialSource
-            ) -> PotentialSource:
+    def __rsub__(self,  # type: ignore[misc]
+                 other: Number_ish | PotentialSource) -> PotentialSource:
         return (-self).__add__(other)
 
-    def __mul__(self,
-                other: Number_ish | PotentialSource) -> PotentialSource:
+    def __mul__(self, other: Number_ish | PotentialSource) -> PotentialSource:
         if isinstance(other, Number | np.number):
             other = ConstantPotential(self.toy_ctx, other)
         elif not isinstance(other, PotentialSource):
@@ -722,9 +717,9 @@ class Sum(PotentialExpressionNode):
     """
 
     def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
-        result = 0
+        result = np.zeros(targets.shape[1])
         for psource in self.psources:
-            result = result + psource.eval(actx, targets)
+            result += psource.eval(actx, targets)
 
         return result
 
@@ -735,9 +730,9 @@ class Product(PotentialExpressionNode):
     """
 
     def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
-        result = 1
+        result = np.ones(targets.shape[1])
         for psource in self.psources:
-            result = result * psource.eval(actx, targets)
+            result *= psource.eval(actx, targets)
 
         return result
 

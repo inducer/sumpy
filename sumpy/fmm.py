@@ -29,6 +29,8 @@ __doc__ = """Integrates :mod:`boxtree` with :mod:`sumpy`.
 .. autoclass:: SumpyExpansionWrangler
 """
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 
 from arraycontext import Array
@@ -56,6 +58,10 @@ from sumpy.tools import (
     run_opencl_fft,
     to_complex_dtype,
 )
+
+
+if TYPE_CHECKING:
+    import pyopencl
 
 
 # {{{ tree-independent data for wrangler
@@ -731,7 +737,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             local_exps_view_func = self.local_expansions_view
 
         for lev in range(self.tree.nlevels):
-            wait_for = []
+            wait_for: list[pyopencl.Event] = []
 
             start, stop = level_start_target_box_nrs[lev:lev+2]
             if start == stop:
