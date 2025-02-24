@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2013 Andreas Kloeckner"
 
 __license__ = """
@@ -21,28 +24,43 @@ THE SOFTWARE.
 """
 
 import os
-from sumpy.p2p import P2P, P2PFromCSR
-from sumpy.p2e import P2EFromSingleBox, P2EFromCSR
-from sumpy.e2p import E2PFromSingleBox, E2PFromCSR
-from sumpy.e2e import (
-    E2EFromCSR, E2EFromChildren, E2EFromParent,
-    M2LUsingTranslationClassesDependentData,
-    M2LGenerateTranslationClassesDependentData, M2LPreprocessMultipole,
-    M2LPostprocessLocal)
-from sumpy.version import VERSION_TEXT
+
 from pytools.persistent_dict import WriteOncePersistentDict
 
+from sumpy.e2e import (
+    E2EFromChildren,
+    E2EFromCSR,
+    E2EFromParent,
+    M2LGenerateTranslationClassesDependentData,
+    M2LPostprocessLocal,
+    M2LPreprocessMultipole,
+    M2LUsingTranslationClassesDependentData,
+)
+from sumpy.e2p import E2PFromCSR, E2PFromSingleBox
+from sumpy.p2e import P2EFromCSR, P2EFromSingleBox
+from sumpy.p2p import P2P, P2PFromCSR
+from sumpy.version import VERSION_TEXT
+
+
 __all__ = [
-    "P2P", "P2PFromCSR",
-    "P2EFromSingleBox", "P2EFromCSR",
-    "E2PFromSingleBox", "E2PFromCSR",
-    "E2EFromCSR", "E2EFromChildren", "E2EFromParent",
-    "M2LUsingTranslationClassesDependentData",
+    "P2P",
+    "E2EFromCSR",
+    "E2EFromChildren",
+    "E2EFromParent",
+    "E2PFromCSR",
+    "E2PFromSingleBox",
     "M2LGenerateTranslationClassesDependentData",
-    "M2LPreprocessMultipole", "M2LPostprocessLocal"]
+    "M2LPostprocessLocal",
+    "M2LPreprocessMultipole",
+    "M2LUsingTranslationClassesDependentData",
+    "P2EFromCSR",
+    "P2EFromSingleBox",
+    "P2PFromCSR",
+]
 
 
-code_cache = WriteOncePersistentDict(f"sumpy-code-cache-v6-{VERSION_TEXT}")
+code_cache = WriteOncePersistentDict(
+     f"sumpy-code-cache-v6-{VERSION_TEXT}", safe_sync=False)
 
 
 # {{{ optimization control

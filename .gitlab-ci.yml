@@ -17,12 +17,7 @@
 #    reports:
 #      junit: test/pytest.xml
 
-stages:
-  - test
-  - deploy
-
 Pytest POCL:
-  stage: test
   script:
   - export PY_EXE=python3
   - export PYOPENCL_TEST=portable:pthread
@@ -39,7 +34,6 @@ Pytest POCL:
       junit: test/pytest.xml
 
 Pytest Titan V:
-  stage: test
   script:
   - py_version=3
   - export PYOPENCL_TEST=nvi:titan
@@ -57,7 +51,6 @@ Pytest Titan V:
       junit: test/pytest.xml
 
 Pytest Conda:
-  stage: test
   script:
   # Disable caching to ensure SymEngine code generation is exercised.
   - export SUMPY_NO_CACHE=1
@@ -74,7 +67,6 @@ Pytest Conda:
       junit: test/pytest.xml
 
 Pytest POCL Titan V:
-  stage: test
   script:
   # Disable caching to ensure SymEngine code generation is exercised.
   - export SUMPY_NO_CACHE=1
@@ -91,7 +83,6 @@ Pytest POCL Titan V:
       junit: test/pytest.xml
 
 Examples Conda:
-  stage: test
   script: |
     grep -v symengine .test-conda-env-py3.yml > .test-conda-env.yml
     CONDA_ENVIRONMENT=.test-conda-env.yml
@@ -106,7 +97,6 @@ Examples Conda:
   - tags
 
 Documentation:
-  stage: deploy
   script: |
     EXTRA_INSTALL="pybind11 numpy mako"
     curl -L -O https://tiker.net/ci-support-v0
@@ -118,25 +108,12 @@ Documentation:
   tags:
   - linux
 
-Flake8:
-  stage: test
+Ruff:
   script:
-  - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/prepare-and-run-flake8.sh
-  - . ./prepare-and-run-flake8.sh "$CI_PROJECT_NAME" test examples benchmarks
+  - pipx install uv
+  - uv run --only-group lint ruff check
   tags:
-  - python3
-  except:
-  - tags
-
-Pylint:
-  script:
-  - EXTRA_INSTALL="pybind11 numpy mako scipy matplotlib pyvisfile mpi4py"
-  - curl -L -O https://tiker.net/ci-support-v0
-  - . ci-support-v0
-  - build_py_project
-  - run_pylint "$(basename $GITHUB_REPOSITORY)" examples/*.py, test/*.py
-  tags:
-  - python3
+  - docker-runner
   except:
   - tags
 

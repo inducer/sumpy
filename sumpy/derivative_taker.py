@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = """
 Copyright (C) 2012 Andreas Kloeckner
 Copyright (C) 2020 Isuru Fernando
@@ -35,91 +38,120 @@ __doc__ = """
  .. autoclass:: DifferentiatedExprDerivativeTaker
 """
 
-from pytools.tag import tag_dataclass
+import logging
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import numpy as np
+from typing_extensions import override
+
+from pytools import memoize_method
+
 import sumpy.symbolic as sym
-from sumpy.tools import add_to_sac, add_mi
+from sumpy.tools import add_mi, add_to_sac, sub_mi
 
-from typing import Dict, Tuple, Any
 
-import logging
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
+
+    import sympy as sp
+
+    from sumpy.assignment_collection import SymbolicAssignmentCollection
+    from sumpy.expansion.diff_op import MultiIndex
+
 
 logger = logging.getLogger(__name__)
 
 
 # {{{ ExprDerivativeTaker
 
+@dataclass(frozen=True)
 class ExprDerivativeTaker:
-    """Facilitates the efficient computation of (potentially) high-order
+    r"""Facilitates the efficient computation of (potentially) high-order
     derivatives of a given :mod:`sympy` expression *expr* while attempting
     to maximize the number of common subexpressions generated.
     This class defines the interface and realizes a baseline implementation.
     More specialized implementations may offer better efficiency for special
     cases.
+
+    A class to take scaled derivatives of the symbolic expression
+    expr w.r.t. variables var_list and the scaling parameter rscale.
+
+    Consider a Taylor multipole expansion:
+
+    .. math::
+        f (x - y) = \sum_{i = 0}^{\infty} (\partial_y^i f) (x - y) \big|_{y = c}
+       \frac{(y - c)^i}{i!} .
+
+    Now suppose we would like to use a scaled version :math:`g` of the
+    kernel :math:`f`:
+    .. math::
+
+        \begin{eqnarray*}
+        f (x) & = & g (x / \alpha),\\
+        f^{(i)} (x) & = & \frac{1}{\alpha^i} g^{(i)} (x / \alpha) .
+        \end{eqnarray*}
+
+    where :math:`\alpha` is chosen to be on a length scale similar to
+    :math:`x` (for example by choosing :math:`\alpha` proporitional to the
+    size of the box for which the expansion is intended) so that :math:`x /
+    \alpha` is roughly of unit magnitude, to avoid arithmetic issues with
+    small arguments. This yields
+    .. math::
+
+        f (x - y) = \sum_{i = 0}^{\infty} (\partial_y^i g)
+        \left( \frac{x - y}{\alpha} \right) \Bigg|_{y = c}
+        \cdot
+        \frac{(y - c)^i}{\alpha^i \cdot i!}.
+
+    Observe that the :math:`(y - c)` term is now scaled to unit magnitude,
+    as is the argument of :math:`g`.
+    With :math:`\xi = x / \alpha`, we find
+    .. math::
+
+        \begin{eqnarray*}
+        g (\xi) & = & f (\alpha \xi),\\
+        g^{(i)} (\xi) & = & \alpha^i f^{(i)} (\alpha \xi) .
+        \end{eqnarray*}
+
+    Generically for all kernels, :math:`f^{(i)} (\alpha \xi)` is computable
+    by taking a sufficient number of symbolic derivatives of :math:`f` and
+    providing :math:`\alpha \xi = x` as the argument.
+    Now, for some kernels, like :math:`f (x) = C \log x`, the powers of
+    :math:`\alpha^i` from the chain rule cancel with the ones from the
+    argument substituted into the kernel derivatives:
+    .. math::
+
+        g^{(i)} (\xi) = \alpha^i f^{(i)} (\alpha \xi) = C' \cdot \alpha^i \cdot
+        \frac{1}{(\alpha x)^i} \quad (i > 0),
+
+    making them what you might call *scale-invariant*.
+    This derivative taker returns :math:`g^{(i)}(\xi) = \alpha^i f^{(i)}`
+    given :math:`f^{(0)}` as *expr* and :math:`\alpha` as :attr:`rscale`.
+
+    .. autoattribute:: orig_expr
+    .. autoattribute:: var_list
+    .. autoattribute:: rscale
+    .. autoattribute:: sac
+
     .. automethod:: diff
     """
+    orig_expr: sym.Expr
+    var_list: Sequence[sym.Symbol]
+    rscale: sym.Expr = field(default_factory=lambda: sym.sympify(1))
+    sac: SymbolicAssignmentCollection | None = None
 
-    def __init__(self, expr, var_list, rscale=1, sac=None):
-        r"""
-        A class to take scaled derivatives of the symbolic expression
-        expr w.r.t. variables var_list and the scaling parameter rscale.
-        Consider a Taylor multipole expansion:
-        .. math::
-            f (x - y) = \sum_{i = 0}^{\infty} (\partial_y^i f) (x - y) \big|_{y = c}
-           \frac{(y - c)^i}{i!} .
-        Now suppose we would like to use a scaled version :math:`g` of the
-        kernel :math:`f`:
-        .. math::
-            \begin{eqnarray*}
-              f (x) & = & g (x / \alpha),\\
-              f^{(i)} (x) & = & \frac{1}{\alpha^i} g^{(i)} (x / \alpha) .
-            \end{eqnarray*}
-        where :math:`\alpha` is chosen to be on a length scale similar to
-        :math:`x` (for example by choosing :math:`\alpha` proporitional to the
-        size of the box for which the expansion is intended) so that :math:`x /
-        \alpha` is roughly of unit magnitude, to avoid arithmetic issues with
-        small arguments. This yields
-        .. math::
-            f (x - y) = \sum_{i = 0}^{\infty} (\partial_y^i g)
-            \left( \frac{x - y}{\alpha} \right) \Bigg|_{y = c}
-            \cdot
-            \frac{(y - c)^i}{\alpha^i \cdot i!}.
-        Observe that the :math:`(y - c)` term is now scaled to unit magnitude,
-        as is the argument of :math:`g`.
-        With :math:`\xi = x / \alpha`, we find
-        .. math::
-            \begin{eqnarray*}
-              g (\xi) & = & f (\alpha \xi),\\
-              g^{(i)} (\xi) & = & \alpha^i f^{(i)} (\alpha \xi) .
-            \end{eqnarray*}
-        Generically for all kernels, :math:`f^{(i)} (\alpha \xi)` is computable
-        by taking a sufficient number of symbolic derivatives of :math:`f` and
-        providing :math:`\alpha \xi = x` as the argument.
-        Now, for some kernels, like :math:`f (x) = C \log x`, the powers of
-        :math:`\alpha^i` from the chain rule cancel with the ones from the
-        argument substituted into the kernel derivatives:
-        .. math::
-            g^{(i)} (\xi) = \alpha^i f^{(i)} (\alpha \xi) = C' \cdot \alpha^i \cdot
-            \frac{1}{(\alpha x)^i} \quad (i > 0),
-        making them what you might call *scale-invariant*.
-        This derivative taker returns :math:`g^{(i)}(\xi) = \alpha^i f^{(i)}`
-        given :math:`f^{(0)}` as *expr* and :math:`\alpha` as :attr:`rscale`.
-        """
+    cache_by_mi: dict[MultiIndex, sym.Expr] = field(init=False)
 
-        assert isinstance(expr, sym.Basic)
-        self.var_list = var_list
-        zero_mi = (0,) * len(var_list)
-        self.cache_by_mi = {zero_mi: expr}
-        self.rscale = rscale
-        self.sac = sac
-        self.dim = len(self.var_list)
-        self.orig_expr = expr
+    def __post_init__(self):
+        zero_mi = (0,) * self.dim
+        object.__setattr__(self, "cache_by_mi", {zero_mi: self.orig_expr})
 
-    def mi_dist(self, a, b):
-        return np.array(a, dtype=int) - np.array(b, dtype=int)
+    @property
+    def dim(self):
+        return len(self.var_list)
 
-    def diff(self, mi):
+    def diff(self, mi: MultiIndex) -> sym.Expr:
         """Take the derivative of the expression represented by
         :class:`ExprDerivativeTaker`.
         :param mi: multi-index representing the derivative
@@ -139,19 +171,21 @@ class ExprDerivativeTaker:
 
         return expr
 
-    def get_derivative_taking_sequence(self, start_mi, end_mi):
+    def get_derivative_taking_sequence(self,
+                start_mi: MultiIndex,
+                end_mi: MultiIndex) -> Iterable[tuple[sym.Symbol, MultiIndex]]:
         current_mi = np.array(start_mi, dtype=int)
         for idx, (mi_i, vec_i) in enumerate(
-                zip(self.mi_dist(end_mi, start_mi), self.var_list)):
+                zip(sub_mi(end_mi, start_mi), self.var_list, strict=True)):
             for _ in range(1, 1 + mi_i):
                 current_mi[idx] += 1
                 yield vec_i, tuple(current_mi)
 
-    def get_closest_cached_mi(self, mi):
+    def get_closest_cached_mi(self, mi: MultiIndex):
         return min((other_mi
-                for other_mi in self.cache_by_mi.keys()
+                for other_mi in self.cache_by_mi
                 if (np.array(mi) >= np.array(other_mi)).all()),
-            key=lambda other_mi: sum(self.mi_dist(mi, other_mi)))
+            key=lambda other_mi: sum(sub_mi(mi, other_mi)))
 
 
 # }}}
@@ -162,13 +196,19 @@ class LaplaceDerivativeTaker(ExprDerivativeTaker):
     """Specialized derivative taker for Laplace potential.
     """
 
-    def __init__(self, expr, var_list, rscale=1, sac=None):
-        super().__init__(expr, var_list, rscale, sac)
-        self.scaled_var_list = [add_to_sac(self.sac, v/rscale) for v in var_list]
-        self.scaled_r = add_to_sac(self.sac,
+    @property
+    @memoize_method
+    def scaled_var_list(self):
+        return [add_to_sac(self.sac, v/self.rscale) for v in self.var_list]
+
+    @property
+    @memoize_method
+    def scaled_r(self):
+        return add_to_sac(self.sac,
                 sym.sqrt(sum(v**2 for v in self.scaled_var_list)))
 
-    def diff(self, mi):
+    @override
+    def diff(self, mi: MultiIndex) -> sym.Expr:
         """
         Implements the algorithm described in [Fernando2021] to take cartesian
         derivatives of Laplace potential using recurrences. Cost of each derivative
@@ -179,7 +219,7 @@ class LaplaceDerivativeTaker(ExprDerivativeTaker):
         """
         # Return zero for negative values. Makes the algorithm readable.
         if min(mi) < 0:
-            return 0
+            return sym.sympify(0)
         try:
             return self.cache_by_mi[mi]
         except KeyError:
@@ -226,25 +266,34 @@ class LaplaceDerivativeTaker(ExprDerivativeTaker):
 
 # {{{ RadialDerivativeTaker
 
+@dataclass(frozen=True)
 class RadialDerivativeTaker(ExprDerivativeTaker):
     """Specialized derivative taker for radial expressions.
     """
 
-    def __init__(self, expr, var_list, rscale=1, sac=None):
-        """
-        Takes the derivatives of a radial function.
-        """
-        import sumpy.symbolic as sym
-        super().__init__(expr, var_list, rscale, sac)
-        empty_mi = (0,) * len(var_list)
-        self.cache_by_mi_q = {(empty_mi, 0): expr}
-        self.r = sym.sqrt(sum(v**2 for v in var_list))
-        rsym = sym.Symbol("_r")
-        r_expr = expr.xreplace({self.r**2: rsym**2})
-        self.is_radial = not any(r_expr.has(v) for v in var_list)
-        self.var_list_multiplied = [add_to_sac(sac, v * rscale) for v in var_list]
+    cache_by_mi_q: dict[tuple[MultiIndex, int], sym.Expr] = field(init=False)
 
-    def diff(self, mi, q=0):
+    def __post_init__(self):
+        empty_mi = (0,) * len(self.var_list)
+        object.__setattr__(self, "cache_by_mi_q", {(empty_mi, 0): self.orig_expr})
+
+    @property
+    @memoize_method
+    def r(self):
+        return sym.sqrt(sum(v**2 for v in self.var_list))
+
+    @property
+    def is_radial(self):
+        rsym = sym.Symbol("_r")
+        r_expr = self.orig_expr.xreplace({self.r**2: rsym**2})
+        return not any(r_expr.has(v) for v in self.var_list)
+
+    @property
+    @memoize_method
+    def var_list_multiplied(self):
+        return [add_to_sac(self.sac, v * self.rscale) for v in self.var_list]
+
+    def diff(self, mi: MultiIndex, q: int = 0) -> sym.Expr:
         """
         Implements the algorithm described in [Tausch2003] to take cartesian
         derivatives of radial functions using recurrences. Cost of each derivative
@@ -258,7 +307,7 @@ class RadialDerivativeTaker(ExprDerivativeTaker):
             return ExprDerivativeTaker.diff(self, mi)
 
         try:
-            return self.cache_by_mi_q[(mi, q)]
+            return self.cache_by_mi_q[mi, q]
         except KeyError:
             pass
 
@@ -268,7 +317,7 @@ class RadialDerivativeTaker(ExprDerivativeTaker):
                 mi_minus_one[i] = 0
                 mi_minus_one = tuple(mi_minus_one)
                 expr = self.var_list_multiplied[i] * self.diff(mi_minus_one, q=q+1)
-                self.cache_by_mi_q[(mi, q)] = expr
+                self.cache_by_mi_q[mi, q] = expr
                 return expr
 
         for i in range(self.dim):
@@ -282,7 +331,7 @@ class RadialDerivativeTaker(ExprDerivativeTaker):
                 expr = (mi[i]-1)*self.diff(mi_minus_two, q=q+1) * self.rscale ** 2
                 expr += self.var_list_multiplied[i] * self.diff(mi_minus_one, q=q+1)
                 expr = add_to_sac(self.sac, expr)
-                self.cache_by_mi_q[(mi, q)] = expr
+                self.cache_by_mi_q[mi, q] = expr
                 return expr
 
         assert mi == (0,)*self.dim
@@ -294,7 +343,7 @@ class RadialDerivativeTaker(ExprDerivativeTaker):
         expr = prev_expr.diff(self.var_list[0])/self.var_list[0]
         # We need to distribute the division above
         expr = expr.expand(deep=False)
-        self.cache_by_mi_q[(mi, q)] = expr
+        self.cache_by_mi_q[mi, q] = expr
         return expr
 
 
@@ -312,7 +361,7 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
             return RadialDerivativeTaker.diff(self, mi, q)
 
         try:
-            return self.cache_by_mi_q[(mi, q)]
+            return self.cache_by_mi_q[mi, q]
         except KeyError:
             pass
 
@@ -329,7 +378,7 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
             k = (self.orig_expr * self.r).args[-1] / sym.I / self.r
             expr = (-(2*q - 1) * self.diff(mi, q - 1)
                     - k**2 * self.diff(mi, q - 2)) / self.r**2
-        self.cache_by_mi_q[(mi, q)] = expr
+        self.cache_by_mi_q[mi, q] = expr
         return expr
 
 
@@ -337,10 +386,10 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
 
 # {{{ DifferentiatedExprDerivativeTaker
 
-DerivativeCoeffDict = Dict[Tuple[int], Any]
+DerivativeCoeffDict = dict[tuple[int, ...], int | float | complex | sym.Expr]
 
 
-@tag_dataclass
+@dataclass(frozen=True)
 class DifferentiatedExprDerivativeTaker:
     """Implements the :class:`ExprDerivativeTaker` interface
     for an expression that is itself a linear combination of
@@ -359,7 +408,7 @@ class DifferentiatedExprDerivativeTaker:
     taker: ExprDerivativeTaker
     derivative_coeff_dict: DerivativeCoeffDict
 
-    def diff(self, mi, save_intermediate=lambda x: x):
+    def diff(self, mi: MultiIndex, save_intermediate=lambda x: x) -> sym.Expr:
         # By passing `rscale` to the derivative taker we are taking a scaled
         # version of the derivative which is `expr.diff(mi)*rscale**sum(mi)`
         # which might be implemented efficiently for kernels like Laplace.
@@ -367,8 +416,9 @@ class DifferentiatedExprDerivativeTaker:
         # :attr:`derivative_coeff_dict` which would multiply the
         # expression by more `rscale`s than necessary. This is corrected by
         # dividing by `rscale`.
-        max_order = max(sum(extra_mi) for extra_mi in
-                self.derivative_coeff_dict.keys())
+        max_order = max(
+                sum(extra_mi) for extra_mi in self.derivative_coeff_dict
+                )
 
         result = sum(
             coeff * self.taker.diff(add_mi(mi, extra_mi))
@@ -382,25 +432,29 @@ class DifferentiatedExprDerivativeTaker:
 
 # {{{ Helper functions
 
-def diff_derivative_coeff_dict(derivative_coeff_dict: DerivativeCoeffDict,
-        variable_idx, variables):
+def diff_derivative_coeff_dict(
+        derivative_coeff_dict: DerivativeCoeffDict,
+        variable_idx: int,
+        variables: sp.Matrix) -> DerivativeCoeffDict:
     """Differentiate a derivative transformation dictionary given by
     *derivative_coeff_dict* using the variable given by **variable_idx**
     and return a new derivative transformation dictionary.
     """
     from collections import defaultdict
-    new_derivative_coeff_dict = defaultdict(lambda: 0)
+    new_derivative_coeff_dict: DerivativeCoeffDict = defaultdict(lambda: 0)
 
     for mi, coeff in derivative_coeff_dict.items():
-        # In the case where we have x * u.diff(x), the result should
-        # be x.diff(x) + x * u.diff(x, x)
+        # In the case where we have x * u.diff(x), the result should be
+        #       x.diff(x) + x * u.diff(x, x)
         # Calculate the first term by differentiating the coefficients
         new_coeff = sym.sympify(coeff).diff(variables[variable_idx])
         new_derivative_coeff_dict[mi] += new_coeff
+
         # Next calculate the second term by differentiating the derivatives
         new_mi = list(mi)
         new_mi[variable_idx] += 1
         new_derivative_coeff_dict[tuple(new_mi)] += coeff
+
     return {derivative: coeff for derivative, coeff in
             new_derivative_coeff_dict.items() if coeff != 0}
 

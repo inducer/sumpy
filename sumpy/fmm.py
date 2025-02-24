@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2013 Andreas Kloeckner"
 
 __license__ = """
@@ -23,26 +26,73 @@ THE SOFTWARE.
 __doc__ = """Integrates :mod:`boxtree` with :mod:`sumpy`.
 
 .. autoclass:: SumpyTreeIndependentDataForWrangler
+.. autodata:: FMMLevelToOrder
+    :no-index:
+.. class:: FMMLevelToOrder
+
+    See above.
+
 .. autoclass:: SumpyExpansionWrangler
+
+.. autoclass:: MultipoleExpansionFromOrderFactory
+.. autoclass:: LocalExpansionFromOrderFactory
 """
 
+from collections.abc import Callable, Mapping
+from typing import TYPE_CHECKING, Any, Protocol, TypeAlias
+
 import numpy as np
+from boxtree.fmm import ExpansionWranglerInterface, TreeIndependentDataForWrangler
+from boxtree.tree import Tree
 
+import pytools.obj_array as obj_array
 from pytools import memoize_method
-from boxtree.fmm import TreeIndependentDataForWrangler, ExpansionWranglerInterface
 
-from arraycontext import Array
-
-from sumpy.array_context import PyOpenCLArrayContext
 from sumpy import (
-        P2EFromSingleBox, P2EFromCSR,
-        E2PFromSingleBox, E2PFromCSR,
-        P2PFromCSR,
-        E2EFromCSR, M2LUsingTranslationClassesDependentData,
-        E2EFromChildren, E2EFromParent,
-        M2LGenerateTranslationClassesDependentData,
-        M2LPreprocessMultipole, M2LPostprocessLocal)
-from sumpy.tools import to_complex_dtype, run_opencl_fft, get_opencl_fft_app
+    E2EFromChildren,
+    E2EFromCSR,
+    E2EFromParent,
+    E2PFromCSR,
+    E2PFromSingleBox,
+    M2LGenerateTranslationClassesDependentData,
+    M2LPostprocessLocal,
+    M2LPreprocessMultipole,
+    M2LUsingTranslationClassesDependentData,
+    P2EFromCSR,
+    P2EFromSingleBox,
+    P2PFromCSR,
+)
+from sumpy.kernel import Kernel
+from sumpy.tools import (
+    get_opencl_fft_app,
+    run_opencl_fft,
+    to_complex_dtype,
+)
+
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from boxtree.traversal import FMMTraversalInfo
+    from numpy.typing import DTypeLike
+
+    from arraycontext import Array
+
+    from sumpy.array_context import PyOpenCLArrayContext
+    from sumpy.expansion.local import LocalExpansionBase
+    from sumpy.expansion.multipole import MultipoleExpansionBase
+
+
+class MultipoleExpansionFromOrderFactory(Protocol):
+    def __call__(self,
+            order: int,
+            *, use_rscale: bool = True) -> MultipoleExpansionBase:
+        ...
+
+
+class LocalExpansionFromOrderFactory(Protocol):
+    def __call__(self, order: int, *, use_rscale: bool = True) -> LocalExpansionBase:
+        ...
 
 
 # {{{ tree-independent data for wrangler
@@ -54,12 +104,23 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
     lifetime is decoupled by storing it in this object.
     """
 
+    multipole_expansion_factory: MultipoleExpansionFromOrderFactory
+    local_expansion_factory: LocalExpansionFromOrderFactory
+    source_kernels: Sequence[Kernel] | None
+    target_kernels: Sequence[Kernel]
+    exclude_self: bool
+    use_rscale: bool | None
+    strength_usage: Sequence[int] | None
+
     def __init__(self,
-            array_context: PyOpenCLArrayContext,
-            multipole_expansion_factory,
-            local_expansion_factory,
-            target_kernels, exclude_self=False, use_rscale=None,
-            strength_usage=None, source_kernels=None):
+                 array_context: PyOpenCLArrayContext,
+                 multipole_expansion_factory: MultipoleExpansionFromOrderFactory,
+                 local_expansion_factory: LocalExpansionFromOrderFactory,
+                 target_kernels: Sequence[Kernel],
+                 exclude_self: bool = False,
+                 use_rscale: bool | None = None,
+                 strength_usage: Sequence[int] | None = None,
+                 source_kernels: Sequence[Kernel] | None = None):
         """
         :arg multipole_expansion_factory: a callable of a single argument (order)
             that returns a multipole expansion.
@@ -72,7 +133,7 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
         """
         super().__init__()
 
-        self._setup_actx = array_context
+        self._setup_actx: PyOpenCLArrayContext = array_context
 
         self.multipole_expansion_factory = multipole_expansion_factory
         self.local_expansion_factory = local_expansion_factory
@@ -88,12 +149,18 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
         return single_valued(k.get_base_kernel() for k in self.target_kernels)
 
     @memoize_method
-    def multipole_expansion(self, order):
-        return self.multipole_expansion_factory(order, self.use_rscale)
+    def multipole_expansion(self, order: int):
+        if self.use_rscale is None:
+            return self.multipole_expansion_factory(order)
+        else:
+            return self.multipole_expansion_factory(order, use_rscale=self.use_rscale)
 
     @memoize_method
-    def local_expansion(self, order):
-        return self.local_expansion_factory(order, self.use_rscale)
+    def local_expansion(self, order: int):
+        if self.use_rscale is None:
+            return self.local_expansion_factory(order)
+        else:
+            return self.local_expansion_factory(order, use_rscale=self.use_rscale)
 
     @property
     def m2l_translation(self):
@@ -182,6 +249,11 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
 
 # {{{ expansion wrangler
 
+FMMLevelToOrder: TypeAlias = Callable[
+        [Kernel, frozenset[tuple[str, object]], Tree, int],
+        int]
+
+
 class SumpyExpansionWrangler(ExpansionWranglerInterface):
     """Implements the :class:`boxtree.fmm.ExpansionWranglerInterface`
     by using :mod:`sumpy` expansions/translations.
@@ -207,23 +279,43 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         Type for the preprocessed multipole expansion if used for M2L.
     """
 
+    tree_indep: SumpyTreeIndependentDataForWrangler
+    traversal: FMMTraversalInfo
+
+    source_extra_kwargs: Mapping[str, object]
+    kernel_extra_kwargs: Mapping[str, object]
+    self_extra_kwargs: Mapping[str, object]
+    extra_kwargs: Mapping[str, object]
+
+    dtype: np.dtype[Any]
+    preprocessed_mpole_dtype: np.dtype[Any]
+
+    level_order: Sequence[int]
+
+    issued_timing_data_warning: bool
+
     def __init__(self,
-            tree_indep, traversal, dtype, fmm_level_to_order,
-            source_extra_kwargs=None,
-            kernel_extra_kwargs=None,
-            self_extra_kwargs=None,
-            translation_classes_data=None,
-            preprocessed_mpole_dtype=None,
-            *, _disable_translation_classes=False):
+                tree_indep: SumpyTreeIndependentDataForWrangler,
+                traversal: FMMTraversalInfo,
+                dtype: DTypeLike,
+                fmm_level_to_order: FMMLevelToOrder,
+                source_extra_kwargs: Mapping[str, object] | None = None,
+                kernel_extra_kwargs: Mapping[str, object] | None = None,
+                self_extra_kwargs: Mapping[str, object] | None = None,
+                translation_classes_data=None,
+                preprocessed_mpole_dtype: DTypeLike | None = None,
+                *,
+                _disable_translation_classes=False
+            ):
         super().__init__(tree_indep, traversal)
 
-        self.dtype = dtype
+        self.dtype = np.dtype(dtype)
 
         if not self.tree_indep.m2l_translation.use_fft:
             # If not FFT, we don't need complex dtypes
-            self.preprocessed_mpole_dtype = dtype
+            self.preprocessed_mpole_dtype = self.dtype
         elif preprocessed_mpole_dtype is not None:
-            self.preprocessed_mpole_dtype = preprocessed_mpole_dtype
+            self.preprocessed_mpole_dtype = np.dtype(preprocessed_mpole_dtype)
         else:
             # FIXME: It is weird that the wrangler has to compute this.
             self.preprocessed_mpole_dtype = to_complex_dtype(dtype)
@@ -248,7 +340,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         self.kernel_extra_kwargs = kernel_extra_kwargs
         self.self_extra_kwargs = self_extra_kwargs
 
-        self.extra_kwargs = source_extra_kwargs.copy()
+        self.extra_kwargs = dict(source_extra_kwargs)
         self.extra_kwargs.update(self.kernel_extra_kwargs)
 
         if _disable_translation_classes or not base_kernel.is_translation_invariant:
@@ -267,7 +359,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
         self.translation_classes_data = translation_classes_data
 
-    def level_to_rscale(self, level):
+    def level_to_rscale(self, level: int) -> float:
         tree = self.tree
         order = self.level_orders[level]
         r = tree.root_extent * (2**-level)
@@ -296,7 +388,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         actx = self.tree_indep._setup_actx
         return actx.to_numpy(self.tree.level_start_box_nrs)
 
-    def _expansions_level_starts(self, order_to_size):
+    def _expansions_level_starts(self, order_to_size: Callable[[int], int]):
         return build_csr_level_starts(self.level_orders, order_to_size,
                 self.tree_level_start_box_nrs)
 
@@ -319,7 +411,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
     @memoize_method
     def m2l_translation_classes_dependent_data_level_starts(self):
-        def order_to_size(order):
+        def order_to_size(order: int):
             mpole_expn = self.tree_indep.multipole_expansion(order)
             local_expn = self.tree_indep.local_expansion(order)
             m2l_translation = local_expn.m2l_translation
@@ -428,15 +520,16 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     m2l_work_array_zeros = m2l_preproc_mpole_expansion_zeros
     m2l_work_array_level_starts = m2l_preproc_mpole_expansions_level_starts
 
-    def output_zeros(self, actx: PyOpenCLArrayContext) -> np.ndarray:
+    def output_zeros(self,
+                actx: PyOpenCLArrayContext
+            ) -> obj_array.ObjectArray1D[Array]:
         """Return a potentials array (which must support addition) capable of
         holding a potential value for each target in the tree. Note that
         :func:`drive_fmm` makes no assumptions about *potential* other than
         that it supports addition--it may consist of potentials, gradients of
         the potential, or arbitrary other per-target output data.
         """
-        from pytools.obj_array import make_obj_array
-        return make_obj_array([
+        return obj_array.new_1d([
                 actx.zeros(self.tree.ntargets, dtype=self.dtype)
                 for k in self.tree_indep.target_kernels])
 
@@ -444,8 +537,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         return source_array[self.tree.user_source_ids]
 
     def reorder_potentials(self, potentials):
-        from pytools.obj_array import obj_array_vectorize
         import numpy as np
+
         assert (
                 isinstance(potentials, np.ndarray)
                 and potentials.dtype.char == "O")
@@ -453,7 +546,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         def reorder(x):
             return x[self.tree.sorted_target_ids]
 
-        return obj_array_vectorize(reorder, potentials)
+        return obj_array.vectorize(reorder, potentials)
 
     @property
     @memoize_method
@@ -513,7 +606,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         mpoles = self.multipole_expansion_zeros(actx)
         level_start_source_box_nrs = actx.to_numpy(level_start_source_box_nrs)
 
-        kwargs = self.extra_kwargs.copy()
+        kwargs = dict(self.extra_kwargs)
         kwargs.update(self.box_source_list_kwargs())
 
         for lev in range(self.tree.nlevels):
@@ -600,7 +693,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             source_box_lists, src_weight_vecs):
         pot = self.output_zeros(actx)
 
-        kwargs = self.extra_kwargs.copy()
+        kwargs = dict(self.extra_kwargs)
         kwargs.update(self.self_extra_kwargs)
         kwargs.update(self.box_source_list_kwargs())
         kwargs.update(self.box_target_list_kwargs())
@@ -615,7 +708,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 max_ntargets_in_one_box=self.max_ntargets_in_one_box,
                 **kwargs)
 
-        for pot_i, pot_res_i in zip(pot, pot_res):
+        for pot_i, pot_res_i in zip(pot, pot_res, strict=True):
             assert pot_i is pot_res_i
 
         return pot
@@ -825,7 +918,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             target_boxes_by_source_level, source_boxes_by_level, mpole_exps):
         pot = self.output_zeros(actx)
 
-        kwargs = self.kernel_extra_kwargs.copy()
+        kwargs = dict(self.kernel_extra_kwargs)
         kwargs.update(self.box_target_list_kwargs())
 
         wait_for = mpole_exps.events
@@ -856,7 +949,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
                     **kwargs)
 
-            for pot_i, pot_res_i in zip(pot, pot_res):
+            for pot_i, pot_res_i in zip(pot, pot_res, strict=True):
                 assert pot_i is pot_res_i
 
         return pot
@@ -869,7 +962,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         level_start_target_or_target_parent_box_nrs = (
             actx.to_numpy(level_start_target_or_target_parent_box_nrs))
 
-        kwargs = self.extra_kwargs.copy()
+        kwargs = dict(self.extra_kwargs)
         kwargs.update(self.box_source_list_kwargs())
 
         for lev in range(self.tree.nlevels):
@@ -951,7 +1044,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         pot = self.output_zeros(actx)
         level_start_target_box_nrs = actx.to_numpy(level_start_target_box_nrs)
 
-        kwargs = self.kernel_extra_kwargs.copy()
+        kwargs = dict(self.kernel_extra_kwargs)
         kwargs.update(self.box_target_list_kwargs())
 
         for lev in range(self.tree.nlevels):
@@ -978,7 +1071,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
                     **kwargs)
 
-            for pot_i, pot_res_i in zip(pot, pot_res):
+            for pot_i, pot_res_i in zip(pot, pot_res, strict=True):
                 assert pot_i is pot_res_i
 
         return pot

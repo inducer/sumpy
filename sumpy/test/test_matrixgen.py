@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2018 Alexandru Fikl"
 
 __license__ = """
@@ -20,17 +23,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import pytest
+import logging
 import sys
 
 import numpy as np
 import numpy.linalg as la
+import pytest
 
-from arraycontext import pytest_generate_tests_for_array_contexts
-from sumpy.array_context import (                                 # noqa: F401
-        PytestPyOpenCLArrayContextFactory, _acf)
+import pytools.obj_array as obj_array
+from arraycontext import ArrayContextFactory, pytest_generate_tests_for_array_contexts
 
-import logging
+from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
+
+
 logger = logging.getLogger(__name__)
 
 pytest_generate_tests = pytest_generate_tests_for_array_contexts([
@@ -87,7 +92,11 @@ def _build_subset_indices(actx, ntargets, nsources, factor):
 
 @pytest.mark.parametrize("factor", [1.0, 0.6])
 @pytest.mark.parametrize("lpot_id", [1, 2])
-def test_qbx_direct(actx_factory, factor, lpot_id, visualize=False):
+def test_qbx_direct(
+            actx_factory: ArrayContextFactory,
+            factor,
+            lpot_id,
+            visualize=False):
     if visualize:
         logging.basicConfig(level=logging.INFO)
 
@@ -97,7 +106,7 @@ def test_qbx_direct(actx_factory, factor, lpot_id, visualize=False):
     order = 12
     mode_nr = 25
 
-    from sumpy.kernel import LaplaceKernel, DirectionalSourceDerivative
+    from sumpy.kernel import DirectionalSourceDerivative, LaplaceKernel
     if lpot_id == 1:
         base_knl = LaplaceKernel(ndim)
         knl = base_knl
@@ -139,9 +148,8 @@ def test_qbx_direct(actx_factory, factor, lpot_id, visualize=False):
 
         extra_kwargs = {}
         if lpot_id == 2:
-            from pytools.obj_array import make_obj_array
             extra_kwargs["dsource_vec"] = (
-                actx.from_numpy(make_obj_array(np.ones((ndim, n))))
+                actx.from_numpy(obj_array.new_1d(np.ones((ndim, n))))
                 )
 
         result_lpot, = lpot(actx,
@@ -184,7 +192,12 @@ def test_qbx_direct(actx_factory, factor, lpot_id, visualize=False):
 @pytest.mark.parametrize("exclude_self", [True, False])
 @pytest.mark.parametrize("factor", [1.0, 0.6])
 @pytest.mark.parametrize("lpot_id", [1, 2])
-def test_p2p_direct(actx_factory, exclude_self, factor, lpot_id, visualize=False):
+def test_p2p_direct(
+            actx_factory: ArrayContextFactory,
+            exclude_self,
+            factor,
+            lpot_id,
+            visualize=False):
     if visualize:
         logging.basicConfig(level=logging.INFO)
 
@@ -193,7 +206,7 @@ def test_p2p_direct(actx_factory, exclude_self, factor, lpot_id, visualize=False
     ndim = 2
     mode_nr = 25
 
-    from sumpy.kernel import LaplaceKernel, DirectionalSourceDerivative
+    from sumpy.kernel import DirectionalSourceDerivative, LaplaceKernel
     if lpot_id == 1:
         lknl = LaplaceKernel(ndim)
     elif lpot_id == 2:
@@ -228,9 +241,8 @@ def test_p2p_direct(actx_factory, exclude_self, factor, lpot_id, visualize=False
                 actx.from_numpy(np.arange(n, dtype=np.int32))
                 )
         if lpot_id == 2:
-            from pytools.obj_array import make_obj_array
             extra_kwargs["dsource_vec"] = (
-                actx.from_numpy(make_obj_array(np.ones((ndim, n)))))
+                actx.from_numpy(obj_array.new_1d(np.ones((ndim, n)))))
 
         result_lpot, = lpot(actx,
                 targets=targets,

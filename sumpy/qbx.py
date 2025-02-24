@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = """
 Copyright (C) 2012 Andreas Kloeckner
 Copyright (C) 2018 Alexandru Fikl
@@ -23,18 +26,30 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Tuple, Union
+import logging
+from abc import ABC
+from typing import TYPE_CHECKING
 
 import numpy as np
+from typing_extensions import override
+
 import loopy as lp
-
+import pytools.obj_array as obj_array
+from pymbolic import parse
 from pytools import memoize_method
-from pytools.obj_array import make_obj_array
 
-from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program, is_cl_cpu
-from sumpy.tools import KernelComputation, KernelCacheMixin, is_obj_array_like
+import sumpy.symbolic as sym
+from sumpy.array_context import PyOpenCLArrayContext, is_cl_cpu, make_loopy_program
+from sumpy.tools import KernelCacheMixin, KernelComputation, is_obj_array_like
 
-import logging
+
+if TYPE_CHECKING:
+
+    from sumpy.expansion.local import (
+        LineTaylorLocalExpansion,
+        LocalExpansionBase,
+    )
+
 logger = logging.getLogger(__name__)
 
 
@@ -51,7 +66,7 @@ QBX for Layer Potentials
 """
 
 
-def stringify_expn_index(i: Union[Tuple[int, ...], int]) -> str:
+def stringify_expn_index(i: tuple[int, ...] | int) -> str:
     if isinstance(i, tuple):
         return "_".join(stringify_expn_index(i_i) for i_i in i)
     else:
@@ -66,11 +81,17 @@ def stringify_expn_index(i: Union[Tuple[int, ...], int]) -> str:
 
 # {{{ LayerPotentialBase: base class
 
-class LayerPotentialBase(KernelCacheMixin, KernelComputation):
-    def __init__(self, expansion, strength_usage=None,
-            value_dtypes=None, name=None,
-            source_kernels=None, target_kernels=None):
+class LayerPotentialBase(KernelCacheMixin, KernelComputation, ABC):
+    expansion: LineTaylorLocalExpansion | LocalExpansionBase
 
+    def __init__(self,
+            expansion: LineTaylorLocalExpansion | LocalExpansionBase,
+            strength_usage=None,
+            value_dtypes=None,
+            name=None,
+            device=None,
+            source_kernels=None,
+            target_kernels=None):
         from pytools import single_valued
 
         KernelComputation.__init__(self,
@@ -91,7 +112,7 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
     def _expand(self, sac, avec, bvec, rscale, isrc):
         from sumpy.symbolic import PymbolicToSympyMapper
         conv = PymbolicToSympyMapper()
-        strengths = [conv(self.get_strength_or_not(isrc, idx))
+        strengths = [conv.to_expr(self.get_strength_or_not(isrc, idx))
                      for idx in range(len(self.source_kernels))]
         coefficients = self.expansion.coefficients_from_source_vec(
             self.source_kernels, avec, bvec, rscale=rscale, weights=strengths,
@@ -102,15 +123,14 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
     def _evaluate(self, sac, avec, bvec, rscale, expansion_nr, coefficients):
         from sumpy.expansion.local import LineTaylorLocalExpansion
         tgt_knl = self.target_kernels[expansion_nr]
-        if isinstance(tgt_knl, LineTaylorLocalExpansion):
+        if isinstance(self.expansion, LineTaylorLocalExpansion):
             # In LineTaylorLocalExpansion.evaluate, we can't run
             # postprocess_at_target because the coefficients are assigned
             # symbols and postprocess with a derivative will make them zero.
             # Instead run postprocess here before the coefficients are assigned.
-            coefficients = [tgt_knl.postprocess_at_target(coeff, bvec) for
+            coefficients = [tgt_knl.postprocess_at_target(coeff, avec) for
                     coeff in coefficients]
 
-        import sumpy.symbolic as sym
         assigned_coeffs = [
             sym.Symbol(
                 sac.assign_unique(
@@ -132,7 +152,6 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
 
         logger.info("compute expansion expressions: start")
 
-        import sumpy.symbolic as sym
         import pymbolic as prim
         rscale = sym.Symbol("rscale")
         isrc_sym = prim.var("isrc")
@@ -145,8 +164,8 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
 
         sac.run_global_cse()
 
-        pymbolic_expr_maps = [knl.get_code_transformer() for knl in (
-            self.target_kernels + self.source_kernels)]
+        pymbolic_expr_maps = [knl.get_code_transformer() for knl in [
+            *self.target_kernels, *self.source_kernels]]
 
         from sumpy.codegen import to_loopy_insns
         loopy_insns = to_loopy_insns(
@@ -175,7 +194,7 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
 
     def get_default_src_tgt_arguments(self):
         from sumpy.tools import gather_loopy_source_arguments
-        return ([
+        return [
                 lp.GlobalArg("sources", None,
                     shape=(self.dim, "nsources"), order="C"),
                 lp.GlobalArg("targets", None,
@@ -185,11 +204,9 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
                 lp.GlobalArg("expansion_radii",
                     None, shape="ntargets"),
                 lp.ValueArg("nsources", None),
-                lp.ValueArg("ntargets", None)]
-                + gather_loopy_source_arguments(self.source_kernels))
-
-    def get_kernel(self):
-        raise NotImplementedError
+                lp.ValueArg("ntargets", None),
+                *gather_loopy_source_arguments(self.source_kernels)
+            ]
 
     def get_optimized_kernel(self, *,
             is_cpu: bool,
@@ -220,7 +237,7 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
             from warnings import warn
             warn(
                 "Do not know how to tune layer potential computation for "
-                "non-CPU targets")
+                "non-CPU targets", stacklevel=1)
             loopy_knl = lp.split_iname(loopy_knl, itgt_name, 128, outer_tag="g.0")
 
         loopy_knl = self._allow_redundant_execution_of_knl_scaling(loopy_knl)
@@ -239,6 +256,7 @@ class LayerPotential(LayerPotentialBase):
     """
 
     @property
+    @override
     def default_name(self):
         return "qbx_apply"
 
@@ -271,11 +289,11 @@ class LayerPotential(LayerPotentialBase):
             + [f"<> strength_{i}_isrc = strength_{i}[isrc]" for i in
                     range(self.strength_count)]
             + loopy_insns + kernel_exprs
-            + ["""
-                result_{i}[itgt] = knl_{i}_scaling * \
-                    simul_reduce(sum, isrc, pair_result_{i}) \
+            + [f"""
+                result_{iknl}[itgt] = knl_{iknl}_scaling * \
+                    simul_reduce(sum, isrc, pair_result_{iknl}) \
                         {{id_prefix=write_lpot,inames=itgt}}
-                """.format(i=iknl)
+                """
                 for iknl in range(len(self.target_kernels))]
             + ["end"],
             kernel_data=arguments,
@@ -286,7 +304,7 @@ class LayerPotential(LayerPotentialBase):
             )
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-        for knl in self.target_kernels + self.source_kernels:
+        for knl in [*self.target_kernels, *self.source_kernels]:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
@@ -316,7 +334,7 @@ class LayerPotential(LayerPotentialBase):
             expansion_radii=expansion_radii,
             **kwargs)
 
-        return make_obj_array([result[f"result_{i}"] for i in range(self.nresults)])
+        return obj_array.new_1d([result[f"result_{i}"] for i in range(self.nresults)])
 
 # }}}
 
@@ -357,11 +375,11 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
             + ["<> b[idim] = targets[idim, itgt] - center[idim, itgt] {dup=idim}"]
             + ["<> rscale = expansion_radii[itgt]"]
             + loopy_insns + kernel_exprs
-            + ["""
-                result_{i}[itgt, isrc] = \
-                    knl_{i}_scaling * pair_result_{i} \
+            + [f"""
+                result_{iknl}[itgt, isrc] = \
+                    knl_{iknl}_scaling * pair_result_{iknl} \
                         {{inames=isrc:itgt}}
-                """.format(i=iknl)
+                """
                 for iknl in range(len(self.target_kernels))]
             + ["end"],
             kernel_data=arguments,
@@ -371,7 +389,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
             )
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-        for expn in self.source_kernels + self.target_kernels:
+        for expn in [*self.source_kernels, *self.target_kernels]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
@@ -392,7 +410,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
             expansion_radii=expansion_radii,
             **kwargs)
 
-        return make_obj_array([result[f"result_{i}"] for i in range(self.nresults)])
+        return obj_array.new_1d([result[f"result_{i}"] for i in range(self.nresults)])
 
 # }}}
 
@@ -445,10 +463,10 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
                     <> rscale = expansion_radii[itgt]
             """]
             + loopy_insns + kernel_exprs
-            + ["""
-                    result_{i}[imat] = knl_{i}_scaling * pair_result_{i} \
+            + [f"""
+                    result_{iknl}[imat] = knl_{iknl}_scaling * pair_result_{iknl} \
                             {{id_prefix=write_lpot}}
-                """.format(i=iknl)
+                """
                 for iknl in range(len(self.target_kernels))]
             + ["end"],
             kernel_data=arguments,
@@ -462,11 +480,12 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
         loopy_knl = lp.add_dtypes(
                 loopy_knl, {"nsources": np.int32, "ntargets": np.int32})
 
-        for knl in self.source_kernels + self.target_kernels:
+        for knl in [*self.source_kernels, *self.target_kernels]:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
 
+    @override
     def get_optimized_kernel(self,
             targets_is_obj_array, sources_is_obj_array, centers_is_obj_array):
         loopy_knl = self.get_kernel()
@@ -520,7 +539,7 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
             tgtindices=tgtindices,
             srcindices=srcindices, **kwargs)
 
-        return make_obj_array([result[f"result_{i}"] for i in range(self.nresults)])
+        return obj_array.new_1d([result[f"result_{i}"] for i in range(self.nresults)])
 
 # }}}
 
@@ -531,11 +550,11 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
 
 def find_jump_term(kernel, arg_provider):
     from sumpy.kernel import (
-            AxisSourceDerivative,
-            AxisTargetDerivative,
-            DirectionalSourceDerivative,
-            DirectionalTargetDerivative,
-            DerivativeBase)
+        AxisSourceDerivative,
+        AxisTargetDerivative,
+        DerivativeBase,
+        DirectionalSourceDerivative,
+    )
 
     tgt_derivatives = []
     src_derivatives = []
@@ -543,9 +562,6 @@ def find_jump_term(kernel, arg_provider):
     while isinstance(kernel, DerivativeBase):
         if isinstance(kernel, AxisTargetDerivative):
             tgt_derivatives.append(kernel.axis)
-            kernel = kernel.kernel
-        elif isinstance(kernel, DirectionalTargetDerivative):
-            tgt_derivatives.append(kernel.dir_vec_name)
             kernel = kernel.kernel
         elif isinstance(kernel, AxisSourceDerivative):
             src_derivatives.append(kernel.axis)
@@ -604,7 +620,7 @@ def find_jump_term(kernel, arg_provider):
         elif tgt_count == 1:
             from warnings import warn
             warn("jump terms for mixed derivatives (1 src+1 tgt) only available "
-                    "for the double-layer potential")
+                    "for the double-layer potential", stacklevel=1)
             i, = tgt_derivatives
             assert isinstance(i, int)
             return (
@@ -625,6 +641,7 @@ class _JumpTermSymbolicArgumentProvider:
     data was requested. This tracking allows assembling the argument list of the
     resulting computational kernel.
     """
+    dim: int
 
     def __init__(self, data_args, dim, density_var_name,
             density_dtype, geometry_dtype):
@@ -665,23 +682,21 @@ class _JumpTermSymbolicArgumentProvider:
     @property
     @memoize_method
     def normal(self):
-        import pymbolic as prim
         self.arguments["normal"] = (
                 lp.GlobalArg("normal", self.geometry_dtype,
                              shape=("ntargets", self.dim), order="C"))
-        return make_obj_array([
-            prim.parse(f"normal[itgt, {i}]")
+        return obj_array.new_1d([
+            parse(f"normal[itgt, {i}]")
             for i in range(self.dim)])
 
     @property
     @memoize_method
     def tangent(self):
-        import pymbolic as prim
         self.arguments["tangent"] = (
                 lp.GlobalArg("tangent", self.geometry_dtype,
                              shape=("ntargets", self.dim), order="C"))
-        return make_obj_array([
-            prim.parse(f"tangent[itgt, {i}]")
+        return obj_array.new_1d([
+            parse(f"tangent[itgt, {i}]")
             for i in range(self.dim)])
 
     @property
@@ -697,25 +712,23 @@ class _JumpTermSymbolicArgumentProvider:
     @property
     @memoize_method
     def src_derivative_dir(self):
-        import pymbolic as prim
         self.arguments["src_derivative_dir"] = (
                 lp.GlobalArg("src_derivative_dir",
                              self.geometry_dtype, shape=("ntargets", self.dim),
                              order="C"))
-        return make_obj_array([
-            prim.parse(f"src_derivative_dir[itgt, {i}]")
+        return obj_array.new_1d([
+            parse(f"src_derivative_dir[itgt, {i}]")
             for i in range(self.dim)])
 
     @property
     @memoize_method
     def tgt_derivative_dir(self):
-        import pymbolic as prim
         self.arguments["tgt_derivative_dir"] = (
                 lp.GlobalArg("tgt_derivative_dir",
                              self.geometry_dtype, shape=("ntargets", self.dim),
                              order="C"))
-        return make_obj_array([
-            prim.parse(f"tgt_derivative_dir[itgt, {i}]")
+        return obj_array.new_1d([
+            parse(f"tgt_derivative_dir[itgt, {i}]")
             for i in range(self.dim)])
 
 # }}}

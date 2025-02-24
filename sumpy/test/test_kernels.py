@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -20,42 +23,54 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import logging
 import sys
-import pytest
 from functools import partial
 
 import numpy as np
 import numpy.linalg as la
+import pytest
 
-from pytools.obj_array import make_obj_array
+import pytools.obj_array as obj_array
+from arraycontext import (
+    ArrayContextFactory,
+    PyOpenCLArrayContext,
+    pytest_generate_tests_for_array_contexts,
+)
 from pytools.convergence import PConvergenceVerifier
-from arraycontext import pytest_generate_tests_for_array_contexts
-from sumpy.array_context import (                                 # noqa: F401
-        PytestPyOpenCLArrayContextFactory, _acf)
 
 import sumpy.symbolic as sym
-from sumpy.expansion.multipole import (
-    VolumeTaylorMultipoleExpansion,
-    H2DMultipoleExpansion,
-    VolumeTaylorMultipoleExpansionBase,
-    LinearPDEConformingVolumeTaylorMultipoleExpansion)
-from sumpy.expansion.local import (
-    VolumeTaylorLocalExpansion,
-    H2DLocalExpansion,
-    LinearPDEConformingVolumeTaylorLocalExpansion)
-from sumpy.expansion.m2l import (NonFFTM2LTranslationClassFactory,
-    FFTM2LTranslationClassFactory)
-from sumpy.kernel import (
-    LaplaceKernel,
-    HelmholtzKernel,
-    BiharmonicKernel,
-    StokesletKernel,
-    AxisTargetDerivative,
-    DirectionalSourceDerivative)
-
 import sumpy.toys as t
+from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
+from sumpy.expansion.local import (
+    H2DLocalExpansion,
+    LinearPDEConformingVolumeTaylorLocalExpansion,
+    LineTaylorLocalExpansion,
+    VolumeTaylorLocalExpansion,
+)
+from sumpy.expansion.m2l import (
+    FFTM2LTranslationClassFactory,
+    NonFFTM2LTranslationClassFactory,
+)
+from sumpy.expansion.multipole import (
+    H2DMultipoleExpansion,
+    LinearPDEConformingVolumeTaylorMultipoleExpansion,
+    VolumeTaylorMultipoleExpansion,
+    VolumeTaylorMultipoleExpansionBase,
+)
+from sumpy.kernel import (
+    AxisTargetDerivative,
+    BiharmonicKernel,
+    DirectionalSourceDerivative,
+    HelmholtzKernel,
+    Kernel,
+    LaplaceKernel,
+    StokesletKernel,
+    YukawaKernel,
+)
+from sumpy.test.geometries import make_ellipsoid, make_torus
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 pytest_generate_tests = pytest_generate_tests_for_array_contexts([
@@ -66,7 +81,7 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts([
 # {{{ test_p2p
 
 @pytest.mark.parametrize("exclude_self", (True, False))
-def test_p2p(actx_factory, exclude_self):
+def test_p2p(actx_factory: ArrayContextFactory, exclude_self):
     actx = actx_factory()
 
     dimensions = 3
@@ -125,7 +140,10 @@ def test_p2p(actx_factory, exclude_self):
     (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion),
     (LaplaceKernel(2), LinearPDEConformingVolumeTaylorMultipoleExpansion),
 ])
-def test_p2e_multiple(actx_factory, base_knl, expn_class):
+def test_p2e_multiple(
+            actx_factory: ArrayContextFactory,
+            base_knl: Kernel,
+            expn_class):
     order = 4
     actx = actx_factory()
 
@@ -265,7 +283,12 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
     False,
     True
     ])
-def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative):
+def test_p2e2p(
+            actx_factory: ArrayContextFactory,
+            base_knl,
+            expn_class,
+            order,
+            with_source_derivative):
     actx = actx_factory()
 
     res = 100
@@ -291,7 +314,7 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
             ]
     expn = expn_class(knl, order=order)
 
-    from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P
+    from sumpy import P2P, E2PFromSingleBox, P2EFromSingleBox
     p2e = P2EFromSingleBox(expn, kernels=[knl])
     e2p = E2PFromSingleBox(expn, kernels=target_kernels)
     p2p = P2P(target_kernels, exclude_self=False)
@@ -340,7 +363,7 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
                         + center[:, np.newaxis])
 
         centers = actx.from_numpy(centers)
-        targets = actx.from_numpy(make_obj_array(fp.points))
+        targets = actx.from_numpy(obj_array.new_1d(fp.points))
 
         rscale = 0.5  # pick something non-1
 
@@ -498,8 +521,13 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
     (StokesletKernel(2, 0, 0), LinearPDEConformingVolumeTaylorLocalExpansion,
      LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
     ])
-def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
-        use_fft, visualize=False):
+def test_translations(
+            actx_factory: ArrayContextFactory,
+            knl,
+            local_expn_class,
+            mpole_expn_class,
+            use_fft,
+            visualize=False):
     if visualize:
         logging.basicConfig(level=logging.INFO)
 
@@ -551,7 +579,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
     del eval_offset
 
-    if knl.dim == 2:
+    if knl.dim == 2:  # noqa: SIM108
         orders = [2, 3, 4]
     else:
         orders = [3, 4, 5]
@@ -565,7 +593,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
     toy_ctx = t.ToyContext(
             kernel=knl,
             local_expn_class=partial(local_expn_class,
-                m2l_translation=m2l_translation),
+                m2l_translation_override=m2l_translation),
             mpole_expn_class=mpole_expn_class,
             extra_kernel_kwargs=extra_kwargs,
     )
@@ -666,14 +694,14 @@ def test_m2m_and_l2l_exprs_simpler(base_knl, local_expn_class, mpole_expn_class,
     slower_m2m = mpole_expn.translate_from(mpole_expn, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, _fast_version=False)
 
-    for expr1, expr2 in zip(faster_m2m, slower_m2m):
+    for expr1, expr2 in zip(faster_m2m, slower_m2m, strict=True):
         assert float(sym.doit(expr1 - expr2).expand()) == 0.0
 
     faster_l2l = local_expn.translate_from(local_expn, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale)
     slower_l2l = local_expn.translate_from(local_expn, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, _fast_version=False)
-    for expr1, expr2 in zip(faster_l2l, slower_l2l):
+    for expr1, expr2 in zip(faster_l2l, slower_l2l, strict=True):
         assert float(sym.doit(expr1 - expr2).expand()) == 0.0
 
 # }}}
@@ -706,7 +734,7 @@ def _m2l_translate_simple(tgt_expansion, src_expansion, src_coeff_exprs, src_rsc
         local_result = []
         for coeff, term in zip(
                 src_coeff_exprs,
-                src_expansion.get_coefficient_identifiers()):
+                src_expansion.get_coefficient_identifiers(), strict=True):
 
             kernel_deriv = taker.diff(add_mi(deriv, term)) / src_rscale**sum(deriv)
 
@@ -726,7 +754,8 @@ def test_m2l_toeplitz():
     m2l_factory = NonFFTM2LTranslationClassFactory()
     m2l_translation = m2l_factory.get_m2l_translation_class(knl, local_expn_class)()
 
-    local_expn = local_expn_class(knl, order=5, m2l_translation=m2l_translation)
+    local_expn = local_expn_class(knl, order=5,
+                                  m2l_translation_override=m2l_translation)
     mpole_expn = mpole_expn_class(knl, order=5)
 
     dvec = sym.make_sym_vector("d", dim)
@@ -744,7 +773,7 @@ def test_m2l_toeplitz():
         src_rscale, dvec, tgt_rscale, sac=None)
 
     replace_dict = {d: rng.random() for d in dvec}
-    for sym_a, sym_b in zip(expected_output, actual_output):
+    for sym_a, sym_b in zip(expected_output, actual_output, strict=True):
         num_a = sym_a.xreplace(replace_dict)
         num_b = sym_b.xreplace(replace_dict)
 
@@ -757,7 +786,7 @@ def test_m2l_toeplitz():
 
 @pytest.mark.parametrize("dim", [2, 3])
 @pytest.mark.parametrize("order", [2, 4, 6])
-def test_m2m_compressed_error_helmholtz(actx_factory, dim, order):
+def test_m2m_compressed_error_helmholtz(actx_factory: ArrayContextFactory, dim, order):
     from sumpy import toys
 
     actx = actx_factory()
@@ -795,7 +824,7 @@ def test_m2m_compressed_error_helmholtz(actx_factory, dim, order):
         furthest_source = np.max(np.abs(sources - mpole_center))
         m2m_vals = [0, 0]
         for i, (mpole_expn_class, local_expn_class) in \
-                enumerate(zip(mpole_expn_classes, local_expn_classes)):
+                enumerate(zip(mpole_expn_classes, local_expn_classes, strict=True)):
             tctx = toys.ToyContext(
                 knl,
                 extra_kernel_kwargs=extra_kernel_kwargs,
@@ -826,6 +855,72 @@ def test_m2m_compressed_error_helmholtz(actx_factory, dim, order):
     assert eoc_rec.order_estimate() >= order + 1
 
 # }}}
+
+
+@pytest.mark.parametrize(("kernel_cls", "kernel_kwargs"), [
+                         (LaplaceKernel, {}),
+                         (HelmholtzKernel, {"k": 1}),
+                         (YukawaKernel, {"lam": 1})
+                     ])
+@pytest.mark.parametrize("dim", [2, 3])
+def test_jump(
+            actx_factory: ArrayContextFactory,
+            kernel_cls: type[Kernel],
+            kernel_kwargs: dict[str, float],
+            dim: int,
+            order: int = 3,
+        ):
+    # x-ref https://github.com/inducer/sumpy/pull/224
+    # fails for Yukawa on then-main
+
+    actx = actx_factory()
+    if not isinstance(actx, PyOpenCLArrayContext):
+        pytest.skip()
+
+    if dim == 2:
+        geo = make_ellipsoid(npoints=1600)
+        qbx_radius = 0.02
+        tol = 3e-7
+
+    elif dim == 3:
+        geo = make_torus()
+        qbx_radius = 0.25
+        tol = 1e-3
+
+    else:
+        raise ValueError(f"unexpected dim: {dim}")
+
+    center_dist = qbx_radius*np.ones(2)
+    center_sides = np.array([-1, 1], dtype=np.float64)
+
+    targets = geo.nodes[:, 0][:, np.newaxis] + np.zeros(2)
+    centers = (geo.nodes[:, 0][:, np.newaxis]
+            + center_sides * center_dist*geo.normals[:, 0][:, np.newaxis])
+
+    from sumpy.kernel import DirectionalSourceDerivative
+    kernel = kernel_cls(dim)
+    dlp_knl = DirectionalSourceDerivative(kernel)
+
+    from sumpy.qbx import LayerPotential
+    lpot = LayerPotential(actx.context,
+            expansion=LineTaylorLocalExpansion(kernel, order=order),
+            source_kernels=(dlp_knl,),
+            target_kernels=(kernel,),
+            value_dtypes=np.complex128,)
+
+    _evt, (y,) = lpot(actx.queue,
+            actx.from_numpy(targets),
+            actx.from_numpy(geo.nodes),
+            actx.from_numpy(centers),
+            [actx.from_numpy(geo.weights * geo.area_elements)],
+            expansion_radii=actx.from_numpy(center_dist),
+            src_derivative_dir=actx.from_numpy(geo.normals),
+            **kernel_kwargs,
+        )
+
+    inside, outside = actx.to_numpy(y)
+    err = abs((inside-outside) - -1)
+    assert err < tol, err
 
 
 # You can test individual routines by typing

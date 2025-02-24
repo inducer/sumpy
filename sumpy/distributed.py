@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2022 Hao Gao"
 
 __license__ = """
@@ -20,10 +23,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from typing import TYPE_CHECKING
+
 from boxtree.distributed.calculation import DistributedExpansionWranglerMixin
 
+import pytools.obj_array as obj_array
+
 from sumpy.fmm import SumpyExpansionWrangler
-from sumpy.array_context import PyOpenCLArrayContext
+
+
+if TYPE_CHECKING:
+    from sumpy.array_context import PyOpenCLArrayContext
 
 
 class DistributedSumpyExpansionWrangler(
@@ -70,8 +80,7 @@ class DistributedSumpyExpansionWrangler(
                     actx, potentials_host, tgt_idx_all_ranks))
 
         if self.is_mpi_root:
-            from pytools.obj_array import make_obj_array
-            return make_obj_array([
+            return obj_array.new_1d([
                 actx.from_numpy(gathered_potentials_host)
                 for gathered_potentials_host in gathered_potentials_host_vec
                 ])
@@ -86,8 +95,8 @@ class DistributedSumpyExpansionWrangler(
 
     def reorder_potentials(self, potentials):
         if self.is_mpi_root:
-            from pytools.obj_array import obj_array_vectorize
             import numpy as np
+
             assert (
                     isinstance(potentials, np.ndarray)
                     and potentials.dtype.char == "O")
@@ -95,7 +104,7 @@ class DistributedSumpyExpansionWrangler(
             def reorder(x):
                 return x[self.global_traversal.tree.sorted_target_ids]
 
-            return obj_array_vectorize(reorder, potentials)
+            return obj_array.vectorize(reorder, potentials)
         else:
             return None
 

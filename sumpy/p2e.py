@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2013 Andreas Kloeckner"
 
 __license__ = """
@@ -20,14 +23,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import logging
+
 import numpy as np
+
 import loopy as lp
 
 from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
-from sumpy.tools import KernelCacheMixin, KernelComputation
 from sumpy.codegen import register_optimization_preambles
+from sumpy.tools import KernelCacheMixin, KernelComputation
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -62,16 +68,14 @@ class P2EBase(KernelCacheMixin, KernelComputation):
             number of strength arrays that need to be passed in.
             By default all kernels use the same strength.
         """
-        from sumpy.kernel import (TargetTransformationRemover,
-                SourceTransformationRemover)
+        from sumpy.kernel import (
+            SourceTransformationRemover,
+            TargetTransformationRemover,
+        )
         txr = TargetTransformationRemover()
         sxr = SourceTransformationRemover()
 
-        if kernels is None:
-            kernels = [txr(expansion.kernel)]
-        else:
-            kernels = kernels
-
+        kernels = [txr(expansion.kernel)] if kernels is None else kernels
         expansion = expansion.with_kernel(sxr(txr(expansion.kernel)))
 
         for knl in kernels:
@@ -101,7 +105,7 @@ class P2EBase(KernelCacheMixin, KernelComputation):
     def get_loopy_args(self):
         from sumpy.tools import gather_loopy_source_arguments
         return gather_loopy_source_arguments(
-                (self.expansion,) + tuple(self.source_kernels))
+                (self.expansion, *tuple(self.source_kernels)))
 
     def get_cache_key(self):
         return (type(self).__name__, self.name, self.expansion,

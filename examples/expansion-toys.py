@@ -3,11 +3,9 @@ import numpy as np
 import pyopencl as cl
 
 import sumpy.toys as t
+from sumpy.kernel import HelmholtzKernel, LaplaceKernel, YukawaKernel  # noqa: F401
 from sumpy.visualization import FieldPlotter
-from sumpy.kernel import (      # noqa: F401
-        YukawaKernel,
-        HelmholtzKernel,
-        LaplaceKernel)
+
 
 try:
     import matplotlib.pyplot as plt
@@ -20,7 +18,7 @@ def main():
     from sumpy.array_context import PyOpenCLArrayContext
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
-    actx = PyOpenCLArrayContext(queue, force_device_scalars=True)
+    actx = PyOpenCLArrayContext(queue)
 
     tctx = t.ToyContext(
             # LaplaceKernel(2),
@@ -28,9 +26,10 @@ def main():
             # HelmholtzKernel(2), extra_kernel_kwargs={"k": 0.3},
             )
 
+    rng = np.random.default_rng()
     pt_src = t.PointSources(
             tctx,
-            np.random.rand(2, 50) - 0.5,
+            rng.uniform(size=(2, 50)) - 0.5,
             np.ones(50))
 
     fp = FieldPlotter([3, 0], extent=8)

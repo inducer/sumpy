@@ -1,7 +1,9 @@
 import numpy as np
 import numpy.linalg as la
+from numpy.typing import NDArray
 
 import pyopencl as cl
+
 
 try:
     import matplotlib.pyplot as plt
@@ -16,6 +18,8 @@ except ImportError:
     USE_MAYAVI = False
 
 import logging
+
+
 logging.basicConfig(level=logging.INFO)
 
 
@@ -33,10 +37,6 @@ def process_kernel(knl, what_operator):
     elif what_operator == "D":
         from sumpy.kernel import DirectionalSourceDerivative
         source_knl = DirectionalSourceDerivative(knl)
-    # DirectionalTargetDerivative (temporarily?) removed
-    # elif what_operator == "S'":
-    #     from sumpy.kernel import DirectionalTargetDerivative
-    #     knl = DirectionalTargetDerivative(knl)
     else:
         raise RuntimeError(f"unrecognized operator '{what_operator}'")
 
@@ -60,7 +60,7 @@ def draw_pot_figure(aspect_ratio,
     from sumpy.array_context import PyOpenCLArrayContext
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
-    actx = PyOpenCLArrayContext(queue, force_device_scalars=True)
+    actx = PyOpenCLArrayContext(queue)
 
     # {{{ make plot targets
 
@@ -72,9 +72,9 @@ def draw_pot_figure(aspect_ratio,
 
     # {{{ make p2p kernel calculator
 
-    from sumpy.p2p import P2P
-    from sumpy.kernel import LaplaceKernel, HelmholtzKernel
     from sumpy.expansion.local import H2DLocalExpansion, LineTaylorLocalExpansion
+    from sumpy.kernel import HelmholtzKernel, LaplaceKernel
+    from sumpy.p2p import P2P
     if helmholtz_k:
         if isinstance(helmholtz_k, complex):
             knl = HelmholtzKernel(2, allow_evanescent=True)
@@ -117,7 +117,7 @@ def draw_pot_figure(aspect_ratio,
     a = 1
     b = 1/aspect_ratio
 
-    def map_to_curve(t):
+    def map_to_curve(t: NDArray[np.floating]):
         t = t*(2*np.pi)
 
         x = a*np.cos(t)
@@ -127,7 +127,7 @@ def draw_pot_figure(aspect_ratio,
 
         return x, y, w
 
-    from curve import CurveGrid
+    from sumpy.test.curve import CurveGrid
 
     native_t = np.linspace(0, 1, nsrc, endpoint=False)
     native_x, native_y, native_weights = map_to_curve(native_t)
@@ -178,11 +178,12 @@ def draw_pot_figure(aspect_ratio,
         from fourier import make_fourier_interp_matrix
         fim = make_fourier_interp_matrix(novsmp, nsrc)
 
-        from sumpy.tools import build_matrix
         from scipy.sparse.linalg import LinearOperator
 
-        def apply_lpot(x):
-            xovsmp = np.dot(fim, x)
+        from sumpy.tools import build_matrix
+
+        def apply_lpot(x: NDArray[np.inexact]) -> NDArray[np.inexact]:
+            xovsmp = fim @ x
             y, = lpot(
                     actx,
                     sources,
@@ -194,11 +195,11 @@ def draw_pot_figure(aspect_ratio,
 
             return actx.to_numpy(y)
 
-        op = LinearOperator((nsrc, nsrc), apply_lpot)
+        op = LinearOperator((nsrc, nsrc), np.dtype(np.complex128), apply_lpot)
         mat = build_matrix(op, dtype=np.complex128)
-        w, v = la.eig(mat)
+        w, _v = la.eig(mat)
         plt.plot(w.real, "o-")
-        #import sys; sys.exit(0)
+        # import sys; sys.exit(0)
         return
 
         # }}}

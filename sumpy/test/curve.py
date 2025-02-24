@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-__copyright__ = "Copyright (C) 2014 Andreas Kloeckner"
+__copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,22 +23,36 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from importlib import metadata
+from typing import TYPE_CHECKING, final
 
-from pytools import find_module_git_revision
-
-
-def _parse_version(version: str) -> tuple[tuple[int, ...], str]:
-    import re
-
-    m = re.match(r"^([0-9.]+)([a-z0-9]*?)$", VERSION_TEXT)
-    assert m is not None
-
-    return tuple(int(nr) for nr in m.group(1).split(".")), m.group(2)
+import numpy as np
+import scipy.fftpack as fftpack
 
 
-VERSION_TEXT = metadata.version("sumpy")
-VERSION, VERSION_STATUS = _parse_version(VERSION_TEXT)
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
-_GIT_REVISION = find_module_git_revision(__file__, n_levels_up=1)
-KERNEL_VERSION = (*VERSION, _GIT_REVISION, 1)
+
+@final
+class CurveGrid:
+    pos: NDArray[np.floating]
+    mean_curvature: NDArray[np.floating]
+    normal: NDArray[np.floating]
+
+    def __init__(self, x: NDArray[np.floating], y: NDArray[np.floating]):
+        self.pos = np.vstack([x, y]).copy()
+        xp = self.xp = fftpack.diff(x, period=1)
+        yp = self.yp = fftpack.diff(y, period=1)
+        xpp = self.xpp = fftpack.diff(xp, period=1)
+        ypp = self.ypp = fftpack.diff(yp, period=1)
+        self.mean_curvature = (xp*ypp-yp*xpp)/((xp**2+yp**2)**(3/2))
+
+        speed = self.speed = np.sqrt(xp**2+yp**2)
+        self.normal = (np.vstack([yp, -xp])/speed).copy()
+
+    def __len__(self):
+        return len(self.pos)
+
+    def plot(self):
+        import matplotlib.pyplot as pt
+        pt.plot(self.pos[:, 0], self.pos[:, 1])

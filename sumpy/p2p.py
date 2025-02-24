@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = """
 Copyright (C) 2012 Andreas Kloeckner
 Copyright (C) 2018 Alexandru Fikl
@@ -23,18 +26,29 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
-import loopy as lp
+import logging
+from typing import TYPE_CHECKING, Any
 
-from pytools.obj_array import make_obj_array
+import numpy as np
+from typing_extensions import override
+
+import loopy as lp
+import pytools.obj_array as obj_array
 
 from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
 from sumpy.codegen import register_optimization_preambles
-from sumpy.tools import KernelComputation, KernelCacheMixin, is_obj_array_like
+from sumpy.tools import KernelCacheMixin, KernelComputation, is_obj_array_like
 
-import logging
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    import pyopencl as cl
+    from arraycontext import Array
+    from pytools.obj_array import ObjectArray1D
+
+
 logger = logging.getLogger(__name__)
-
 
 __doc__ = """
 
@@ -69,9 +83,11 @@ class P2PBase(KernelCacheMixin, KernelComputation):
           Default: all kernels use the same strength.
         """
         from pytools import single_valued
-        from sumpy.kernel import (
-            TargetTransformationRemover, SourceTransformationRemover)
 
+        from sumpy.kernel import (
+            SourceTransformationRemover,
+            TargetTransformationRemover,
+        )
         txr = TargetTransformationRemover()
         sxr = SourceTransformationRemover()
 
@@ -103,8 +119,9 @@ class P2PBase(KernelCacheMixin, KernelComputation):
                 tuple(self.source_kernels))
 
     def get_loopy_insns_and_result_names(self):
-        from sumpy.symbolic import make_sym_vector
         from pymbolic import var
+
+        from sumpy.symbolic import make_sym_vector
 
         dvec = make_sym_vector("d", self.dim)
 
@@ -125,11 +142,7 @@ class P2PBase(KernelCacheMixin, KernelComputation):
             expr_sum = out_knl.postprocess_at_target(expr_sum, dvec)
             exprs.append(expr_sum)
 
-        if self.exclude_self:
-            result_name_prefix = "pair_result_tmp"
-        else:
-            result_name_prefix = "pair_result"
-
+        result_name_prefix = "pair_result_tmp" if self.exclude_self else "pair_result"
         result_names = [
             sac.add_assignment(f"{result_name_prefix}_{i}", expr)
             for i, expr in enumerate(exprs)
@@ -195,7 +208,6 @@ class P2PBase(KernelCacheMixin, KernelComputation):
         knl = register_optimization_preambles(knl, self.device)
         return knl
 
-
 # }}}
 
 
@@ -209,15 +221,14 @@ class P2P(P2PBase):
         return "p2p_apply"
 
     def get_kernel(self):
-        loopy_insns, result_names = self.get_loopy_insns_and_result_names()
-        arguments = (
-            self.get_default_src_tgt_arguments()
-            + [
+        loopy_insns, _result_names = self.get_loopy_insns_and_result_names()
+        arguments = [
+                *self.get_default_src_tgt_arguments(),
                 lp.GlobalArg("strength", None,
                     shape="nstrengths, nsources", dim_tags="sep,C"),
                 lp.GlobalArg("result", None,
                     shape="nresults, ntargets", dim_tags="sep,C")
-            ])
+            ]
 
         loopy_knl = make_loopy_program(["""
             {[itgt, isrc, idim]: \
@@ -249,13 +260,18 @@ class P2P(P2PBase):
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
-        for knl in self.target_kernels + self.source_kernels:
+        for knl in [*self.target_kernels, *self.source_kernels]:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
 
-    def __call__(self, actx: PyOpenCLArrayContext,
-            targets, sources, strength, **kwargs):
+    def __call__(self,
+            actx: PyOpenCLArrayContext,
+            targets: ObjectArray1D[Array] | Array,
+            sources: ObjectArray1D[Array] | Array,
+            strength: Sequence[Array],
+            **kwargs: Any,
+        ) -> tuple[cl.Event, Sequence[Array]]:
         knl = self.get_cached_kernel_executor(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
@@ -270,7 +286,7 @@ class P2P(P2PBase):
             strength=strength,
             **kwargs)
 
-        return make_obj_array([result[f"result_s{i}"] for i in range(self.nresults)])
+        return obj_array.new_1d([result[f"result_s{i}"] for i in range(self.nresults)])
 
 # }}}
 
@@ -288,7 +304,7 @@ class P2PMatrixGenerator(P2PBase):
         return 1
 
     def get_kernel(self):
-        loopy_insns, result_names = self.get_loopy_insns_and_result_names()
+        loopy_insns, _result_names = self.get_loopy_insns_and_result_names()
         arguments = (
             self.get_default_src_tgt_arguments()
             + [
@@ -321,12 +337,17 @@ class P2PMatrixGenerator(P2PBase):
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
-        for knl in self.target_kernels + self.source_kernels:
+        for knl in [*self.target_kernels, *self.source_kernels]:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
 
-    def __call__(self, actx: PyOpenCLArrayContext, targets, sources, **kwargs):
+    def __call__(self,
+            actx: PyOpenCLArrayContext,
+            targets: ObjectArray1D[Array] | Array,
+            sources: ObjectArray1D[Array] | Array,
+            **kwargs: Any,
+        ) -> Sequence[Array]:
         knl = self.get_cached_kernel_executor(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
@@ -335,7 +356,7 @@ class P2PMatrixGenerator(P2PBase):
         knl = register_optimization_preambles(knl, actx.queue.device)
 
         result = actx.call_loopy(knl, sources=sources, targets=targets, **kwargs)
-        return make_obj_array([result[f"result_{i}"] for i in range(self.nresults)])
+        return obj_array.new_1d([result[f"result_{i}"] for i in range(self.nresults)])
 
 # }}}
 
@@ -359,7 +380,7 @@ class P2PMatrixSubsetGenerator(P2PBase):
         return 1
 
     def get_kernel(self):
-        loopy_insns, result_names = self.get_loopy_insns_and_result_names()
+        loopy_insns, _result_names = self.get_loopy_insns_and_result_names()
         arguments = (
             self.get_default_src_tgt_arguments()
             + [
@@ -406,7 +427,7 @@ class P2PMatrixSubsetGenerator(P2PBase):
         loopy_knl = lp.add_dtypes(
                 loopy_knl, {"nsources": np.int32, "ntargets": np.int32})
 
-        for knl in self.target_kernels + self.source_kernels:
+        for knl in [*self.target_kernels, *self.source_kernels]:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
@@ -428,8 +449,15 @@ class P2PMatrixSubsetGenerator(P2PBase):
 
         return knl
 
-    def __call__(self, actx: PyOpenCLArrayContext,
-            targets, sources, tgtindices, srcindices, **kwargs):
+    def __call__(self,
+            actx: PyOpenCLArrayContext,
+            targets: ObjectArray1D[Array] | Array,
+            sources: ObjectArray1D[Array] | Array,
+            *,
+            tgtindices: Array,
+            srcindices: Array,
+            **kwargs: Any,
+        ) -> tuple[cl.Event, Sequence[Array]]:
         """Evaluate a subset of the P2P matrix interactions.
 
         :arg targets: target point coordinates, which can be an object
@@ -459,7 +487,7 @@ class P2PMatrixSubsetGenerator(P2PBase):
             tgtindices=tgtindices,
             srcindices=srcindices, **kwargs)
 
-        return make_obj_array([result[f"result_{i}"] for i in range(self.nresults)])
+        return obj_array.new_1d([result[f"result_{i}"] for i in range(self.nresults)])
 
 # }}}
 
@@ -468,15 +496,17 @@ class P2PMatrixSubsetGenerator(P2PBase):
 
 class P2PFromCSR(P2PBase):
     @property
+    @override
     def default_name(self):
         return "p2p_from_csr"
 
+    @override
     def get_kernel(self,
             max_nsources_in_one_box: int, max_ntargets_in_one_box: int, *,
             work_items_per_group: int = 32, is_gpu: bool = False):
-        loopy_insns, result_names = self.get_loopy_insns_and_result_names()
-        arguments = self.get_default_src_tgt_arguments() \
-            + [
+        loopy_insns, _result_names = self.get_loopy_insns_and_result_names()
+        arguments = [
+                *self.get_default_src_tgt_arguments(),
                 lp.GlobalArg("box_target_starts",
                     None, shape=None),
                 lp.GlobalArg("box_target_counts_nonchild",
@@ -678,23 +708,27 @@ class P2PFromCSR(P2PBase):
         loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
         loopy_knl = lp.tag_array_axes(loopy_knl, "sources", "sep,C")
 
-        for knl in self.target_kernels + self.source_kernels:
+        for knl in [*self.target_kernels, *self.source_kernels]:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
 
+    @override
     def get_optimized_kernel(self,
-            max_nsources_in_one_box: int,
-            max_ntargets_in_one_box: int,
-            dtype_size: int,
-            local_mem_size: int,
-            is_gpu: bool):
+            max_nsources_in_one_box: int = 32,
+            max_ntargets_in_one_box: int = 32,
+            strength_dtype: np.dtype[Any] | None = None,
+            source_dtype: np.dtype[Any] | None = None,
+            local_mem_size: int = 32,
+            is_gpu: bool = False, **kwargs) -> lp.TranslationUnit:
+
         if not is_gpu:
             knl = self.get_kernel(max_nsources_in_one_box,
                     max_ntargets_in_one_box, is_gpu=is_gpu)
             knl = lp.split_iname(knl, "itgt_box", 4, outer_tag="g.0")
             knl = self._allow_redundant_execution_of_knl_scaling(knl)
         else:
+            dtype_size = np.dtype(strength_dtype).alignment
             work_items_per_group = min(256, max_ntargets_in_one_box)
             total_local_mem = max_nsources_in_one_box * \
                     (self.dim + self.strength_count) * dtype_size
@@ -710,6 +744,10 @@ class P2PFromCSR(P2PBase):
             knl = lp.set_temporary_address_space(knl,
                 ["local_isrc", "local_isrc_strength"], lp.AddressSpace.LOCAL)
 
+            local_arrays = ["local_isrc", "local_isrc_strength"]
+            local_array_isrc_axis = [1, 1]
+            local_array_sizes = [self.dim, self.strength_count]
+            local_array_dtypes = [source_dtype, strength_dtype]
             # By having a concatenated memory layout of the temporaries
             # and marking the first axis as vec, we are transposing the
             # the arrays and also making the access of the source
@@ -717,15 +755,34 @@ class P2PFromCSR(P2PBase):
             # access of 256 bits (assuming double precision) which is
             # optimized for NVIDIA GPUs. On an NVIDIA Titan V, this
             # optimization led to a 8% speedup in the performance.
-            knl = lp.concatenate_arrays(knl,
-                ["local_isrc", "local_isrc_strength"], "local_isrc")
-            count = self.strength_count + self.dim
-            if count in [2, 3, 4, 8, 16]:
-                knl = lp.tag_array_axes(knl, "local_isrc", "vec,C")
+            if strength_dtype == source_dtype:
+                knl = lp.concatenate_arrays(knl, local_arrays, "local_isrc")
+                local_arrays = ["local_isrc"]
+                local_array_sizes = [self.dim + self.strength_count]
+                local_array_dtypes = [source_dtype]
+            # We try to mark the local arrays (sources, strengths)
+            # as vec for the first dimension
+            for i, (array_name, array_size, array_dtype) in \
+                    enumerate(zip(local_arrays, local_array_sizes,
+                                  local_array_dtypes, strict=True)):
+                if issubclass(array_dtype.type, np.complexfloating):
+                    # pyopencl does not support complex data type vectors
+                    continue
+                if array_size in [2, 3, 4, 8, 16]:
+                    knl = lp.tag_array_axes(knl, array_name, "vec,C")
+                else:
+                    # FIXME: check if CUDA
+                    n = 16 // dtype_size
+                    if n in [1, 2, 4, 8]:
+                        knl = lp.split_array_axis(knl, array_name, 0, n)
+                        knl = lp.tag_array_axes(knl, array_name, "C,vec,C")
+                        local_array_isrc_axis[i] = 2
 
             # We need to split isrc_prefetch and isrc_offset into chunks.
             nsources = (max_nsources_in_one_box + nprefetch - 1) // nprefetch
-            knl = lp.split_array_axis(knl, "local_isrc", 1, nsources)
+            for local_array, axis in zip(local_arrays, local_array_isrc_axis,
+                                         strict=True):
+                knl = lp.split_array_axis(knl, local_array, axis, nsources)
             knl = lp.split_iname(knl, "isrc_prefetch", nsources,
                     outer_iname="iprefetch")
             knl = lp.split_iname(knl, "isrc_prefetch_inner", work_items_per_group)
@@ -737,7 +794,7 @@ class P2PFromCSR(P2PBase):
             # be as large as before. Need to simplify before unprivatizing
             knl = lp.simplify_indices(knl)
             knl = lp.unprivatize_temporaries_with_inames(knl,
-                    "iprefetch", only_var_names="local_isrc")
+                    "iprefetch", only_var_names=frozenset(local_arrays))
 
             knl = lp.add_inames_to_insn(knl,
                     "inner", "id:init_* or id:*_scaling or id:src_box_insn_*")
@@ -750,29 +807,41 @@ class P2PFromCSR(P2PBase):
         knl = register_optimization_preambles(knl, self.device)
         return knl
 
-    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
+    def __call__(self,
+            actx: PyOpenCLArrayContext,
+            targets: ObjectArray1D[Array] | Array,
+            sources: ObjectArray1D[Array] | Array,
+            *,
+            max_nsources_in_one_box: int,
+            max_ntargets_in_one_box: int,
+            **kwargs: Any,
+        ) -> tuple[cl.Event, Sequence[Array]]:
         from sumpy.array_context import is_cl_cpu
-        max_nsources_in_one_box = kwargs.pop("max_nsources_in_one_box")
-        max_ntargets_in_one_box = kwargs.pop("max_ntargets_in_one_box")
 
         is_gpu = not is_cl_cpu(actx)
         if is_gpu:
             dtype_size = kwargs.get("sources")[0].dtype.alignment
         else:
-            dtype_size = None
+            # these are unused for not GPU and defeats the caching
+            # set them to None to keep the caching across dtypes
+            source_dtype = None
+            strength_dtype = None
 
         knl = self.get_cached_kernel_executor(
                 max_nsources_in_one_box=max_nsources_in_one_box,
                 max_ntargets_in_one_box=max_ntargets_in_one_box,
                 dtype_size=dtype_size,
                 local_mem_size=actx.queue.device.local_mem_size,
-                is_gpu=is_gpu)
+                is_gpu=is_gpu,
+                source_dtype=source_dtype,
+                strength_dtype=strength_dtype,
+            )
 
         from sumpy.codegen import register_optimization_preambles
         knl = register_optimization_preambles(knl, actx.queue.device)
 
-        result = actx.call_loopy(knl, **kwargs)
-        return make_obj_array([result[f"result_s{i}"] for i in range(self.nresults)])
+        result = actx.call_loopy(knl, targets=targets, sources=sources, **kwargs)
+        return obj_array.new_1d([result[f"result_s{i}"] for i in range(self.nresults)])
 
 # }}}
 

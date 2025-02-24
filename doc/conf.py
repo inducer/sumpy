@@ -1,35 +1,64 @@
-import os
+from importlib import metadata
 from urllib.request import urlopen
 
-_conf_url = \
-        "https://raw.githubusercontent.com/inducer/sphinxconfig/main/sphinxconfig.py"
+
+_conf_url = "https://raw.githubusercontent.com/inducer/sphinxconfig/main/sphinxconfig.py"
 with urlopen(_conf_url) as _inf:
     exec(compile(_inf.read(), _conf_url, "exec"), globals())
 
 copyright = "2016-21, sumpy contributors"
-
-os.environ["AKPYTHON_EXEC_FROM_WITHIN_WITHIN_SETUP_PY"] = "1"
-ver_dic = {}
-exec(compile(open("../sumpy/version.py").read(), "../sumpy/version.py", "exec"),
-        ver_dic)
-version = ".".join(str(x) for x in ver_dic["VERSION"])
-release = ver_dic["VERSION_TEXT"]
+release = metadata.version("sumpy")
+version = ".".join(release.split(".")[:2])
 
 intersphinx_mapping = {
-    "python": ("https://docs.python.org/3/", None),
-    "numpy": ("https://numpy.org/doc/stable/", None),
-    "sympy": ("https://docs.sympy.org/latest/", None),
-    "matplotlib": ("https://matplotlib.org/stable/", None),
-    "pyopencl": ("https://documen.tician.de/pyopencl/", None),
-    "pytools": ("https://documen.tician.de/pytools/", None),
-    "modepy": ("https://documen.tician.de/modepy/", None),
-    "pymbolic": ("https://documen.tician.de/pymbolic/", None),
-    "loopy": ("https://documen.tician.de/loopy/", None),
-    "pytential": ("https://documen.tician.de/pytential/", None),
-    "boxtree": ("https://documen.tician.de/boxtree/", None),
     "arraycontext": ("https://documen.tician.de/arraycontext/", None),
+    "boxtree": ("https://documen.tician.de/boxtree/", None),
+    "loopy": ("https://documen.tician.de/loopy/", None),
+    "matplotlib": ("https://matplotlib.org/stable/", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+    "pymbolic": ("https://documen.tician.de/pymbolic/", None),
+    "pyopencl": ("https://documen.tician.de/pyopencl/", None),
+    "pytential": ("https://documen.tician.de/pytential/", None),
+    "python": ("https://docs.python.org/3/", None),
+    "pytools": ("https://documen.tician.de/pytools/", None),
+    "sympy": ("https://docs.sympy.org/latest/", None),
 }
 
 nitpick_ignore_regex = [
     ["py:class", r"symengine\.(.+)"],  # :cry:
 ]
+
+sphinxconfig_missing_reference_aliases = {
+    # numpy
+    "Array1D": "class:numpy.ndarray",
+    "Array2D": "class:numpy.ndarray",
+    "np.floating": "class:numpy.floating",
+    "np.complexfloating": "class:numpy.complexfloating",
+    "np.inexact": "class:numpy.inexact",
+    "np.dtype": "class:numpy.dtype",
+    # pytools
+    "obj_array.ObjectArray1D": "obj:pytools.obj_array.ObjectArray1D",
+    # sympy
+    "sp.Matrix": "class:sympy.matrices.dense.DenseMatrix",
+    "sym.Expr": "class:sympy.core.expr.Expr",
+    "sym.Symbol": "class:sympy.core.symbol.Symbol",
+    "sym.Matrix": "class:sympy.matrices.dense.DenseMatrix",
+    # pytools
+    "ObjectArray1D": "obj:pytools.obj_array.ObjectArray1D",
+    # pymbolic
+    "ArithmeticExpression": "obj:pymbolic.ArithmeticExpression",
+    "Expression": "obj:pymbolic.typing.Expression",
+    # loopy
+    "Assignment": "class:loopy.kernel.instruction.Assignment",
+    "CallInstruction": "class:loopy.kernel.instruction.CallInstruction",
+    # arraycontext
+    "Array": "obj:arraycontext.Array",
+    # boxtree
+    "FMMTraversalInfo": "class:boxtree.traversal.FMMTraversalInfo",
+    # sumpy
+    "ArithmeticExpr": "obj:sumpy.kernel.ArithmeticExpr",
+}
+
+
+def setup(app):
+    app.connect("missing-reference", process_autodoc_missing_reference)  # noqa: F821

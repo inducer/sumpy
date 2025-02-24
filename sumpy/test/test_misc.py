@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+from sumpy.expansion.local import LinearPDEConformingVolumeTaylorLocalExpansion
+
+
 __copyright__ = "Copyright (C) 2017 Andreas Kloeckner"
 
 __license__ = """
@@ -20,39 +25,54 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import pytest
+
+import logging
 import sys
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import numpy.linalg as la
+import pytest
+from typing_extensions import override
 
-from arraycontext import pytest_generate_tests_for_array_contexts
-from sumpy.array_context import (                                 # noqa: F401
-        PytestPyOpenCLArrayContextFactory, _acf)
+from arraycontext import ArrayContextFactory, pytest_generate_tests_for_array_contexts
 
-import sumpy.toys as t
 import sumpy.symbolic as sym
-
+import sumpy.toys as t
+from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
+from sumpy.expansion import (
+    FullExpansionTermsWrangler,
+    LinearPDEBasedExpansionTermsWrangler,
+)
+from sumpy.expansion.diff_op import (
+    as_scalar_pde,
+    concat,
+    curl,
+    diff,
+    divergence,
+    gradient,
+    laplacian,
+    make_identity_diff_op,
+)
 from sumpy.kernel import (
-    LaplaceKernel,
-    HelmholtzKernel,
     BiharmonicKernel,
-    YukawaKernel,
+    ElasticityKernel,
+    ExpressionKernel,
+    HelmholtzKernel,
+    Kernel,
+    LaplaceKernel,
+    LineOfCompressionKernel,
     StokesletKernel,
     StressletKernel,
-    ElasticityKernel,
-    LineOfCompressionKernel,
-    ExpressionKernel)
-from sumpy.expansion.diff_op import (
-    make_identity_diff_op, concat, as_scalar_pde, diff,
-    gradient, divergence, laplacian, curl)
+    YukawaKernel,
+)
 
-from sumpy.expansion import (FullExpansionTermsWrangler,
-    LinearPDEBasedExpansionTermsWrangler)
 
-import logging
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+
 logger = logging.getLogger(__name__)
 
 pytest_generate_tests = pytest_generate_tests_for_array_contexts([
@@ -83,7 +103,7 @@ class KernelInfo:
 
     @property
     def nderivs(self):
-        return max(sum(ident.mi) for ident in self.eq.keys())
+        return max(sum(ident.mi) for ident in self.eq)
 
 
 @pytest.mark.parametrize("knl_info", [
@@ -111,7 +131,7 @@ class KernelInfo:
     KernelInfo(LineOfCompressionKernel(3, 0), mu=5, nu=0.2),
     KernelInfo(LineOfCompressionKernel(3, 1), mu=5, nu=0.2),
     ])
-def test_pde_check_kernels(actx_factory, knl_info, order=5):
+def test_pde_check_kernels(actx_factory: ArrayContextFactory, knl_info, order=5):
     actx = actx_factory()
 
     dim = knl_info.kernel.dim
@@ -125,6 +145,7 @@ def test_pde_check_kernels(actx_factory, knl_info, order=5):
             np.ones(50))
 
     from pytools.convergence import EOCRecorder
+
     from sumpy.point_calculus import CalculusPatch
     eoc_rec = EOCRecorder()
 
@@ -147,8 +168,9 @@ def test_pde_check_kernels(actx_factory, knl_info, order=5):
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 def test_pde_check(dim, order=4):
-    from sumpy.point_calculus import CalculusPatch
     from pytools.convergence import EOCRecorder
+
+    from sumpy.point_calculus import CalculusPatch
 
     for iaxis in range(dim):
         eoc_rec = EOCRecorder()
@@ -178,7 +200,7 @@ class FakeTree:
 @pytest.mark.parametrize("knl", [
         LaplaceKernel(2), HelmholtzKernel(2),
         LaplaceKernel(3), HelmholtzKernel(3)])
-def test_order_finder(knl):
+def test_order_finder(knl: Kernel) -> None:
     from sumpy.expansion.level_to_order import SimpleExpansionOrderFinder
 
     ofind = SimpleExpansionOrderFinder(1e-5)
@@ -290,13 +312,13 @@ RTOL_P2E2E2P = 1e-2
 
 
 @pytest.mark.parametrize("case", P2E2E2P_TEST_CASES)
-def test_toy_p2e2e2p(actx_factory, case):
+def test_toy_p2e2e2p(actx_factory: ArrayContextFactory, case):
     dim = case.dim
 
     src = case.source.reshape(dim, -1)
     tgt = case.target.reshape(dim, -1)
 
-    from pymbolic import parse, evaluate
+    from pymbolic import evaluate, parse
     case_conv_factor = evaluate(parse(case.conv_factor), {
             "s": case.source,
             "c1": case.center1,
@@ -359,12 +381,12 @@ def test_cse_matvec():
     rng = np.random.default_rng(42)
     vec = rng.random(2)
     expected_result = m @ vec
-    actual_result = op.matvec(vec)
+    actual_result = [float(x) for x in op.matvec(vec)]
     assert np.allclose(expected_result, actual_result)
 
     vec = rng.random(4)
     expected_result = m.T @ vec
-    actual_result = op.transpose_matvec(vec)
+    actual_result = [float(x) for x in op.transpose_matvec(vec)]
     assert np.allclose(expected_result, actual_result)
 
 # }}}
@@ -373,7 +395,7 @@ def test_cse_matvec():
 # {{{ test_diff_op_stokes
 
 def test_diff_op_stokes():
-    from sumpy.symbolic import symbols, Function
+    from sumpy.symbolic import Function, symbols
     diff_op = make_identity_diff_op(3, 4)
     u = diff_op[:3]
     p = diff_op[3]
@@ -426,7 +448,7 @@ def test_as_scalar_pde_maxwell():
     mu, epsilon = symbols("mu, epsilon")
     t = (0, 0, 0, 1)
 
-    pde = concat(curl(E) + diff(B, t),  curl(B) - mu*epsilon*diff(E, t),
+    pde = concat(curl(E) + diff(B, t), curl(B) - mu*epsilon*diff(E, t),
                  divergence(E), divergence(B))
     as_scalar_pde(pde, 3)
 
@@ -509,19 +531,23 @@ pdes = [
 def test_weird_kernel(pde):
     class MyKernel(ExpressionKernel):
         def __init__(self):
-            super().__init__(dim=2, expression=1, global_scaling_const=1,
-                is_complex_valued=False)
+            super().__init__(dim=2, expression=1, global_scaling_const=1)
 
+        @property
+        @override
+        def is_complex_valued(self) -> bool:
+            return False
+
+        @override
         def get_pde_as_diff_op(self):
             return pde
 
-    from sumpy.expansion import LinearPDEConformingVolumeTaylorExpansion
-    from operator import mul
     from functools import reduce
+    from operator import mul
 
     knl = MyKernel()
     order = 10
-    expn = LinearPDEConformingVolumeTaylorExpansion(kernel=knl,
+    expn = LinearPDEConformingVolumeTaylorLocalExpansion(kernel=knl,
             order=order, use_rscale=False)
 
     coeffs = expn.get_coefficient_identifiers()
@@ -534,12 +560,17 @@ def test_weird_kernel(pde):
 
 # {{{ test_get_storage_index
 
-class TestKernel(ExpressionKernel):
+class StorageIndexTestKernel(ExpressionKernel):
     def __init__(self, dim, max_mi):
-        super().__init__(dim=dim, expression=1, global_scaling_const=1,
-                is_complex_valued=False)
+        super().__init__(dim=dim, expression=1, global_scaling_const=1)
         self._max_mi = max_mi
 
+    @property
+    @override
+    def is_complex_valued(self) -> bool:
+        return False
+
+    @override
     def get_pde_as_diff_op(self):
         w = make_identity_diff_op(self.dim)
         pde = diff(w, tuple(self._max_mi))
@@ -550,11 +581,11 @@ class TestKernel(ExpressionKernel):
 @pytest.mark.parametrize("knl", [
     LaplaceKernel(2),
     LaplaceKernel(3),
-    TestKernel(2, (3, 0)),
-    TestKernel(2, (0, 3)),
-    TestKernel(3, (3, 0, 0)),
-    TestKernel(3, (0, 3, 0)),
-    TestKernel(3, (0, 0, 3)),
+    StorageIndexTestKernel(2, (3, 0)),
+    StorageIndexTestKernel(2, (0, 3)),
+    StorageIndexTestKernel(3, (3, 0, 0)),
+    StorageIndexTestKernel(3, (0, 3, 0)),
+    StorageIndexTestKernel(3, (0, 0, 3)),
     BiharmonicKernel(2),
     BiharmonicKernel(3),
 ])
@@ -562,9 +593,9 @@ class TestKernel(ExpressionKernel):
 def test_get_storage_index(order, knl, compressed):
     dim = knl.dim
     if compressed:
-        wrangler = LinearPDEBasedExpansionTermsWrangler(order, dim, knl=knl)
+        wrangler = LinearPDEBasedExpansionTermsWrangler(order, dim, None, knl=knl)
     else:
-        wrangler = FullExpansionTermsWrangler(order, dim)
+        wrangler = FullExpansionTermsWrangler(order, dim, max_mi=None)
     for i, mi in enumerate(wrangler.get_coefficient_identifiers()):
         assert i == wrangler.get_storage_index(mi)
 

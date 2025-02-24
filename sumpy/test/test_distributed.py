@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2022 Hao Gao"
 
 __license__ = """
@@ -20,29 +23,31 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import logging
 import os
-import pytest
 from functools import partial
 
 import numpy as np
+import pytest
 
 from arraycontext import pytest_generate_tests_for_array_contexts
-from sumpy.array_context import (                                 # noqa: F401
-        PytestPyOpenCLArrayContextFactory, _acf)
 
-import logging
+from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf
+
+
 logger = logging.getLogger(__name__)
 
 pytest_generate_tests = pytest_generate_tests_for_array_contexts([
     PytestPyOpenCLArrayContextFactory,
     ])
 
+
 # Note: Do not import mpi4py.MPI object at the module level, because OpenMPI does not
 # support recursive invocations.
 
 
 def set_cache_dir(mpirank):
-    """Make each rank use a differnt cache location to avoid conflict."""
+    """Make each rank use a different cache location to avoid conflict."""
     import platformdirs
     cache_dir = platformdirs.user_cache_dir("sumpy", "sumpy")
 
@@ -70,8 +75,8 @@ def _test_against_single_rank(
     from boxtree.traversal import FMMTraversalBuilder
     traversal_builder = FMMTraversalBuilder(actx, well_sep_is_n_away=2)
 
-    from sumpy.kernel import LaplaceKernel
     from sumpy.expansion import DefaultExpansionFactory
+    from sumpy.kernel import LaplaceKernel
     kernel = LaplaceKernel(dims)
     expansion_factory = DefaultExpansionFactory()
     local_expansion_factory = expansion_factory.get_local_expansion_class(kernel)
@@ -85,7 +90,7 @@ def _test_against_single_rank(
         actx, multipole_expansion_factory, local_expansion_factory, [kernel])
 
     global_tree_dev = None
-    sources_weights = actx.empty(0, dtype=dtype)
+    sources_weights = actx.np.zeros(0, dtype=dtype)
 
     if mpi_rank == 0:
         # Generate random particles and source weights
@@ -125,10 +130,10 @@ def _test_against_single_rank(
             communicate_mpoles_via_allreduce=communicate_mpoles_via_allreduce)
 
     from boxtree.distributed import DistributedFMMRunner
-    distribued_fmm_info = DistributedFMMRunner(
+    distributed_fmm_info = DistributedFMMRunner(
         actx, global_tree_dev, traversal_builder, wrangler_factory, comm=comm)
 
-    distributed_potential = distribued_fmm_info.drive_dfmm(actx, [sources_weights])
+    distributed_potential = distributed_fmm_info.drive_dfmm(actx, [sources_weights])
 
     if mpi_rank == 0:
         assert shmem_potential.shape == (1,)
@@ -156,32 +161,34 @@ def test_against_single_rank(
 
     from boxtree.tools import run_mpi
     run_mpi(__file__, num_processes, {
-        "PYTEST": "against_single_rank",
-        "dims": dims,
-        "nsources": nsources,
-        "ntargets": ntargets,
         "OMP_NUM_THREADS": 1,
-        "communicate_mpoles_via_allreduce": communicate_mpoles_via_allreduce
+        "_SUMPY_TEST_NAME": "against_single_rank",
+        "_SUMPY_TEST_DIMS": dims,
+        "_SUMPY_TEST_NSOURCES": nsources,
+        "_SUMPY_TEST_NTARGETS": ntargets,
+        "_SUMPY_TEST_MPOLES_ALLREDUCE": communicate_mpoles_via_allreduce
         })
 
 # }}}
 
 
 if __name__ == "__main__":
-    if "PYTEST" in os.environ:
-        if os.environ["PYTEST"] == "against_single_rank":
+    if "_SUMPY_TEST_NAME" in os.environ:
+        name = os.environ["_SUMPY_TEST_NAME"]
+        if name == "against_single_rank":
             # Run "test_against_single_rank" test case
-            dims = int(os.environ["dims"])
-            nsources = int(os.environ["nsources"])
-            ntargets = int(os.environ["ntargets"])
+            dims = int(os.environ["_SUMPY_TEST_DIMS"])
+            nsources = int(os.environ["_SUMPY_TEST_NSOURCES"])
+            ntargets = int(os.environ["_SUMPY_TEST_NTARGETS"])
 
-            from distutils.util import strtobool
-            communicate_mpoles_via_allreduce = bool(
-                strtobool(os.environ["communicate_mpoles_via_allreduce"]))
+            communicate_mpoles_via_allreduce = (
+                os.environ["_SUMPY_TEST_MPOLES_ALLREDUCE"] == "True")
 
             _test_against_single_rank(
                 dims, nsources, ntargets, np.float64,
                 communicate_mpoles_via_allreduce)
+        else:
+            raise ValueError(f"Invalid test name: {name!r}")
     else:
         # You can test individual routines by typing
         # $ python test_distributed.py

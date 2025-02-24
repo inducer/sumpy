@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = """
 Copyright (C) 2017 Matt Wala
 Copyright (C) 2006-2016 SymPy Development Team
@@ -64,9 +67,11 @@ DAMAGE.
 
 # }}}
 
-from sumpy.symbolic import (
-    Basic, Mul, Add, Pow, Symbol, _coeff_isneg, Derivative, Subs)
 from sympy.utilities.iterables import numbered_symbols
+
+from sumpy.symbolic import Add, Basic, Derivative, Mul, Pow, Subs, Symbol, _coeff_isneg
+
+
 try:
     from sympy.utilities.iterables import iterable
 except ImportError:
@@ -304,7 +309,7 @@ def match_common_args(func_class, funcs, opt_subs):
         # This makes us try combining smaller matches first.
         common_arg_candidates = OrderedSet(sorted(
                 common_arg_candidates_counts.keys(),
-                key=lambda k: (common_arg_candidates_counts[k], k)))  # noqa: B023
+                key=lambda k: (common_arg_candidates_counts[k], k)))
 
         while common_arg_candidates:
             j = common_arg_candidates.pop(last=False)
@@ -455,7 +460,7 @@ def tree_cse(exprs, symbols, opt_subs=None):
     excluded_symbols = set()
 
     def find_repeated(expr):
-        if not isinstance(expr, (Basic, Unevaluated)):
+        if not isinstance(expr, Basic | Unevaluated):
             return
 
         if isinstance(expr, Basic) and expr.is_Atom:
@@ -476,7 +481,7 @@ def tree_cse(exprs, symbols, opt_subs=None):
             if expr in opt_subs:
                 expr = opt_subs[expr]
 
-            if isinstance(expr, CSE_NO_DESCEND_CLASSES):
+            if isinstance(expr, CSE_NO_DESCEND_CLASSES):  # noqa: SIM108
                 args = ()
             else:
                 args = expr.args
@@ -500,7 +505,7 @@ def tree_cse(exprs, symbols, opt_subs=None):
     subs = {}
 
     def rebuild(expr):
-        if not isinstance(expr, (Basic, Unevaluated)):
+        if not isinstance(expr, Basic | Unevaluated):
             return expr
 
         if not expr.args:
@@ -527,7 +532,7 @@ def tree_cse(exprs, symbols, opt_subs=None):
             try:
                 sym = next(symbols)
             except StopIteration:
-                raise ValueError("Symbols iterator ran out of symbols.")
+                raise ValueError("Symbols iterator ran out of symbols.") from None
 
             subs[orig_expr] = sym
             replacements.append((sym, new_expr))
@@ -539,7 +544,7 @@ def tree_cse(exprs, symbols, opt_subs=None):
 
     reduced_exprs = []
     for e in exprs:
-        if isinstance(e, Basic):
+        if isinstance(e, Basic):  # noqa: SIM108
             reduced_e = rebuild(e)
         else:
             reduced_e = e
@@ -581,7 +586,7 @@ def cse(exprs, symbols=None, optimizations=None):
     # Preprocess the expressions to give us better optimization opportunities.
     reduced_exprs = [preprocess_for_cse(e, optimizations) for e in exprs]
 
-    if symbols is None:
+    if symbols is None:  # noqa: SIM108
         symbols = numbered_symbols(cls=Symbol)
     else:
         # In case we get passed an iterable with an __iter__ method instead of

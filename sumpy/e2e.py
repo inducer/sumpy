@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2013 Andreas Kloeckner"
 
 __license__ = """
@@ -20,17 +23,22 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import logging
 from abc import ABC, abstractmethod
 
 import numpy as np
-import loopy as lp
+from typing_extensions import override
 
+import loopy as lp
+from loopy.version import MOST_RECENT_LANGUAGE_VERSION  # noqa: F401
 from pytools import memoize_method
+
+import sumpy.symbolic as sym
 from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
 from sumpy.codegen import register_optimization_preambles
 from sumpy.tools import KernelCacheMixin, to_complex_dtype
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -59,7 +67,9 @@ class E2EBase(KernelCacheMixin, ABC):
             Default: all kernels use the same strength.
         """
         from sumpy.kernel import (
-            TargetTransformationRemover, SourceTransformationRemover)
+            SourceTransformationRemover,
+            TargetTransformationRemover,
+        )
         txr = TargetTransformationRemover()
         sxr = SourceTransformationRemover()
 
@@ -148,7 +158,6 @@ class E2EFromCSR(E2EBase):
         return "e2e_from_csr"
 
     def get_translation_loopy_insns(self):
-        import sumpy.symbolic as sym
         dvec = sym.make_sym_vector("d", self.dim)
 
         src_rscale = sym.Symbol("src_rscale")
@@ -206,11 +215,11 @@ class E2EFromCSR(E2EBase):
                         <> src_center[idim] = centers[idim, src_ibox] {dup=idim}
                         <> d[idim] = tgt_center[idim] - src_center[idim] \
                             {dup=idim}
-                        """] + ["""
-                        <> src_coeff{coeffidx} = \
-                            src_expansions[src_ibox - src_base_ibox, {coeffidx}] \
+                        """] + [f"""
+                        <> src_coeff{i} = \
+                            src_expansions[src_ibox - src_base_ibox, {i}] \
                             {{dep=read_src_ibox}}
-                        """.format(coeffidx=i) for i in range(ncoeff_src)] + [
+                        """ for i in range(ncoeff_src)] + [
                         ] + self.get_translation_loopy_insns() + ["""
                     end
 
@@ -234,9 +243,10 @@ class E2EFromCSR(E2EBase):
                         shape=("nsrc_level_boxes", ncoeff_src), offset=lp.auto),
                     lp.GlobalArg("tgt_expansions", None,
                         shape=("ntgt_level_boxes", ncoeff_tgt), offset=lp.auto),
-                    ...
-                ] + gather_loopy_arguments([self.src_expansion,
-                                            self.tgt_expansion]),
+                    "...",
+                    *gather_loopy_arguments([self.src_expansion,
+                                            self.tgt_expansion])
+                ],
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
@@ -252,6 +262,7 @@ class E2EFromCSR(E2EBase):
 
         return loopy_knl
 
+    @override
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
@@ -359,7 +370,7 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
 
         import pymbolic as prim
 
-        domains = []
+        domains: list[str] = []
         insns = self.get_translation_loopy_insns(result_dtype)
         tgt_coeffs = prim.var("tgt_coeffs")
         for i in range(ncoeff_tgt):
@@ -470,9 +481,10 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                         offset=lp.auto),
                     lp.ValueArg("ntranslation_classes, ntranslation_classes_lists",
                         np.int32),
-                    ...
-                ] + gather_loopy_arguments([self.src_expansion,
-                                            self.tgt_expansion]),
+                    ...,
+                    *gather_loopy_arguments([self.src_expansion,
+                                            self.tgt_expansion])
+                ],
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 fixed_parameters={
@@ -584,8 +596,9 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                     lp.ValueArg("ntranslation_classes", np.int32),
                     lp.ValueArg("ntranslation_vectors", np.int32),
                     lp.ValueArg("translation_classes_level_start", np.int32),
-                    ...
-                ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
+                    "...",
+                    *gather_loopy_arguments([self.src_expansion, self.tgt_expansion])
+                ],
                 name=self.name,
                 assumptions="ntranslation_classes>=1",
                 fixed_parameters={
@@ -696,8 +709,9 @@ class M2LPreprocessMultipole(E2EBase):
                     lp.GlobalArg("preprocessed_src_expansions", None,
                         shape=("nsrc_boxes", npreprocessed_src_coeffs),
                         offset=lp.auto),
-                    ...
-                ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
+                    "...",
+                    *gather_loopy_arguments([self.src_expansion, self.tgt_expansion])
+                ],
                 name=self.name,
                 assumptions="nsrc_boxes>=1",
                 fixed_parameters={
@@ -792,8 +806,9 @@ class M2LPostprocessLocal(E2EBase):
                     lp.GlobalArg("tgt_expansions_before_postprocessing", None,
                         shape=("ntgt_boxes", ntgt_coeffs_before_postprocessing),
                         offset=lp.auto),
-                    ...
-                ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
+                    "...",
+                    *gather_loopy_arguments([self.src_expansion, self.tgt_expansion])
+                ],
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 fixed_parameters={
@@ -888,18 +903,18 @@ class E2EFromChildren(E2EBase):
                             <> d[idim] = tgt_center[idim] - src_center[idim] \
                                     {dup=idim}
 
-                            """] + ["""
+                            """] + [f"""
                             <> src_coeff{i} = \
                                 src_expansions[src_ibox - src_base_ibox, {i}] \
                                 {{id_prefix=read_coeff,dep=read_src_ibox}}
-                            """.format(i=i) for i in range(ncoeffs_src)] + [
-                            ] + loopy_insns + ["""
+                            """ for i in range(ncoeffs_src)] + [
+                            ] + loopy_insns + [f"""
                             tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] = \
                                 tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] \
                                 + coeff{i} \
                                 {{id_prefix=write_expn,dep=compute_coeff*,
                                     nosync=read_coeff*}}
-                            """.format(i=i) for i in range(ncoeffs_tgt)] + ["""
+                            """ for i in range(ncoeffs_tgt)] + ["""
                         end
                     end
                 end
@@ -918,8 +933,9 @@ class E2EFromChildren(E2EBase):
                     lp.ValueArg("src_base_ibox,tgt_base_ibox", np.int32),
                     lp.ValueArg("ntgt_level_boxes,nsrc_level_boxes", np.int32),
                     lp.ValueArg("aligned_nboxes", np.int32),
-                    ...
-                ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
+                    "...",
+                    *gather_loopy_arguments([self.src_expansion, self.tgt_expansion])
+                ],
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
@@ -997,18 +1013,18 @@ class E2EFromParent(E2EBase):
                     <> src_center[idim] = centers[idim, src_ibox] {dup=idim}
                     <> d[idim] = tgt_center[idim] - src_center[idim] {dup=idim}
 
-                    """] + ["""
+                    """] + [f"""
                     <> src_coeff{i} = \
                         src_expansions[src_ibox - src_base_ibox, {i}] \
                         {{id_prefix=read_expn,dep=read_src_ibox}}
-                    """.format(i=i) for i in range(ncoeffs_src)] + [
+                    """ for i in range(ncoeffs_src)] + [
 
-                    ] + self.get_translation_loopy_insns() + ["""
+                    ] + self.get_translation_loopy_insns() + [f"""
 
                     tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] = \
                         tgt_expansions[tgt_ibox - tgt_base_ibox, {i}] + coeff{i} \
                         {{id_prefix=write_expn,nosync=read_expn*}}
-                    """.format(i=i) for i in range(ncoeffs_tgt)] + ["""
+                    """ for i in range(ncoeffs_tgt)] + ["""
                 end
                 """],
                 kernel_data=[
@@ -1024,8 +1040,9 @@ class E2EFromParent(E2EBase):
                         shape=("ntgt_level_boxes", ncoeffs_tgt), offset=lp.auto),
                     lp.GlobalArg("src_expansions", None,
                         shape=("nsrc_level_boxes", ncoeffs_src), offset=lp.auto),
-                    ...
-                ] + gather_loopy_arguments([self.src_expansion, self.tgt_expansion]),
+                    "...",
+                    *gather_loopy_arguments([self.src_expansion, self.tgt_expansion])
+                ],
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",

@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -20,41 +23,89 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import ClassVar, Tuple
+from abc import ABC, abstractmethod
+from collections import defaultdict
+from dataclasses import dataclass
+from typing import (
+    TYPE_CHECKING,
+    ClassVar,
+    Generic,
+    Literal,
+    TypeVar,
+    cast,
+    overload,
+)
+
+import numpy as np
+from typing_extensions import override
 
 import loopy as lp
-import numpy as np
-from pymbolic.mapper import IdentityMapper, CSECachingMapperMixin
-from sumpy.symbolic import pymbolic_real_norm_2, SpatialConstant
-import sumpy.symbolic as sym
+import pymbolic.primitives as prim
+from pymbolic import Expression, var
+from pymbolic.mapper import CSECachingMapperMixin, IdentityMapper
 from pymbolic.primitives import make_sym_vector
-from pymbolic import var
 from pytools import memoize_method
-from collections import defaultdict
+
+import sumpy.symbolic as sym
+from sumpy.derivative_taker import (
+    DerivativeCoeffDict,
+    DifferentiatedExprDerivativeTaker,
+    ExprDerivativeTaker,
+    diff_derivative_coeff_dict,
+)
+from sumpy.symbolic import SpatialConstant, pymbolic_real_norm_2
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable, Sequence
+
+    import sympy as sp
+
+    from sumpy.assignment_collection import SymbolicAssignmentCollection
+    from sumpy.expansion.diff_op import LinearPDESystemOperator
 
 __doc__ = """
 Kernel interface
 ----------------
 
-.. autoclass:: Kernel
 .. autoclass:: KernelArgument
+.. autoclass:: Kernel
+    :show-inheritance:
 
 Symbolic kernels
 ----------------
 
 .. autoclass:: ExpressionKernel
+    :show-inheritance:
+    :members: mapper_method
 
 PDE kernels
 -----------
 
 .. autoclass:: LaplaceKernel
+    :show-inheritance:
+    :members: mapper_method
 .. autoclass:: BiharmonicKernel
+    :show-inheritance:
+    :members: mapper_method
 .. autoclass:: HelmholtzKernel
+    :show-inheritance:
+    :members: mapper_method
 .. autoclass:: YukawaKernel
+    :show-inheritance:
+    :members: mapper_method
 .. autoclass:: StokesletKernel
+    :show-inheritance:
+    :members: mapper_method
 .. autoclass:: StressletKernel
+    :show-inheritance:
+    :members: mapper_method
 .. autoclass:: ElasticityKernel
+    :show-inheritance:
+    :members: mapper_method
 .. autoclass:: LineOfCompressionKernel
+    :show-inheritance:
+    :members: mapper_method
 
 Derivatives
 -----------
@@ -64,66 +115,77 @@ of them in the process.
 
 .. autoclass:: DerivativeBase
 .. autoclass:: AxisTargetDerivative
+    :show-inheritance:
+    :undoc-members:
+    :members: mapper_method,target_array_name
 .. autoclass:: AxisSourceDerivative
+    :show-inheritance:
+    :members: mapper_method
+.. autoclass:: DirectionalDerivative
+    :show-inheritance:
+    :members: directional_kind
 .. autoclass:: DirectionalSourceDerivative
-.. autoclass:: DirectionalTargetDerivative
+    :show-inheritance:
+    :members: mapper_method,directional_kind
 
 Transforming kernels
 --------------------
 
-.. autoclass:: KernelMapper
-.. autoclass:: KernelCombineMapper
-.. autoclass:: KernelIdentityMapper
-.. autoclass:: AxisSourceDerivativeRemover
-.. autoclass:: AxisTargetDerivativeRemover
-.. autoclass:: SourceDerivativeRemover
-.. autoclass:: TargetDerivativeRemover
 .. autoclass:: TargetPointMultiplier
+    :undoc-members:
+    :members: mapper_method,target_array_name
+
+.. autoclass:: ResultT
+
+.. autoclass:: KernelMapper
+    :show-inheritance:
+.. autoclass:: KernelCombineMapper
+    :show-inheritance:
+.. autoclass:: KernelIdentityMapper
+    :show-inheritance:
+.. autoclass:: AxisSourceDerivativeRemover
+    :show-inheritance:
+.. autoclass:: AxisTargetDerivativeRemover
+    :show-inheritance:
+.. autoclass:: SourceDerivativeRemover
+    :show-inheritance:
+.. autoclass:: TargetDerivativeRemover
+    :show-inheritance:
+.. autoclass:: TargetTransformationRemover
+    :show-inheritance:
 .. autoclass:: DerivativeCounter
+    :show-inheritance:
 """
 
 
+@dataclass(frozen=True)
 class KernelArgument:
     """
-    .. attribute:: loopy_arg
-
-        A :class:`loopy.KernelArgument` instance describing the type,
-        name, and other features of this kernel argument when
-        passed to a generated piece of code.
+    .. autoattribute:: loopy_arg
     """
 
-    def __init__(self, loopy_arg):
-        self.loopy_arg = loopy_arg
+    loopy_arg: lp.KernelArgument
+    """A :class:`loopy.KernelArgument` instance describing the type, name, and
+    other features of this kernel argument when passed to a generated piece of
+    code.
+    """
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self.loopy_arg.name
-
-    def __eq__(self, other):
-        if id(self) == id(other):
-            return True
-        if type(self) is not KernelArgument:
-            return NotImplemented
-        if type(other) is not KernelArgument:
-            return NotImplemented
-        return self.loopy_arg == other.loopy_arg
-
-    def __ne__(self, other):
-        # Needed for python2
-        return not self == other
-
-    def __hash__(self):                 # pylint: disable=invalid-hash-returned
-        return (type(self), self.loopy_arg)
 
 
 # {{{ basic kernel interface
 
-class Kernel:
+@dataclass(frozen=True)
+class Kernel(ABC):
     """Basic kernel interface.
 
-    .. attribute:: is_complex_valued
-    .. attribute:: is_translation_invariant
-    .. attribute:: dim
+    .. autoattribute:: mapper_method
+    .. autoattribute:: is_translation_invariant
+
+    .. autoattribute:: dim
+    .. autoproperty:: is_complex_valued
 
     .. automethod:: get_base_kernel
     .. automethod:: replace_base_kernel
@@ -135,100 +197,125 @@ class Kernel:
     .. automethod:: get_global_scaling_const
     .. automethod:: get_args
     .. automethod:: get_source_args
+    .. automethod:: get_pde_as_diff_op
     """
 
-    init_arg_names: ClassVar[Tuple[str, ...]]
+    dim: int
+    """Dimension of the space the kernel is defined in."""
 
-    def __init__(self, dim):
-        self.dim = dim
+    # TODO: Allow kernels that are not translation invariant
+    is_translation_invariant: ClassVar[bool] = True
+    """A boolean flag indicating whether the kernel is translation invariant."""
+    mapper_method: ClassVar[str]
+    """The name of the mapper method called for the kernel."""
 
-    # {{{ hashing/pickling/equality
+    @property
+    @abstractmethod
+    def is_complex_valued(self) -> bool:
+        """A boolean flag indicating whether this kernel is complex valued."""
 
-    def __eq__(self, other):
-        if self is other:
-            return True
-        elif hash(self) != hash(other):
-            return False
-        else:
-            return (type(self) is type(other)
-                    and self.__getinitargs__() == other.__getinitargs__())
+    @override
+    def __repr__(self) -> str:
+        from dataclasses import fields
 
-    def __ne__(self, other):
-        return not self.__eq__(other)
+        args: list[str] = []
+        for f in fields(self):
+            value = getattr(self, f.name)
+            if isinstance(value, prim.ExpressionNode):
+                args.append(f"{f.name}={value}")
+            else:
+                args.append(f"{f.name}={value!r}")
 
-    def __hash__(self):
-        try:
-            return self.hash_value
-        except AttributeError:
-            self.hash_value = hash((type(self),) + self.__getinitargs__())
-            return self.hash_value
+        return f"{type(self).__name__}({', '.join(args)})"
 
-    def update_persistent_hash(self, key_hash, key_builder):
-        key_hash.update(type(self).__name__.encode("utf8"))
-        key_builder.rec(key_hash, self.__getinitargs__())
-
-    def __getinitargs__(self):
-        return (self.dim,)
-
-    def __getstate__(self):
-        return self.__getinitargs__()
-
-    def __setstate__(self, state):
-        # Can't use trivial pickling: hash_value cache must stay unset
-        assert len(self.init_arg_names) == len(state)
-        self.__init__(*state)
-
-    # }}}
-
-    def get_base_kernel(self):
-        """Return the kernel being wrapped by this one, or else
-        *self*.
+    def get_base_kernel(self) -> Kernel:
+        """
+        :returns: the kernel being wrapped by this one, or else *self*.
         """
         return self
 
-    def replace_base_kernel(self, new_base_kernel):
-        """Return the base kernel being wrapped by this one, or else
-        *new_base_kernel*.
+    def replace_base_kernel(self, new_base_kernel: Kernel) -> Kernel:
+        """
+        :returns: the base kernel being wrapped by this one, or else
+            *new_base_kernel*.
         """
         return new_base_kernel
 
-    def prepare_loopy_kernel(self, loopy_knl):
-        """Apply some changes (such as registering function
-        manglers) to the kernel. Return the new kernel.
+    def prepare_loopy_kernel(self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
+        """Apply some changes (such as registering function manglers) to the kernel.
+
+        :returns: a new :mod:`loopy` kernel with the applied changes.
         """
         return loopy_knl
 
-    def get_code_transformer(self):
-        """Return a function to postprocess the :mod:`pymbolic`
-        expression generated from the result of
-        :meth:`get_expression` on the way to code generation.
+    def get_code_transformer(self) -> Callable[[Expression], Expression]:
+        """
+        :returns: a function to postprocess the :mod:`pymbolic` expression
+            generated from the result of :meth:`get_expression` on the way to
+            code generation.
         """
         return lambda expr: expr
 
-    def get_expression(self, dist_vec):
-        r"""Return a :mod:`sympy` expression for the kernel."""
-        raise NotImplementedError
-
-    def _diff(self, expr, vec, mi):
-        """Take the derivative of an expression
+    @abstractmethod
+    def get_expression(self, dist_vec: sym.Matrix) -> sym.Expr:
         """
+        :returns: a :mod:`sympy` expression for the kernel.
+        """
+
+    @abstractmethod
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        r"""
+        :returns: the PDE for the kernel as a
+            :class:`sumpy.expansion.diff_op.LinearPDESystemOperator` object
+            :math:`\mathcal{L}`, where :math:`\mathcal{L}(u) = 0` is the PDE.
+        """
+
+    def _diff(self,
+              expr: sym.Expr,
+              vec: sp.Matrix,
+              mi: tuple[int, ...]) -> sym.Expr:
+        """Take the derivative of an expression."""
         for i in range(self.dim):
             if mi[i] == 0:
                 continue
             expr = expr.diff(vec[i], mi[i])
+
         return expr
 
-    def postprocess_at_source(self, expr, avec):
+    @abstractmethod
+    def get_derivative_taker(
+            self,
+            dvec: sp.Matrix,
+            rscale: sym.Expr,
+            sac: SymbolicAssignmentCollection | None,
+        ) -> ExprDerivativeTaker:
+        """
+        :returns: an :class:`~sumpy.derivative_taker.ExprDerivativeTaker` instance
+            that supports taking derivatives of the base kernel with respect to
+            *dvec*.
+        """
+
+    @overload
+    def postprocess_at_source(
+            self, expr: sym.Expr, avec: sym.Matrix
+        ) -> sym.Expr: ...
+
+    @overload
+    def postprocess_at_source(
+            self, expr: ExprDerivativeTaker, avec: sym.Matrix
+        ) -> DifferentiatedExprDerivativeTaker: ...
+
+    def postprocess_at_source(
+            self, expr: sym.Expr | ExprDerivativeTaker, avec: sym.Matrix,
+        ) -> sym.Expr | DifferentiatedExprDerivativeTaker:
         """Transform a kernel evaluation or expansion expression in a place
-        where the vector a (something - source) is known. ("something" may be
-        an expansion center or a target.)
+        where the vector :math:`a` (something - source) is known. ("something" may be
+        an expansion center or a target)
 
         The typical use of this function is to apply source-variable
         derivatives to the kernel.
         """
-        from sumpy.derivative_taker import (ExprDerivativeTaker,
-            DifferentiatedExprDerivativeTaker)
-        expr_dict = {(0,)*self.dim: 1}
+        expr_dict: DerivativeCoeffDict = {(0,)*self.dim: 1}
         expr_dict = self.get_derivative_coeff_dict_at_source(expr_dict)
         if isinstance(expr, ExprDerivativeTaker):
             return DifferentiatedExprDerivativeTaker(expr, expr_dict)
@@ -236,181 +323,167 @@ class Kernel:
         result = 0
         for mi, coeff in expr_dict.items():
             result += coeff * self._diff(expr, avec, mi)
+
+        assert isinstance(result, sym.Expr)
         return result
 
-    def postprocess_at_target(self, expr, bvec):
+    @overload
+    def postprocess_at_target(
+            self, expr: sym.Expr, bvec: sym.Matrix,
+        ) -> sym.Expr: ...
+
+    @overload
+    def postprocess_at_target(
+            self, expr: ExprDerivativeTaker | DifferentiatedExprDerivativeTaker,
+            bvec: sym.Matrix,
+        ) -> DifferentiatedExprDerivativeTaker: ...
+
+    def postprocess_at_target(self,
+                expr:
+                    sym.Expr | ExprDerivativeTaker | DifferentiatedExprDerivativeTaker,
+                bvec: sym.Matrix,
+            ) -> sym.Expr | DifferentiatedExprDerivativeTaker:
         """Transform a kernel evaluation or expansion expression in a place
-        where the vector b (target - something) is known. ("something" may be
-        an expansion center or a target.)
+        where the vector :math:`b` (target - something) is known. ("something" may
+        be an expansion center or a target.)
 
         The typical use of this function is to apply target-variable
         derivatives to the kernel.
-
-        :arg expr: may be a :class:`sympy.core.expr.Expr` or a
-            :class:`sumpy.derivative_taker.DifferentiatedExprDerivativeTaker`.
         """
         return expr
 
-    def get_derivative_coeff_dict_at_source(self, expr_dict):
-        r"""Get the derivative transformation of the expression at source
-        represented by the dictionary expr_dict which is mapping from multi-index
-        `mi` to coefficient `coeff`.
-        Expression represented by the dictionary `expr_dict` is
-        :math:`\sum_{mi} \frac{\partial^mi}{x^mi}G * coeff`. Returns an
-        expression of the same type.
+    def get_derivative_coeff_dict_at_source(
+            self, expr_dict: DerivativeCoeffDict,
+        ) -> DerivativeCoeffDict:
+        r"""Get the derivative transformation of the expression at the source.
+
+        The transformation is represented by the *expr_dict* which maps from a
+        multi-index *mi* to a coefficient *coeff*. The Expression represented by
+        *expr_dict* is :math:`\sum_{mi} \frac{\partial^mi}{x^mi}G * coeff`.
 
         This function is meant to be overridden by child classes where necessary.
         """
         return expr_dict
 
-    def get_global_scaling_const(self):
-        r"""Return a global scaling constant of the kernel.
+    @abstractmethod
+    def get_global_scaling_const(self) -> sym.Expr:
+        r"""A global scaling constant of the kernel.
+
         Typically, this ensures that the kernel is scaled so that
-        :math:`\mathcal L(G)(x)=C\delta(x)` with a constant of 1, where
-        :math:`\mathcal L` is the PDE operator associated with the kernel.
-        Not to be confused with *rscale*, which keeps expansion
-        coefficients benignly scaled.
+        :math:`\mathcal{L}(G)(x) = C \delta(x)` with a constant of 1, where
+        :math:`\mathcal{L}` is the PDE operator associated with the kernel. Not
+        to be confused with *rscale*, which keeps expansion coefficients
+        benignly scaled.
         """
-        raise NotImplementedError
 
-    def get_args(self):
-        """Return list of :class:`KernelArgument` instances describing
-        extra arguments used by the kernel.
+    def get_args(self) -> Sequence[KernelArgument]:
         """
-        return []
-
-    def get_source_args(self):
-        """Return list of :class:`KernelArgument` instances describing
-        extra arguments used by kernel in picking up contributions
-        from point sources.
+        :returns: list of :class:`KernelArgument` instances describing extra
+            arguments used by the kernel.
         """
         return []
 
-    # TODO: Allow kernels that are not translation invariant
-    is_translation_invariant = True
+    def get_source_args(self) -> Sequence[KernelArgument]:
+        """
+        :returns: list of :class:`KernelArgument` instances describing extra
+            arguments used by kernel in picking up contributions from point sources.
+        """
+        return []
 
 # }}}
 
 
-class ExpressionKernel(Kernel):
+@dataclass(frozen=True, repr=False)
+class ExpressionKernel(Kernel, ABC):
     r"""
-    .. attribute:: expression
-
-        A :mod:`pymbolic` expression depending on
-        variables *d_1* through *d_N* where *N* equals *dim*.
-        (These variables match what is returned from
-        :func:`pymbolic.primitives.make_sym_vector` with
-        argument `"d"`.) Any variable that is not *d* or
-        a :class:`~sumpy.symbolic.SpatialConstant` will be
-        viewed as potentially spatially varying.
-
-    .. attribute:: global_scaling_const
-
-        A constant :mod:`pymbolic` expression for the
-        global scaling of the kernel. Typically, this ensures that
-        the kernel is scaled so that :math:`\mathcal L(G)(x)=C\delta(x)`
-        with a constant of 1, where :math:`\mathcal L` is the PDE
-        operator associated with the kernel. Not to be confused with
-        *rscale*, which keeps expansion coefficients benignly scaled.
-
-    .. attribute:: is_complex_valued
-
-    .. automethod:: __init__
-    .. automethod:: get_expression
+    .. autoattribute:: expression
+    .. autoattribute:: global_scaling_const
     """
 
-    init_arg_names = ("dim", "expression", "global_scaling_const",
-            "is_complex_valued")
+    mapper_method: ClassVar[str] = "map_expression_kernel"
 
-    def __init__(self, dim, expression, global_scaling_const,
-            is_complex_valued):
-        # expression and global_scaling_const are pymbolic objects because
-        # those pickle cleanly. D'oh, sympy!
+    expression: Expression
+    """A :mod:`pymbolic` expression depending on variables *d_1* through *d_N*
+    where *N* equals *dim*. These variables match what is returned from
+    :func:`pymbolic.primitives.make_sym_vector` with argument `"d"`. Any
+    variable that is not *d* or a :class:`~sumpy.symbolic.SpatialConstant` will
+    be viewed as potentially spatially varying.
+    """
 
-        Kernel.__init__(self, dim)
+    global_scaling_const: Expression
+    r"""A constant :mod:`pymbolic` expression for the global scaling of the
+    kernel. Typically, this ensures that the kernel is scaled so that
+    :math:`\mathcal{L}(G)(x)=C\delta(x)` with a constant of 1, where
+    :math:`\mathcal{L}` is the PDE operator associated with the kernel. Not to
+    be confused with *rscale*, which keeps expansion coefficients benignly
+    scaled.
+    """
 
-        self.expression = expression
-        self.global_scaling_const = global_scaling_const
-        self.is_complex_valued = is_complex_valued
-
-    def __getinitargs__(self):
-        return (self.dim, self.expression, self.global_scaling_const,
-                self.is_complex_valued)
-
-    def __repr__(self):
+    @override
+    def __str__(self) -> str:
         return f"ExprKnl{self.dim}D"
 
-    def get_expression(self, scaled_dist_vec):
-        """Return :attr:`expression` as a :class:`sumpy.symbolic.Basic`."""
-
+    @override
+    def get_expression(self, dist_vec: sym.Matrix) -> sym.Expr:
         from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
-        expr = PymbolicToSympyMapperWithSymbols()(self.expression)
+        expr = PymbolicToSympyMapperWithSymbols().to_expr(self.expression)
 
-        if self.dim != len(scaled_dist_vec):
-            raise ValueError("dist_vec length does not match expected dimension")
+        if self.dim != len(dist_vec):
+            raise ValueError(
+                "'dist_vec' length does not match expected dimension: "
+                f"kernel dim is '{self.dim}' and dist_vec has length '{len(dist_vec)}'")
 
         from sumpy.symbolic import Symbol
         expr = expr.xreplace({
             Symbol(f"d{i}"): dist_vec_i
-            for i, dist_vec_i in enumerate(scaled_dist_vec)
+            for i, dist_vec_i in enumerate(dist_vec)
             })
 
         return expr
 
-    def get_global_scaling_const(self):
-        """Return a global scaling of the kernel as a :class:`sumpy.symbolic.Basic`.
-        """
-
+    @override
+    def get_global_scaling_const(self) -> sym.Expr:
         from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
-        return PymbolicToSympyMapperWithSymbols()(
-                self.global_scaling_const)
+        return PymbolicToSympyMapperWithSymbols().to_expr(self.global_scaling_const)
 
-    def update_persistent_hash(self, key_hash, key_builder):
-        key_hash.update(type(self).__name__.encode("utf8"))
-        for name, value in zip(self.init_arg_names, self.__getinitargs__()):
-            if name in ["expression", "global_scaling_const"]:
-                from pymbolic.mapper.persistent_hash import (
-                        PersistentHashWalkMapper as PersistentHashWalkMapper)
-                PersistentHashWalkMapper(key_hash)(value)
-            else:
-                key_builder.rec(key_hash, value)
-
-    mapper_method = "map_expression_kernel"
-
-    def get_derivative_taker(self, dvec, rscale, sac):
-        """Return a :class:`sumpy.derivative_taker.ExprDerivativeTaker` instance
-        that supports taking derivatives of the base kernel with respect to dvec.
-        """
-        from sumpy.derivative_taker import ExprDerivativeTaker
+    @override
+    def get_derivative_taker(
+            self,
+            dvec: sym.Matrix,
+            rscale: sym.Expr,
+            sac: SymbolicAssignmentCollection | None,
+        ) -> ExprDerivativeTaker:
         return ExprDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
-    def get_pde_as_diff_op(self):
-        r"""
-        Returns the PDE for the kernel as a
-        :class:`sumpy.expansion.diff_op.LinearPDESystemOperator` object `L`
-        where `L(u) = 0` is the PDE.
-        """
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
         raise NotImplementedError
 
 
-one_kernel_2d = ExpressionKernel(
-        dim=2,
-        expression=1,
-        global_scaling_const=1,
-        is_complex_valued=False)
-one_kernel_3d = ExpressionKernel(
-        dim=3,
-        expression=1,
-        global_scaling_const=1,
-        is_complex_valued=False)
+class OneKernel(ExpressionKernel):
+    def __init__(self, dim: int):
+        super().__init__(
+            dim=dim,
+            expression=1,
+            global_scaling_const=1,
+        )
+
+    @property
+    @override
+    def is_complex_valued(self) -> bool:
+        return False
+
+
+one_kernel_2d = OneKernel(2)
+one_kernel_3d = OneKernel(3)
 
 
 # {{{ PDE kernels
 
 class LaplaceKernel(ExpressionKernel):
-    init_arg_names = ("dim",)
+    mapper_method: ClassVar[str] = "map_laplace_kernel"
 
-    def __init__(self, dim):
+    def __init__(self, dim: int) -> None:
         # See (Kress LIE, Thm 6.2) for scaling
         if dim == 2:
             r = pymbolic_real_norm_2(make_sym_vector("d", dim))
@@ -421,39 +494,40 @@ class LaplaceKernel(ExpressionKernel):
             expr = 1/r
             scaling = 1/(4*var("pi"))
         else:
-            raise NotImplementedError("unsupported dimensionality")
+            raise NotImplementedError(f"unsupported dimension: '{dim}'")
 
-        super().__init__(
-                dim,
-                expression=expr,
-                global_scaling_const=scaling,
-                is_complex_valued=False)
+        super().__init__(dim, expression=expr, global_scaling_const=scaling)
 
-    def __getinitargs__(self):
-        return (self.dim,)
+    @property
+    @override
+    def is_complex_valued(self) -> bool:
+        return False
 
-    def __repr__(self):
+    @override
+    def __str__(self) -> str:
         return f"LapKnl{self.dim}D"
 
-    mapper_method = "map_laplace_kernel"
-
-    def get_derivative_taker(self, dvec, rscale, sac):
-        """Return a :class:`sumpy.derivative_taker.ExprDerivativeTaker` instance
-        that supports taking derivatives of the base kernel with respect to dvec.
-        """
+    @override
+    def get_derivative_taker(
+            self,
+            dvec: sym.Matrix,
+            rscale: sym.Expr,
+            sac: SymbolicAssignmentCollection | None,
+        ) -> ExprDerivativeTaker:
         from sumpy.derivative_taker import LaplaceDerivativeTaker
         return LaplaceDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
-    def get_pde_as_diff_op(self):
-        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
         w = make_identity_diff_op(self.dim)
         return laplacian(w)
 
 
 class BiharmonicKernel(ExpressionKernel):
-    init_arg_names = ("dim",)
+    mapper_method: ClassVar[str] = "map_biharmonic_kernel"
 
-    def __init__(self, dim):
+    def __init__(self, dim: int) -> None:
         r = pymbolic_real_norm_2(make_sym_vector("d", dim))
         if dim == 2:
             # Ref: Farkas, Peter. Mathematical foundations for fast algorithms
@@ -469,45 +543,55 @@ class BiharmonicKernel(ExpressionKernel):
             expr = r
             scaling = -1/(8*var("pi"))
         else:
-            raise RuntimeError("unsupported dimensionality")
+            raise NotImplementedError(f"unsupported dimension: '{dim}'")
 
-        super().__init__(
-                dim,
-                expression=expr,
-                global_scaling_const=scaling,
-                is_complex_valued=False)
+        super().__init__(dim, expression=expr, global_scaling_const=scaling)
 
-    def __getinitargs__(self):
-        return (self.dim,)
+    @property
+    @override
+    def is_complex_valued(self) -> bool:
+        return False
 
-    def __repr__(self):
+    @override
+    def __str__(self) -> str:
         return f"BiharmKnl{self.dim}D"
 
-    mapper_method = "map_biharmonic_kernel"
-
-    def get_derivative_taker(self, dvec, rscale, sac):
-        """Return a :class:`sumpy.derivative_taker.ExprDerivativeTaker` instance
-        that supports taking derivatives of the base kernel with respect to dvec.
-        """
+    @override
+    def get_derivative_taker(
+            self,
+            dvec: sp.Matrix,
+            rscale: sym.Expr,
+            sac: SymbolicAssignmentCollection | None,
+        ) -> ExprDerivativeTaker:
         from sumpy.derivative_taker import RadialDerivativeTaker
-        return RadialDerivativeTaker(self.get_expression(dvec), dvec, rscale,
-                sac)
+        return RadialDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
-    def get_pde_as_diff_op(self):
-        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
         w = make_identity_diff_op(self.dim)
         return laplacian(laplacian(w))
 
 
+@dataclass(frozen=True, repr=False)
 class HelmholtzKernel(ExpressionKernel):
-    init_arg_names = ("dim", "helmholtz_k_name", "allow_evanescent")
+    """
+    .. autoattribute:: helmholtz_k_name
+    .. autoattribute:: allow_evanescent
+    """
 
-    def __init__(self, dim, helmholtz_k_name="k",
-            allow_evanescent=False):
-        """
-        :arg helmholtz_k_name: The argument name to use for the Helmholtz
-            parameter when generating functions to evaluate this kernel.
-        """
+    mapper_method: ClassVar[str] = "map_helmholtz_kernel"
+
+    helmholtz_k_name: str
+    """The argument name to use for the Helmholtz parameter when generating
+    functions to evaluate this kernel.
+    """
+    allow_evanescent: bool
+
+    def __init__(self,
+                 dim: int,
+                 helmholtz_k_name: str = "k",
+                 allow_evanescent: bool = False) -> None:
         k = SpatialConstant(helmholtz_k_name)
 
         # Guard against code using the old positional interface.
@@ -522,69 +606,68 @@ class HelmholtzKernel(ExpressionKernel):
             expr = var("exp")(var("I")*k*r)/r
             scaling = 1/(4*var("pi"))
         else:
-            raise RuntimeError("unsupported dimensionality")
+            raise NotImplementedError(f"unsupported dimension: '{dim}'")
 
-        super().__init__(
-                dim,
-                expression=expr,
-                global_scaling_const=scaling,
-                is_complex_valued=True)
+        super().__init__(dim, expression=expr, global_scaling_const=scaling)
 
-        self.helmholtz_k_name = helmholtz_k_name
-        self.allow_evanescent = allow_evanescent
+        object.__setattr__(self, "helmholtz_k_name", helmholtz_k_name)
+        object.__setattr__(self, "allow_evanescent", allow_evanescent)
 
-    def __getinitargs__(self):
-        return (self.dim, self.helmholtz_k_name,
-                self.allow_evanescent)
+    @property
+    @override
+    def is_complex_valued(self) -> bool:
+        return True
 
-    def update_persistent_hash(self, key_hash, key_builder):
-        key_hash.update(type(self).__name__.encode("utf8"))
-        key_builder.rec(key_hash, (self.dim, self.helmholtz_k_name,
-            self.allow_evanescent))
-
-    def __repr__(self):
+    @override
+    def __str__(self) -> str:
         return f"HelmKnl{self.dim}D({self.helmholtz_k_name})"
 
-    def prepare_loopy_kernel(self, loopy_knl):
+    @override
+    def prepare_loopy_kernel(self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
         from sumpy.codegen import register_bessel_callables
         return register_bessel_callables(loopy_knl)
 
-    def get_args(self):
-        if self.allow_evanescent:
-            k_dtype = np.complex128
-        else:
-            k_dtype = np.float64
-
+    @override
+    def get_args(self) -> Sequence[KernelArgument]:
+        k_dtype = np.complex128 if self.allow_evanescent else np.float64
         return [
                 KernelArgument(
                     loopy_arg=lp.ValueArg(self.helmholtz_k_name, k_dtype),
                     )]
 
-    mapper_method = "map_helmholtz_kernel"
-
-    def get_derivative_taker(self, dvec, rscale, sac):
-        """Return a :class:`sumpy.derivative_taker.ExprDerivativeTaker` instance
-        that supports taking derivatives of the base kernel with respect to dvec.
-        """
+    @override
+    def get_derivative_taker(
+            self,
+            dvec: sym.Matrix,
+            rscale: sym.Expr,
+            sac: SymbolicAssignmentCollection | None,
+        ) -> ExprDerivativeTaker:
         from sumpy.derivative_taker import HelmholtzDerivativeTaker
         return HelmholtzDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
-    def get_pde_as_diff_op(self):
-        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
 
         w = make_identity_diff_op(self.dim)
         k = sym.Symbol(self.helmholtz_k_name)
-        return (laplacian(w) + k**2 * w)
+        return laplacian(w) + k**2 * w
 
 
+@dataclass(frozen=True, repr=False)
 class YukawaKernel(ExpressionKernel):
-    init_arg_names = ("dim", "yukawa_lambda_name")
+    """
+    .. autoattribute:: yukawa_lambda_name
+    """
 
-    def __init__(self, dim, yukawa_lambda_name="lam"):
-        """
-        :arg yukawa_lambda_name: The argument name to use for the Yukawa
-            parameter when generating functions to evaluate this kernel.
-        """
+    mapper_method: ClassVar[str] = "map_yukawa_kernel"
+
+    yukawa_lambda_name: str
+    """The argument name to use for the Yukawa parameter when generating
+    functions to evaluate this kernel.
+    """
+
+    def __init__(self, dim: int, yukawa_lambda_name: str = "lam") -> None:
         lam = SpatialConstant(yukawa_lambda_name)
 
         # NOTE: The Yukawa kernel is given by [1]
@@ -602,7 +685,7 @@ class YukawaKernel(ExpressionKernel):
             expr = var("hankel_1")(0, var("I")*lam*r)
             scaling_for_K0 = var("pi")/2*var("I")       # noqa: N806
 
-            scaling = -1/(2*var("pi")) * scaling_for_K0
+            scaling = 1/(2*var("pi")) * scaling_for_K0
         elif dim == 3:
             # NOTE: to get the expression, we do the following and simplify
             # 1. express K(1/2, lam r) as a modified spherical Bessel function
@@ -610,77 +693,97 @@ class YukawaKernel(ExpressionKernel):
             # 2. or use (AS 10.2.17) directly
             expr = var("exp")(-lam*r) / r
 
-            scaling = -1/(4 * var("pi")**2)
+            scaling = 1/(4 * var("pi"))
         else:
-            raise RuntimeError("unsupported dimensionality")
+            raise NotImplementedError(f"unsupported dimension: '{dim}'")
 
-        super().__init__(
-                dim,
-                expression=expr,
-                global_scaling_const=scaling,
-                is_complex_valued=True)
+        super().__init__(dim, expression=expr, global_scaling_const=scaling)
+        object.__setattr__(self, "yukawa_lambda_name", yukawa_lambda_name)
 
-        self.yukawa_lambda_name = yukawa_lambda_name
+    @property
+    @override
+    def is_complex_valued(self) -> bool:
+        # FIXME
+        return True
 
-    def __getinitargs__(self):
-        return (self.dim, self.yukawa_lambda_name)
-
-    def update_persistent_hash(self, key_hash, key_builder):
-        key_hash.update(type(self).__name__.encode("utf8"))
-        key_builder.rec(key_hash, (self.dim, self.yukawa_lambda_name))
-
-    def __repr__(self):
+    @override
+    def __str__(self) -> str:
         return f"YukKnl{self.dim}D({self.yukawa_lambda_name})"
 
-    def prepare_loopy_kernel(self, loopy_knl):
+    @override
+    def prepare_loopy_kernel(self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
         from sumpy.codegen import register_bessel_callables
         return register_bessel_callables(loopy_knl)
 
-    def get_args(self):
+    @override
+    def get_args(self) -> Sequence[KernelArgument]:
         return [
                 KernelArgument(
                     loopy_arg=lp.ValueArg(self.yukawa_lambda_name, np.float64),
                     )]
 
-    mapper_method = "map_yukawa_kernel"
-
-    def get_derivative_taker(self, dvec, rscale, sac):
-        """Return a :class:`sumpy.derivative_taker.ExprDerivativeTaker` instance
-        that supports taking derivatives of the base kernel with respect to dvec.
-        """
+    @override
+    def get_derivative_taker(
+            self,
+            dvec: sym.Matrix,
+            rscale: sym.Expr,
+            sac: SymbolicAssignmentCollection | None,
+        ) -> ExprDerivativeTaker:
         from sumpy.derivative_taker import HelmholtzDerivativeTaker
         return HelmholtzDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
-    def get_pde_as_diff_op(self):
-        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
+
         w = make_identity_diff_op(self.dim)
         lam = sym.Symbol(self.yukawa_lambda_name)
-        return (laplacian(w) - lam**2 * w)
+        return laplacian(w) - lam**2 * w
 
 
+@dataclass(frozen=True, repr=False)
 class ElasticityKernel(ExpressionKernel):
-    init_arg_names = ("dim", "icomp", "jcomp", "viscosity_mu", "poisson_ratio")
+    """
+    .. autoattribute:: icomp
+    .. autoattribute:: jcomp
+    .. autoattribute:: viscosity_mu
+    .. autoattribute:: poisson_ratio
+    """
+    mapper_method: ClassVar[str] = "map_elasticity_kernel"
 
-    def __new__(cls, dim, icomp, jcomp, viscosity_mu="mu", poisson_ratio="nu"):
+    icomp: int
+    """Component index for the kernel."""
+    jcomp: int
+    """Component index for the kernel."""
+
+    viscosity_mu: float | SpatialConstant
+    r"""The argument name to use for the dynamic viscosity :math:`\mu` when
+    generating functions to evaluate this kernel. Can also be a numeric value.
+    """
+    poisson_ratio: float | SpatialConstant
+    r"""The argument name to use for Poisson's ratio :math:`\nu` when generating
+    functions to evaluate this kernel. Can also be a numeric value.
+    """
+
+    def __new__(cls,
+                dim: int, icomp: int, jcomp: int,
+                viscosity_mu: float | str | SpatialConstant = "mu",
+                poisson_ratio: float | str | SpatialConstant = "nu",
+        ) -> ElasticityKernel:
         if poisson_ratio == 0.5:
-            instance = super().__new__(StokesletKernel)
+            return super().__new__(StokesletKernel)
         else:
-            instance = super().__new__(cls)
-        return instance
+            return super().__new__(cls)
 
-    def __init__(self, dim, icomp, jcomp, viscosity_mu="mu", poisson_ratio="nu"):
-        r"""
-        :arg viscosity_mu: The argument name to use for
-                dynamic viscosity :math:`\mu` when generating functions to
-                evaluate this kernel. Can also be a numeric value.
-        :arg poisson_ratio: The argument name to use for
-                Poisson's ratio :math:`\nu` when generating functions to
-                evaluate this kernel. Can also be a numeric value.
-        """
+    def __init__(self,
+                 dim: int, icomp: int, jcomp: int,
+                 viscosity_mu: float | str | SpatialConstant = "mu",
+                 poisson_ratio: float | str | SpatialConstant = "nu") -> None:
         if isinstance(viscosity_mu, str):
             mu = SpatialConstant(viscosity_mu)
         else:
             mu = viscosity_mu
+
         if isinstance(poisson_ratio, str):
             nu = SpatialConstant(poisson_ratio)
         else:
@@ -692,7 +795,7 @@ class ElasticityKernel(ExpressionKernel):
             # See (Berger and Karageorghis 2001)
             expr = (
                 -var("log")(r)*((3 - 4 * nu) if icomp == jcomp else 0)
-                +  # noqa: W504
+                +
                 d[icomp]*d[jcomp]/r**2
                 )
             scaling = -1/(8*var("pi")*(1 - nu)*mu)
@@ -703,90 +806,134 @@ class ElasticityKernel(ExpressionKernel):
             # Kelvin solution
             expr = (
                 (1/r)*((3 - 4*nu) if icomp == jcomp else 0)
-                +  # noqa: W504
+                +
                 d[icomp]*d[jcomp]/r**3
                 )
             scaling = -1/(16*var("pi")*(1 - nu)*mu)
 
         else:
-            raise RuntimeError("unsupported dimensionality")
+            raise NotImplementedError(f"unsupported dimension: '{dim}'")
 
-        self.viscosity_mu = mu
-        self.poisson_ratio = nu
-        self.icomp = icomp
-        self.jcomp = jcomp
+        super().__init__(dim, expression=expr, global_scaling_const=scaling)
 
-        super().__init__(
-                dim,
-                expression=expr,
-                global_scaling_const=scaling,
-                is_complex_valued=False)
+        object.__setattr__(self, "icomp", icomp)
+        object.__setattr__(self, "jcomp", jcomp)
+        object.__setattr__(self, "viscosity_mu", mu)
+        object.__setattr__(self, "poisson_ratio", nu)
 
-    def __getinitargs__(self):
-        return (self.dim, self.icomp, self.jcomp, self.viscosity_mu,
-                self.poisson_ratio)
-
+    @override
     def __reduce__(self):
-        return (ElasticityKernel, self.__getinitargs__())
+        return (
+            type(self),
+            (self.dim, self.icomp, self.jcomp, self.viscosity_mu, self.poisson_ratio))
 
-    def update_persistent_hash(self, key_hash, key_builder):
-        from pymbolic.mapper.persistent_hash import PersistentHashWalkMapper
-        key_hash.update(type(self).__name__.encode())
-        key_builder.rec(key_hash,
-                (self.dim, self.icomp, self.jcomp))
-        mapper = PersistentHashWalkMapper(key_hash)
-        mapper(self.viscosity_mu)
-        mapper(self.poisson_ratio)
+    @property
+    @override
+    def is_complex_valued(self) -> bool:
+        return False
 
-    def __repr__(self):
-        return f"ElasticityKnl{self.dim}D_{self.icomp}{self.jcomp}"
+    @override
+    def __str__(self) -> str:
+        return (
+            f"ElasticityKnl{self.dim}D_{self.icomp}{self.jcomp}"
+            f"({self.viscosity_mu}, {self.poisson_ratio})")
 
     @memoize_method
-    def get_args(self):
+    @override
+    def get_args(self) -> Sequence[KernelArgument]:
         from sumpy.tools import get_all_variables
         variables = get_all_variables(self.viscosity_mu)
-        res = []
+
+        args: list[KernelArgument] = []
         for v in variables:
-            res.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
-        return res + self.get_source_args()
+            args.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
+
+        return [*args, *self.get_source_args()]
 
     @memoize_method
-    def get_source_args(self):
+    @override
+    def get_source_args(self) -> Sequence[KernelArgument]:
         from sumpy.tools import get_all_variables
         variables = get_all_variables(self.poisson_ratio)
-        res = []
+
+        args: list[KernelArgument] = []
         for v in variables:
-            res.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
-        return res
+            args.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
 
-    mapper_method = "map_elasticity_kernel"
+        return args
 
-    def get_pde_as_diff_op(self):
-        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
+
         w = make_identity_diff_op(self.dim)
         return laplacian(laplacian(w))
 
 
+@dataclass(frozen=True, repr=False)
 class StokesletKernel(ElasticityKernel):
-    def __new__(cls, dim, icomp, jcomp, viscosity_mu="mu", poisson_ratio="0.5"):
+    """
+    .. autoattribute:: icomp
+    .. autoattribute:: jcomp
+    .. autoattribute:: viscosity_mu
+    """
+
+    def __new__(cls,
+                dim: int,
+                icomp: int,
+                jcomp: int,
+                viscosity_mu: float | str | SpatialConstant = "mu",
+                poisson_ratio: float | str | SpatialConstant | None = None,
+            ) -> StokesletKernel:
         return object.__new__(cls)
 
-    def __init__(self, dim, icomp, jcomp, viscosity_mu="mu", poisson_ratio=0.5):
+    def __init__(self,
+                dim: int,
+                icomp: int,
+                jcomp: int,
+                viscosity_mu: float | str | SpatialConstant = "mu",
+                poisson_ratio: float | str | SpatialConstant | None = None) -> None:
+        if poisson_ratio is None:
+            poisson_ratio = 0.5
+
+        if poisson_ratio != 0.5:
+            raise ValueError(
+                "'StokesletKernel' must have a Poisson ratio of 0.5: "
+                f"got '{poisson_ratio}'")
+
         super().__init__(dim, icomp, jcomp, viscosity_mu, poisson_ratio)
 
-    def __repr__(self):
-        return f"StokesletKnl{self.dim}D_{self.icomp}{self.jcomp}"
+    @override
+    def __str__(self) -> str:
+        return (
+            f"StokesletKnl{self.dim}D_{self.icomp}{self.jcomp}"
+            f"({self.viscosity_mu}, {self.poisson_ratio})")
 
 
+@dataclass(frozen=True, repr=False)
 class StressletKernel(ExpressionKernel):
-    init_arg_names = ("dim", "icomp", "jcomp", "kcomp", "viscosity_mu")
+    """
+    .. autoattribute:: icomp
+    .. autoattribute:: jcomp
+    .. autoattribute:: kcomp
+    .. autoattribute:: viscosity_mu
+    """
+    mapper_method: ClassVar[str] = "map_stresslet_kernel"
 
-    def __init__(self, dim, icomp, jcomp, kcomp, viscosity_mu="mu"):
-        r"""
-        :arg viscosity_mu: The argument name to use for
-                dynamic viscosity :math:`\mu` the then generating functions to
-                evaluate this kernel.
-        """
+    icomp: int
+    """Component index for the kernel."""
+    jcomp: int
+    """Component index for the kernel."""
+    kcomp: int
+    """Component index for the kernel."""
+    viscosity_mu: float | SpatialConstant
+    r"""The argument name to use for the dynamic viscosity :math:`\mu` when
+    generating functions to evaluate this kernel. Can also be a numeric value.
+    """
+
+    def __init__(self,
+                 dim: int, icomp: int, jcomp: int, kcomp: int,
+                 viscosity_mu: float | str | SpatialConstant = "mu") -> None:
         # mu is unused but kept for consistency with the Stokeslet.
         if isinstance(viscosity_mu, str):
             mu = SpatialConstant(viscosity_mu)
@@ -810,69 +957,79 @@ class StressletKernel(ExpressionKernel):
             scaling = 3/(4*var("pi"))
 
         else:
-            raise RuntimeError("unsupported dimensionality")
+            raise NotImplementedError(f"unsupported dimension: '{dim}'")
 
-        self.icomp = icomp
-        self.jcomp = jcomp
-        self.kcomp = kcomp
-        self.viscosity_mu = mu
+        super().__init__(dim, expression=expr, global_scaling_const=scaling)
 
-        super().__init__(
-                dim,
-                expression=expr,
-                global_scaling_const=scaling,
-                is_complex_valued=False)
+        object.__setattr__(self, "icomp", icomp)
+        object.__setattr__(self, "jcomp", jcomp)
+        object.__setattr__(self, "kcomp", kcomp)
+        object.__setattr__(self, "viscosity_mu", mu)
 
-    def __getinitargs__(self):
-        return (self.dim, self.icomp, self.jcomp, self.kcomp, self.viscosity_mu)
+    @property
+    @override
+    def is_complex_valued(self) -> bool:
+        return False
 
-    def update_persistent_hash(self, key_hash, key_builder):
-        key_hash.update(type(self).__name__.encode())
-        key_builder.rec(key_hash, (self.dim, self.icomp, self.jcomp, self.kcomp))
-
-        from pymbolic.mapper.persistent_hash import PersistentHashWalkMapper
-        mapper = PersistentHashWalkMapper(key_hash)
-        mapper(self.viscosity_mu)
-
-    def __repr__(self):
-        return f"StressletKnl{self.dim}D_{self.icomp}{self.jcomp}{self.kcomp}"
+    @override
+    def __str__(self) -> str:
+        return (
+            f"StressletKnl{self.dim}D_{self.icomp}{self.jcomp}{self.kcomp}"
+            f"({self.viscosity_mu})")
 
     @memoize_method
-    def get_args(self):
+    @override
+    def get_args(self) -> Sequence[KernelArgument]:
         from sumpy.tools import get_all_variables
         variables = get_all_variables(self.viscosity_mu)
         return [
                 KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64))
                 for v in variables]
 
-    mapper_method = "map_stresslet_kernel"
-
-    def get_pde_as_diff_op(self):
-        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
         w = make_identity_diff_op(self.dim)
         return laplacian(laplacian(w))
 
 
+@dataclass(frozen=True, repr=False)
 class LineOfCompressionKernel(ExpressionKernel):
     """A kernel for the line of compression or dilatation of constant strength
-    along the axis "axis" from zero to negative infinity. This is used for the
-    explicit solution to half-space Elasticity problem. See [1] for details.
+    along the axis "axis" from zero to negative infinity.
 
-    [1]: Mindlin, R.: Force at a Point in the Interior of a Semi-Infinite Solid
-         https://doi.org/10.1063/1.1745385
+    This is used for the explicit solution to half-space Elasticity problem.
+    See [Mindlin1936]_ for details.
+
+    .. [Mindlin1936] R. D. Mindlin (1936).
+         *Force at a Point in the Interior of a Semi-Infinite Solid*.
+         Physics. 7 (5): 195-202.
+         `doi:10.1063/1.1745385 <https://doi.org/10.1063/1.1745385>`__.
+
+    .. autoattribute:: axis
+    .. autoattribute:: viscosity_mu
+    .. autoattribute:: poisson_ratio
     """
-    init_arg_names = ("dim", "axis", "viscosity_mu", "poisson_ratio")
 
-    def __init__(self, dim=3, axis=2, viscosity_mu="mu", poisson_ratio="nu"):
-        r"""
-        :arg axis: axis number defaulting to 2 for the z axis.
-        :arg viscosity_mu: The argument name to use for
-                dynamic viscosity :math:`\mu` when generating functions to
-                evaluate this kernel. Can also be a numeric value.
-        :arg poisson_ratio: The argument name to use for
-                Poisson's ratio :math:`\nu` when generating functions to
-                evaluate this kernel. Can also be a numeric value.
-        """
+    mapper_method: ClassVar[str] = "map_line_of_compression_kernel"
+
+    axis: int
+    """Axis number (defaulting to 2 for the z axis)."""
+    viscosity_mu: float | SpatialConstant
+    r"""The argument name to use for the dynamic viscosity :math:`\mu` when
+    generating functions to evaluate this kernel. Can also be a numeric value.
+    """
+    poisson_ratio: float | SpatialConstant
+    r"""The argument name to use for Poisson's ratio :math:`\nu` when
+    generating functions to evaluate this kernel. Can also be a numeric value.
+    """
+
+    def __init__(self,
+                 dim: int = 3,
+                 axis: int = 2,
+                 viscosity_mu: float | str | SpatialConstant = "mu",
+                 poisson_ratio: float | str | SpatialConstant = "nu"
+             ) -> None:
         if isinstance(viscosity_mu, str):
             mu = SpatialConstant(viscosity_mu)
         else:
@@ -889,46 +1046,40 @@ class LineOfCompressionKernel(ExpressionKernel):
             expr = d[axis] * var("log")(r + d[axis]) - r
             scaling = (1 - 2*nu)/(4*var("pi")*mu)
         else:
-            raise RuntimeError("unsupported dimensionality")
+            raise NotImplementedError(f"unsupported dimension: '{dim}'")
 
-        self.viscosity_mu = mu
-        self.poisson_ratio = nu
-        self.axis = axis
+        super().__init__(dim, expression=expr, global_scaling_const=scaling)
 
-        super().__init__(
-                dim,
-                expression=expr,
-                global_scaling_const=scaling,
-                is_complex_valued=False)
+        object.__setattr__(self, "axis", axis)
+        object.__setattr__(self, "viscosity_mu", mu)
+        object.__setattr__(self, "poisson_ratio", nu)
 
-    def __getinitargs__(self):
-        return (self.dim, self.axis, self.viscosity_mu, self.poisson_ratio)
+    @property
+    @override
+    def is_complex_valued(self) -> bool:
+        return False
 
-    def update_persistent_hash(self, key_hash, key_builder):
-        from pymbolic.mapper.persistent_hash import PersistentHashWalkMapper
-        key_hash.update(type(self).__name__.encode())
-        key_builder.rec(key_hash, (self.dim, self.axis))
-        mapper = PersistentHashWalkMapper(key_hash)
-        mapper(self.viscosity_mu)
-        mapper(self.poisson_ratio)
-
-    def __repr__(self):
+    @override
+    def __str__(self) -> str:
         return f"LineOfCompressionKnl{self.dim}D_{self.axis}"
 
     @memoize_method
-    def get_args(self):
+    @override
+    def get_args(self) -> Sequence[KernelArgument]:
         from sumpy.tools import get_all_variables
-        variables = list(get_all_variables(self.viscosity_mu)) \
-            + list(get_all_variables(self.poisson_ratio))
-        res = []
+        variables = [
+            *get_all_variables(self.viscosity_mu),
+            *get_all_variables(self.poisson_ratio)]
+
+        args: list[KernelArgument] = []
         for v in variables:
-            res.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
-        return res
+            args.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
 
-    mapper_method = "map_line_of_compression_kernel"
+        return args
 
-    def get_pde_as_diff_op(self):
-        from sumpy.expansion.diff_op import make_identity_diff_op, laplacian
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
         w = make_identity_diff_op(self.dim)
         return laplacian(w)
 
@@ -938,47 +1089,81 @@ class LineOfCompressionKernel(ExpressionKernel):
 
 # {{{ a kernel defined as wrapping another one--e.g., derivatives
 
-class KernelWrapper(Kernel):
-    def __init__(self, inner_kernel):
+@dataclass(frozen=True)
+class KernelWrapper(Kernel, ABC):
+    inner_kernel: Kernel
+    """The kernel that is being wrapped (to take a derivative of, etc.)."""
+
+    def __init__(self, inner_kernel: Kernel) -> None:
         Kernel.__init__(self, inner_kernel.dim)
-        self.inner_kernel = inner_kernel
-
-    def get_base_kernel(self):
-        return self.inner_kernel.get_base_kernel()
-
-    def prepare_loopy_kernel(self, loopy_knl):
-        return self.inner_kernel.prepare_loopy_kernel(loopy_knl)
+        object.__setattr__(self, "inner_kernel", inner_kernel)
 
     @property
-    def is_complex_valued(self):
+    @override
+    def is_complex_valued(self) -> bool:
         return self.inner_kernel.is_complex_valued
 
-    def get_expression(self, scaled_dist_vec):
-        return self.inner_kernel.get_expression(scaled_dist_vec)
+    @override
+    def get_base_kernel(self) -> Kernel:
+        return self.inner_kernel.get_base_kernel()
 
-    def get_derivative_coeff_dict_at_source(self, expr_dict):
+    @override
+    def prepare_loopy_kernel(self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
+        return self.inner_kernel.prepare_loopy_kernel(loopy_knl)
+
+    @override
+    def get_expression(self, dist_vec: sym.Matrix) -> sym.Expr:
+        return self.inner_kernel.get_expression(dist_vec)
+
+    @override
+    def get_derivative_coeff_dict_at_source(
+            self, expr_dict: DerivativeCoeffDict,
+        ) -> DerivativeCoeffDict:
         return self.inner_kernel.get_derivative_coeff_dict_at_source(expr_dict)
 
-    def postprocess_at_target(self, expr, bvec):
+    @overload
+    def postprocess_at_target(
+            self, expr: sym.Expr, bvec: sp.Matrix,
+        ) -> sym.Expr: ...
+
+    @overload
+    def postprocess_at_target(
+            self, expr: ExprDerivativeTaker, bvec: sp.Matrix,
+        ) -> DifferentiatedExprDerivativeTaker: ...
+
+    @override
+    def postprocess_at_target(
+            self, expr: sym.Expr | ExprDerivativeTaker, bvec: sp.Matrix,
+        ) -> sym.Expr | DifferentiatedExprDerivativeTaker:
         return self.inner_kernel.postprocess_at_target(expr, bvec)
 
-    def get_global_scaling_const(self):
+    @override
+    def get_global_scaling_const(self) -> sym.Expr:
         return self.inner_kernel.get_global_scaling_const()
 
-    def get_code_transformer(self):
+    @override
+    def get_code_transformer(self) -> Callable[[Expression], Expression]:
         return self.inner_kernel.get_code_transformer()
 
-    def get_args(self):
+    @override
+    def get_args(self) -> Sequence[KernelArgument]:
         return self.inner_kernel.get_args()
 
-    def get_source_args(self):
+    @override
+    def get_source_args(self) -> Sequence[KernelArgument]:
         return self.inner_kernel.get_source_args()
 
-    def replace_base_kernel(self, new_base_kernel):
-        raise NotImplementedError("replace_base_kernel is not implemented "
-            "for this wrapper.")
+    @override
+    def replace_base_kernel(self, new_base_kernel: Kernel) -> Kernel:
+        raise NotImplementedError(
+            f"'replace_base_kernel' is not implemented for '{type(self).__name__}'")
 
-    def get_derivative_taker(self, dvec, rscale, sac):
+    @override
+    def get_derivative_taker(self,
+            dvec: sym.Matrix,
+            rscale: sym.Expr,
+            sac: SymbolicAssignmentCollection | None,
+        ) -> ExprDerivativeTaker:
         return self.inner_kernel.get_derivative_taker(dvec, rscale, sac)
 
 # }}}
@@ -986,27 +1171,49 @@ class KernelWrapper(Kernel):
 
 # {{{ derivatives
 
-class DerivativeBase(KernelWrapper):
-    pass
+class DerivativeBase(KernelWrapper, ABC):
+    """Bases: :class:`Kernel`
+
+    .. autoattribute:: inner_kernel
+    .. automethod:: replace_inner_kernel
+    """
+
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        return self.inner_kernel.get_pde_as_diff_op()
+
+    @abstractmethod
+    def replace_inner_kernel(self, new_inner_kernel: Kernel) -> Kernel:
+        """Replace the inner kernel of this wrapper.
+
+        This is essentially the same as :meth:`Kernel.replace_base_kernel`, but it does
+        not recurse.
+        """
 
 
+@dataclass(frozen=True)
 class AxisSourceDerivative(DerivativeBase):
-    init_arg_names = ("axis", "inner_kernel")
+    """
+    .. autoattribute:: axis
+    """
 
-    def __init__(self, axis, inner_kernel):
-        KernelWrapper.__init__(self, inner_kernel)
-        self.axis = axis
+    mapper_method: ClassVar[str] = "map_axis_source_derivative"
 
-    def __getinitargs__(self):
-        return (self.axis, self.inner_kernel)
+    axis: int
+    """Direction axis for the source derivative."""
 
-    def __str__(self):
+    def __init__(self, axis: int, inner_kernel: Kernel) -> None:
+        super().__init__(inner_kernel)
+        object.__setattr__(self, "axis", axis)
+
+    @override
+    def __str__(self) -> str:
         return f"d/dy{self.axis} {self.inner_kernel}"
 
-    def __repr__(self):
-        return f"AxisSourceDerivative({self.axis}, {self.inner_kernel!r})"
-
-    def get_derivative_coeff_dict_at_source(self, expr_dict):
+    @override
+    def get_derivative_coeff_dict_at_source(
+            self, expr_dict: DerivativeCoeffDict,
+        ) -> DerivativeCoeffDict:
         expr_dict = self.inner_kernel.get_derivative_coeff_dict_at_source(
             expr_dict)
         result = {}
@@ -1016,198 +1223,161 @@ class AxisSourceDerivative(DerivativeBase):
             result[tuple(new_mi)] = -coeff
         return result
 
-    def replace_base_kernel(self, new_base_kernel):
+    @override
+    def replace_base_kernel(self, new_base_kernel: Kernel) -> Kernel:
         return type(self)(self.axis,
             self.inner_kernel.replace_base_kernel(new_base_kernel))
 
-    def replace_inner_kernel(self, new_inner_kernel):
+    @override
+    def replace_inner_kernel(self, new_inner_kernel: Kernel) -> Kernel:
         return type(self)(self.axis, new_inner_kernel)
 
-    mapper_method = "map_axis_source_derivative"
 
-
+@dataclass(frozen=True)
 class AxisTargetDerivative(DerivativeBase):
-    init_arg_names = ("axis", "inner_kernel")
-    target_array_name = "targets"
+    """
+    .. autoattribute:: axis
+    """
 
-    def __init__(self, axis, inner_kernel):
-        KernelWrapper.__init__(self, inner_kernel)
-        self.axis = axis
+    mapper_method: ClassVar[str] = "map_axis_target_derivative"
+    target_array_name: ClassVar[str] = "targets"
 
-    def __getinitargs__(self):
-        return (self.axis, self.inner_kernel)
+    axis: int
 
-    def __str__(self):
+    def __init__(self, axis: int, inner_kernel: Kernel) -> None:
+        super().__init__(inner_kernel)
+        object.__setattr__(self, "axis", axis)
+
+    @override
+    def __str__(self) -> str:
         return f"d/dx{self.axis} {self.inner_kernel}"
 
-    def __repr__(self):
-        return f"AxisTargetDerivative({self.axis}, {self.inner_kernel!r})"
+    @overload
+    def postprocess_at_target(
+            self, expr: sym.Expr, bvec: sp.Matrix,
+        ) -> sym.Expr: ...
 
-    def postprocess_at_target(self, expr, bvec):
-        from sumpy.derivative_taker import (DifferentiatedExprDerivativeTaker,
-                diff_derivative_coeff_dict)
-        from sumpy.symbolic import make_sym_vector as make_sympy_vector
+    @overload
+    def postprocess_at_target(
+            self, expr: ExprDerivativeTaker, bvec: sp.Matrix,
+        ) -> DifferentiatedExprDerivativeTaker: ...
 
-        target_vec = make_sympy_vector(self.target_array_name, self.dim)
+    @override
+    def postprocess_at_target(
+            self, expr: sym.Expr | ExprDerivativeTaker, bvec: sp.Matrix,
+        ) -> sym.Expr | DifferentiatedExprDerivativeTaker:
+        target_vec = sym.make_sym_vector(self.target_array_name, self.dim)
 
         # bvec = tgt - ctr
-        expr = self.inner_kernel.postprocess_at_target(expr, bvec)
-        if isinstance(expr, DifferentiatedExprDerivativeTaker):
-            transformation = diff_derivative_coeff_dict(expr.derivative_coeff_dict,
+        inner_expr = self.inner_kernel.postprocess_at_target(expr, bvec)
+        if isinstance(inner_expr, DifferentiatedExprDerivativeTaker):
+            transformation = diff_derivative_coeff_dict(
+                    inner_expr.derivative_coeff_dict,
                     self.axis, target_vec)
-            return DifferentiatedExprDerivativeTaker(expr.taker, transformation)
+            return DifferentiatedExprDerivativeTaker(inner_expr.taker, transformation)
         else:
             # Since `bvec` and `tgt` are two different symbolic variables
             # need to differentiate by both to get the correct answer
-            return expr.diff(bvec[self.axis]) + expr.diff(target_vec[self.axis])
+            return (inner_expr.diff(bvec[self.axis])
+                    + inner_expr.diff(target_vec[self.axis]))
 
-    def replace_base_kernel(self, new_base_kernel):
+    @override
+    def replace_base_kernel(self, new_base_kernel: Kernel) -> Kernel:
         return type(self)(self.axis,
             self.inner_kernel.replace_base_kernel(new_base_kernel))
 
-    def replace_inner_kernel(self, new_inner_kernel):
+    @override
+    def replace_inner_kernel(self, new_inner_kernel: Kernel) -> Kernel:
         return type(self)(self.axis, new_inner_kernel)
 
-    mapper_method = "map_axis_target_derivative"
 
+class _VectorIndexAdder(CSECachingMapperMixin[Expression, []], IdentityMapper[[]]):
+    vec_name: str
+    additional_indices: tuple[Expression, ...]
 
-class _VectorIndexAdder(CSECachingMapperMixin, IdentityMapper):
-    def __init__(self, vec_name, additional_indices):
+    def __init__(self,
+                 vec_name: str,
+                 additional_indices: tuple[Expression, ...]) -> None:
         self.vec_name = vec_name
         self.additional_indices = additional_indices
 
-    def map_subscript(self, expr):
+    @override
+    def map_subscript(self, expr: prim.Subscript) -> Expression:
         from pymbolic.primitives import CommonSubexpression, cse_scope
-        if expr.aggregate.name == self.vec_name \
-                and isinstance(expr.index, int):
+        name = getattr(expr.aggregate, "name", None)
+
+        if name == self.vec_name and isinstance(expr.index, int):
             return CommonSubexpression(
-                    expr.aggregate.index((expr.index,) + self.additional_indices),
+                    expr.aggregate[(expr.index, *self.additional_indices)],
                     prefix=None, scope=cse_scope.EVALUATION)
         else:
             return IdentityMapper.map_subscript(self, expr)
 
-    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+    @override
+    def map_common_subexpression_uncached(self,
+                expr: prim.CommonSubexpression) -> Expression:
+        result = self.rec(expr.child)
+        if result is expr.child:
+            return expr
+
+        return type(expr)(
+                      result, expr.prefix, expr.scope, **expr.get_extra_properties())
 
 
+@dataclass(frozen=True)
 class DirectionalDerivative(DerivativeBase):
-    directional_kind: ClassVar[str]
-    init_arg_names = ("inner_kernel", "dir_vec_name")
+    """
+    .. autoattribute:: dir_vec_name
+    """
+    directional_kind: ClassVar[Literal["src", "tgt"]]
+    """The kind of this directional derivative (can only be a source or target)."""
 
-    def __init__(self, inner_kernel, dir_vec_name=None):
+    dir_vec_name: str
+    """Name of the vector used for the direction."""
+
+    def __init__(self, inner_kernel: Kernel, dir_vec_name: str | None = None) -> None:
         if dir_vec_name is None:
             dir_vec_name = f"{self.directional_kind}_derivative_dir"
 
         KernelWrapper.__init__(self, inner_kernel)
-        self.dir_vec_name = dir_vec_name
+        object.__setattr__(self, "dir_vec_name", dir_vec_name)
 
-    def __getinitargs__(self):
-        return (self.inner_kernel, self.dir_vec_name)
+    @override
+    def __str__(self) -> str:
+        d = "y" if self.directional_kind == "src" else "x"
+        return fr"{self.dir_vec_name}·∇_{d} {self.inner_kernel}"
 
-    def update_persistent_hash(self, key_hash, key_builder):
-        key_hash.update(type(self).__name__.encode("utf8"))
-        key_builder.rec(key_hash, self.inner_kernel)
-        key_builder.rec(key_hash, self.dir_vec_name)
-
-    def replace_base_kernel(self, new_base_kernel):
-        return type(self)(self.inner_kernel.replace_base_kernel(new_base_kernel),
+    @override
+    def replace_base_kernel(self, new_base_kernel: Kernel) -> Kernel:
+        return type(self)(
+            self.inner_kernel.replace_base_kernel(new_base_kernel),
             dir_vec_name=self.dir_vec_name)
 
-    def __str__(self):
-        return r"{}·∇_{} {}".format(
-                self.dir_vec_name,
-                "y" if self.directional_kind == "src" else "x",
-                self.inner_kernel)
-
-    def __repr__(self):
-        return "{}({!r}, {})".format(
-                type(self).__name__,
-                self.inner_kernel,
-                self.dir_vec_name)
-
-
-class DirectionalTargetDerivative(DirectionalDerivative):
-    directional_kind = "tgt"
-    target_array_name = "targets"
-
-    def get_code_transformer(self):
-        from sumpy.codegen import VectorComponentRewriter
-        vcr = VectorComponentRewriter([self.dir_vec_name])
-        from pymbolic.primitives import Variable
-        via = _VectorIndexAdder(self.dir_vec_name, (Variable("itgt"),))
-
-        inner_transform = self.inner_kernel.get_code_transformer()
-
-        def transform(expr):
-            return via(vcr(inner_transform(expr)))
-
-        return transform
-
-    def postprocess_at_target(self, expr, bvec):
-        from sumpy.derivative_taker import (DifferentiatedExprDerivativeTaker,
-                diff_derivative_coeff_dict)
-
-        from sumpy.symbolic import make_sym_vector as make_sympy_vector
-        dir_vec = make_sympy_vector(self.dir_vec_name, self.dim)
-        target_vec = make_sympy_vector(self.target_array_name, self.dim)
-
-        expr = self.inner_kernel.postprocess_at_target(expr, bvec)
-
-        # bvec = tgt - center
-        if not isinstance(expr, DifferentiatedExprDerivativeTaker):
-            result = 0
-            for axis in range(self.dim):
-                # Since `bvec` and `tgt` are two different symbolic variables
-                # need to differentiate by both to get the correct answer
-                result += (expr.diff(bvec[axis]) + expr.diff(target_vec[axis])) \
-                        * dir_vec[axis]
-            return result
-
-        new_transformation = defaultdict(lambda: 0)
-        for axis in range(self.dim):
-            axis_transformation = diff_derivative_coeff_dict(
-                    expr.derivative_coeff_dict, axis, target_vec)
-            for mi, coeff in axis_transformation.items():
-                new_transformation[mi] += coeff * dir_vec[axis]
-
-        return DifferentiatedExprDerivativeTaker(expr.taker,
-                dict(new_transformation))
-
-    def get_args(self):
-        return [
-            KernelArgument(
-                loopy_arg=lp.GlobalArg(
-                    self.dir_vec_name,
-                    None,
-                    shape=(self.dim, "ntargets"),
-                    offset=lp.auto
-                ),
-            ),
-            *self.inner_kernel.get_args()
-        ]
-
-    def prepare_loopy_kernel(self, loopy_knl):
-        loopy_knl = self.inner_kernel.prepare_loopy_kernel(loopy_knl)
-        return lp.tag_array_axes(loopy_knl, self.dir_vec_name, "sep,C")
-
-    mapper_method = "map_directional_target_derivative"
+    @override
+    def replace_inner_kernel(self, new_inner_kernel: Kernel) -> Kernel:
+        return type(self)(new_inner_kernel, dir_vec_name=self.dir_vec_name)
 
 
 class DirectionalSourceDerivative(DirectionalDerivative):
-    directional_kind = "src"
+    mapper_method: ClassVar[str] = "map_directional_source_derivative"
+    directional_kind: ClassVar[Literal["src", "tgt"]] = "src"
 
-    def get_code_transformer(self):
+    @override
+    def get_code_transformer(self) -> Callable[[Expression], Expression]:
         inner = self.inner_kernel.get_code_transformer()
         from sumpy.codegen import VectorComponentRewriter
-        vcr = VectorComponentRewriter([self.dir_vec_name])
-        from pymbolic.primitives import Variable
-        via = _VectorIndexAdder(self.dir_vec_name, (Variable("isrc"),))
+        vcr = VectorComponentRewriter(frozenset([self.dir_vec_name]))
+        via = _VectorIndexAdder(self.dir_vec_name, (prim.Variable("isrc"),))
 
-        def transform(expr):
+        def transform(expr: Expression) -> Expression:
             return via(vcr(inner(expr)))
 
         return transform
 
-    def get_derivative_coeff_dict_at_source(self, expr_dict):
+    @override
+    def get_derivative_coeff_dict_at_source(
+            self, expr_dict: DerivativeCoeffDict,
+        ) -> DerivativeCoeffDict:
         from sumpy.symbolic import make_sym_vector as make_sympy_vector
         dir_vec = make_sympy_vector(self.dir_vec_name, self.dim)
 
@@ -1215,15 +1385,17 @@ class DirectionalSourceDerivative(DirectionalDerivative):
             expr_dict)
 
         # avec = center-src -> minus sign from chain rule
-        result = defaultdict(lambda: 0)
+        result: DerivativeCoeffDict = defaultdict(lambda: 0)
         for mi, coeff in expr_dict.items():
             for axis in range(self.dim):
                 new_mi = list(mi)
                 new_mi[axis] += 1
                 result[tuple(new_mi)] += -coeff * dir_vec[axis]
-        return result
 
-    def get_source_args(self):
+        return dict(result)
+
+    @override
+    def get_source_args(self) -> Sequence[KernelArgument]:
         return [
                 KernelArgument(
                     loopy_arg=lp.GlobalArg(
@@ -1231,117 +1403,148 @@ class DirectionalSourceDerivative(DirectionalDerivative):
                         None,
                         shape=(self.dim, "nsources"),
                         offset=lp.auto),
-                    )
-                    ] + self.inner_kernel.get_source_args()
+                    ),
+                    *self.inner_kernel.get_source_args()]
 
-    def prepare_loopy_kernel(self, loopy_knl):
+    @override
+    def prepare_loopy_kernel(self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
         loopy_knl = self.inner_kernel.prepare_loopy_kernel(loopy_knl)
         return lp.tag_array_axes(loopy_knl, self.dir_vec_name, "sep,C")
 
-    mapper_method = "map_directional_source_derivative"
-
 
 class TargetPointMultiplier(KernelWrapper):
-    """Wraps a kernel :math:`G(x, y)` and outputs :math:`x_j G(x, y)`
+    """Bases: :class:`Kernel`
+
+    Wraps a kernel :math:`G(x, y)` and outputs :math:`x_j G(x, y)`
     where :math:`x, y` are targets and sources respectively.
+
+    .. autoattribute:: axis
     """
 
-    init_arg_names = ("axis", "inner_kernel")
-    target_array_name = "targets"
+    mapper_method: ClassVar[str] = "map_target_point_multiplier"
+    target_array_name: ClassVar[str] = "targets"
 
-    def __init__(self, axis, inner_kernel):
+    axis: int
+    """Coordinate axis with which to multiply the kernel."""
+
+    def __init__(self, axis: int, inner_kernel: Kernel) -> None:
         KernelWrapper.__init__(self, inner_kernel)
         self.axis = axis
 
-    def __getinitargs__(self):
-        return (self.axis, self.inner_kernel)
-
-    def __str__(self):
+    @override
+    def __str__(self) -> str:
         return f"x{self.axis} {self.inner_kernel}"
 
-    def __repr__(self):
-        return f"TargetPointMultiplier({self.axis}, {self.inner_kernel!r})"
+    @overload
+    def postprocess_at_target(
+            self, expr: sym.Expr, bvec: sp.Matrix,
+        ) -> sym.Expr: ...
 
-    def replace_base_kernel(self, new_base_kernel):
-        return type(self)(self.axis,
-            self.inner_kernel.replace_base_kernel(new_base_kernel))
+    @overload
+    def postprocess_at_target(
+            self, expr: ExprDerivativeTaker, bvec: sp.Matrix,
+        ) -> DifferentiatedExprDerivativeTaker: ...
 
-    def replace_inner_kernel(self, new_inner_kernel):
-        return type(self)(self.axis, new_inner_kernel)
-
-    def postprocess_at_target(self, expr, avec):
-        from sumpy.symbolic import make_sym_vector as make_sympy_vector
-        from sumpy.derivative_taker import (ExprDerivativeTaker,
-            DifferentiatedExprDerivativeTaker)
-
-        expr = self.inner_kernel.postprocess_at_target(expr, avec)
-        target_vec = make_sympy_vector(self.target_array_name, self.dim)
+    @override
+    def postprocess_at_target(
+            self, expr: sym.Expr | ExprDerivativeTaker, bvec: sp.Matrix,
+        ) -> sym.Expr | DifferentiatedExprDerivativeTaker:
+        inner_expr = self.inner_kernel.postprocess_at_target(expr, bvec)
+        target_vec = sym.make_sym_vector(self.target_array_name, self.dim)
 
         zeros = tuple([0]*self.dim)
-        mult = target_vec[self.axis]
+        mult = cast("sym.Symbol", target_vec[self.axis])
 
-        if isinstance(expr, DifferentiatedExprDerivativeTaker):
-            transform = {mi: coeff * mult for mi, coeff in
-                    expr.derivative_coeff_dict.items()}
-            return DifferentiatedExprDerivativeTaker(expr.taker, transform)
-        elif isinstance(expr, ExprDerivativeTaker):
-            return DifferentiatedExprDerivativeTaker({zeros: mult})
+        if isinstance(inner_expr, DifferentiatedExprDerivativeTaker):
+            transform: DerivativeCoeffDict = {
+                mi: coeff * mult for mi, coeff in
+                inner_expr.derivative_coeff_dict.items()}
+
+            return DifferentiatedExprDerivativeTaker(inner_expr.taker, transform)
+        elif isinstance(inner_expr, ExprDerivativeTaker):
+            return DifferentiatedExprDerivativeTaker(expr.orig_expr, {zeros: mult})
         else:
-            return mult * expr
+            return mult * inner_expr
 
-    def get_code_transformer(self):
+    @override
+    def get_code_transformer(self) -> Callable[[Expression], Expression]:
         from sumpy.codegen import VectorComponentRewriter
-        vcr = VectorComponentRewriter([self.target_array_name])
-        from pymbolic.primitives import Variable
-        via = _VectorIndexAdder(self.target_array_name, (Variable("itgt"),))
+        vcr = VectorComponentRewriter(frozenset([self.target_array_name]))
+        via = _VectorIndexAdder(self.target_array_name, (prim.Variable("itgt"),))
 
         inner_transform = self.inner_kernel.get_code_transformer()
 
-        def transform(expr):
+        def transform(expr: Expression) -> Expression:
             return via(vcr(inner_transform(expr)))
 
         return transform
 
-    mapper_method = "map_target_point_multiplier"
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        raise NotImplementedError("no PDE is known")
+
+    @override
+    def replace_base_kernel(self, new_base_kernel: Kernel) -> Kernel:
+        return type(self)(self.axis,
+            self.inner_kernel.replace_base_kernel(new_base_kernel))
+
+    def replace_inner_kernel(self, new_inner_kernel: Kernel) -> Kernel:
+        return type(self)(self.axis, new_inner_kernel)
 
 # }}}
 
 
 # {{{ kernel mappers
 
-class KernelMapper:
-    def rec(self, kernel):
+ResultT = TypeVar("ResultT")
+
+
+class KernelMapper(Generic[ResultT]):
+    """
+    .. automethod:: __call__
+    """
+    def rec(self, kernel: Kernel) -> ResultT:
         try:
-            method = getattr(self, kernel.mapper_method)
-        except AttributeError:
-            raise RuntimeError("{} cannot handle {}".format(
-                type(self), type(kernel)))
+            method = cast(
+                "Callable[[Kernel], ResultT]",
+                getattr(self, kernel.mapper_method))
+        except AttributeError as err:
+            raise RuntimeError(f"{type(self)} cannot handle {type(kernel)}") from err
         else:
             return method(kernel)
 
-    __call__ = rec
+    def __call__(self, kernel: Kernel) -> ResultT:
+        return self.rec(kernel)
 
 
-class KernelCombineMapper(KernelMapper):
-    def combine(self, values):
+class KernelCombineMapper(KernelMapper[ResultT], ABC):
+    """
+    .. automethod:: combine
+    """
+
+    @abstractmethod
+    def combine(self, values: Iterable[ResultT]) -> ResultT:
         raise NotImplementedError
 
-    def map_difference_kernel(self, kernel):
-        return self.combine([
-                self.rec(kernel.kernel_plus),
-                self.rec(kernel.kernel_minus)])
-
-    def map_axis_target_derivative(self, kernel):
+    def map_axis_target_derivative(
+            self, kernel: AxisTargetDerivative) -> ResultT:
         return self.rec(kernel.inner_kernel)
 
-    map_directional_target_derivative = map_axis_target_derivative
-    map_directional_source_derivative = map_axis_target_derivative
-    map_axis_source_derivative = map_axis_target_derivative
-    map_target_point_multiplier = map_axis_target_derivative
+    def map_axis_source_derivative(
+            self, kernel: AxisSourceDerivative) -> ResultT:
+        return self.rec(kernel.inner_kernel)
+
+    def map_directional_source_derivative(
+            self, kernel: DirectionalSourceDerivative) -> ResultT:
+        return self.rec(kernel.inner_kernel)
+
+    def map_target_point_multiplier(
+            self, kernel: TargetPointMultiplier) -> ResultT:
+        return self.rec(kernel.inner_kernel)
 
 
-class KernelIdentityMapper(KernelMapper):
-    def map_expression_kernel(self, kernel):
+class KernelIdentityMapper(KernelMapper[Kernel]):
+    def map_expression_kernel(self, kernel: ExpressionKernel) -> Kernel:
         return kernel
 
     map_laplace_kernel = map_expression_kernel
@@ -1352,53 +1555,69 @@ class KernelIdentityMapper(KernelMapper):
     map_line_of_compression_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
 
-    def map_axis_target_derivative(self, kernel):
+    def map_axis_target_derivative(self, kernel: AxisTargetDerivative) -> Kernel:
         return type(kernel)(kernel.axis, self.rec(kernel.inner_kernel))
 
-    map_axis_source_derivative = map_axis_target_derivative
-    map_target_point_multiplier = map_axis_target_derivative
+    def map_axis_source_derivative(self, kernel: AxisSourceDerivative) -> Kernel:
+        return type(kernel)(kernel.axis, self.rec(kernel.inner_kernel))
 
-    def map_directional_target_derivative(self, kernel):
-        return type(kernel)(
-                self.rec(kernel.inner_kernel),
-                kernel.dir_vec_name)
+    def map_target_point_multiplier(self, kernel: TargetPointMultiplier) -> Kernel:
+        return type(kernel)(kernel.axis, self.rec(kernel.inner_kernel))
 
-    map_directional_source_derivative = map_directional_target_derivative
+    def map_directional_source_derivative(
+            self, kernel: DirectionalSourceDerivative) -> Kernel:
+        return type(kernel)(self.rec(kernel.inner_kernel),
+                            dir_vec_name=kernel.dir_vec_name)
 
 
 class AxisSourceDerivativeRemover(KernelIdentityMapper):
-    def map_axis_source_derivative(self, kernel):
+    """Removes all axis source derivatives from the kernel."""
+
+    @override
+    def map_axis_source_derivative(self, kernel: AxisSourceDerivative) -> Kernel:
         return self.rec(kernel.inner_kernel)
 
 
 class AxisTargetDerivativeRemover(KernelIdentityMapper):
-    def map_axis_target_derivative(self, kernel):
+    """Removes all axis target derivatives from the kernel."""
+
+    @override
+    def map_axis_target_derivative(self, kernel: AxisTargetDerivative) -> Kernel:
         return self.rec(kernel.inner_kernel)
 
 
 class TargetDerivativeRemover(AxisTargetDerivativeRemover):
-    def map_directional_target_derivative(self, kernel):
-        return self.rec(kernel.inner_kernel)
+    """Removes all target derivatives from the kernel."""
 
 
 class SourceDerivativeRemover(AxisSourceDerivativeRemover):
-    def map_directional_source_derivative(self, kernel):
+    """Removes all source derivatives from the kernel."""
+
+    @override
+    def map_directional_source_derivative(
+            self, kernel: DirectionalSourceDerivative) -> Kernel:
         return self.rec(kernel.inner_kernel)
 
 
 class TargetTransformationRemover(TargetDerivativeRemover):
-    def map_target_point_multiplier(self, kernel):
+    """Removes all target transformations from the kernel."""
+
+    @override
+    def map_target_point_multiplier(self, kernel: TargetPointMultiplier) -> Kernel:
         return self.rec(kernel.inner_kernel)
 
 
 SourceTransformationRemover = SourceDerivativeRemover
 
 
-class DerivativeCounter(KernelCombineMapper):
-    def combine(self, values):
-        return max(values)
+class DerivativeCounter(KernelCombineMapper[int]):
+    """Counts the number of derivatives in the kernel."""
 
-    def map_expression_kernel(self, kernel):
+    @override
+    def combine(self, values: Iterable[int]) -> int:
+        return sum(values)
+
+    def map_expression_kernel(self, kernel: ExpressionKernel) -> int:
         return 0
 
     map_laplace_kernel = map_expression_kernel
@@ -1408,34 +1627,15 @@ class DerivativeCounter(KernelCombineMapper):
     map_line_of_compression_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
 
-    def map_axis_target_derivative(self, kernel):
-        return 1 + self.rec(kernel.inner_kernel)
+    @override
+    def map_axis_target_derivative(self, kernel: AxisTargetDerivative) -> int:
+        return self.combine([1, self.rec(kernel.inner_kernel)])
 
     map_directional_target_derivative = map_axis_target_derivative
     map_directional_source_derivative = map_axis_target_derivative
     map_axis_source_derivative = map_axis_target_derivative
 
 # }}}
-
-
-def to_kernel_and_args(kernel_like):
-    if (isinstance(kernel_like, tuple)
-            and len(kernel_like) == 2
-            and isinstance(kernel_like[0], Kernel)):
-        # already gone through to_kernel_and_args
-        return kernel_like
-
-    if not isinstance(kernel_like, Kernel):
-        if kernel_like == 0:
-            return LaplaceKernel(None), {}
-        elif isinstance(kernel_like, str):
-            return HelmholtzKernel(None), {"k": var(kernel_like)}
-        else:
-            raise ValueError("Only Kernel instances, 0 (for Laplace) and "
-                    "variable names (strings) "
-                    "for the Helmholtz parameter are allowed as kernels.")
-
-    return kernel_like, {}
 
 
 # vim: fdm=marker

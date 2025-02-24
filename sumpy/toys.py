@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 __copyright__ = """
 Copyright (C) 2017 Andreas Kloeckner
 Copyright (C) 2017 Matt Wala
@@ -25,22 +26,35 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from numbers import Number
+import logging
 from functools import partial
-from typing import Any, Sequence, Union, Optional, TYPE_CHECKING
+from numbers import Number
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from typing_extensions import override
 
+import pytools.obj_array as obj_array
 from pytools import memoize_method
-from sumpy.kernel import TargetTransformationRemover
-from sumpy.array_context import PyOpenCLArrayContext
 
-import logging
-logger = logging.getLogger(__name__)
+from sumpy.kernel import TargetTransformationRemover
+
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+
+    from sumpy.array_context import PyOpenCLArrayContext
+    from sumpy.expansion import (
+        ExpansionFactoryBase,
+        LocalExpansionFactory,
+        MultipoleExpansionFactory,
+    )
+    from sumpy.expansion.m2l import M2LTranslationClassFactoryBase
     from sumpy.kernel import Kernel
     from sumpy.visualization import FieldPlotter
+
+
+logger = logging.getLogger(__name__)
 
 __doc__ = """
 
@@ -93,14 +107,24 @@ class ToyContext:
 
     .. automethod:: __init__
     """
+    kernel: Kernel
+    no_target_deriv_kernel: Kernel
 
-    def __init__(self, kernel: "Kernel",
-            mpole_expn_class=None,
-            local_expn_class=None,
-            expansion_factory=None,
-            extra_source_kwargs=None,
-            extra_kernel_kwargs=None,
-            m2l_use_fft=None):
+    mpole_expn_class: MultipoleExpansionFactory
+    local_expn_class: LocalExpansionFactory
+
+    extra_source_kwargs: Mapping[str, object]
+    extra_kernel_kwargs: Mapping[str, object]
+    extra_source_and_kernel_kwargs: Mapping[str, object]
+
+    def __init__(self,
+                kernel: Kernel,
+                mpole_expn_class: MultipoleExpansionFactory | None = None,
+                local_expn_class: LocalExpansionFactory | None = None,
+                expansion_factory: ExpansionFactoryBase | None = None,
+                extra_source_kwargs: Mapping[str, object] | None = None,
+                extra_kernel_kwargs: Mapping[str, object] | None = None,
+                m2l_use_fft: bool | None = None):
         self.kernel = kernel
         self.no_target_deriv_kernel = TargetTransformationRemover()(kernel)
 
@@ -115,10 +139,11 @@ class ToyContext:
         if local_expn_class is None:
             from sumpy.expansion.m2l import (
                 FFTM2LTranslationClassFactory,
-                NonFFTM2LTranslationClassFactory)
-
+                NonFFTM2LTranslationClassFactory,
+            )
             if m2l_use_fft:
-                m2l_translation_class_factory = FFTM2LTranslationClassFactory()
+                m2l_translation_class_factory: M2LTranslationClassFactoryBase = \
+                    FFTM2LTranslationClassFactory()
             else:
                 m2l_translation_class_factory = NonFFTM2LTranslationClassFactory()
             local_expn_class = \
@@ -127,7 +152,8 @@ class ToyContext:
                     m2l_translation_class_factory.get_m2l_translation_class(
                         kernel, local_expn_class)
             local_expn_class = partial(local_expn_class,
-                    m2l_translation=m2l_translation_class())
+                    m2l_translation_override=m2l_translation_class())
+            assert local_expn_class is not None
         elif m2l_use_fft is not None:
             raise ValueError("local_expn_class and m2l_use_fft are both supplied. "
                              "Use only one of these arguments")
@@ -143,7 +169,7 @@ class ToyContext:
         self.extra_source_kwargs = extra_source_kwargs
         self.extra_kernel_kwargs = extra_kernel_kwargs
 
-        extra_source_and_kernel_kwargs = extra_source_kwargs.copy()
+        extra_source_and_kernel_kwargs = dict(extra_source_kwargs)
         extra_source_and_kernel_kwargs.update(extra_kernel_kwargs)
         self.extra_source_and_kernel_kwargs = extra_source_and_kernel_kwargs
 
@@ -153,35 +179,35 @@ class ToyContext:
         return P2P((self.kernel,), exclude_self=False)
 
     @memoize_method
-    def get_p2m(self, order):
+    def get_p2m(self, order: int):
         from sumpy import P2EFromSingleBox
         return P2EFromSingleBox(
                 self.mpole_expn_class(self.no_target_deriv_kernel, order),
                 kernels=(self.kernel,))
 
     @memoize_method
-    def get_p2l(self, order):
+    def get_p2l(self, order: int):
         from sumpy import P2EFromSingleBox
         return P2EFromSingleBox(
                 self.local_expn_class(self.no_target_deriv_kernel, order),
                 kernels=(self.kernel,))
 
     @memoize_method
-    def get_m2p(self, order):
+    def get_m2p(self, order: int):
         from sumpy import E2PFromSingleBox
         return E2PFromSingleBox(
                 self.mpole_expn_class(self.no_target_deriv_kernel, order),
                 (self.kernel,))
 
     @memoize_method
-    def get_l2p(self, order):
+    def get_l2p(self, order: int):
         from sumpy import E2PFromSingleBox
         return E2PFromSingleBox(
                 self.local_expn_class(self.no_target_deriv_kernel, order),
                 (self.kernel,))
 
     @memoize_method
-    def get_m2m(self, from_order, to_order):
+    def get_m2m(self, from_order: int, to_order: int):
         from sumpy import E2EFromCSR
         return E2EFromCSR(
                 self.mpole_expn_class(self.no_target_deriv_kernel, from_order),
@@ -198,7 +224,7 @@ class ToyContext:
         return l_expn.m2l_translation.use_fft
 
     @memoize_method
-    def get_m2l(self, from_order, to_order):
+    def get_m2l(self, from_order: int, to_order: int):
         from sumpy import E2EFromCSR, M2LUsingTranslationClassesDependentData
         if self.use_translation_classes_dependent_data():
             m2l_class = M2LUsingTranslationClassesDependentData
@@ -209,34 +235,36 @@ class ToyContext:
                 self.local_expn_class(self.no_target_deriv_kernel, to_order))
 
     @memoize_method
-    def get_m2l_translation_class_dependent_data_kernel(self, from_order, to_order):
+    def get_m2l_translation_class_dependent_data_kernel(self,
+                from_order: int,
+                to_order: int):
         from sumpy import M2LGenerateTranslationClassesDependentData
         return M2LGenerateTranslationClassesDependentData(
                 self.mpole_expn_class(self.no_target_deriv_kernel, from_order),
                 self.local_expn_class(self.no_target_deriv_kernel, to_order))
 
     @memoize_method
-    def get_m2l_expansion_size(self, from_order, to_order):
+    def get_m2l_expansion_size(self, from_order: int, to_order: int):
         m_expn = self.mpole_expn_class(self.no_target_deriv_kernel, from_order)
         l_expn = self.local_expn_class(self.no_target_deriv_kernel, to_order)
         return l_expn.m2l_translation.preprocess_multipole_nexprs(l_expn, m_expn)
 
     @memoize_method
-    def get_m2l_preprocess_mpole_kernel(self, from_order, to_order):
+    def get_m2l_preprocess_mpole_kernel(self, from_order: int, to_order: int):
         from sumpy import M2LPreprocessMultipole
         return M2LPreprocessMultipole(
                 self.mpole_expn_class(self.no_target_deriv_kernel, from_order),
                 self.local_expn_class(self.no_target_deriv_kernel, to_order))
 
     @memoize_method
-    def get_m2l_postprocess_local_kernel(self, from_order, to_order):
+    def get_m2l_postprocess_local_kernel(self, from_order: int, to_order: int):
         from sumpy import M2LPostprocessLocal
         return M2LPostprocessLocal(
                 self.mpole_expn_class(self.no_target_deriv_kernel, from_order),
                 self.local_expn_class(self.no_target_deriv_kernel, to_order))
 
     @memoize_method
-    def get_l2l(self, from_order, to_order):
+    def get_l2l(self, from_order: int, to_order: int):
         from sumpy import E2EFromCSR
         return E2EFromCSR(
                 self.local_expn_class(self.no_target_deriv_kernel, from_order),
@@ -247,7 +275,7 @@ class ToyContext:
 
 # {{{ helpers
 
-def _p2e(actx, psource, center, rscale, order, p2e, expn_class, expn_kwargs):
+def _p2e(actx, psource, center, rscale, order: int, p2e, expn_class, expn_kwargs):
     toy_ctx = psource.toy_ctx
 
     source_boxes = actx.from_numpy(
@@ -294,7 +322,6 @@ def _e2p(actx, psource, targets, e2p):
     centers = actx.from_numpy(
         np.array(psource.center, dtype=np.float64).reshape(toy_ctx.kernel.dim, 1))
 
-    from pytools.obj_array import make_obj_array
     coeffs = actx.from_numpy(np.array([psource.coeffs]))
     pot, = e2p(
             actx,
@@ -305,14 +332,14 @@ def _e2p(actx, psource, targets, e2p):
             box_target_counts_nonchild=box_target_counts_nonchild,
             centers=centers,
             rscale=psource.rscale,
-            targets=actx.from_numpy(make_obj_array(targets)),
+            targets=actx.from_numpy(obj_array.new_1d(targets)),
             **toy_ctx.extra_kernel_kwargs)
 
     return actx.to_numpy(pot)
 
 
 def _e2e(actx: PyOpenCLArrayContext,
-         psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
+         psource, to_center, to_rscale, to_order: int, e2e, expn_class, expn_kwargs,
          extra_kernel_kwargs):
     toy_ctx = psource.toy_ctx
 
@@ -383,8 +410,9 @@ def _m2l(actx: PyOpenCLArrayContext,
                 src_rscale=np.float64(psource.rscale),
                 **toy_ctx.extra_kernel_kwargs)
 
+        from sumpy.tools import get_opencl_fft_app, run_opencl_fft
+
         if toy_ctx.use_fft:
-            from sumpy.tools import get_opencl_fft_app, run_opencl_fft
 
             fft_app = get_opencl_fft_app(actx, (expn_size,),
                 dtype=preprocessed_src_expansions.dtype, inverse=False)
@@ -437,7 +465,7 @@ def _m2l(actx: PyOpenCLArrayContext,
                                dtype=coeffs.dtype)
 
         if toy_ctx.use_fft:
-            evt, local_before = run_opencl_fft(
+            _evt, local_before = run_opencl_fft(
                 actx, ifft_app,
                 local_before, inverse=True)
 
@@ -465,6 +493,9 @@ def _m2l(actx: PyOpenCLArrayContext,
 # }}}
 
 # {{{ potential source classes
+
+Number_ish = int | float | complex | np.number
+
 
 class PotentialSource:
     """A base class for all classes representing potentials that can be
@@ -496,9 +527,9 @@ class PotentialSource:
     def __neg__(self) -> PotentialSource:
         return -1*self
 
-    def __add__(self, other: Union[Number, np.number, PotentialSource]
+    def __add__(self, other: Number_ish | PotentialSource
                 ) -> PotentialSource:
-        if isinstance(other, (Number, np.number)):
+        if isinstance(other, Number | np.number):
             other = ConstantPotential(self.toy_ctx, other)
         elif not isinstance(other, PotentialSource):
             return NotImplemented
@@ -508,16 +539,19 @@ class PotentialSource:
     __radd__ = __add__
 
     def __sub__(self,
-                other: Union[Number, np.number, PotentialSource]) -> PotentialSource:
+                other: Number_ish | PotentialSource) -> PotentialSource:
         return self.__add__(-other)
 
-    def __rsub__(self, other: Union[Number, np.number, PotentialSource]
+    # FIXME: mypy says " Forward operator "__sub__" is not callable"
+    # I don't know what it means. -AK, 2024-07-18
+    def __rsub__(self,  # type:ignore[misc]
+                 other: Number_ish | PotentialSource
                  ) -> PotentialSource:
         return (-self).__add__(other)
 
     def __mul__(self,
-                other: Union[Number, np.number, PotentialSource]) -> PotentialSource:
-        if isinstance(other, (Number, np.number)):
+                other: Number_ish | PotentialSource) -> PotentialSource:
+        if isinstance(other, Number | np.number):
             other = ConstantPotential(self.toy_ctx, other)
         elif not isinstance(other, PotentialSource):
             return NotImplemented
@@ -597,7 +631,7 @@ class PointSources(PotentialSource):
 
     def __init__(self,
                  toy_ctx: ToyContext, points: np.ndarray, weights: np.ndarray,
-                 center: Optional[np.ndarray] = None):
+                 center: np.ndarray | None = None):
         super().__init__(toy_ctx)
 
         self.points = points
@@ -639,7 +673,7 @@ class ExpansionPotentialSource(PotentialSource):
     .. automethod:: __init__
     """
 
-    def __init__(self, toy_ctx, center, rscale, order, coeffs, derived_from,
+    def __init__(self, toy_ctx, center, rscale, order: int, coeffs, derived_from,
             radius=None, expn_style=None, text_kwargs=None):
         super().__init__(toy_ctx)
         self.center = np.asarray(center)
@@ -694,7 +728,7 @@ class PotentialExpressionNode(PotentialSource):
     def center(self) -> np.ndarray:
         for psource in self.psources:
             try:
-                return psource.center
+                return psource.center  # type: ignore[attr-defined]
             except AttributeError:
                 pass
 
@@ -706,6 +740,7 @@ class Sum(PotentialExpressionNode):
     Inherits from :class:`PotentialExpressionNode`.
     """
 
+    @override
     def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
         result = 0
         for psource in self.psources:
@@ -719,13 +754,13 @@ class Product(PotentialExpressionNode):
     Inherits from :class:`PotentialExpressionNode`.
     """
 
+    @override
     def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
-        result = 1
+        result = np.ones(targets.shape[1])
         for psource in self.psources:
-            result = result * psource.eval(actx, targets)
+            result *= psource.eval(actx, targets)
 
         return result
-
 # }}}
 
 
@@ -733,7 +768,7 @@ def multipole_expand(
         actx: PyOpenCLArrayContext,
         psource: PotentialSource,
         center: np.ndarray, *,
-        order: Optional[int] = None,
+        order: int | None = None,
         rscale: float = 1,
         **expn_kwargs: Any) -> MultipoleExpansion:
     if isinstance(psource, PointSources):
@@ -760,7 +795,7 @@ def local_expand(
         actx: PyOpenCLArrayContext,
         psource: PotentialSource,
         center: np.ndarray, *,
-        order: Optional[int] = None,
+        order: int | None = None,
         rscale: float = 1,
         **expn_kwargs: Any) -> LocalExpansion:
     if isinstance(psource, PointSources):
@@ -812,7 +847,7 @@ def local_expand(
 
 def logplot(
         actx: PyOpenCLArrayContext,
-        fp: "FieldPlotter",
+        fp: FieldPlotter,
         psource: PotentialSource, **kwargs) -> None:
     fp.show_scalar_in_matplotlib(
             np.log10(np.abs(psource.eval(actx, fp.points) + 1e-15)), **kwargs)
@@ -821,11 +856,13 @@ def logplot(
 def combine_inner_outer(
         psource_inner: PotentialSource,
         psource_outer: PotentialSource,
-        radius: Optional[float],
-        center: Optional[np.ndarray] = None) -> PotentialSource:
+        radius: float | None,
+        center: np.ndarray | None = None) -> PotentialSource:
     if center is None:
+        assert isinstance(psource_inner, ExpansionPotentialSource)
         center = psource_inner.center
     if radius is None:
+        assert isinstance(psource_inner, ExpansionPotentialSource)
         radius = psource_inner.radius
 
     ball_one = OneOnBallPotential(psource_inner.toy_ctx, center, radius)
@@ -836,8 +873,9 @@ def combine_inner_outer(
 
 def combine_halfspace(psource_pos: PotentialSource,
                       psource_neg: PotentialSource, axis: int,
-                      center: Optional[np.ndarray] = None) -> PotentialSource:
+                      center: np.ndarray | None = None) -> PotentialSource:
     if center is None:
+        assert isinstance(psource_pos, ExpansionPotentialSource)
         center = psource_pos.center
 
     halfspace_one = HalfspaceOnePotential(psource_pos.toy_ctx, center, axis)
@@ -850,12 +888,14 @@ def combine_halfspace_and_outer(
         psource_pos: PotentialSource,
         psource_neg: PotentialSource,
         psource_outer: PotentialSource,
-        axis: int, radius: Optional[Number] = None,
-        center: Optional[np.ndarray] = None) -> PotentialSource:
+        axis: int, radius: float | None = None,
+        center: np.ndarray | None = None) -> PotentialSource:
 
     if center is None:
+        assert isinstance(psource_pos, ExpansionPotentialSource)
         center = psource_pos.center
     if radius is None:
+        assert isinstance(psource_pos, ExpansionPotentialSource)
         center = psource_pos.radius
 
     return combine_inner_outer(
@@ -864,9 +904,10 @@ def combine_halfspace_and_outer(
 
 
 def l_inf(actx: PyOpenCLArrayContext, psource: PotentialSource, radius: float,
-          center: Optional[np.ndarray] = None, npoints: int = 100,
+          center: np.ndarray | None = None, npoints: int = 100,
           debug: bool = False) -> np.number:
     if center is None:
+        assert isinstance(psource, ExpansionPotentialSource)
         center = psource.center
 
     restr = psource * OneOnBallPotential(psource.toy_ctx, center, radius)
@@ -900,7 +941,7 @@ def draw_box(el, eh, **kwargs):
         (Path.CLOSEPOLY, (el[0], el[1])),
         ]
 
-    codes, verts = zip(*pathdata)
+    codes, verts = zip(*pathdata, strict=True)
     path = Path(verts, codes)
     patch = mpatches.PathPatch(path, **kwargs)
     pt.gca().add_patch(patch)

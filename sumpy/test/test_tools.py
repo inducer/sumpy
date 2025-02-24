@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2020 Isuru Fernando"
 
 __license__ = """
@@ -20,23 +23,24 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import pytest
+import logging
 import sys
 
 import numpy as np
+import pytest
 
-from arraycontext import pytest_generate_tests_for_array_contexts
-from sumpy.array_context import (                                 # noqa: F401
-        PytestPyOpenCLArrayContextFactory, _acf)
+from arraycontext import ArrayContextFactory, pytest_generate_tests_for_array_contexts
 
 import sumpy.symbolic as sym
+from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
 from sumpy.tools import (
+    fft,
     fft_toeplitz_upper_triangular,
-    matvec_toeplitz_upper_triangular,
     loopy_fft,
-    fft)
+    matvec_toeplitz_upper_triangular,
+)
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 pytest_generate_tests = pytest_generate_tests_for_array_contexts([
@@ -82,14 +86,18 @@ def test_matvec_fft_small_floats():
 # {{{ test_fft
 
 @pytest.mark.parametrize("size", [1, 2, 7, 10, 30, 210])
-def test_fft(actx_factory, size):
+def test_fft(actx_factory: ArrayContextFactory, size: int):
     actx = actx_factory()
 
     inp = np.arange(size, dtype=np.complex64)
     inp_dev = actx.from_numpy(inp)
     out = fft(inp)
 
-    fft_func = loopy_fft(inp.shape, inverse=False, complex_dtype=inp.dtype.type)
+    fft_func = loopy_fft(
+                inp.shape[-1],
+                n_batch_dims=len(inp.shape) - 1,
+                inverse=False,
+                complex_dtype=inp.dtype.type)
     out_dev = actx.call_loopy(fft_func, y=inp_dev)["x"]
 
     assert np.allclose(actx.to_numpy(out_dev), out)
