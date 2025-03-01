@@ -297,7 +297,7 @@ def process_recurrence_relation(r: sp.Expr) -> tuple[int, sp.Expr]:
     """
     idx_l, terms = _extract_idx_terms_from_recurrence(r)
     # Order is the max difference between highest/lowest in idx_l
-    order = max(idx_l) - min(idx_l) + 1
+    order = max(idx_l) - min(idx_l)
 
     # How much do we need to shift the recurrence relation
     shift_idx = max(idx_l)
@@ -418,6 +418,15 @@ def get_shifted_recurrence_exp_from_pde(pde: LinearPDESystemOperator) -> sp.Expr
 
     return r_ret, (max(idx_l)+1-min(idx_l))
 
+
+def get_taylor_recurrence(pde: LinearPDESystemOperator) -> sp.Expr:
+    r"""
+    A function that takes in as input a pde and outputs a SHIFTED
+    + PROCESSED taylor recurrence
+    """
+    var = _make_sympy_vec("x", 1)
+    r_exp = get_shifted_recurrence_exp_from_pde(pde)[0].subs(var[0], 0)
+    return process_recurrence_relation(r_exp)
 
 def shift_recurrence(r: sp.Expr) -> sp.Expr:
     r"""
