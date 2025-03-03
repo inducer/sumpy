@@ -39,7 +39,7 @@ from typing import Sequence
 import numpy as np
 import sympy as sp
 
-from sumpy.recurrence import _make_sympy_vec, get_processed_and_shifted_recurrence
+from sumpy.recurrence import _make_sympy_vec, get_processed_and_shifted_recurrence, get_taylor_recurrence
 
 
 # ================ Transform/Rotate =================
@@ -98,13 +98,37 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
 
     # ------------ 5. Compute recurrence
     n_initial, order, recurrence = get_processed_and_shifted_recurrence(pde)
+    t_order, t_recurrence = get_taylor_recurrence(pde)
+    t_order += 2
 
     # ------------ 6. Set order p = 5
     n_p = sources.shape[1]
     storage = [np.zeros((n_p, n_p))] * order
+    storage_taylor = [np.zeros((n_p, n_p))] * t_order
 
     s = sp.Function("s")
     n = sp.symbols("n")
+
+    def generate_lamb_expr_taylor(i, t_order):
+        arg_list_taylor = []
+        for j in range(t_order, 0, -1):
+            # pylint: disable-next=not-callable
+            arg_list_taylor.append(s(i-j))
+        for j in range(1, ndim):
+            arg_list_taylor.append(var[j])
+
+        lamb_expr_symb_deriv = sp.diff(g_x_y, var_t[0], i)
+        for j in range(ndim):
+            lamb_expr_symb_deriv = lamb_expr_symb_deriv.subs(var_t[j], 0)
+
+        if i < t_order:
+            lamb_expr_symb = lamb_expr_symb_deriv.subs(var[0], 0)
+        else:
+            lamb_expr_symb = t_recurrence.subs(n, i)
+        
+        print(lamb_expr_symb, arg_list_taylor)
+
+        return sp.lambdify(arg_list_taylor, lamb_expr_symb)
 
     def generate_lamb_expr(i, n_initial):
         arg_list = []
@@ -117,31 +141,42 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
         lamb_expr_symb_deriv = sp.diff(g_x_y, var_t[0], i)
         for j in range(ndim):
             lamb_expr_symb_deriv = lamb_expr_symb_deriv.subs(var_t[j], 0)
-        
+
         if i < n_initial:
             lamb_expr_symb = lamb_expr_symb_deriv
         else:
             lamb_expr_symb = recurrence.subs(n, i)
         #print("=============== ORDER = " + str(i))
         #print(lamb_expr_symb)
-        return sp.lambdify(arg_list, lamb_expr_symb), sp.lambdify(arg_list, lamb_expr_symb_deriv)
+        return sp.lambdify(arg_list, lamb_expr_symb) #, sp.lambdify(arg_list, lamb_expr_symb_deriv)
 
     interactions = 0
     coord = [cts_r_s[j] for j in range(ndim)]
+    coord_taylor = [cts_r_s[j] for j in range(1,ndim)]
     for i in range(p+1):
-        lamb_expr, true_lamb_expr = generate_lamb_expr(i, n_initial)
+        #lamb_expr, true_lamb_expr = generate_lamb_expr(i, n_initial)
+        lamb_expr = generate_lamb_expr(i, n_initial)
+        lamb_expr_taylor = generate_lamb_expr_taylor(i, t_order)
+
+
         a = [*storage, *coord]
+        b = [*storage_taylor[-t_order:], *coord_taylor]
         s_new = lamb_expr(*a)
-        s_new_true = true_lamb_expr(*a)
-        arg_max = np.argmax(abs(s_new-s_new_true)/abs(s_new_true))
-        print((s_new-s_new_true).reshape(-1)[arg_max]/s_new_true.reshape(-1)[arg_max])
-        print("x:", coord[0].reshape(-1)[arg_max], "y:", coord[1].reshape(-1)[arg_max],
-              "s_recur:", s_new.reshape(-1)[arg_max], "s_true:", s_new_true.reshape(-1)[arg_max], "order: ", i)
+        t_new = lamb_expr_taylor(*b)
+        #s_new_true = true_lamb_expr(*a)
+        #arg_max = np.argmax(abs(s_new-s_new_true)/abs(s_new_true))
+        #print((s_new-s_new_true).reshape(-1)[arg_max]/s_new_true.reshape(-1)[arg_max])
+        #print("x:", coord[0].reshape(-1)[arg_max], "y:", coord[1].reshape(-1)[arg_max],
+        #      "s_recur:", s_new.reshape(-1)[arg_max], "s_true:", s_new_true.reshape(-1)[arg_max], "order: ", i)
+
         interactions += s_new * radius**i/math.factorial(i)
 
         storage.pop(0)
         storage.append(s_new)
+        storage_taylor.append(t_new)
 
     exp_res = (interactions * strengths[None, :]).sum(axis=1)
+    print(coord_taylor)
+    print(storage_taylor)
 
     return exp_res
