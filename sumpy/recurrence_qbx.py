@@ -39,7 +39,7 @@ from typing import Sequence
 import numpy as np
 import sympy as sp
 
-from sumpy.recurrence import _make_sympy_vec, get_processed_and_shifted_recurrence, get_taylor_recurrence
+from sumpy.recurrence import _make_sympy_vec, get_processed_and_shifted_recurrence, get_taylor_recurrence, eval_taylor_recurrence_laplace_processed
 
 
 # ================ Transform/Rotate =================
@@ -126,7 +126,7 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
         else:
             lamb_expr_symb = t_recurrence.subs(n, i)
         
-        print(lamb_expr_symb, arg_list_taylor)
+        #print(lamb_expr_symb, arg_list_taylor)
 
         return sp.lambdify(arg_list_taylor, lamb_expr_symb)
 
@@ -163,17 +163,40 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
         b = [*storage_taylor[-t_order:], *coord_taylor]
         s_new = lamb_expr(*a)
         t_new = lamb_expr_taylor(*b)
+        storage_taylor.append(t_new)
+
+        interactions += s_new * radius**i/math.factorial(i)
+        mask_off_axis = cts_r_s[1]/cts_r_s[0] > 1
+
+        if i > 3:
+            t_expr = eval_taylor_recurrence_laplace_processed(i)
+            arg_list_1 = []
+            for j in range(2, -1, -1):
+                # pylint: disable-next=not-callable
+                arg_list_1.append(s(i-j))
+            for j in range(ndim):
+                arg_list_1.append(var[j])
+            f_t_expr = sp.lambdify(arg_list_1, t_expr)
+            t_new_true = f_t_expr(*[*storage_taylor[-3:], *coord]) * radius**i/math.factorial(i)
+            interactions[mask_off_axis] = t_new_true[mask_off_axis] 
+
+
         #s_new_true = true_lamb_expr(*a)
         #arg_max = np.argmax(abs(s_new-s_new_true)/abs(s_new_true))
         #print((s_new-s_new_true).reshape(-1)[arg_max]/s_new_true.reshape(-1)[arg_max])
         #print("x:", coord[0].reshape(-1)[arg_max], "y:", coord[1].reshape(-1)[arg_max],
         #      "s_recur:", s_new.reshape(-1)[arg_max], "s_true:", s_new_true.reshape(-1)[arg_max], "order: ", i)
 
-        interactions += s_new * radius**i/math.factorial(i)
+
+        
+
+        #Gives  the  coordinates where  we need an off-axis recurrence
+        
+
 
         storage.pop(0)
         storage.append(s_new)
-        storage_taylor.append(t_new)
+
 
     exp_res = (interactions * strengths[None, :]).sum(axis=1)
     print(coord_taylor)

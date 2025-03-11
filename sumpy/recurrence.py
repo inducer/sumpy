@@ -418,7 +418,6 @@ def get_shifted_recurrence_exp_from_pde(pde: LinearPDESystemOperator) -> sp.Expr
 
     return r_ret, (max(idx_l)+1-min(idx_l))
 
-
 def get_taylor_recurrence(pde: LinearPDESystemOperator) -> sp.Expr:
     r"""
     A function that takes in as input a pde and outputs a SHIFTED
@@ -427,6 +426,25 @@ def get_taylor_recurrence(pde: LinearPDESystemOperator) -> sp.Expr:
     var = _make_sympy_vec("x", 1)
     r_exp = get_shifted_recurrence_exp_from_pde(pde)[0].subs(var[0], 0)
     return process_recurrence_relation(r_exp)
+
+def eval_taylor_recurrence(pde, deriv_order, taylor_order=4):
+    t_recurrence = get_taylor_recurrence(pde)[1]
+    var = _make_sympy_vec("x", 2)
+    n = sp.symbols("n")
+    exp = 0
+    for i in range(taylor_order):
+        exp += t_recurrence.subs(n, deriv_order+i)/math.factorial(i) * var[0]**i
+    return exp
+
+def eval_taylor_recurrence_laplace_processed(deriv_order):
+    from sumpy.expansion.diff_op import laplacian,make_identity_diff_op
+    #HARDCODED TO LAPLACE 2D!!!!!
+    w = make_identity_diff_op(2)
+    laplace2d = laplacian(w)
+    n = sp.symbols("n")
+    s = sp.Function("s")
+    t_recurrence = get_taylor_recurrence(laplace2d)[1]
+    return eval_taylor_recurrence(laplace2d, n, taylor_order=4).subs(s(n+1), t_recurrence.subs(n,n+1)).subs(n, deriv_order)
 
 def shift_recurrence(r: sp.Expr) -> sp.Expr:
     r"""
