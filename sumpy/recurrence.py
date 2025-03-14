@@ -25,8 +25,8 @@ The whole process can be automated using :func:`recurrence_from_pde`.
 .. autofunction:: ode_in_x_to_coeff_array
 .. autofunction:: recurrence_from_coeff_array
 .. autofunction:: recurrence_from_pde
-.. autofunction:: process_recurrence_relation
-.. autofunction:: shift_recurrence
+.. autofunction:: reindex_recurrence_relation
+.. autofunction:: move_center_origin_source_arbitrary
 .. autofunction:: get_processed_and_shifted_recurrence
 .. autofunction:: get_shifted_recurrence_exp_from_pde
 """
@@ -287,7 +287,7 @@ def recurrence_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
     return recurrence_from_coeff_array(coeffs, var)
 
 
-def process_recurrence_relation(r: sp.Expr) -> tuple[int, sp.Expr]:
+def reindex_recurrence_relation(r: sp.Expr) -> tuple[int, sp.Expr]:
     r"""
     A function that takes in as input a recurrence and outputs a recurrence
     relation that has the nth term in terms of the n-1th, n-2th etc.
@@ -313,30 +313,6 @@ def process_recurrence_relation(r: sp.Expr) -> tuple[int, sp.Expr]:
     true_recurrence1 = true_recurrence.subs(n, n-shift_idx)
 
     return order, true_recurrence1
-
-
-def get_recurrence(r: sp.Expr, n_val) -> tuple[int, sp.Expr]:
-    r"""
-    A function that takes in as input a recurrence and outputs a recurrence
-    relation that has the nth term in terms of the n-1th, n-2th etc.
-    Also returns the order of the recurrence relation.
-
-    :arg recurrence: a recurrence relation in :math:`s(n)`
-    """
-    n = sp.symbols("n")
-    _, terms = _extract_idx_terms_from_recurrence(r.subs(n, n_val))
-    # Order is the max difference between highest/lowest in idx_l
-
-    # Get the respective coefficients in the recurrence relation from r
-
-    coeffs = sp.poly(r.subs(n, n_val), list(terms)).coeffs()
-
-    # Re-arrange the recurrence relation so we get s(n) = ____
-    # in terms of s(n-1), ...
-    true_recurrence = sum(sp.cancel(coeffs[i]) * terms[i]
-                          for i in range(0, len(terms)))
-
-    return true_recurrence
 
 
 def _extract_idx_terms_from_recurrence(r: sp.Expr) -> tuple[np.ndarray,
@@ -391,12 +367,42 @@ def _get_initial_c(recurrence):
     return i
 
 
-def get_shifted_recurrence_exp_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
+def get_taylor_recurrence(pde: LinearPDESystemOperator) -> sp.Expr:
+    r"""
+    A function that takes in as input a pde and outputs a SHIFTED
+    + PROCESSED taylor recurrence
+    """
+    var = _make_sympy_vec("x", 1)
+    r_exp = move_center_origin_source_arbitrary_expression(pde)[0].subs(var[0], 0)
+    return reindex_recurrence_relation(r_exp)
+
+def eval_taylor_recurrence(pde, deriv_order, taylor_order=4):
+    t_recurrence = get_taylor_recurrence(pde)[1]
+    var = _make_sympy_vec("x", 2)
+    n = sp.symbols("n")
+    exp = 0
+    for i in range(taylor_order):
+        exp += t_recurrence.subs(n, deriv_order+i)/math.factorial(i) * var[0]**i
+    return exp
+
+def eval_taylor_recurrence_laplace_processed(deriv_order):
+    from sumpy.expansion.diff_op import laplacian,make_identity_diff_op
+    #HARDCODED TO LAPLACE 2D!!!!!
+    w = make_identity_diff_op(2)
+    laplace2d = laplacian(w)
+    n = sp.symbols("n")
+    s = sp.Function("s")
+    t_recurrence = get_taylor_recurrence(laplace2d)[1]
+    return eval_taylor_recurrence(laplace2d, n, taylor_order=4).subs(s(n+1), t_recurrence.subs(n,n+1)).subs(n, deriv_order)
+
+
+def move_center_origin_source_arbitrary_expression(pde: LinearPDESystemOperator) -> sp.Expr:
     r"""
     A function that "shifts" the recurrence so it's center is placed
     at the origin and source is the input for the recurrence generated.
     Outputs an expression that evaluates to 0 rather than s(n) in terms
-    of s(n-1), etc. 
+    of s(n-1), etc. This is different from move_center_origin_source_arbitrary,
+    because we are "shifting" an EXPRESSION, not s(n) in terms of s(n-1), etc.
 
     :arg recurrence: a recurrence relation in :math:`s(n)`
     """
@@ -418,35 +424,8 @@ def get_shifted_recurrence_exp_from_pde(pde: LinearPDESystemOperator) -> sp.Expr
 
     return r_ret, (max(idx_l)+1-min(idx_l))
 
-def get_taylor_recurrence(pde: LinearPDESystemOperator) -> sp.Expr:
-    r"""
-    A function that takes in as input a pde and outputs a SHIFTED
-    + PROCESSED taylor recurrence
-    """
-    var = _make_sympy_vec("x", 1)
-    r_exp = get_shifted_recurrence_exp_from_pde(pde)[0].subs(var[0], 0)
-    return process_recurrence_relation(r_exp)
 
-def eval_taylor_recurrence(pde, deriv_order, taylor_order=4):
-    t_recurrence = get_taylor_recurrence(pde)[1]
-    var = _make_sympy_vec("x", 2)
-    n = sp.symbols("n")
-    exp = 0
-    for i in range(taylor_order):
-        exp += t_recurrence.subs(n, deriv_order+i)/math.factorial(i) * var[0]**i
-    return exp
-
-def eval_taylor_recurrence_laplace_processed(deriv_order):
-    from sumpy.expansion.diff_op import laplacian,make_identity_diff_op
-    #HARDCODED TO LAPLACE 2D!!!!!
-    w = make_identity_diff_op(2)
-    laplace2d = laplacian(w)
-    n = sp.symbols("n")
-    s = sp.Function("s")
-    t_recurrence = get_taylor_recurrence(laplace2d)[1]
-    return eval_taylor_recurrence(laplace2d, n, taylor_order=4).subs(s(n+1), t_recurrence.subs(n,n+1)).subs(n, deriv_order)
-
-def shift_recurrence(r: sp.Expr) -> sp.Expr:
+def move_center_origin_source_arbitrary(r: sp.Expr) -> sp.Expr:
     r"""
     A function that "shifts" the recurrence so it's center is placed
     at the origin and source is the input for the recurrence generated.
@@ -480,7 +459,7 @@ def get_processed_and_shifted_recurrence(pde) -> tuple[int, int,
     - *r_s* is the shifted/processed recurrence
     """
     r = recurrence_from_pde(pde)
-    order, r_p = process_recurrence_relation(r)
+    order, r_p = reindex_recurrence_relation(r)
     n_initial = _get_initial_c(r_p)
-    r_s = shift_recurrence(r_p)
+    r_s = move_center_origin_source_arbitrary(r_p)
     return n_initial, order, r_s
