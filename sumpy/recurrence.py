@@ -465,23 +465,12 @@ def get_off_axis_recurrence(pde: LinearPDESystemOperator) -> sp.Expr:
     start_order = _get_initial_order_off_axis(recur)
     return start_order, recur_order, recur
 
-def eval_taylor_recurrence(pde, deriv_order, taylor_order=4):
-    t_recurrence = get_off_axis_recurrence(pde)[1]
+def get_taylor_expression(pde, deriv_order, taylor_order=4):
+    #recursively substitute, and output the "order" of the taylor expression
+    t_recurrence = get_off_axis_recurrence(pde)[2]
     var = _make_sympy_vec("x", 2)
     n = sp.symbols("n")
     exp = 0
     for i in range(taylor_order):
         exp += t_recurrence.subs(n, deriv_order+i)/math.factorial(i) * var[0]**i
     return exp
-
-def eval_taylor_recurrence_laplace_processed(deriv_order):
-    from sumpy.expansion.diff_op import laplacian,make_identity_diff_op
-    #HARDCODED TO LAPLACE 2D!!!!!
-    w = make_identity_diff_op(2)
-    laplace2d = laplacian(w)
-    n = sp.symbols("n")
-    s = sp.Function("s")
-    t_recurrence = get_off_axis_recurrence(laplace2d)[1]
-    return eval_taylor_recurrence(laplace2d, n, taylor_order=4).subs(s(n+1), t_recurrence.subs(n,n+1)).subs(n, deriv_order)
-
-
