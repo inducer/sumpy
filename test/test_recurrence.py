@@ -41,7 +41,7 @@ from sumpy.expansion.diff_op import (
     laplacian,
     make_identity_diff_op,
 )
-from sumpy.recurrence import _make_sympy_vec, get_processed_and_shifted_recurrence
+from sumpy.recurrence import _make_sympy_vec, get_reindexed_and_center_origin_recurrence
 
 
 def test_laplace3d():
@@ -50,7 +50,7 @@ def test_laplace3d():
     """
     w = make_identity_diff_op(3)
     laplace3d = laplacian(w)
-    n_init, _, r = get_processed_and_shifted_recurrence(laplace3d)
+    n_init, _, r = get_reindexed_and_center_origin_recurrence(laplace3d)
     n = sp.symbols("n")
     s = sp.Function("s")
 
@@ -90,7 +90,7 @@ def test_helmholtz3d():
     """
     w = make_identity_diff_op(3)
     helmholtz3d = laplacian(w) + w
-    n_init, _, r = get_processed_and_shifted_recurrence(helmholtz3d)
+    n_init, _, r = get_reindexed_and_center_origin_recurrence(helmholtz3d)
 
     n = sp.symbols("n")
     s = sp.Function("s")
@@ -131,7 +131,7 @@ def test_helmholtz2d():
     """
     w = make_identity_diff_op(2)
     helmholtz2d = laplacian(w) + w
-    n_init, _, r = get_processed_and_shifted_recurrence(helmholtz2d)
+    n_init, _, r = get_reindexed_and_center_origin_recurrence(helmholtz2d)
 
     n = sp.symbols("n")
     s = sp.Function("s")
@@ -177,7 +177,7 @@ def test_laplace2d():
     """
     w = make_identity_diff_op(2)
     laplace2d = laplacian(w)
-    n_init, _, r = get_processed_and_shifted_recurrence(laplace2d)
+    n_init, _, r = get_reindexed_and_center_origin_recurrence(laplace2d)
 
     n = sp.symbols("n")
     s = sp.Function("s")
@@ -212,7 +212,7 @@ import matplotlib.pyplot as plt
 def _plot_laplace_2d(max_order_check, max_abs):
     w = make_identity_diff_op(2)
     laplace2d = laplacian(w)
-    n_init, _, r = get_processed_and_shifted_recurrence(laplace2d)
+    n_init, _, r = get_reindexed_and_center_origin_recurrence(laplace2d)
 
     n = sp.symbols("n")
     s = sp.Function("s")

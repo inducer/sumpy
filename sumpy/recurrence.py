@@ -27,8 +27,7 @@ The whole process can be automated using :func:`recurrence_from_pde`.
 .. autofunction:: recurrence_from_pde
 .. autofunction:: reindex_recurrence_relation
 .. autofunction:: move_center_origin_source_arbitrary
-.. autofunction:: get_processed_and_shifted_recurrence
-.. autofunction:: get_shifted_recurrence_exp_from_pde
+.. autofunction:: get_reindexed_and_center_origin_recurrence
 """
 
 from __future__ import annotations
@@ -352,9 +351,9 @@ def _check_neg_ind(r_n):
     return np.any(idx_l < 0)
 
 
-def _get_initial_c(recurrence):
+def _get_initial_order_on_axis(recurrence):
     r"""
-    For a given recurrence checks how many initial conditions by
+    For a on-axis recurrence checks how many initial conditions by
     checking for non-negative indexed terms.
     """
     n = sp.symbols("n")
@@ -366,35 +365,19 @@ def _get_initial_c(recurrence):
         r_c = recurrence.subs(n, i)
     return i
 
-
-def get_taylor_recurrence(pde: LinearPDESystemOperator) -> sp.Expr:
+def _get_initial_order_off_axis(recurrence):
     r"""
-    A function that takes in as input a pde and outputs a SHIFTED
-    + PROCESSED taylor recurrence
+    For a off-axis recurrence checks how many initial conditions by
+    checking for non-negative indexed terms.
     """
-    var = _make_sympy_vec("x", 1)
-    r_exp = move_center_origin_source_arbitrary_expression(pde)[0].subs(var[0], 0)
-    return reindex_recurrence_relation(r_exp)
-
-def eval_taylor_recurrence(pde, deriv_order, taylor_order=4):
-    t_recurrence = get_taylor_recurrence(pde)[1]
-    var = _make_sympy_vec("x", 2)
     n = sp.symbols("n")
-    exp = 0
-    for i in range(taylor_order):
-        exp += t_recurrence.subs(n, deriv_order+i)/math.factorial(i) * var[0]**i
-    return exp
 
-def eval_taylor_recurrence_laplace_processed(deriv_order):
-    from sumpy.expansion.diff_op import laplacian,make_identity_diff_op
-    #HARDCODED TO LAPLACE 2D!!!!!
-    w = make_identity_diff_op(2)
-    laplace2d = laplacian(w)
-    n = sp.symbols("n")
-    s = sp.Function("s")
-    t_recurrence = get_taylor_recurrence(laplace2d)[1]
-    return eval_taylor_recurrence(laplace2d, n, taylor_order=4).subs(s(n+1), t_recurrence.subs(n,n+1)).subs(n, deriv_order)
-
+    i = 0
+    r_c = recurrence.subs(n, i)
+    while _check_neg_ind(r_c) or r_c == 0:
+        i += 1
+        r_c = recurrence.subs(n, i)
+    return i
 
 def move_center_origin_source_arbitrary_expression(pde: LinearPDESystemOperator) -> sp.Expr:
     r"""
@@ -427,8 +410,13 @@ def move_center_origin_source_arbitrary_expression(pde: LinearPDESystemOperator)
 
 def move_center_origin_source_arbitrary(r: sp.Expr) -> sp.Expr:
     r"""
-    A function that "shifts" the recurrence so it's center is placed
+    A function that "shifts" a recurrence so it's center is placed
     at the origin and source is the input for the recurrence generated.
+    Assuming the recurrence is formulated so that evaluating it gives
+    s(n) in terms of s(n-1), .., etc. We do NOT want a recurrence
+    EXPRESSION as input, i.e. an expression containing s(n), s(n-1),
+    ..., that evaluates to 0. 
+    Use move_center_origin_source_arbitrary_expression for this.
 
     :arg recurrence: a recurrence relation in :math:`s(n)`
     """
@@ -443,7 +431,7 @@ def move_center_origin_source_arbitrary(r: sp.Expr) -> sp.Expr:
     return r_ret*((-1)**(n+1))
 
 
-def get_processed_and_shifted_recurrence(pde) -> tuple[int, int,
+def get_reindexed_and_center_origin_recurrence(pde) -> tuple[int, int,
                                                        sp.Expr]:
     r"""
     A function that "shifts" the recurrence so the expansion center is placed
@@ -460,6 +448,40 @@ def get_processed_and_shifted_recurrence(pde) -> tuple[int, int,
     """
     r = recurrence_from_pde(pde)
     order, r_p = reindex_recurrence_relation(r)
-    n_initial = _get_initial_c(r_p)
+    n_initial = _get_initial_order_on_axis(r_p)
     r_s = move_center_origin_source_arbitrary(r_p)
     return n_initial, order, r_s
+
+# ================ OFF-AXIS RECURRENCE =================
+def get_off_axis_recurrence(pde: LinearPDESystemOperator) -> sp.Expr:
+    r"""
+    A function that takes in as input a pde and outputs a SHIFTED
+    + REINDEXED off-axis recurrence
+    """
+    var = _make_sympy_vec("x", 1)
+    r_exp = move_center_origin_source_arbitrary_expression(pde)[0].subs(var[0], 0)
+    recur_order, recur = reindex_recurrence_relation(r_exp)
+    print(recur)
+    start_order = _get_initial_order_off_axis(recur)
+    return start_order, recur_order, recur
+
+def eval_taylor_recurrence(pde, deriv_order, taylor_order=4):
+    t_recurrence = get_off_axis_recurrence(pde)[1]
+    var = _make_sympy_vec("x", 2)
+    n = sp.symbols("n")
+    exp = 0
+    for i in range(taylor_order):
+        exp += t_recurrence.subs(n, deriv_order+i)/math.factorial(i) * var[0]**i
+    return exp
+
+def eval_taylor_recurrence_laplace_processed(deriv_order):
+    from sumpy.expansion.diff_op import laplacian,make_identity_diff_op
+    #HARDCODED TO LAPLACE 2D!!!!!
+    w = make_identity_diff_op(2)
+    laplace2d = laplacian(w)
+    n = sp.symbols("n")
+    s = sp.Function("s")
+    t_recurrence = get_off_axis_recurrence(laplace2d)[1]
+    return eval_taylor_recurrence(laplace2d, n, taylor_order=4).subs(s(n+1), t_recurrence.subs(n,n+1)).subs(n, deriv_order)
+
+
