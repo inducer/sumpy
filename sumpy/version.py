@@ -41,4 +41,4 @@ VERSION_TEXT = metadata.version("sumpy")
 VERSION, VERSION_STATUS = _parse_version(VERSION_TEXT)
 
 _GIT_REVISION = find_module_git_revision(__file__, n_levels_up=1)
-KERNEL_VERSION = (*VERSION, _GIT_REVISION, 0)
+KERNEL_VERSION = (*VERSION, _GIT_REVISION, 1)
