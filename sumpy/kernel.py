@@ -676,7 +676,7 @@ class YukawaKernel(ExpressionKernel):
             expr = var("hankel_1")(0, var("I")*lam*r)
             scaling_for_K0 = var("pi")/2*var("I")       # noqa: N806
 
-            scaling = -1/(2*var("pi")) * scaling_for_K0
+            scaling = 1/(2*var("pi")) * scaling_for_K0
         elif dim == 3:
             # NOTE: to get the expression, we do the following and simplify
             # 1. express K(1/2, lam r) as a modified spherical Bessel function
@@ -684,7 +684,7 @@ class YukawaKernel(ExpressionKernel):
             # 2. or use (AS 10.2.17) directly
             expr = var("exp")(-lam*r) / r
 
-            scaling = -1/(4 * var("pi")**2)
+            scaling = 1/(4 * var("pi"))
         else:
             raise NotImplementedError(f"unsupported dimension: '{dim}'")
 
