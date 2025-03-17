@@ -379,34 +379,6 @@ def _get_initial_order_off_axis(recurrence):
         r_c = recurrence.subs(n, i)
     return i
 
-def move_center_origin_source_arbitrary_expression(pde: LinearPDESystemOperator) -> sp.Expr:
-    r"""
-    A function that "shifts" the recurrence so it's center is placed
-    at the origin and source is the input for the recurrence generated.
-    Outputs an expression that evaluates to 0 rather than s(n) in terms
-    of s(n-1), etc. This is different from move_center_origin_source_arbitrary,
-    because we are "shifting" an EXPRESSION, not s(n) in terms of s(n-1), etc.
-
-    :arg recurrence: a recurrence relation in :math:`s(n)`
-    """
-    r = recurrence_from_pde(pde)
-
-    idx_l, terms = _extract_idx_terms_from_recurrence(r)
-
-    # How much do we need to shift the recurrence relation
-    shift_idx = max(idx_l)
-
-    n = sp.symbols("n")
-    r = r.subs(n, n-shift_idx)
-
-    idx_l, terms = _extract_idx_terms_from_recurrence(r)
-
-    r_ret = r
-    for i in range(len(idx_l)):
-        r_ret = r_ret.subs(terms[i], (-1)**(n+idx_l[i])*terms[i])
-
-    return r_ret, (max(idx_l)+1-min(idx_l))
-
 
 def move_center_origin_source_arbitrary(r: sp.Expr) -> sp.Expr:
     r"""
@@ -415,8 +387,8 @@ def move_center_origin_source_arbitrary(r: sp.Expr) -> sp.Expr:
     Assuming the recurrence is formulated so that evaluating it gives
     s(n) in terms of s(n-1), .., etc. We do NOT want a recurrence
     EXPRESSION as input, i.e. an expression containing s(n), s(n-1),
-    ..., that evaluates to 0. 
-    Use move_center_origin_source_arbitrary_expression for this.
+    ..., that evaluates to 0.
+    Use move_center_origin_source_arbitrary_expression for EXPRESSIONS.
 
     :arg recurrence: a recurrence relation in :math:`s(n)`
     """
@@ -431,7 +403,7 @@ def move_center_origin_source_arbitrary(r: sp.Expr) -> sp.Expr:
     return r_ret*((-1)**(n+1))
 
 
-def get_reindexed_and_center_origin_recurrence(pde) -> tuple[int, int,
+def get_reindexed_and_center_origin_on_axis_recurrence(pde) -> tuple[int, int,
                                                        sp.Expr]:
     r"""
     A function that "shifts" the recurrence so the expansion center is placed
@@ -453,24 +425,70 @@ def get_reindexed_and_center_origin_recurrence(pde) -> tuple[int, int,
     return n_initial, order, r_s
 
 # ================ OFF-AXIS RECURRENCE =================
-def get_off_axis_recurrence(pde: LinearPDESystemOperator) -> sp.Expr:
+def move_center_origin_source_arbitrary_expression(pde: LinearPDESystemOperator) -> sp.Expr:
     r"""
-    A function that takes in as input a pde and outputs a SHIFTED
-    + REINDEXED off-axis recurrence
+    A function that "shifts" the recurrence so it's center is placed
+    at the origin and source is the input for the recurrence generated.
+    Outputs an expression that evaluates to 0 rather than s(n) in terms
+    of s(n-1), etc. This is different from move_center_origin_source_arbitrary,
+    because we are "shifting" an EXPRESSION, not s(n) in terms of s(n-1), etc.
+
+    :arg recurrence: a recurrence relation in :math:`s(n)`
+    """
+    r = recurrence_from_pde(pde)
+
+    idx_l, terms = _extract_idx_terms_from_recurrence(r)
+    n = sp.symbols("n")
+
+    r_ret = r
+    for i in range(len(idx_l)):
+        r_ret = r_ret.subs(terms[i], (-1)**(n+idx_l[i])*terms[i])
+
+    return r_ret
+
+def get_reindexed_and_center_origin_off_axis_recurrence(pde: LinearPDESystemOperator) -> sp.Expr:
+    r"""
+    A function that takes in as input a pde and outputs a off-axis recurrence
+    for derivatives taken at the origin with an arbitrary source location.
+    The recurrence is reindexed so it gives s(n) in terms of s(n-1), ..., etc.
     """
     var = _make_sympy_vec("x", 1)
-    r_exp = move_center_origin_source_arbitrary_expression(pde)[0].subs(var[0], 0)
+    r_exp = move_center_origin_source_arbitrary_expression(pde).subs(var[0], 0)
     recur_order, recur = reindex_recurrence_relation(r_exp)
-    print(recur)
     start_order = _get_initial_order_off_axis(recur)
     return start_order, recur_order, recur
 
-def get_taylor_expression(pde, deriv_order, taylor_order=4):
-    #recursively substitute, and output the "order" of the taylor expression
-    t_recurrence = get_off_axis_recurrence(pde)[2]
-    var = _make_sympy_vec("x", 2)
+
+def get_off_axis_expression(pde, taylor_order=4):
+    r"""
+    A function that takes in as input a pde, and outputs
+    the Taylor expression that gives the deriv_order th derivative
+    to a taylor_order order Taylor series with respect to x_1 and
+    s(i) where s(i) comes from the off-axis recurrence. See
+    get_reindexed_and_center_origin_off_axis_recurrence.
+    """
+    s = sp.Function("s")
     n = sp.symbols("n")
+    deriv_order = n
+
+    t_recurrence = get_reindexed_and_center_origin_off_axis_recurrence(pde)[2]
+    var = _make_sympy_vec("x", 2)
     exp = 0
     for i in range(taylor_order):
         exp += t_recurrence.subs(n, deriv_order+i)/math.factorial(i) * var[0]**i
-    return exp
+
+    #While derivatives w/order larger than the deriv_order exist in our taylor expression
+    #replace them with smaller order derivatives
+    idx_l, _ = _extract_idx_terms_from_recurrence(exp)
+    max_idx = max(idx_l)
+
+    while max_idx > 0:
+        for ind in idx_l:
+            if ind > 0:
+                exp = exp.subs(s(n+ind), t_recurrence.subs(n, n+ind))
+        
+        idx_l, _ = _extract_idx_terms_from_recurrence(exp)
+        max_idx = max(idx_l)
+    exp_range = max(idx_l) - min(idx_l)
+
+    return exp, exp_range

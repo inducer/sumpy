@@ -39,7 +39,7 @@ from typing import Sequence
 import numpy as np
 import sympy as sp
 
-from sumpy.recurrence import _make_sympy_vec, get_reindexed_and_center_origin_recurrence, get_off_axis_recurrence, eval_taylor_recurrence_laplace_processed
+from sumpy.recurrence import _make_sympy_vec, get_reindexed_and_center_origin_on_axis_recurrence, get_reindexed_and_center_origin_off_axis_recurrence, eval_taylor_recurrence_laplace_processed
 
 
 # ================ Transform/Rotate =================
@@ -97,8 +97,8 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
     var_t = _make_sympy_vec("t", ndim)
 
     # ------------ 5. Compute recurrence
-    n_initial, order, recurrence = get_reindexed_and_center_origin_recurrence(pde)
-    t_order, t_recurrence = get_off_axis_recurrence(pde)
+    n_initial, order, recurrence = get_reindexed_and_center_origin_on_axis_recurrence(pde)
+    t_order, t_recurrence = get_reindexed_and_center_origin_off_axis_recurrence(pde)
     t_order += 2
 
     # ------------ 6. Set order p = 5

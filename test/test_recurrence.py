@@ -41,7 +41,7 @@ from sumpy.expansion.diff_op import (
     laplacian,
     make_identity_diff_op,
 )
-from sumpy.recurrence import _make_sympy_vec, get_reindexed_and_center_origin_recurrence
+from sumpy.recurrence import _make_sympy_vec, get_reindexed_and_center_origin_on_axis_recurrence, get_off_axis_expression, get_reindexed_and_center_origin_off_axis_recurrence
 
 
 def test_laplace3d():
@@ -50,7 +50,7 @@ def test_laplace3d():
     """
     w = make_identity_diff_op(3)
     laplace3d = laplacian(w)
-    n_init, _, r = get_reindexed_and_center_origin_recurrence(laplace3d)
+    n_init, _, r = get_reindexed_and_center_origin_on_axis_recurrence(laplace3d)
     n = sp.symbols("n")
     s = sp.Function("s")
 
@@ -90,7 +90,7 @@ def test_helmholtz3d():
     """
     w = make_identity_diff_op(3)
     helmholtz3d = laplacian(w) + w
-    n_init, _, r = get_reindexed_and_center_origin_recurrence(helmholtz3d)
+    n_init, _, r = get_reindexed_and_center_origin_on_axis_recurrence(helmholtz3d)
 
     n = sp.symbols("n")
     s = sp.Function("s")
@@ -131,7 +131,7 @@ def test_helmholtz2d():
     """
     w = make_identity_diff_op(2)
     helmholtz2d = laplacian(w) + w
-    n_init, _, r = get_reindexed_and_center_origin_recurrence(helmholtz2d)
+    n_init, _, r = get_reindexed_and_center_origin_on_axis_recurrence(helmholtz2d)
 
     n = sp.symbols("n")
     s = sp.Function("s")
@@ -177,7 +177,7 @@ def test_laplace2d():
     """
     w = make_identity_diff_op(2)
     laplace2d = laplacian(w)
-    n_init, _, r = get_reindexed_and_center_origin_recurrence(laplace2d)
+    n_init, _, r = get_reindexed_and_center_origin_on_axis_recurrence(laplace2d)
 
     n = sp.symbols("n")
     s = sp.Function("s")
@@ -207,12 +207,65 @@ def test_laplace2d():
     check = np.array([check[i].subs(coord_dict) for i in range(len(check))])
     assert max(abs(abs(check))) <= 1e-12
 
+def test_laplace_2d_off_axis():
+    r"""
+    Tests off-axis recurrence code for orders up to 6 laplace2d.
+    """
+    s = sp.Function("s")
+    var = _make_sympy_vec("x", 2)
+    var_t = _make_sympy_vec("t", 2)
+    g_x_y = sp.log(sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2))
+    derivs = [sp.diff(g_x_y,
+                      var_t[0], i).subs(var_t[0], 0).subs(var_t[1], 0)
+                      for i in range(8)]
+    x_coord = np.random.rand()  # noqa: NPY002
+    y_coord = np.random.rand()  # noqa: NPY002
+    coord_dict = {var[0]: x_coord, var[1]: y_coord}
+
+    w = make_identity_diff_op(2)
+    laplace2d = laplacian(w)
+    start_order, recur_order, recur = get_reindexed_and_center_origin_off_axis_recurrence(laplace2d)
+    exp, exp_range = get_off_axis_expression(laplace2d)
+
+    beg_order = 4
+    end_order = 8
+
+    ic = []
+    #Generate ic
+
+    for i in range(start_order):
+        ic.append(derivs[i].subs(var[0], 0).subs(var[1], coord_dict[var[1]]))
+
+    n = sp.symbols("n")
+    for i in range(start_order, end_order):
+        recur_eval = recur.subs(var[0], coord_dict[var[0]]).subs(var[1], coord_dict[var[1]]).subs(n, i)
+        for j in range(i-recur_order, i):
+            recur_eval = recur_eval.subs(s(j), ic[j])
+        ic.append(recur_eval)
+
+    ic = np.array(ic)
+
+    true_ic = np.array([derivs[i].subs(var[0], 0).subs(var[1], coord_dict[var[1]]) for i in range(end_order)])
+    
+    print(ic)
+    print(true_ic)
+    print(ic-true_ic)
+
+test_laplace_2d_off_axis()
+
+
+
+
+
+
+
+
 
 import matplotlib.pyplot as plt
 def _plot_laplace_2d(max_order_check, max_abs):
     w = make_identity_diff_op(2)
     laplace2d = laplacian(w)
-    n_init, _, r = get_reindexed_and_center_origin_recurrence(laplace2d)
+    n_init, _, r = get_reindexed_and_center_origin_on_axis_recurrence(laplace2d)
 
     n = sp.symbols("n")
     s = sp.Function("s")
@@ -240,7 +293,7 @@ def _plot_laplace_2d(max_order_check, max_abs):
 
     return np.array([check[i].subs(coord_dict) for i in range(len(check))])
 
-plot_me = _plot_laplace_2d(13, 1)
+""" plot_me = _plot_laplace_2d(13, 1)
 
 fig = plt.figure()
 ax = fig.add_subplot(1, 1, 1)
@@ -248,4 +301,5 @@ line, = ax.plot([i+2 for i in range(len(plot_me))], plot_me)
 ax.set_yscale('log')
 plt.ylabel("Error")
 plt.xlabel("Order")
-plt.show()
+plt.show() """
+
