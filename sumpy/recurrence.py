@@ -307,7 +307,7 @@ def reindex_recurrence_relation(r: sp.Expr) -> tuple[int, sp.Expr]:
 
     # Re-arrange the recurrence relation so we get s(n) = ____
     # in terms of s(n-1), ...
-    true_recurrence = sum(sp.cancel(coeffs[i]/coeffs[-1]) * terms[i]
+    true_recurrence = sum(sp.cancel(-coeffs[i]/coeffs[-1]) * terms[i]
                           for i in range(0, len(terms)-1))
     true_recurrence1 = true_recurrence.subs(n, n-shift_idx)
 
@@ -400,7 +400,7 @@ def move_center_origin_source_arbitrary(r: sp.Expr) -> sp.Expr:
     for i in range(len(idx_l)):
         r_ret = r_ret.subs(terms[i], (-1)**(n+idx_l[i])*terms[i])
 
-    return r_ret*((-1)**(n+1))
+    return r_ret*((-1)**(n))
 
 
 def get_reindexed_and_center_origin_on_axis_recurrence(pde) -> tuple[int, int,
@@ -446,6 +446,7 @@ def move_center_origin_source_arbitrary_expression(pde: LinearPDESystemOperator)
 
     return r_ret
 
+
 def get_reindexed_and_center_origin_off_axis_recurrence(pde: LinearPDESystemOperator) -> sp.Expr:
     r"""
     A function that takes in as input a pde and outputs a off-axis recurrence
@@ -454,6 +455,15 @@ def get_reindexed_and_center_origin_off_axis_recurrence(pde: LinearPDESystemOper
     """
     var = _make_sympy_vec("x", 1)
     r_exp = move_center_origin_source_arbitrary_expression(pde).subs(var[0], 0)
+
+    var = _make_sympy_vec("x", 2)
+    var_t = _make_sympy_vec("t", 2)
+    g_x_y = sp.log(sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2))
+    derivs = [sp.diff(g_x_y,
+                      var_t[0], i).subs(var_t[0], 0).subs(var_t[1], 0)
+                      for i in range(8)]
+    
+
     recur_order, recur = reindex_recurrence_relation(r_exp)
     start_order = _get_initial_order_off_axis(recur)
     return start_order, recur_order, recur
@@ -486,7 +496,7 @@ def get_off_axis_expression(pde, taylor_order=4):
         for ind in idx_l:
             if ind > 0:
                 exp = exp.subs(s(n+ind), t_recurrence.subs(n, n+ind))
-        
+
         idx_l, _ = _extract_idx_terms_from_recurrence(exp)
         max_idx = max(idx_l)
     exp_range = max(idx_l) - min(idx_l)

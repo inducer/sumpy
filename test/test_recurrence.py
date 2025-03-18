@@ -254,13 +254,6 @@ def test_laplace_2d_off_axis():
 test_laplace_2d_off_axis()
 
 
-
-
-
-
-
-
-
 import matplotlib.pyplot as plt
 def _plot_laplace_2d(max_order_check, max_abs):
     w = make_identity_diff_op(2)
