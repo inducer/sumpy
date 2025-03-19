@@ -499,6 +499,6 @@ def get_off_axis_expression(pde, taylor_order=4):
 
         idx_l, _ = _extract_idx_terms_from_recurrence(exp)
         max_idx = max(idx_l)
-    exp_range = max(idx_l) - min(idx_l)
+    exp_range = max(idx_l) - min(idx_l) + 1
 
     return exp, exp_range

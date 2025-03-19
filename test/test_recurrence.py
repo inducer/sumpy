@@ -5,6 +5,8 @@ code.
 .. autofunction:: test_laplace3d
 .. autofunction:: test_helmholtz3d
 .. autofunction:: test_laplace2d
+.. autofunction:: test_helmholtz2d
+.. autofunction:: test_laplace_2d_off_axis
 """
 from __future__ import annotations
 
@@ -207,6 +209,7 @@ def test_laplace2d():
     check = np.array([check[i].subs(coord_dict) for i in range(len(check))])
     assert max(abs(abs(check))) <= 1e-12
 
+
 def test_laplace_2d_off_axis():
     r"""
     Tests off-axis recurrence code for orders up to 6 laplace2d.
@@ -225,7 +228,6 @@ def test_laplace_2d_off_axis():
     w = make_identity_diff_op(2)
     laplace2d = laplacian(w)
     start_order, recur_order, recur = get_reindexed_and_center_origin_off_axis_recurrence(laplace2d)
-    exp, exp_range = get_off_axis_expression(laplace2d)
 
     beg_order = 4
     end_order = 8
@@ -247,9 +249,20 @@ def test_laplace_2d_off_axis():
 
     true_ic = np.array([derivs[i].subs(var[0], 0).subs(var[1], coord_dict[var[1]]) for i in range(end_order)])
     
-    print(ic)
-    print(true_ic)
-    print(ic-true_ic)
+    assert np.max(np.abs(ic-true_ic)) < 10e-8
+
+    exp, exp_range = get_off_axis_expression(laplace2d, 4)
+
+    deriv_order = 6
+    approx_deriv = exp.subs(n, deriv_order)
+    for i in range(exp_range):
+        approx_deriv = approx_deriv.subs(s(deriv_order-i), true_ic[deriv_order-i])
+    
+    print((approx_deriv - derivs[deriv_order]).subs(var[0], 1e-3 * np.random.rand()).subs(var[1], np.random.rand()))
+
+
+
+
 
 test_laplace_2d_off_axis()
 
