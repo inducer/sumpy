@@ -221,8 +221,8 @@ def test_laplace_2d_off_axis():
     derivs = [sp.diff(g_x_y,
                       var_t[0], i).subs(var_t[0], 0).subs(var_t[1], 0)
                       for i in range(8)]
-    x_coord = np.random.rand()  # noqa: NPY002
-    y_coord = np.random.rand()  # noqa: NPY002
+    x_coord = 0.0003#1e-3 * np.random.rand()  # noqa: NPY002
+    y_coord = 0.06#np.random.rand()  # noqa: NPY002
     coord_dict = {var[0]: x_coord, var[1]: y_coord}
 
     w = make_identity_diff_op(2)
@@ -258,7 +258,9 @@ def test_laplace_2d_off_axis():
     for i in range(exp_range):
         approx_deriv = approx_deriv.subs(s(deriv_order-i), true_ic[deriv_order-i])
     
-    print((approx_deriv - derivs[deriv_order]).subs(var[0], 1e-3 * np.random.rand()).subs(var[1], np.random.rand()))
+    print(coord_dict[var[0]]/coord_dict[var[1]])
+    print(coord_dict[var[0]], coord_dict[var[1]])
+    print(((approx_deriv - derivs[deriv_order])/derivs[deriv_order]).subs(var[0], coord_dict[var[0]]).subs(var[1], coord_dict[var[1]]))
 
 
 
