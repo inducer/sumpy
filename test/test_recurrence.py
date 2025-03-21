@@ -221,8 +221,8 @@ def test_laplace_2d_off_axis():
     derivs = [sp.diff(g_x_y,
                       var_t[0], i).subs(var_t[0], 0).subs(var_t[1], 0)
                       for i in range(15)]
-    x_coord = 0.5234#np.random.rand()  # noqa: NPY002
-    y_coord = 1.1#np.random.rand()  # noqa: NPY002
+    x_coord = 1e-2 * np.random.rand()  # noqa: NPY002
+    y_coord = np.random.rand()  # noqa: NPY002
     coord_dict = {var[0]: x_coord, var[1]: y_coord}
 
     w = make_identity_diff_op(2)
@@ -250,8 +250,8 @@ def test_laplace_2d_off_axis():
     #print(np.max(np.abs(ic[::2]-true_ic[::2])/np.abs(true_ic[::2])))
 
     # CHECK ACCURACY OF EXPRESSION FOR deriv_order
-    deriv_order = 6
-    exp_order = 6
+    deriv_order = 7
+    exp_order = 5
 
     exp, exp_range = get_off_axis_expression(laplace2d, exp_order)
     approx_deriv = exp.subs(n, deriv_order)
@@ -259,19 +259,17 @@ def test_laplace_2d_off_axis():
         approx_deriv = approx_deriv.subs(s(deriv_order-i), ic[deriv_order-i])
     
     rat = coord_dict[var[0]]/coord_dict[var[1]]
-    prederror = abs(ic[deriv_order+exp_order+2] * coord_dict[var[0]]**(exp_order+2)/math.factorial(exp_order+2))
+    if deriv_order + exp_order % 2 == 0:
+        prederror = abs(ic[deriv_order+exp_order+2] * coord_dict[var[0]]**(exp_order+2)/math.factorial(exp_order+2))
+    else:
+        prederror = abs(ic[deriv_order+exp_order+1] * coord_dict[var[0]]**(exp_order+1)/math.factorial(exp_order+1))
     print("PREDICTED ERROR: ", prederror)
     relerr = abs((approx_deriv - derivs[deriv_order])/derivs[deriv_order]).subs(var[0], coord_dict[var[0]]).subs(var[1], coord_dict[var[1]])
     print("RELATIVE ERROR: ", relerr)
     print("RATIO: ", rat)
     assert relerr <= prederror
 
-
-
-
-
 test_laplace_2d_off_axis()
-
 
 import matplotlib.pyplot as plt
 def _plot_laplace_2d(max_order_check, max_abs):
