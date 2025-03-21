@@ -44,7 +44,7 @@ from sumpy.expansion.diff_op import (
     make_identity_diff_op,
 )
 from sumpy.recurrence import _make_sympy_vec, get_reindexed_and_center_origin_on_axis_recurrence, get_off_axis_expression, get_reindexed_and_center_origin_off_axis_recurrence
-
+import math
 
 def test_laplace3d():
     r"""
@@ -220,17 +220,14 @@ def test_laplace_2d_off_axis():
     g_x_y = sp.log(sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2))
     derivs = [sp.diff(g_x_y,
                       var_t[0], i).subs(var_t[0], 0).subs(var_t[1], 0)
-                      for i in range(8)]
-    x_coord = 0.0003#1e-3 * np.random.rand()  # noqa: NPY002
-    y_coord = 0.06#np.random.rand()  # noqa: NPY002
+                      for i in range(15)]
+    x_coord = 0.5234#np.random.rand()  # noqa: NPY002
+    y_coord = 1.1#np.random.rand()  # noqa: NPY002
     coord_dict = {var[0]: x_coord, var[1]: y_coord}
 
     w = make_identity_diff_op(2)
     laplace2d = laplacian(w)
     start_order, recur_order, recur = get_reindexed_and_center_origin_off_axis_recurrence(laplace2d)
-
-    beg_order = 4
-    end_order = 8
 
     ic = []
     #Generate ic
@@ -239,7 +236,7 @@ def test_laplace_2d_off_axis():
         ic.append(derivs[i].subs(var[0], 0).subs(var[1], coord_dict[var[1]]))
 
     n = sp.symbols("n")
-    for i in range(start_order, end_order):
+    for i in range(start_order, 15):
         recur_eval = recur.subs(var[0], coord_dict[var[0]]).subs(var[1], coord_dict[var[1]]).subs(n, i)
         for j in range(i-recur_order, i):
             recur_eval = recur_eval.subs(s(j), ic[j])
@@ -247,20 +244,27 @@ def test_laplace_2d_off_axis():
 
     ic = np.array(ic)
 
-    true_ic = np.array([derivs[i].subs(var[0], 0).subs(var[1], coord_dict[var[1]]) for i in range(end_order)])
+    true_ic = np.array([derivs[i].subs(var[0], 0).subs(var[1], coord_dict[var[1]]) for i in range(15)])
     
-    assert np.max(np.abs(ic-true_ic)) < 10e-8
+    assert np.max(np.abs(ic[::2]-true_ic[::2])/np.abs(true_ic[::2])) < 1e-8
+    #print(np.max(np.abs(ic[::2]-true_ic[::2])/np.abs(true_ic[::2])))
 
-    exp, exp_range = get_off_axis_expression(laplace2d, 4)
-
+    # CHECK ACCURACY OF EXPRESSION FOR deriv_order
     deriv_order = 6
+    exp_order = 6
+
+    exp, exp_range = get_off_axis_expression(laplace2d, exp_order)
     approx_deriv = exp.subs(n, deriv_order)
     for i in range(exp_range):
-        approx_deriv = approx_deriv.subs(s(deriv_order-i), true_ic[deriv_order-i])
+        approx_deriv = approx_deriv.subs(s(deriv_order-i), ic[deriv_order-i])
     
-    print(coord_dict[var[0]]/coord_dict[var[1]])
-    print(coord_dict[var[0]], coord_dict[var[1]])
-    print(((approx_deriv - derivs[deriv_order])/derivs[deriv_order]).subs(var[0], coord_dict[var[0]]).subs(var[1], coord_dict[var[1]]))
+    rat = coord_dict[var[0]]/coord_dict[var[1]]
+    prederror = abs(ic[deriv_order+exp_order+2] * coord_dict[var[0]]**(exp_order+2)/math.factorial(exp_order+2))
+    print("PREDICTED ERROR: ", prederror)
+    relerr = abs((approx_deriv - derivs[deriv_order])/derivs[deriv_order]).subs(var[0], coord_dict[var[0]]).subs(var[1], coord_dict[var[1]])
+    print("RELATIVE ERROR: ", relerr)
+    print("RATIO: ", rat)
+    assert relerr <= prederror
 
 
 

@@ -484,7 +484,7 @@ def get_off_axis_expression(pde, taylor_order=4):
     t_recurrence = get_reindexed_and_center_origin_off_axis_recurrence(pde)[2]
     var = _make_sympy_vec("x", 2)
     exp = 0
-    for i in range(taylor_order):
+    for i in range(taylor_order+1):
         exp += t_recurrence.subs(n, deriv_order+i)/math.factorial(i) * var[0]**i
 
     #While derivatives w/order larger than the deriv_order exist in our taylor expression
