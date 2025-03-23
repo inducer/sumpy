@@ -1092,10 +1092,10 @@ class _VectorIndexAdder(CSECachingMapperMixin[Expression, []], IdentityMapper[[]
 
     def map_subscript(self, expr):
         from pymbolic.primitives import CommonSubexpression, cse_scope
-        if (expr.aggregate.name == self.vec_name
-                and isinstance(expr.index, int)):
+        if (expr.aggregate.name == self.vec_name and isinstance(expr.index, int)):
+            index = (expr.index, *self.additional_indices)
             return CommonSubexpression(
-                    expr.aggregate[(expr.index, *self.additional_indices)],
+                    expr.aggregate[index],
                     prefix=None, scope=cse_scope.EVALUATION)
         else:
             return IdentityMapper.map_subscript(self, expr)
