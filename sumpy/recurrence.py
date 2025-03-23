@@ -472,10 +472,14 @@ def get_reindexed_and_center_origin_off_axis_recurrence(pde: LinearPDESystemOper
 def get_off_axis_expression(pde, taylor_order=4):
     r"""
     A function that takes in as input a pde, and outputs
-    the Taylor expression that gives the deriv_order th derivative
-    to a taylor_order order Taylor series with respect to x_1 and
+    the Taylor expression that gives the n th derivative
+    as a truncated taylor_order th order Taylor series with respect to x_1 and
     s(i) where s(i) comes from the off-axis recurrence. See
     get_reindexed_and_center_origin_off_axis_recurrence.
+
+    Also outputs the -number of coefficients it needs from nth order.
+    So if it outputs -3 as the second return value, then it needs
+    s(deriv_order), s(deriv_order-1), ..., s(deriv_order-3).
     """
     s = sp.Function("s")
     n = sp.symbols("n")
@@ -504,4 +508,4 @@ def get_off_axis_expression(pde, taylor_order=4):
     idx_l, _ = _extract_idx_terms_from_recurrence(exp)
     exp_range = (min(idx_l), max(idx_l))
 
-    return exp*(-1)**n, exp_range
+    return exp*(-1)**n, min(idx_l)
