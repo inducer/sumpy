@@ -485,10 +485,11 @@ def get_off_axis_expression(pde, taylor_order=4):
     var = _make_sympy_vec("x", 2)
     exp = 0
     for i in range(taylor_order+1):
-        exp += t_recurrence.subs(n, deriv_order+i)/math.factorial(i) * var[0]**i
+        exp += s(deriv_order+i)/math.factorial(i) * var[0]**i
 
     #While derivatives w/order larger than the deriv_order exist in our taylor expression
     #replace them with smaller order derivatives
+
     idx_l, _ = _extract_idx_terms_from_recurrence(exp)
     max_idx = max(idx_l)
 
@@ -498,7 +499,9 @@ def get_off_axis_expression(pde, taylor_order=4):
                 exp = exp.subs(s(n+ind), t_recurrence.subs(n, n+ind))
 
         idx_l, _ = _extract_idx_terms_from_recurrence(exp)
-        max_idx = max(idx_l)
-    exp_range = max(idx_l) - min(idx_l) + 1
+        max_idx = max(idx_l) 
 
-    return exp, exp_range
+    idx_l, _ = _extract_idx_terms_from_recurrence(exp)
+    exp_range = (min(idx_l), max(idx_l))
+
+    return exp*(-1)**n, exp_range

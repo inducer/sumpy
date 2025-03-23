@@ -210,6 +210,75 @@ def test_laplace2d():
     assert max(abs(abs(check))) <= 1e-12
 
 
+def test_helmholtz_2d_off_axis():
+    r"""
+    Tests off-axis recurrence code for orders up to 6 laplace2d.
+    """
+    w = make_identity_diff_op(2)
+    helmholtz2d = laplacian(w) + w
+
+    n = sp.symbols("n")
+    s = sp.Function("s")
+
+    var = _make_sympy_vec("x", 2)
+    var_t = _make_sympy_vec("t", 2)
+    abs_dist = sp.sqrt((var[0]-var_t[0])**2 +
+                       (var[1]-var_t[1])**2)
+    k = 1
+    g_x_y = (1j/4) * hankel1(0, k * abs_dist)
+    derivs = [sp.diff(g_x_y,
+                      var_t[0], i).subs(var_t[0], 0).subs(var_t[1], 0)
+                                               for i in range(8)]
+    
+    x_coord = 1e-2 * np.random.rand()  # noqa: NPY002
+    y_coord = np.random.rand()  # noqa: NPY002
+    coord_dict = {var[0]: x_coord, var[1]: y_coord}
+    start_order, recur_order, recur = get_reindexed_and_center_origin_off_axis_recurrence(helmholtz2d)
+
+    ic = []
+    #Generate ic
+
+    for i in range(start_order):
+        ic.append(derivs[i].subs(var[0], 0).subs(var[1], coord_dict[var[1]]))
+
+    n = sp.symbols("n")
+    for i in range(start_order, 15):
+        recur_eval = recur.subs(var[0], coord_dict[var[0]]).subs(var[1], coord_dict[var[1]]).subs(n, i)
+        for j in range(i-recur_order, i):
+            recur_eval = recur_eval.subs(s(j), ic[j])
+        ic.append(recur_eval)
+
+    ic = np.array(ic)
+
+    #true_ic = np.array([derivs[i].subs(var[0], 0).subs(var[1], coord_dict[var[1]]) for i in range(15)])
+    
+    #assert np.max(np.abs(ic[::2]-true_ic[::2])/np.abs(true_ic[::2])) < 1e-8
+    #print(np.max(np.abs(ic[::2]-true_ic[::2])/np.abs(true_ic[::2])))
+
+    # CHECK ACCURACY OF EXPRESSION FOR deriv_order
+    deriv_order = 7
+    exp_order = 4
+
+    exp, exp_range = get_off_axis_expression(helmholtz2d, exp_order)
+    approx_deriv = exp.subs(n, deriv_order)
+    exp_range = (exp_range[0]+deriv_order, exp_range[1]+deriv_order)
+    for i in range(exp_range[0], exp_range[1]+1):
+        approx_deriv = approx_deriv.subs(s(i), ic[i])
+    
+    rat = coord_dict[var[0]]/coord_dict[var[1]]
+    if deriv_order + exp_order % 2 == 0:
+        prederror = abs((ic[deriv_order+exp_order+2] * coord_dict[var[0]]**(exp_order+2)/math.factorial(exp_order+2)).evalf())
+    else:
+        prederror = abs((ic[deriv_order+exp_order+1] * coord_dict[var[0]]**(exp_order+1)/math.factorial(exp_order+1)).evalf())
+    print("PREDICTED ERROR: ", prederror)
+    relerr = abs(((approx_deriv - derivs[deriv_order])/derivs[deriv_order]).subs(var[0], coord_dict[var[0]]).subs(var[1], coord_dict[var[1]]).evalf())
+    print("RELATIVE ERROR: ", relerr)
+    print("RATIO: ", rat)
+    assert relerr <= prederror
+
+test_helmholtz_2d_off_axis()
+
+
 def test_laplace_2d_off_axis():
     r"""
     Tests off-axis recurrence code for orders up to 6 laplace2d.
@@ -251,12 +320,13 @@ def test_laplace_2d_off_axis():
 
     # CHECK ACCURACY OF EXPRESSION FOR deriv_order
     deriv_order = 7
-    exp_order = 5
+    exp_order = 6
 
     exp, exp_range = get_off_axis_expression(laplace2d, exp_order)
     approx_deriv = exp.subs(n, deriv_order)
-    for i in range(exp_range):
-        approx_deriv = approx_deriv.subs(s(deriv_order-i), ic[deriv_order-i])
+    exp_range = (exp_range[0]+deriv_order, exp_range[1]+deriv_order)
+    for i in range(exp_range[0], exp_range[1]+1):
+        approx_deriv = approx_deriv.subs(s(i), ic[i])
     
     rat = coord_dict[var[0]]/coord_dict[var[1]]
     if deriv_order + exp_order % 2 == 0:
@@ -268,8 +338,6 @@ def test_laplace_2d_off_axis():
     print("RELATIVE ERROR: ", relerr)
     print("RATIO: ", rat)
     assert relerr <= prederror
-
-test_laplace_2d_off_axis()
 
 import matplotlib.pyplot as plt
 def _plot_laplace_2d(max_order_check, max_abs):
