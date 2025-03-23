@@ -124,42 +124,24 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
             lamb_expr_symb = recurrence.subs(n, i)
         #print("=============== ORDER = " + str(i))
         #print(lamb_expr_symb)
-        return sp.lambdify(arg_list, lamb_expr_symb)#, sp.lambdify(arg_list, lamb_expr_symb_deriv)
+        return sp.lambdify(arg_list, lamb_expr_symb), sp.lambdify(arg_list, lamb_expr_symb_deriv)
 
-    interactions_on_axis = 0
+    interactions = 0
     coord = [cts_r_s[j] for j in range(ndim)]
     for i in range(p+1):
-        lamb_expr = generate_lamb_expr(i, n_initial)
+        lamb_expr, true_lamb_expr = generate_lamb_expr(i, n_initial)
         a = [*storage, *coord]
         s_new = lamb_expr(*a)
-
-        """
         s_new_true = true_lamb_expr(*a)
         arg_max = np.argmax(abs(s_new-s_new_true)/abs(s_new_true))
         print((s_new-s_new_true).reshape(-1)[arg_max]/s_new_true.reshape(-1)[arg_max])
         print("x:", coord[0].reshape(-1)[arg_max], "y:", coord[1].reshape(-1)[arg_max],
-              "s_recur:", s_new.reshape(-1)[arg_max], "s_true:", s_new_true.reshape(-1)[arg_max], "order: ", i) 
-        """
-
-        interactions_on_axis += s_new * radius**i/math.factorial(i)
+              "s_recur:", s_new.reshape(-1)[arg_max], "s_true:", s_new_true.reshape(-1)[arg_max], "order: ", i)
+        interactions += s_new * radius**i/math.factorial(i)
 
         storage.pop(0)
         storage.append(s_new)
 
-
-    ### NEW CODE - COMPUTE OFF AXIS INTERACTIONS
-
-
-    ################
-
-    #slope of line y = mx
-    m = 1e10
-    mask_on_axis = m*np.abs(coord[0]) >= np.abs(coord[1])
-    mask_off_axis = m*np.abs(coord[0]) < np.abs(coord[1])
-
-    interactions_total = np.zeros(coord[0].shape)
-    interactions_total[mask_on_axis] = interactions_on_axis[mask_on_axis]
-
-    exp_res = (interactions_total * strengths[None, :]).sum(axis=1)
+    exp_res = (interactions * strengths[None, :]).sum(axis=1)
 
     return exp_res
