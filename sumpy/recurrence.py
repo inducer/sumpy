@@ -425,7 +425,7 @@ def get_reindexed_and_center_origin_on_axis_recurrence(pde) -> tuple[int, int,
     return n_initial, order, r_s
 
 # ================ OFF-AXIS RECURRENCE =================
-def move_center_origin_source_arbitrary_expression(pde: LinearPDESystemOperator) -> sp.Expr:
+def _move_center_origin_source_arbitrary_expression(pde: LinearPDESystemOperator) -> sp.Expr:
     r"""
     A function that "shifts" the recurrence so it's center is placed
     at the origin and source is the input for the recurrence generated.
@@ -447,14 +447,14 @@ def move_center_origin_source_arbitrary_expression(pde: LinearPDESystemOperator)
     return r_ret
 
 
-def get_reindexed_and_center_origin_off_axis_recurrence(pde: LinearPDESystemOperator) -> sp.Expr:
+def get_reindexed_and_center_origin_off_axis_recurrence(pde: LinearPDESystemOperator) -> [int, int, sp.Expr]:
     r"""
     A function that takes in as input a pde and outputs a off-axis recurrence
     for derivatives taken at the origin with an arbitrary source location.
     The recurrence is reindexed so it gives s(n) in terms of s(n-1), ..., etc.
     """
     var = _make_sympy_vec("x", 1)
-    r_exp = move_center_origin_source_arbitrary_expression(pde).subs(var[0], 0)
+    r_exp = _move_center_origin_source_arbitrary_expression(pde).subs(var[0], 0)
 
     var = _make_sympy_vec("x", 2)
     var_t = _make_sympy_vec("t", 2)
@@ -469,7 +469,7 @@ def get_reindexed_and_center_origin_off_axis_recurrence(pde: LinearPDESystemOper
     return start_order, recur_order, recur
 
 
-def get_off_axis_expression(pde, taylor_order=4):
+def get_off_axis_expression(pde, taylor_order=4) -> [sp.Expr, int]:
     r"""
     A function that takes in as input a pde, and outputs
     the Taylor expression that gives the n th derivative

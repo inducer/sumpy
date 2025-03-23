@@ -304,6 +304,3 @@ plt.ylabel("Error")
 plt.title("2D Ellipse LP Eval Error")
 plt.legend()
 plt.show()
-
-
-

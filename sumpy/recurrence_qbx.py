@@ -39,7 +39,12 @@ from typing import Sequence
 import numpy as np
 import sympy as sp
 
-from sumpy.recurrence import _make_sympy_vec, get_reindexed_and_center_origin_on_axis_recurrence
+from sumpy.recurrence import (
+    _make_sympy_vec,
+    get_off_axis_expression,
+    get_reindexed_and_center_origin_off_axis_recurrence,
+    get_reindexed_and_center_origin_on_axis_recurrence,
+)
 
 
 # ================ Transform/Rotate =================
@@ -114,11 +119,10 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
         for j in range(ndim):
             arg_list.append(var[j])
 
-        lamb_expr_symb_deriv = sp.diff(g_x_y, var_t[0], i)
-        for j in range(ndim):
-            lamb_expr_symb_deriv = lamb_expr_symb_deriv.subs(var_t[j], 0)
-        
         if i < n_initial:
+            lamb_expr_symb_deriv = sp.diff(g_x_y, var_t[0], i)
+            for j in range(ndim):
+                lamb_expr_symb_deriv = lamb_expr_symb_deriv.subs(var_t[j], 0)
             lamb_expr_symb = lamb_expr_symb_deriv
         else:
             lamb_expr_symb = recurrence.subs(n, i)
@@ -148,7 +152,61 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
 
 
     ### NEW CODE - COMPUTE OFF AXIS INTERACTIONS
+    start_order, t_recur_order, t_recur = get_reindexed_and_center_origin_off_axis_recurrence(pde)
+    t_exp, t_exp_order = get_off_axis_expression(pde)
+    storage_taylor_order = max(t_recur_order, t_exp_order+1)
 
+    storage = [np.zeros((n_p, n_p))] * storage_taylor_order
+
+    def gen_lamb_expr_t_recur(i, start_order):
+        arg_list = []
+        for j in range(t_recur_order, 0, -1):
+            # pylint: disable-next=not-callable
+            arg_list.append(s(i-j))
+        for j in range(ndim):
+            arg_list.append(var[j])
+
+        if i < start_order:
+            lamb_expr_symb_deriv = sp.diff(g_x_y, var_t[0], i)
+            for j in range(ndim):
+                lamb_expr_symb_deriv = lamb_expr_symb_deriv.subs(var_t[j], 0)
+            lamb_expr_symb = lamb_expr_symb_deriv
+        else:
+            lamb_expr_symb = t_recur.subs(n, i)
+
+        return lamb_expr_symb
+
+
+    def gen_lamb_expr_t_exp(i, t_exp_order):
+        arg_list = []
+        for j in range(t_exp_order, -1, -1):
+            # pylint: disable-next=not-callable
+            arg_list.append(s(i-j))
+        for j in range(ndim):
+            arg_list.append(var[j])
+
+        if i < t_exp_order:
+            lamb_expr_symb_deriv = sp.diff(g_x_y, var_t[0], i)
+            for j in range(ndim):
+                lamb_expr_symb_deriv = lamb_expr_symb_deriv.subs(var_t[j], 0)
+            lamb_expr_symb = lamb_expr_symb_deriv.subs(var[0], 0)
+        else:
+            lamb_expr_symb = t_exp.subs(n, i)
+
+        return lamb_expr_symb
+
+    interactions_off_axis = 0
+    for i in range(p+1):
+        lamb_expr_t_recur = gen_lamb_expr_t_recur(i, start_order)
+        a1 = [*storage[:-t_recur_order], *coord]
+
+        storage.pop(0)
+        storage.append(lamb_expr_t_recur(a1))
+
+        lamb_expr_t_exp = gen_lamb_expr_t_exp(i, t_exp_order)
+        a2 = [*storage[:-(t_exp_order+1)], *coord]
+
+        interactions_off_axis += lamb_expr_t_exp(a2) * radius**i/math.factorial(i)
 
     ################
 
@@ -159,6 +217,7 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
 
     interactions_total = np.zeros(coord[0].shape)
     interactions_total[mask_on_axis] = interactions_on_axis[mask_on_axis]
+    interactions_total[mask_off_axis] = interactions_off_axis[mask_off_axis]
 
     exp_res = (interactions_total * strengths[None, :]).sum(axis=1)
 
