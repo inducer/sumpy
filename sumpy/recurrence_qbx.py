@@ -233,7 +233,7 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
     ###############
 
     #slope of line y = mx
-    m = 15000 * 1e3
+    m = 1e5/2 
     mask_on_axis = m*np.abs(coord[0]) >= np.abs(coord[1])
     mask_off_axis = m*np.abs(coord[0]) < np.abs(coord[1])
 

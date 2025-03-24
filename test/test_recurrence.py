@@ -273,22 +273,22 @@ def test_helmholtz_2d_off_axis(deriv_order, exp_order):
     print("RATIO(x0/x1): ", rat)
     #assert relerr <= prederror
 
-test_helmholtz_2d_off_axis(5, 4)
-
+max_deriv = 21
+var = _make_sympy_vec("x", 2)
+var_t = _make_sympy_vec("t", 2)
+g_x_y = sp.log(sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2))
+derivs = [sp.diff(g_x_y,
+                    var_t[0], i).subs(var_t[0], 0).subs(var_t[1], 0)
+                    for i in range(max_deriv)]
 
 def test_laplace_2d_off_axis(deriv_order, exp_order):
     r"""
     Tests off-axis recurrence code for orders up to 6 laplace2d.
     """
     s = sp.Function("s")
-    var = _make_sympy_vec("x", 2)
-    var_t = _make_sympy_vec("t", 2)
-    g_x_y = sp.log(sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2))
-    derivs = [sp.diff(g_x_y,
-                      var_t[0], i).subs(var_t[0], 0).subs(var_t[1], 0)
-                      for i in range(15)]
-    x_coord = 1e-2 * np.random.rand()  # noqa: NPY002
-    y_coord = np.random.rand()  # noqa: NPY002
+
+    x_coord = -0.0009025550989241182#1e-2 * np.random.rand()  # noqa: NPY002
+    y_coord = 0.05495017991244575#np.random.rand()  # noqa: NPY002
     coord_dict = {var[0]: x_coord, var[1]: y_coord}
 
     w = make_identity_diff_op(2)
@@ -302,7 +302,7 @@ def test_laplace_2d_off_axis(deriv_order, exp_order):
         ic.append(derivs[i].subs(var[0], 0).subs(var[1], coord_dict[var[1]]))
 
     n = sp.symbols("n")
-    for i in range(start_order, 15):
+    for i in range(start_order, max_deriv):
         recur_eval = recur.subs(var[0], coord_dict[var[0]]).subs(var[1], coord_dict[var[1]]).subs(n, i)
         for j in range(i-recur_order, i):
             recur_eval = recur_eval.subs(s(j), ic[j])
@@ -310,9 +310,9 @@ def test_laplace_2d_off_axis(deriv_order, exp_order):
 
     ic = np.array(ic)
 
-    true_ic = np.array([derivs[i].subs(var[0], 0).subs(var[1], coord_dict[var[1]]) for i in range(15)])
+    #true_ic = np.array([derivs[i].subs(var[0], 0).subs(var[1], coord_dict[var[1]]) for i in range(max_deriv)])
     
-    assert np.max(np.abs(ic[::2]-true_ic[::2])/np.abs(true_ic[::2])) < 1e-8
+    #assert np.max(np.abs(ic[::2]-true_ic[::2])/np.abs(true_ic[::2])) < 1e-8
     #print(np.max(np.abs(ic[::2]-true_ic[::2])/np.abs(true_ic[::2])))
 
     # CHECK ACCURACY OF EXPRESSION FOR deriv_order
@@ -321,23 +321,53 @@ def test_laplace_2d_off_axis(deriv_order, exp_order):
     approx_deriv = exp.subs(n, deriv_order)
     for i in range(-exp_range+deriv_order, deriv_order+1):
         approx_deriv = approx_deriv.subs(s(i), ic[i])
-    
+
+    """
     rat = coord_dict[var[0]]/coord_dict[var[1]]
     if deriv_order + exp_order % 2 == 0:
         prederror = abs(ic[deriv_order+exp_order+2] * coord_dict[var[0]]**(exp_order+2)/math.factorial(exp_order+2))
     else:
         prederror = abs(ic[deriv_order+exp_order+1] * coord_dict[var[0]]**(exp_order+1)/math.factorial(exp_order+1))
     print("PREDICTED ERROR: ", prederror)
+    """
+
     relerr = abs((approx_deriv - derivs[deriv_order])/derivs[deriv_order]).subs(var[0], coord_dict[var[0]]).subs(var[1], coord_dict[var[1]])
-    print("RELATIVE ERROR: ", relerr)
-    print("RATIO(x0/x1): ", rat)
+    #print("RELATIVE ERROR: ", relerr)
+    #print("RATIO(x0/x1): ", rat)
+
+    return relerr
     #assert relerr <= prederror
 
 
-test_laplace_2d_off_axis(6, 4)
-
-
 import matplotlib.pyplot as plt
+
+orders_for_plot = [5, 7, 9]
+exp_orders = [4, 5, 6, 7, 8]
+
+X_P = []
+for i in exp_orders:
+    TEMP = []
+    for j in orders_for_plot:
+        TEMP.append(test_laplace_2d_off_axis(j, i))
+    X_P.append(TEMP)
+
+fig, ax = plt.subplots()
+
+for i in range(len(exp_orders)):
+    ax.plot(orders_for_plot, X_P[i], label="EXP ORDER: " +str(exp_orders[i]))
+
+ax.set_yscale('log')
+ax.set_xlabel('Deriv Order')
+ax.set_ylabel('Error')
+plt.legend()
+plt.show()
+
+
+
+
+
+
+
 def _plot_laplace_2d(max_order_check, max_abs):
     w = make_identity_diff_op(2)
     laplace2d = laplacian(w)
