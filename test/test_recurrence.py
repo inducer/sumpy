@@ -259,7 +259,7 @@ def test_helmholtz_2d_off_axis(deriv_order, exp_order):
 
     exp, exp_range = get_off_axis_expression(helmholtz2d, exp_order)
     approx_deriv = exp.subs(n, deriv_order)
-    for i in range(exp_range+deriv_order, deriv_order+1):
+    for i in range(-exp_range+deriv_order, deriv_order+1):
         approx_deriv = approx_deriv.subs(s(i), ic[i])
     
     rat = coord_dict[var[0]]/coord_dict[var[1]]
@@ -273,7 +273,7 @@ def test_helmholtz_2d_off_axis(deriv_order, exp_order):
     print("RATIO(x0/x1): ", rat)
     #assert relerr <= prederror
 
-test_helmholtz_2d_off_axis(6, 4)
+test_helmholtz_2d_off_axis(5, 4)
 
 
 def test_laplace_2d_off_axis(deriv_order, exp_order):
@@ -319,7 +319,7 @@ def test_laplace_2d_off_axis(deriv_order, exp_order):
 
     exp, exp_range = get_off_axis_expression(laplace2d, exp_order)
     approx_deriv = exp.subs(n, deriv_order)
-    for i in range(exp_range+deriv_order, deriv_order+1):
+    for i in range(-exp_range+deriv_order, deriv_order+1):
         approx_deriv = approx_deriv.subs(s(i), ic[i])
     
     rat = coord_dict[var[0]]/coord_dict[var[1]]

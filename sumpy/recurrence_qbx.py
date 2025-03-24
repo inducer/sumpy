@@ -156,7 +156,7 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
     t_exp, t_exp_order = get_off_axis_expression(pde)
     storage_taylor_order = max(t_recur_order, t_exp_order+1)
 
-    storage = [np.zeros((n_p, n_p))] * storage_taylor_order
+    storage_taylor = [np.zeros((n_p, n_p))] * storage_taylor_order
 
     def gen_lamb_expr_t_recur(i, start_order):
         arg_list = []
@@ -170,11 +170,11 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
             lamb_expr_symb_deriv = sp.diff(g_x_y, var_t[0], i)
             for j in range(ndim):
                 lamb_expr_symb_deriv = lamb_expr_symb_deriv.subs(var_t[j], 0)
-            lamb_expr_symb = lamb_expr_symb_deriv
+            lamb_expr_symb = lamb_expr_symb_deriv.subs(var[0], 0)
         else:
             lamb_expr_symb = t_recur.subs(n, i)
 
-        return lamb_expr_symb
+        return sp.lambdify(arg_list, lamb_expr_symb)
 
 
     def gen_lamb_expr_t_exp(i, t_exp_order):
@@ -189,31 +189,70 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
             lamb_expr_symb_deriv = sp.diff(g_x_y, var_t[0], i)
             for j in range(ndim):
                 lamb_expr_symb_deriv = lamb_expr_symb_deriv.subs(var_t[j], 0)
-            lamb_expr_symb = lamb_expr_symb_deriv.subs(var[0], 0)
+            lamb_expr_symb = lamb_expr_symb_deriv
         else:
             lamb_expr_symb = t_exp.subs(n, i)
 
-        return lamb_expr_symb
+        return sp.lambdify(arg_list, lamb_expr_symb)
 
     interactions_off_axis = 0
     for i in range(p+1):
         lamb_expr_t_recur = gen_lamb_expr_t_recur(i, start_order)
-        a1 = [*storage[:-t_recur_order], *coord]
+        a1 = [*storage_taylor[(-t_recur_order):], *coord]
 
         storage.pop(0)
-        storage.append(lamb_expr_t_recur(a1))
+        storage.append(lamb_expr_t_recur(*a1))
 
         lamb_expr_t_exp = gen_lamb_expr_t_exp(i, t_exp_order)
-        a2 = [*storage[:-(t_exp_order+1)], *coord]
+        a2 = [*storage_taylor[-(t_exp_order+1):], *coord]
 
-        interactions_off_axis += lamb_expr_t_exp(a2) * radius**i/math.factorial(i)
+        interactions_off_axis += lamb_expr_t_exp(*a2) * radius**i/math.factorial(i)
 
     ################
+    # Compute True Interactions
+    def generate_true(i):
+        arg_list = []
+        for j in range(ndim):
+            arg_list.append(var[j])
+
+        lamb_expr_symb_deriv = sp.diff(g_x_y, var_t[0], i)
+        for j in range(ndim):
+            lamb_expr_symb_deriv = lamb_expr_symb_deriv.subs(var_t[j], 0)
+        lamb_expr_symb = lamb_expr_symb_deriv
+
+        #print("=============== ORDER = " + str(i))
+        #print(lamb_expr_symb)
+        return sp.lambdify(arg_list, lamb_expr_symb)#, sp.lambdify(arg_list, lamb_expr_symb_deriv)
+
+    interactions_true = 0
+    for i in range(p+1):
+        lamb_expr_true = generate_true(i)
+        a4 = [*coord]
+        s_new_true = lamb_expr_true(*a4)
+        interactions_true += s_new_true * radius**i/math.factorial(i)
+    ###############
 
     #slope of line y = mx
-    m = 1e10
+    m = 1e5
     mask_on_axis = m*np.abs(coord[0]) >= np.abs(coord[1])
     mask_off_axis = m*np.abs(coord[0]) < np.abs(coord[1])
+
+    print("-------------------------")
+
+    relerr_on = np.abs(interactions_on_axis[mask_on_axis]-interactions_true[mask_on_axis])/np.abs(interactions_on_axis[mask_on_axis])
+    print("MAX ON AXIS ERROR:", np.max(relerr_on))
+    print(np.mean(relerr_on))
+    print("X:", coord[0].reshape(-1)[np.argmax(relerr_on)])
+    print("Y:", coord[1].reshape(-1)[np.argmax(relerr_on)])
+
+    print("-------------------------")
+
+    if np.any(mask_off_axis):
+        relerr_off = np.abs(interactions_off_axis[mask_off_axis]-interactions_true[mask_off_axis])/np.abs(interactions_off_axis[mask_off_axis])
+        print("MAX OFF AXIS ERROR:", np.max(relerr_off))
+        print(np.mean(relerr_off))
+        print("X:", coord[0].reshape(-1)[np.argmax(relerr_off)])
+        print("Y:", coord[1].reshape(-1)[np.argmax(relerr_off)])
 
     interactions_total = np.zeros(coord[0].shape)
     interactions_total[mask_on_axis] = interactions_on_axis[mask_on_axis]

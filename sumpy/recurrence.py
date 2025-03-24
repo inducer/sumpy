@@ -477,8 +477,8 @@ def get_off_axis_expression(pde, taylor_order=4) -> [sp.Expr, int]:
     s(i) where s(i) comes from the off-axis recurrence. See
     get_reindexed_and_center_origin_off_axis_recurrence.
 
-    Also outputs the -number of coefficients it needs from nth order.
-    So if it outputs -3 as the second return value, then it needs
+    Also outputs the number of coefficients it needs from nth order.
+    So if it outputs 3 as the second return value, then it needs
     s(deriv_order), s(deriv_order-1), ..., s(deriv_order-3).
     """
     s = sp.Function("s")
@@ -506,6 +506,5 @@ def get_off_axis_expression(pde, taylor_order=4) -> [sp.Expr, int]:
         max_idx = max(idx_l) 
 
     idx_l, _ = _extract_idx_terms_from_recurrence(exp)
-    exp_range = (min(idx_l), max(idx_l))
 
-    return exp*(-1)**n, min(idx_l)
+    return exp*(-1)**n, -min(idx_l)
