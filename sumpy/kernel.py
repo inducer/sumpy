@@ -149,6 +149,7 @@ class Kernel:
     .. automethod:: get_global_scaling_const
     .. automethod:: get_args
     .. automethod:: get_source_args
+    .. automethod:: get_pde_as_diff_op
     """
 
     if TYPE_CHECKING:
