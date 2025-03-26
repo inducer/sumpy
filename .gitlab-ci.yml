@@ -121,8 +121,8 @@ Documentation:
 Ruff:
   stage: test
   script:
-  - pipx install ruff
-  - ruff check
+  - pipx install uv
+  - uv run --only-group lint ruff check
   tags:
   - docker-runner
   except:
