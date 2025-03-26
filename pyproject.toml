@@ -40,12 +40,27 @@ dependencies = [
     "sympy>=0.7.2",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
+dev = [
+    {include-group = "doc"},
+    {include-group = "test"},
+    {include-group = "lint"},
+]
+lint = [
+    "pylint",
+    # https://github.com/astral-sh/ruff/issues/16943
+    "ruff!=0.11.1,!=0.11.2",
+]
 doc = [
     "furo",
     "sphinx-copybutton",
     "sphinx>=4",
 ]
+test = [
+    "pytest",
+]
+
+[project.optional-dependencies]
 fmmlib = [
     "pyfmmlib>=2023.1",
 ]
@@ -54,11 +69,6 @@ symengine = [
 ]
 pyvkfft = [
     "pyvkfft>=2024.1",
-]
-test = [
-    "pylint",
-    "pytest",
-    "ruff",
 ]
 
 [project.urls]
