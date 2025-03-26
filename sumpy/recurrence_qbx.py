@@ -153,11 +153,10 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
 
     ### NEW CODE - COMPUTE OFF AXIS INTERACTIONS
     start_order, t_recur_order, t_recur = get_reindexed_and_center_origin_off_axis_recurrence(pde)
-    t_exp, t_exp_order = get_off_axis_expression(pde)
+    t_exp, t_exp_order = get_off_axis_expression(pde, 8)
     storage_taylor_order = max(t_recur_order, t_exp_order+1)
 
     storage_taylor = [np.zeros((n_p, n_p))] * storage_taylor_order
-
     def gen_lamb_expr_t_recur(i, start_order):
         arg_list = []
         for j in range(t_recur_order, 0, -1):
@@ -230,13 +229,16 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
         a4 = [*coord]
         s_new_true = lamb_expr_true(*a4)
         interactions_true += s_new_true * radius**i/math.factorial(i)
+
     ###############
 
     #slope of line y = mx
-    m = 1e5/2 
+    m = 100
     mask_on_axis = m*np.abs(coord[0]) >= np.abs(coord[1])
     mask_off_axis = m*np.abs(coord[0]) < np.abs(coord[1])
 
+
+  
     print("-------------------------")
 
     percent_on = np.sum(mask_on_axis)/(mask_on_axis.shape[0]*mask_on_axis.shape[1])
@@ -245,26 +247,27 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
     relerr_on = np.abs(interactions_on_axis[mask_on_axis]-interactions_true[mask_on_axis])/np.abs(interactions_on_axis[mask_on_axis])
     print("MAX ON AXIS ERROR(", percent_on, "):", np.max(relerr_on))
     print(np.mean(relerr_on))
-    print("X:", coord[0].reshape(-1)[np.argmax(relerr_on)])
-    print("Y:", coord[1].reshape(-1)[np.argmax(relerr_on)])
+    print("X:", coord[0][mask_on_axis].reshape(-1)[np.argmax(relerr_on)])
+    print("Y:", coord[1][mask_on_axis].reshape(-1)[np.argmax(relerr_on)])
 
     print("-------------------------")
-
+  
     if np.any(mask_off_axis):
         relerr_off = np.abs(interactions_off_axis[mask_off_axis]-interactions_true[mask_off_axis])/np.abs(interactions_off_axis[mask_off_axis])
         print("MAX OFF AXIS ERROR(", percent_off, "):", np.max(relerr_off))
         print(np.mean(relerr_off))
-        print("X:", coord[0].reshape(-1)[np.argmax(relerr_off)])
-        print("Y:", coord[1].reshape(-1)[np.argmax(relerr_off)])
+        print("X:", coord[0][mask_off_axis].reshape(-1)[np.argmax(relerr_off)])
+        print("Y:", coord[1][mask_off_axis].reshape(-1)[np.argmax(relerr_off)])  
+
 
     interactions_total = np.zeros(coord[0].shape)
     interactions_total[mask_on_axis] = interactions_on_axis[mask_on_axis]
     interactions_total[mask_off_axis] = interactions_off_axis[mask_off_axis]
 
     exp_res = (interactions_total * strengths[None, :]).sum(axis=1)
-    exp_res_true = (interactions_true * strengths[None, :]).sum(axis=1)
+    #exp_res_true = (interactions_true * strengths[None, :]).sum(axis=1)
 
-    relerr_total = np.max(np.abs(exp_res-exp_res_true)/np.abs(exp_res_true))
-    print("OVERALL ERROR:", relerr_total)
+    #relerr_total = np.max(np.abs(exp_res-exp_res_true)/np.abs(exp_res_true))
+    #print("OVERALL ERROR:", relerr_total)
 
     return exp_res

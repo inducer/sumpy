@@ -273,22 +273,22 @@ def test_helmholtz_2d_off_axis(deriv_order, exp_order):
     print("RATIO(x0/x1): ", rat)
     #assert relerr <= prederror
 
-max_deriv = 21
-var = _make_sympy_vec("x", 2)
-var_t = _make_sympy_vec("t", 2)
-g_x_y = sp.log(sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2))
-derivs = [sp.diff(g_x_y,
-                    var_t[0], i).subs(var_t[0], 0).subs(var_t[1], 0)
-                    for i in range(max_deriv)]
 
 def test_laplace_2d_off_axis(deriv_order, exp_order):
     r"""
     Tests off-axis recurrence code for orders up to 6 laplace2d.
     """
+    max_deriv = deriv_order+exp_order+2
+    var = _make_sympy_vec("x", 2)
+    var_t = _make_sympy_vec("t", 2)
+    g_x_y = sp.log(sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2))
+    derivs = [sp.diff(g_x_y,
+                        var_t[0], i).subs(var_t[0], 0).subs(var_t[1], 0)
+                        for i in range(max_deriv)]
     s = sp.Function("s")
 
-    x_coord = -0.0009025550989241182#1e-2 * np.random.rand()  # noqa: NPY002
-    y_coord = 0.05495017991244575#np.random.rand()  # noqa: NPY002
+    x_coord = 0.0002934165818751001#1e-2 * np.random.rand()  # noqa: NPY002
+    y_coord = 0.06272081418069221#np.random.rand()  # noqa: NPY002
     coord_dict = {var[0]: x_coord, var[1]: y_coord}
 
     w = make_identity_diff_op(2)
@@ -322,23 +322,26 @@ def test_laplace_2d_off_axis(deriv_order, exp_order):
     for i in range(-exp_range+deriv_order, deriv_order+1):
         approx_deriv = approx_deriv.subs(s(i), ic[i])
 
-    """
+
     rat = coord_dict[var[0]]/coord_dict[var[1]]
     if deriv_order + exp_order % 2 == 0:
         prederror = abs(ic[deriv_order+exp_order+2] * coord_dict[var[0]]**(exp_order+2)/math.factorial(exp_order+2))
     else:
         prederror = abs(ic[deriv_order+exp_order+1] * coord_dict[var[0]]**(exp_order+1)/math.factorial(exp_order+1))
     print("PREDICTED ERROR: ", prederror)
-    """
+
 
     relerr = abs((approx_deriv - derivs[deriv_order])/derivs[deriv_order]).subs(var[0], coord_dict[var[0]]).subs(var[1], coord_dict[var[1]])
-    #print("RELATIVE ERROR: ", relerr)
-    #print("RATIO(x0/x1): ", rat)
+    print("RELATIVE ERROR: ", relerr)
+    print("RATIO(x0/x1): ", rat)
 
+    assert relerr <= prederror
     return relerr
-    #assert relerr <= prederror
+
+test_laplace_2d_off_axis(7, 8)
 
 
+""" 
 import matplotlib.pyplot as plt
 
 orders_for_plot = [5, 7, 9]
@@ -361,7 +364,7 @@ ax.set_xlabel('Deriv Order')
 ax.set_ylabel('Error')
 plt.legend()
 plt.show()
-
+"""
 
 
 
