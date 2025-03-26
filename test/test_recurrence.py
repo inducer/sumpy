@@ -287,8 +287,8 @@ def test_laplace_2d_off_axis(deriv_order, exp_order):
                         for i in range(max_deriv)]
     s = sp.Function("s")
 
-    x_coord = 0.0002934165818751001#1e-2 * np.random.rand()  # noqa: NPY002
-    y_coord = 0.06272081418069221#np.random.rand()  # noqa: NPY002
+    x_coord = 0.0006490822305146929#1e-2 * np.random.rand()  # noqa: NPY002
+    y_coord = -0.06766742499535426#np.random.rand()  # noqa: NPY002
     coord_dict = {var[0]: x_coord, var[1]: y_coord}
 
     w = make_identity_diff_op(2)
@@ -338,7 +338,7 @@ def test_laplace_2d_off_axis(deriv_order, exp_order):
     assert relerr <= prederror
     return relerr
 
-test_laplace_2d_off_axis(7, 8)
+test_laplace_2d_off_axis(1, 8)
 
 
 """ 

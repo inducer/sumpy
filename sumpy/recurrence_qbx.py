@@ -194,13 +194,14 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
 
         return sp.lambdify(arg_list, lamb_expr_symb)
 
+
     interactions_off_axis = 0
     for i in range(p+1):
         lamb_expr_t_recur = gen_lamb_expr_t_recur(i, start_order)
         a1 = [*storage_taylor[(-t_recur_order):], *coord]
 
-        storage.pop(0)
-        storage.append(lamb_expr_t_recur(*a1))
+        storage_taylor.pop(0)
+        storage_taylor.append(lamb_expr_t_recur(*a1) + np.zeros((n_p, n_p)))
 
         lamb_expr_t_exp = gen_lamb_expr_t_exp(i, t_exp_order)
         a2 = [*storage_taylor[-(t_exp_order+1):], *coord]
@@ -209,6 +210,7 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
 
     ################
     # Compute True Interactions
+    storage_taylor_true = [np.zeros((n_p, n_p))] * storage_taylor_order
     def generate_true(i):
         arg_list = []
         for j in range(ndim):
@@ -237,8 +239,6 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
     mask_on_axis = m*np.abs(coord[0]) >= np.abs(coord[1])
     mask_off_axis = m*np.abs(coord[0]) < np.abs(coord[1])
 
-
-  
     print("-------------------------")
 
     percent_on = np.sum(mask_on_axis)/(mask_on_axis.shape[0]*mask_on_axis.shape[1])
