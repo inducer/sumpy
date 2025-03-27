@@ -294,15 +294,15 @@ def _construct_laplace_axis_2d(orders, resolutions):
     return err
 
 import matplotlib.pyplot as plt
-orders = [1]
+orders = [10, 16]
 #resolutions = range(200, 800, 200)
-resolutions = [400]
+resolutions = [400, 800, 1200]
 err_mat = _construct_laplace_axis_2d(orders, resolutions)
 
 for i in range(len(orders)):
-    plt.plot(resolutions, err_mat[i], label="order QBX="+str(orders[i]))
+    plt.scatter(resolutions, err_mat[i], label="order QBX="+str(orders[i]))
 plt.xlabel("Number of Nodes")
-plt.ylabel("Error")
-plt.title("2D Ellipse LP Eval Error")
+plt.ylabel("Relative Error")
+plt.title("2D Ellipse LP Eval Error (m=10)")
 plt.legend()
 plt.show()

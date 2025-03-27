@@ -153,7 +153,7 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
 
     ### NEW CODE - COMPUTE OFF AXIS INTERACTIONS
     start_order, t_recur_order, t_recur = get_reindexed_and_center_origin_off_axis_recurrence(pde)
-    t_exp, t_exp_order = get_off_axis_expression(pde, 8)
+    t_exp, t_exp_order, _ = get_off_axis_expression(pde, 8)
     storage_taylor_order = max(t_recur_order, t_exp_order+1)
 
     storage_taylor = [np.zeros((n_p, n_p))] * storage_taylor_order
@@ -176,7 +176,7 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
         return sp.lambdify(arg_list, lamb_expr_symb)
 
 
-    def gen_lamb_expr_t_exp(i, t_exp_order):
+    def gen_lamb_expr_t_exp(i, t_exp_order, start_order):
         arg_list = []
         for j in range(t_exp_order, -1, -1):
             # pylint: disable-next=not-callable
@@ -184,7 +184,7 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
         for j in range(ndim):
             arg_list.append(var[j])
 
-        if i < t_exp_order:
+        if i < start_order:
             lamb_expr_symb_deriv = sp.diff(g_x_y, var_t[0], i)
             for j in range(ndim):
                 lamb_expr_symb_deriv = lamb_expr_symb_deriv.subs(var_t[j], 0)
@@ -203,7 +203,7 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
         storage_taylor.pop(0)
         storage_taylor.append(lamb_expr_t_recur(*a1) + np.zeros((n_p, n_p)))
 
-        lamb_expr_t_exp = gen_lamb_expr_t_exp(i, t_exp_order)
+        lamb_expr_t_exp = gen_lamb_expr_t_exp(i, t_exp_order, start_order)
         a2 = [*storage_taylor[-(t_exp_order+1):], *coord]
 
         interactions_off_axis += lamb_expr_t_exp(*a2) * radius**i/math.factorial(i)
@@ -231,7 +231,6 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
         a4 = [*coord]
         s_new_true = lamb_expr_true(*a4)
         interactions_true += s_new_true * radius**i/math.factorial(i)
-
     ###############
 
     #slope of line y = mx
@@ -251,14 +250,13 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
     print("Y:", coord[1][mask_on_axis].reshape(-1)[np.argmax(relerr_on)])
 
     print("-------------------------")
-  
+
     if np.any(mask_off_axis):
         relerr_off = np.abs(interactions_off_axis[mask_off_axis]-interactions_true[mask_off_axis])/np.abs(interactions_off_axis[mask_off_axis])
         print("MAX OFF AXIS ERROR(", percent_off, "):", np.max(relerr_off))
         print(np.mean(relerr_off))
         print("X:", coord[0][mask_off_axis].reshape(-1)[np.argmax(relerr_off)])
-        print("Y:", coord[1][mask_off_axis].reshape(-1)[np.argmax(relerr_off)])  
-
+        print("Y:", coord[1][mask_off_axis].reshape(-1)[np.argmax(relerr_off)])
 
     interactions_total = np.zeros(coord[0].shape)
     interactions_total[mask_on_axis] = interactions_on_axis[mask_on_axis]

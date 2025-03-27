@@ -257,7 +257,7 @@ def test_helmholtz_2d_off_axis(deriv_order, exp_order):
 
     # CHECK ACCURACY OF EXPRESSION FOR deriv_order
 
-    exp, exp_range = get_off_axis_expression(helmholtz2d, exp_order)
+    exp, exp_range, _ = get_off_axis_expression(helmholtz2d, exp_order)
     approx_deriv = exp.subs(n, deriv_order)
     for i in range(-exp_range+deriv_order, deriv_order+1):
         approx_deriv = approx_deriv.subs(s(i), ic[i])
@@ -317,7 +317,9 @@ def test_laplace_2d_off_axis(deriv_order, exp_order):
 
     # CHECK ACCURACY OF EXPRESSION FOR deriv_order
 
-    exp, exp_range = get_off_axis_expression(laplace2d, exp_order)
+    exp, exp_range, start_order = get_off_axis_expression(laplace2d, exp_order)
+    
+    assert deriv_order >= start_order
     approx_deriv = exp.subs(n, deriv_order)
     for i in range(-exp_range+deriv_order, deriv_order+1):
         approx_deriv = approx_deriv.subs(s(i), ic[i])

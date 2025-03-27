@@ -473,19 +473,23 @@ def get_off_axis_expression(pde, taylor_order=4) -> [sp.Expr, int]:
     r"""
     A function that takes in as input a pde, and outputs
     the Taylor expression that gives the n th derivative
-    as a truncated taylor_order th order Taylor series with respect to x_1 and
+    as a truncated taylor_order th order Taylor series with respect to x_0 and
     s(i) where s(i) comes from the off-axis recurrence. See
     get_reindexed_and_center_origin_off_axis_recurrence.
 
     Also outputs the number of coefficients it needs from nth order.
     So if it outputs 3 as the second return value, then it needs
     s(deriv_order), s(deriv_order-1), ..., s(deriv_order-3).
+
+    YOU CANNOT SUB N < START_ORDER INTO THE OUTPUTTED EXPRESSION.
+    I CANNOT REARRANGE THE EXPRESSION IN THIS CASE TO HAVE INDICES
+    LOWER THAN THE SUBSITUTED N VALUE.
     """
     s = sp.Function("s")
     n = sp.symbols("n")
     deriv_order = n
 
-    t_recurrence = get_reindexed_and_center_origin_off_axis_recurrence(pde)[2]
+    start_order, _, t_recurrence = get_reindexed_and_center_origin_off_axis_recurrence(pde)
     var = _make_sympy_vec("x", 2)
     exp = 0
     for i in range(taylor_order+1):
@@ -507,4 +511,4 @@ def get_off_axis_expression(pde, taylor_order=4) -> [sp.Expr, int]:
 
     idx_l, _ = _extract_idx_terms_from_recurrence(exp)
 
-    return exp*(-1)**n, -min(idx_l)
+    return exp*(-1)**n, -min(idx_l), start_order
