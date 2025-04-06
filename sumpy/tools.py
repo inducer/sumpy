@@ -603,7 +603,7 @@ def nullspace(m, atol=0):
         vec = [0]*cols
         vec[free_var] = 1
         for piv_row, piv_col in enumerate(pivot_cols):
-            for pos in pivot_cols[piv_row+1:] + [free_var]:
+            for pos in (*pivot_cols[piv_row+1:], free_var):
                 if isinstance(mat[piv_row, pos], sym.Integer):
                     vec[piv_col] -= int(mat[piv_row, pos])
                 else:
