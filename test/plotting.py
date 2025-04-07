@@ -11,6 +11,11 @@ from sumpy.recurrence import (
     get_reindexed_and_center_origin_on_axis_recurrence,
 )
 
+from sumpy.expansion.diff_op import (
+    laplacian,
+    make_identity_diff_op,
+)
+
 def show_scalar_in_matplotlib(self, fld, max_val=None, func_name="imshow", **kwargs):
     squeezed_points = self.points.squeeze()
 
@@ -42,6 +47,8 @@ def show_scalar_in_matplotlib(self, fld, max_val=None, func_name="imshow", **kwa
 def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
 
     #Possibly reshape coords?
+    cts_r_s = coords.reshape(2,coords.shape[1],1)
+
     p = deriv_order-1
     cts_r_s = coords
     ndim = cts_r_s.shape[0]
@@ -53,7 +60,7 @@ def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
 
     # ------------ 6. Set order p = 5
     n_p = cts_r_s.shape[1]
-    storage = [np.zeros((n_p, n_p))] * order
+    storage = [np.zeros((n_p, 1))] * order
 
     s = sp.Function("s")
     n = sp.symbols("n")
@@ -91,7 +98,7 @@ def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
         print("x:", coord[0].reshape(-1)[arg_max], "y:", coord[1].reshape(-1)[arg_max],
               "s_recur:", s_new.reshape(-1)[arg_max], "s_true:", s_new_true.reshape(-1)[arg_max], "order: ", i) 
         """
-        if i == p+1:
+        if i == p:
             interactions_on_axis += s_new
 
         storage.pop(0)
@@ -103,7 +110,7 @@ def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
     t_exp, t_exp_order, _ = get_off_axis_expression(pde, 8)
     storage_taylor_order = max(t_recur_order, t_exp_order+1)
 
-    storage_taylor = [np.zeros((n_p, n_p))] * storage_taylor_order
+    storage_taylor = [np.zeros((n_p, 1))] * storage_taylor_order
     def gen_lamb_expr_t_recur(i, start_order):
         arg_list = []
         for j in range(t_recur_order, 0, -1):
@@ -148,17 +155,16 @@ def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
         a1 = [*storage_taylor[(-t_recur_order):], *coord]
 
         storage_taylor.pop(0)
-        storage_taylor.append(lamb_expr_t_recur(*a1) + np.zeros((n_p, n_p)))
+        storage_taylor.append(lamb_expr_t_recur(*a1) + np.zeros((n_p, 1)))
 
         lamb_expr_t_exp = gen_lamb_expr_t_exp(i, t_exp_order, start_order)
         a2 = [*storage_taylor[-(t_exp_order+1):], *coord]
 
-        if i == p+1:
+        if i == p:
             interactions_off_axis += lamb_expr_t_exp(*a2)
 
     ################
     # Compute True Interactions
-    storage_taylor_true = [np.zeros((n_p, n_p))] * storage_taylor_order
     def generate_true(i):
         arg_list = []
         for j in range(ndim):
@@ -178,7 +184,7 @@ def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
         lamb_expr_true = generate_true(i)
         a4 = [*coord]
         s_new_true = lamb_expr_true(*a4)
-        if i == p+1:
+        if i == p:
             interactions_true += s_new_true
     ###############
 
@@ -193,7 +199,7 @@ def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
     return interactions_on_axis, interactions_off_axis, interactions_true, interactions_total
 
 
-import matplotlib.pyplot as plt
+""" import matplotlib.pyplot as plt
 from sumpy.visualization import FieldPlotter
 center = np.asarray([0, 0], dtype=np.float64)
 fp = FieldPlotter(center, npoints=1000, extent=6)
@@ -209,4 +215,15 @@ cb = plt.colorbar(shrink=0.9)
 cb.set_label(r"$\log_{10}(\mathdefault{Error})$")
 fp.set_matplotlib_limits()
 
-plt.show()
+plt.show() """
+
+w = make_identity_diff_op(2)
+laplace2d = laplacian(w)
+var = _make_sympy_vec("x", 2)
+var_t = _make_sympy_vec("t", 2)
+g_x_y = (-1/(2*np.pi)) * sp.log(sp.sqrt((var[0]-var_t[0])**2 +
+                                        (var[1]-var_t[1])**2))
+
+coords = np.array([np.array([1.2, 3.4, .00045]),np.array([2.3, 4.5, 4.5])])
+
+produce_error_for_recurrences(coords, laplace2d, g_x_y, 6)
