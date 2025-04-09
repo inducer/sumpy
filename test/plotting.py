@@ -16,34 +16,6 @@ from sumpy.expansion.diff_op import (
     make_identity_diff_op,
 )
 
-def show_scalar_in_matplotlib(self, fld, max_val=None, func_name="imshow", **kwargs):
-    squeezed_points = self.points.squeeze()
-
-    if len(squeezed_points.shape) != 2:
-        raise RuntimeError(
-                "matplotlib plotting requires 2D geometry")
-
-    if len(fld.shape) == 1:
-        fld = fld.reshape(self.nd_points.shape[1:])
-
-    squeezed_fld = fld.squeeze()
-
-    if max_val is not None:
-        squeezed_fld[squeezed_fld > max_val] = max_val
-        squeezed_fld[squeezed_fld < -max_val] = -max_val
-
-    squeezed_fld = squeezed_fld[..., ::-1]
-
-    a, b = self._get_squeezed_bounds()
-
-    kwargs["extent"] = (
-            # (left, right, bottom, top)
-            a[0], b[0],
-            a[1], b[1])
-
-    import matplotlib.pyplot as pt
-    return getattr(pt, func_name)(squeezed_fld.T, **kwargs)
-
 def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
 
     #Possibly reshape coords?
@@ -201,23 +173,18 @@ def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
     return interactions_on_axis, interactions_off_axis, interactions_true, interactions_total
 
 
-""" import matplotlib.pyplot as plt
-from sumpy.visualization import FieldPlotter
-center = np.asarray([0, 0], dtype=np.float64)
-fp = FieldPlotter(center, npoints=1000, extent=6)
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots(1, 1, figsize=(15, 8))
+res = 8
+x_grid = [10**(pw) for pw in np.linspace(-8, 0, res)]
+y_grid = [10**(pw) for pw in np.linspace(-8, 0, res)]
+res = len(x_grid)
 
-plt.clf()
-vol_pot = np.outer(0.3**np.arange(1, 100), 1.1**np.arange(1, 100))
-plotval = np.log10(1e-20+np.abs(vol_pot))
-im = fp.show_scalar_in_matplotlib(plotval.real)
-from matplotlib.colors import Normalize
-im.set_norm(Normalize(vmin=-8, vmax=5))
+mesh = np.meshgrid(x_grid, y_grid)
 
-cb = plt.colorbar(shrink=0.9)
-cb.set_label(r"$\log_{10}(\mathdefault{Error})$")
-fp.set_matplotlib_limits()
+#cs1 = ax1.contourf(x_grid, y_grid, plot_me_lap.T, locator=ticker.LogLocator(), cmap=cm.PuBu_r)
 
-plt.show() """
+
 
 w = make_identity_diff_op(2)
 laplace2d = laplacian(w)
@@ -228,4 +195,4 @@ g_x_y = (-1/(2*np.pi)) * sp.log(sp.sqrt((var[0]-var_t[0])**2 +
 
 coords = np.array([np.array([1.2, 3.4, .00045]),np.array([2.3, 4.5, 4.5])])
 
-interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(coords, laplace2d, g_x_y, 9)
+#interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(coords, laplace2d, g_x_y, 9)
