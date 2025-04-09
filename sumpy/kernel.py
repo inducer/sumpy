@@ -130,10 +130,6 @@ of them in the process.
 .. autoclass:: DirectionalSourceDerivative
     :show-inheritance:
     :members: mapper_method,directional_kind
-.. autoclass:: DirectionalTargetDerivative
-    :show-inheritance:
-    :undoc-members:
-    :members: mapper_method,directional_kind,target_array_name
 
 Transforming kernels
 --------------------
@@ -1351,86 +1347,6 @@ class DirectionalDerivative(DerivativeBase):
         return type(self)(new_inner_kernel, dir_vec_name=self.dir_vec_name)
 
 
-class DirectionalTargetDerivative(DirectionalDerivative):
-    mapper_method: ClassVar[str] = "map_directional_target_derivative"
-    directional_kind: ClassVar[Literal["src", "tgt"]] = "tgt"
-    target_array_name: ClassVar[str] = "targets"
-
-    @override
-    def get_code_transformer(self) -> Callable[[Expression], Expression]:
-        from sumpy.codegen import VectorComponentRewriter
-        vcr = VectorComponentRewriter(frozenset([self.dir_vec_name]))
-        via = _VectorIndexAdder(self.dir_vec_name, (prim.Variable("itgt"),))
-
-        inner_transform = self.inner_kernel.get_code_transformer()
-
-        def transform(expr: Expression) -> Expression:
-            return via(vcr(inner_transform(expr)))
-
-        return transform
-
-    @overload
-    def postprocess_at_target(
-            self, expr: sym.Expr, bvec: sp.Matrix,
-        ) -> sym.Expr: ...
-
-    @overload
-    def postprocess_at_target(
-            self, expr: ExprDerivativeTaker, bvec: sp.Matrix,
-        ) -> DifferentiatedExprDerivativeTaker: ...
-
-    @override
-    def postprocess_at_target(
-            self, expr: sym.Expr | ExprDerivativeTaker, bvec: sp.Matrix,
-        ) -> sym.Expr | DifferentiatedExprDerivativeTaker:
-        dir_vec = sym.make_sym_vector(self.dir_vec_name, self.dim)
-        target_vec = sym.make_sym_vector(self.target_array_name, self.dim)
-
-        inner_expr = self.inner_kernel.postprocess_at_target(expr, bvec)
-
-        # bvec = tgt - center
-        if not isinstance(inner_expr, DifferentiatedExprDerivativeTaker):
-            result = 0
-            for axis in range(self.dim):
-                # Since `bvec` and `tgt` are two different symbolic variables
-                # need to differentiate by both to get the correct answer
-                result += (
-                    (inner_expr.diff(bvec[axis]) + inner_expr.diff(target_vec[axis]))
-                    * dir_vec[axis])
-
-            assert isinstance(result, sym.Expr)
-            return result
-
-        new_transformation: DerivativeCoeffDict = defaultdict(lambda: 0)
-        for axis in range(self.dim):
-            axis_transformation = diff_derivative_coeff_dict(
-                    inner_expr.derivative_coeff_dict, axis, target_vec)
-            for mi, coeff in axis_transformation.items():
-                new_transformation[mi] += coeff * dir_vec[axis]
-
-        return DifferentiatedExprDerivativeTaker(
-            inner_expr.taker, dict(new_transformation))
-
-    @override
-    def get_args(self) -> Sequence[KernelArgument]:
-        return [
-            KernelArgument(
-                loopy_arg=lp.GlobalArg(
-                    self.dir_vec_name,
-                    None,
-                    shape=(self.dim, "ntargets"),
-                    offset=lp.auto
-                ),
-            ),
-            *self.inner_kernel.get_args()
-        ]
-
-    @override
-    def prepare_loopy_kernel(self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
-        loopy_knl = self.inner_kernel.prepare_loopy_kernel(loopy_knl)
-        return lp.tag_array_axes(loopy_knl, self.dir_vec_name, "sep,C")
-
-
 class DirectionalSourceDerivative(DirectionalDerivative):
     mapper_method: ClassVar[str] = "map_directional_source_derivative"
     directional_kind: ClassVar[Literal["src", "tgt"]] = "src"
@@ -1607,10 +1523,6 @@ class KernelCombineMapper(KernelMapper[ResultT], ABC):
             self, kernel: AxisSourceDerivative) -> ResultT:
         return self.rec(kernel.inner_kernel)
 
-    def map_directional_target_derivative(
-            self, kernel: DirectionalTargetDerivative) -> ResultT:
-        return self.rec(kernel.inner_kernel)
-
     def map_directional_source_derivative(
             self, kernel: DirectionalSourceDerivative) -> ResultT:
         return self.rec(kernel.inner_kernel)
@@ -1641,11 +1553,6 @@ class KernelIdentityMapper(KernelMapper[Kernel]):
     def map_target_point_multiplier(self, kernel: TargetPointMultiplier) -> Kernel:
         return type(kernel)(kernel.axis, self.rec(kernel.inner_kernel))
 
-    def map_directional_target_derivative(
-            self, kernel: DirectionalTargetDerivative) -> Kernel:
-        return type(kernel)(self.rec(kernel.inner_kernel),
-                            dir_vec_name=kernel.dir_vec_name)
-
     def map_directional_source_derivative(
             self, kernel: DirectionalSourceDerivative) -> Kernel:
         return type(kernel)(self.rec(kernel.inner_kernel),
@@ -1670,11 +1577,6 @@ class AxisTargetDerivativeRemover(KernelIdentityMapper):
 
 class TargetDerivativeRemover(AxisTargetDerivativeRemover):
     """Removes all target derivatives from the kernel."""
-
-    @override
-    def map_directional_target_derivative(
-            self, kernel: DirectionalTargetDerivative) -> Kernel:
-        return self.rec(kernel.inner_kernel)
 
 
 class SourceDerivativeRemover(AxisSourceDerivativeRemover):

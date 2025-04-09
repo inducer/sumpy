@@ -37,10 +37,6 @@ def process_kernel(knl, what_operator):
     elif what_operator == "D":
         from sumpy.kernel import DirectionalSourceDerivative
         source_knl = DirectionalSourceDerivative(knl)
-    # DirectionalTargetDerivative (temporarily?) removed
-    # elif what_operator == "S'":
-    #     from sumpy.kernel import DirectionalTargetDerivative
-    #     knl = DirectionalTargetDerivative(knl)
     else:
         raise RuntimeError(f"unrecognized operator '{what_operator}'")
 
