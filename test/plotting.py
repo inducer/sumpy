@@ -60,7 +60,7 @@ def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
 
     # ------------ 6. Set order p = 5
     n_p = cts_r_s.shape[1]
-    storage = [np.zeros((n_p, 1))] * order
+    storage = [np.zeros((1, n_p))] * order
 
     s = sp.Function("s")
     n = sp.symbols("n")
@@ -110,7 +110,7 @@ def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
     t_exp, t_exp_order, _ = get_off_axis_expression(pde, 8)
     storage_taylor_order = max(t_recur_order, t_exp_order+1)
 
-    storage_taylor = [np.zeros((n_p, 1))] * storage_taylor_order
+    storage_taylor = [np.zeros((1, n_p))] * storage_taylor_order
     def gen_lamb_expr_t_recur(i, start_order):
         arg_list = []
         for j in range(t_recur_order, 0, -1):
@@ -155,7 +155,7 @@ def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
         a1 = [*storage_taylor[(-t_recur_order):], *coord]
 
         storage_taylor.pop(0)
-        storage_taylor.append(lamb_expr_t_recur(*a1) + np.zeros((n_p, 1)))
+        storage_taylor.append(lamb_expr_t_recur(*a1) + np.zeros((1, n_p)))
 
         lamb_expr_t_exp = gen_lamb_expr_t_exp(i, t_exp_order, start_order)
         a2 = [*storage_taylor[-(t_exp_order+1):], *coord]
@@ -192,6 +192,8 @@ def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
     mask_on_axis = m*np.abs(coord[0]) >= np.abs(coord[1])
     mask_off_axis = m*np.abs(coord[0]) < np.abs(coord[1])
 
+    interactions_off_axis = interactions_off_axis.reshape(coord[0].shape)
+
     interactions_total = np.zeros(coord[0].shape)
     interactions_total[mask_on_axis] = interactions_on_axis[mask_on_axis]
     interactions_total[mask_off_axis] = interactions_off_axis[mask_off_axis]
@@ -226,4 +228,4 @@ g_x_y = (-1/(2*np.pi)) * sp.log(sp.sqrt((var[0]-var_t[0])**2 +
 
 coords = np.array([np.array([1.2, 3.4, .00045]),np.array([2.3, 4.5, 4.5])])
 
-produce_error_for_recurrences(coords, laplace2d, g_x_y, 6)
+interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(coords, laplace2d, g_x_y, 9)
