@@ -149,9 +149,12 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
 
     def evaluate(self, tgt_kernel, coeffs, bvec, rscale, sac=None):
         # no point in heeding rscale here--just ignore it
-        return sym.Add(*(
-                coeffs[self.get_storage_index(i)] / math.factorial(i)
-                for i in self.get_coefficient_identifiers()))
+
+        # NOTE: We can't meaningfully apply target derivatives here.
+        # Instead, this is handled in LayerPotentialBase._evaluate.
+        return  sym.Add(*(
+                    coeffs[self.get_storage_index(i)] / math.factorial(i)
+                    for i in self.get_coefficient_identifiers()))
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None, m2l_translation_classes_dependent_data=None):
