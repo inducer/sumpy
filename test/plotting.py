@@ -173,19 +173,6 @@ def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
     return interactions_on_axis, interactions_off_axis, interactions_true, interactions_total
 
 
-import matplotlib.pyplot as plt
-fig, ax = plt.subplots(1, 1, figsize=(15, 8))
-res = 8
-x_grid = [10**(pw) for pw in np.linspace(-8, 0, res)]
-y_grid = [10**(pw) for pw in np.linspace(-8, 0, res)]
-res = len(x_grid)
-
-mesh = np.meshgrid(x_grid, y_grid)
-
-#cs1 = ax1.contourf(x_grid, y_grid, plot_me_lap.T, locator=ticker.LogLocator(), cmap=cm.PuBu_r)
-
-
-
 w = make_identity_diff_op(2)
 laplace2d = laplacian(w)
 var = _make_sympy_vec("x", 2)
@@ -193,6 +180,27 @@ var_t = _make_sympy_vec("t", 2)
 g_x_y = (-1/(2*np.pi)) * sp.log(sp.sqrt((var[0]-var_t[0])**2 +
                                         (var[1]-var_t[1])**2))
 
-coords = np.array([np.array([1.2, 3.4, .00045]),np.array([2.3, 4.5, 4.5])])
+res = 32
+x_grid = [10**(pw) for pw in np.linspace(-8, 0, res)]
+y_grid = [10**(pw) for pw in np.linspace(-8, 0, res)]
 
-#interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(coords, laplace2d, g_x_y, 9)
+mesh = np.meshgrid(x_grid, y_grid)
+mesh_points = np.array(mesh).reshape(2, -1)
+
+interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, laplace2d, g_x_y, 9)
+
+
+import matplotlib.pyplot as plt
+from matplotlib import cm, ticker
+fig, ax = plt.subplots(1, 1, figsize=(15, 8))
+
+relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
+cs = ax.contourf(x_grid, y_grid, relerr_on.reshape(res, res), locator=ticker.LogLocator(), cmap=cm.PuBu_r)
+fig.colorbar(cs)
+
+ax.set_xscale('log')
+ax.set_yscale('log')
+ax.set_xlabel("source x-coord", fontsize=15)
+ax.set_ylabel("source y-coord", fontsize=15)
+
+plt.show()
