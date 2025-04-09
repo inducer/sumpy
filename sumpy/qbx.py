@@ -512,7 +512,6 @@ def find_jump_term(kernel, arg_provider):
         AxisTargetDerivative,
         DerivativeBase,
         DirectionalSourceDerivative,
-        DirectionalTargetDerivative,
     )
 
     tgt_derivatives = []
@@ -521,9 +520,6 @@ def find_jump_term(kernel, arg_provider):
     while isinstance(kernel, DerivativeBase):
         if isinstance(kernel, AxisTargetDerivative):
             tgt_derivatives.append(kernel.axis)
-            kernel = kernel.kernel
-        elif isinstance(kernel, DirectionalTargetDerivative):
-            tgt_derivatives.append(kernel.dir_vec_name)
             kernel = kernel.kernel
         elif isinstance(kernel, AxisSourceDerivative):
             src_derivatives.append(kernel.axis)

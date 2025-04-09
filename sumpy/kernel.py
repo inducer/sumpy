@@ -79,7 +79,6 @@ of them in the process.
 .. autoclass:: AxisTargetDerivative
 .. autoclass:: AxisSourceDerivative
 .. autoclass:: DirectionalSourceDerivative
-.. autoclass:: DirectionalTargetDerivative
 
 Transforming kernels
 --------------------
@@ -1141,74 +1140,6 @@ class DirectionalDerivative(DerivativeBase):
 
     def __repr__(self):
         return f"{type(self).__name__}({self.inner_kernel!r}, {self.dir_vec_name})"
-
-
-class DirectionalTargetDerivative(DirectionalDerivative):
-    directional_kind = "tgt"
-    target_array_name = "targets"
-
-    def get_code_transformer(self):
-        from sumpy.codegen import VectorComponentRewriter
-        vcr = VectorComponentRewriter([self.dir_vec_name])
-        from pymbolic.primitives import Variable
-        via = _VectorIndexAdder(self.dir_vec_name, (Variable("itgt"),))
-
-        inner_transform = self.inner_kernel.get_code_transformer()
-
-        def transform(expr):
-            return via(vcr(inner_transform(expr)))
-
-        return transform
-
-    def postprocess_at_target(self, expr, bvec):
-        from sumpy.derivative_taker import (
-            DifferentiatedExprDerivativeTaker,
-            diff_derivative_coeff_dict,
-        )
-        from sumpy.symbolic import make_sym_vector as make_sympy_vector
-        dir_vec = make_sympy_vector(self.dir_vec_name, self.dim)
-        target_vec = make_sympy_vector(self.target_array_name, self.dim)
-
-        expr = self.inner_kernel.postprocess_at_target(expr, bvec)
-
-        # bvec = tgt - center
-        if not isinstance(expr, DifferentiatedExprDerivativeTaker):
-            result = 0
-            for axis in range(self.dim):
-                # Since `bvec` and `tgt` are two different symbolic variables
-                # need to differentiate by both to get the correct answer
-                result += (expr.diff(bvec[axis]) + expr.diff(target_vec[axis])) \
-                        * dir_vec[axis]
-            return result
-
-        new_transformation = defaultdict(lambda: 0)
-        for axis in range(self.dim):
-            axis_transformation = diff_derivative_coeff_dict(
-                    expr.derivative_coeff_dict, axis, target_vec)
-            for mi, coeff in axis_transformation.items():
-                new_transformation[mi] += coeff * dir_vec[axis]
-
-        return DifferentiatedExprDerivativeTaker(expr.taker,
-                dict(new_transformation))
-
-    def get_args(self):
-        return [
-            KernelArgument(
-                loopy_arg=lp.GlobalArg(
-                    self.dir_vec_name,
-                    None,
-                    shape=(self.dim, "ntargets"),
-                    offset=lp.auto
-                ),
-            ),
-            *self.inner_kernel.get_args()
-        ]
-
-    def prepare_loopy_kernel(self, loopy_knl):
-        loopy_knl = self.inner_kernel.prepare_loopy_kernel(loopy_knl)
-        return lp.tag_array_axes(loopy_knl, self.dir_vec_name, "sep,C")
-
-    mapper_method = "map_directional_target_derivative"
 
 
 class DirectionalSourceDerivative(DirectionalDerivative):
