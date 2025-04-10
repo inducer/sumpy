@@ -1,6 +1,3 @@
-import math
-from typing import Sequence
-
 import numpy as np
 import sympy as sp
 
@@ -15,6 +12,9 @@ from sumpy.expansion.diff_op import (
     laplacian,
     make_identity_diff_op,
 )
+
+import matplotlib.pyplot as plt
+from matplotlib import cm, ticker
 
 def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
 
@@ -172,35 +172,49 @@ def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
 
     return interactions_on_axis, interactions_off_axis, interactions_true, interactions_total
 
+def create_logarithmic_mesh(res):
+
+    x_grid = [10**(pw) for pw in np.linspace(-8, 0, res)]
+    y_grid = [10**(pw) for pw in np.linspace(-8, 0, res)]
+
+    mesh = np.meshgrid(x_grid, y_grid)
+    mesh_points = np.array(mesh).reshape(2, -1)
+
+    return mesh_points, x_grid, y_grid
+
+def create_plot(relerr_on, str_title):
+    fig, ax = plt.subplots(1, 1, figsize=(15, 8))
+
+    n_levels = 18
+    levels = 10**np.linspace(-n_levels+2, 1, n_levels)
+    cs = ax.contourf(x_grid, y_grid, relerr_on.reshape(res, res), locator=ticker.LogLocator(), cmap=cm.coolwarm, levels=levels, extend="both")
+    cbar = fig.colorbar(cs)
+
+    cbar.set_ticks(levels)
+    cbar.set_ticklabels(["1e"+str(int(i)) for i in np.linspace(-n_levels+2, 1, n_levels)])
+
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlabel("x-coordinate", fontsize=15)
+    ax.set_ylabel("y-coordinate", fontsize=15)
+    plt.title(str_title)
+
+#========================= LAPLACE 2D ====================================
+res = 32
+mesh_points, x_grid, y_grid = create_logarithmic_mesh(res)
 
 w = make_identity_diff_op(2)
 laplace2d = laplacian(w)
 var = _make_sympy_vec("x", 2)
 var_t = _make_sympy_vec("t", 2)
-g_x_y = (-1/(2*np.pi)) * sp.log(sp.sqrt((var[0]-var_t[0])**2 +
+g_x_y_laplace = (-1/(2*np.pi)) * sp.log(sp.sqrt((var[0]-var_t[0])**2 +
                                         (var[1]-var_t[1])**2))
 
-res = 32
-x_grid = [10**(pw) for pw in np.linspace(-8, 0, res)]
-y_grid = [10**(pw) for pw in np.linspace(-8, 0, res)]
-
-mesh = np.meshgrid(x_grid, y_grid)
-mesh_points = np.array(mesh).reshape(2, -1)
-
-interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, laplace2d, g_x_y, 9)
-
-
-import matplotlib.pyplot as plt
-from matplotlib import cm, ticker
-fig, ax = plt.subplots(1, 1, figsize=(15, 8))
+interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, laplace2d, g_x_y_laplace, 9)
 
 relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
-cs = ax.contourf(x_grid, y_grid, relerr_on.reshape(res, res), locator=ticker.LogLocator(), cmap=cm.PuBu_r)
-fig.colorbar(cs)
 
-ax.set_xscale('log')
-ax.set_yscale('log')
-ax.set_xlabel("source x-coord", fontsize=15)
-ax.set_ylabel("source y-coord", fontsize=15)
+create_plot(relerr_on, "Laplace (2D): On-Axis Recurrence, 9th Order Derivative Evaluation Error")
 
+#========================= HELMOLTZ 2D ====================================
 plt.show()
