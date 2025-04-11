@@ -15,6 +15,10 @@ from sumpy.expansion.diff_op import (
 
 import matplotlib.pyplot as plt
 from matplotlib import cm, ticker
+from sympy import hankel1
+
+from immutabledict import immutabledict
+from sumpy.expansion.diff_op import LinearPDESystemOperator
 
 def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
 
@@ -195,26 +199,55 @@ def create_plot(relerr_on, str_title):
 
     ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.set_xlabel("x-coordinate", fontsize=15)
-    ax.set_ylabel("y-coordinate", fontsize=15)
+    ax.set_xlabel("$x_1$-coordinate", fontsize=15)
+    ax.set_ylabel("$x_2$-coordinate", fontsize=15)
     plt.title(str_title)
 
-#========================= LAPLACE 2D ====================================
-res = 32
+#========================= DEFINE PLOT RESOLUTION ====================================
+res = 8
 mesh_points, x_grid, y_grid = create_logarithmic_mesh(res)
 
-w = make_identity_diff_op(2)
-laplace2d = laplacian(w)
+#========================= DEFINE GREEN'S FUNCTIONS/PDE's ====================================
+from collections import namedtuple
+DerivativeIdentifier = namedtuple("DerivativeIdentifier", ["mi", "vec_idx"])
 var = _make_sympy_vec("x", 2)
 var_t = _make_sympy_vec("t", 2)
-g_x_y_laplace = (-1/(2*np.pi)) * sp.log(sp.sqrt((var[0]-var_t[0])**2 +
-                                        (var[1]-var_t[1])**2))
+abs_dist = sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2)
+w = make_identity_diff_op(2)
 
-interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, laplace2d, g_x_y_laplace, 9)
+partial_1x = DerivativeIdentifier((4,0), 0)
+partial_1y = DerivativeIdentifier((0,4), 0)
+biharmonic_op = {partial_1x: 1, partial_1y: 1}
+list_pde = immutabledict(biharmonic_op)
 
-relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
 
-create_plot(relerr_on, "Laplace (2D): On-Axis Recurrence, 9th Order Derivative Evaluation Error")
+biharmonic_pde = LinearPDESystemOperator(2, (list_pde,))
+g_x_y_biharmonic = abs_dist**2 * sp.log(abs_dist)
+
+laplace2d = laplacian(w)
+g_x_y_laplace = (-1/(2*np.pi)) * sp.log(abs_dist)
+
+k = 1
+helmholtz2d = laplacian(w) + w
+g_x_y_helmholtz = (1j/4) * hankel1(0, k * abs_dist)
+#========================= LAPLACE 2D ====================================
+#interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, laplace2d, g_x_y_laplace, 9)
+
+#relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
+#plt.figure(1)
+#create_plot(relerr_on, "Laplace (2D): On-Axis Recurrence, 9th Order Derivative Evaluation Error $(u_{recur}-u_{sym})/u_{sym}$")
 
 #========================= HELMOLTZ 2D ====================================
+#interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, helmholtz2d, g_x_y_helmholtz, 9)
+
+#relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
+#create_plot(relerr_on, "Helmholtz (2D): On-Axis Recurrence, 8th Order Derivative Evaluation Error $(u_{recur}-u_{sym})/u_{sym}$")
+
+
+#======================== BIHARMONIC 2D ===================================
+interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, biharmonic_pde, g_x_y_biharmonic, 7)
+
+relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
+create_plot(relerr_on, "Biharmonic (2D): On-Axis Recurrence, 8th Order Derivative Evaluation Error $(u_{recur}-u_{sym})/u_{sym}$")
+
 plt.show()

@@ -277,7 +277,7 @@ def recurrence_from_pde(pde: LinearPDESystemOperator) -> sp.Expr:
     """
     ode_in_r, var, ode_order = pde_to_ode_in_r(pde)
     ode_in_x = ode_in_r_to_x(ode_in_r, var, ode_order).simplify()
-    ode_in_x_cleared = (ode_in_x * var[0]**(ode_order+1)).simplify()
+    ode_in_x_cleared = (ode_in_x * var[0]**(pde.order*2-1)).simplify()
     # ode_in_x_cleared shouldn't have rational function coefficients
     assert sp.together(ode_in_x_cleared) == ode_in_x_cleared
     f_x_derivs = _make_sympy_vec("f_x", ode_order+1)

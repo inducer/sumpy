@@ -46,6 +46,9 @@ from sumpy.expansion.diff_op import (
 from sumpy.recurrence import _make_sympy_vec, get_reindexed_and_center_origin_on_axis_recurrence, get_off_axis_expression, get_reindexed_and_center_origin_off_axis_recurrence
 import math
 
+from immutabledict import immutabledict
+from sumpy.expansion.diff_op import LinearPDESystemOperator
+
 def test_laplace3d():
     r"""
     Tests recurrence code for orders up to 6 laplace3d.
@@ -125,6 +128,63 @@ def test_helmholtz3d():
     check = np.array([check[i].subs(coord_dict) for i in range(len(check))])
 
     assert max(abs(abs(check))) <= 1e-12
+
+def test_biharmonic2d():
+    r"""
+    Tests recurrence code for orders up to 6 biharmonic.
+    """
+
+    from collections import namedtuple
+    DerivativeIdentifier = namedtuple("DerivativeIdentifier", ["mi", "vec_idx"])
+    var = _make_sympy_vec("x", 2)
+    var_t = _make_sympy_vec("t", 2)
+    abs_dist = sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2)
+    w = make_identity_diff_op(2)
+
+    partial_1x = DerivativeIdentifier((4,0), 0)
+    partial_1y = DerivativeIdentifier((0,4), 0)
+    biharmonic_op = {partial_1x: 1, partial_1y: 1}
+    list_pde = immutabledict(biharmonic_op)
+
+    biharmonic_pde = LinearPDESystemOperator(2, (list_pde,))
+    g_x_y = abs_dist**2 * (sp.log(abs_dist)-1)
+
+    n_init, _, r = get_reindexed_and_center_origin_on_axis_recurrence(biharmonic_pde)
+
+    derivs = [sp.diff(g_x_y,
+                    var_t[0], i).subs(var_t[0], 0).subs(var_t[1], 0)
+                                            for i in range(8)]
+
+    x_coord = np.random.rand()  # noqa: NPY002
+    y_coord = np.random.rand()  # noqa: NPY002
+    coord_dict = {var[0]: x_coord, var[1]: y_coord}
+    derivs = [d.subs(coord_dict) for d in derivs]
+
+    n = sp.symbols("n")
+    s = sp.Function("s")
+
+    # pylint: disable-next=not-callable
+    subs_dict = {s(0): derivs[0], s(1): derivs[1], s(2): derivs[1], s(3): derivs[1]}
+    check = []
+
+    assert n_init == 4
+    max_order_check = 8
+    for i in range(n_init, max_order_check):
+        check.append(r.subs(n, i).subs(subs_dict) - derivs[i])
+        # pylint: disable-next=not-callable
+        subs_dict[s(i)] = derivs[i]
+
+    f2 = sp.lambdify([var[0], var[1]], check[0])
+    assert abs(f2(x_coord, y_coord)) <= 1e-13
+    f3 = sp.lambdify([var[0], var[1]], check[1])
+    assert abs(f3(x_coord, y_coord)) <= 1e-13
+    f4 = sp.lambdify([var[0], var[1]], check[2])
+    assert abs(f4(x_coord, y_coord)) <= 1e-13
+    f5 = sp.lambdify([var[0], var[1]], check[3])
+    assert abs(f5(x_coord, y_coord)) <= 1e-12
+
+test_biharmonic2d()
+
 
 
 def test_helmholtz2d():
@@ -339,8 +399,6 @@ def test_laplace_2d_off_axis(deriv_order, exp_order):
 
     assert relerr <= prederror
     return relerr
-
-test_laplace_2d_off_axis(1, 8)
 
 
 """ 
