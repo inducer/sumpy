@@ -95,7 +95,7 @@ def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
         for j in range(ndim):
             arg_list.append(var[j])
 
-        if i < start_order:
+        if i < start_order+4:
             lamb_expr_symb_deriv = sp.diff(g_x_y, var_t[0], i)
             for j in range(ndim):
                 lamb_expr_symb_deriv = lamb_expr_symb_deriv.subs(var_t[j], 0)
@@ -232,11 +232,11 @@ var_t = _make_sympy_vec("t", 2)
 abs_dist = sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2)
 w = make_identity_diff_op(2)
 
-partial_1x = DerivativeIdentifier((4,0), 0)
-partial_1y = DerivativeIdentifier((0,4), 0)
-biharmonic_op = {partial_1x: 1, partial_1y: 1}
+partial_4x = DerivativeIdentifier((4,0), 0)
+partial_4y = DerivativeIdentifier((0,4), 0)
+partial_2x2y = DerivativeIdentifier((2,2), 0)
+biharmonic_op = {partial_4x: 1, partial_4y: 1, partial_2x2y:2}
 list_pde = immutabledict(biharmonic_op)
-
 
 biharmonic_pde = LinearPDESystemOperator(2, (list_pde,))
 g_x_y_biharmonic = abs_dist**2 * sp.log(abs_dist)
@@ -248,28 +248,31 @@ k = 1
 helmholtz2d = laplacian(w) + w
 g_x_y_helmholtz = (1j/4) * hankel1(0, k * abs_dist)
 #========================= LAPLACE 2D ====================================
-interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, laplace2d, g_x_y_laplace, 9,m=1e2/2)
+#interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, laplace2d, g_x_y_laplace, 10,m=1e2/2)
 
-relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
-relerr_off = np.abs((interactions_off_axis-interactions_true)/interactions_true)
-relerr_comb = np.abs((interactions_total-interactions_true)/interactions_true)
+#relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
+#relerr_off = np.abs((interactions_off_axis-interactions_true)/interactions_true)
+#relerr_comb = np.abs((interactions_total-interactions_true)/interactions_true)
 
-create_suite_plot(relerr_on, relerr_off, relerr_comb, "Laplace 2D: 9th Order Derivative Evaluation Error $(u_{recur}-u_{sympy})/u_{recur}$")
+#create_suite_plot(relerr_on, relerr_off, relerr_comb, "Laplace 2D: 9th Order Derivative Evaluation Error $(u_{recur}-u_{sympy})/u_{recur}$")
 
 #========================= HELMOLTZ 2D ====================================
-interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, helmholtz2d, g_x_y_helmholtz, 8)
+#interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, helmholtz2d, g_x_y_helmholtz, 8)
 
-relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
-relerr_off = np.abs((interactions_off_axis-interactions_true)/interactions_true)
-relerr_comb = np.abs((interactions_total-interactions_true)/interactions_true)
+#relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
+#relerr_off = np.abs((interactions_off_axis-interactions_true)/interactions_true)
+#relerr_comb = np.abs((interactions_total-interactions_true)/interactions_true)
 
-create_suite_plot(relerr_on, relerr_off, relerr_comb, "Helmholtz 2D: 8th Order Derivative Evaluation Error $(u_{recur}-u_{sympy})/u_{recur}$")
+#create_suite_plot(relerr_on, relerr_off, relerr_comb, "Helmholtz 2D: 8th Order Derivative Evaluation Error $(u_{recur}-u_{sympy})/u_{recur}$")
 
 
 #======================== BIHARMONIC 2D ===================================
-#interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, biharmonic_pde, g_x_y_biharmonic, 7)
+interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, biharmonic_pde, g_x_y_biharmonic, 7)
 
-#relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
-#create_plot(relerr_on, "Biharmonic (2D): On-Axis Recurrence, 8th Order Derivative Evaluation Error $(u_{recur}-u_{sym})/u_{sym}$")
+relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
+relerr_off = np.abs((interactions_off_axis-interactions_true)/interactions_true)
+relerr_comb = np.abs((interactions_total-interactions_true)/interactions_true)
+
+create_suite_plot(relerr_on, relerr_off+1e-20, relerr_comb+1e-20, "Biharmonic 2D: 7th Order Derivative Evaluation Error $(u_{recur}-u_{sympy})/u_{recur}$")
 
 plt.show()
