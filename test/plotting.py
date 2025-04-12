@@ -170,7 +170,7 @@ def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
 
     interactions_off_axis = interactions_off_axis.reshape(coord[0].shape)
 
-    interactions_total = np.zeros(coord[0].shape)
+    interactions_total = interactions_on_axis * 0
     interactions_total[mask_on_axis] = interactions_on_axis[mask_on_axis]
     interactions_total[mask_off_axis] = interactions_off_axis[mask_off_axis]
 
@@ -186,25 +186,42 @@ def create_logarithmic_mesh(res):
 
     return mesh_points, x_grid, y_grid
 
-def create_plot(relerr_on, str_title):
-    fig, ax = plt.subplots(1, 1, figsize=(15, 8))
-
+def create_plot(relerr_on, ax, str_title, acbar=True):
     n_levels = 18
     levels = 10**np.linspace(-n_levels+2, 1, n_levels)
     cs = ax.contourf(x_grid, y_grid, relerr_on.reshape(res, res), locator=ticker.LogLocator(), cmap=cm.coolwarm, levels=levels, extend="both")
-    cbar = fig.colorbar(cs)
-
-    cbar.set_ticks(levels)
-    cbar.set_ticklabels(["1e"+str(int(i)) for i in np.linspace(-n_levels+2, 1, n_levels)])
+    if acbar:
+        cbar = fig.colorbar(cs)
+        cbar.set_ticks(levels)
+        cbar.set_ticklabels(["1e"+str(int(i)) for i in np.linspace(-n_levels+2, 1, n_levels)])
 
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_xlabel("$x_1$-coordinate", fontsize=15)
     ax.set_ylabel("$x_2$-coordinate", fontsize=15)
-    plt.title(str_title)
+    ax.set_title(str_title)
+
+    return cs
+
+def create_suite_plot(relerr_on, relerr_off, relerr_comb, str_title):
+    fig, (ax1,ax2,ax3) = plt.subplots(1, 3, figsize=(15, 8))
+    cs = create_plot(relerr_on, ax1, "On-Axis Recurrence", False)
+    cs = create_plot(relerr_off, ax2, "Off-Axis Recurrence ($p_{offaxis}=8$)", False)
+    cs = create_plot(relerr_comb, ax3, "On/Off-Axis Recurrence ($m=100$)", False)
+
+    n_levels = 18
+    levels = 10**np.linspace(-n_levels+2, 1, n_levels)
+
+
+    fig.subplots_adjust(wspace=0.3, hspace=0.5)
+
+    cbar = fig.colorbar(cs, ax=[ax1,ax2,ax3], shrink=0.9, location='bottom')
+    cbar.set_ticks(levels)
+    cbar.set_ticklabels(["1e"+str(int(i)) for i in np.linspace(-n_levels+2, 1, n_levels)])
+    fig.suptitle(str_title, fontsize=16)
 
 #========================= DEFINE PLOT RESOLUTION ====================================
-res = 8
+res = 32
 mesh_points, x_grid, y_grid = create_logarithmic_mesh(res)
 
 #========================= DEFINE GREEN'S FUNCTIONS/PDE's ====================================
@@ -231,23 +248,28 @@ k = 1
 helmholtz2d = laplacian(w) + w
 g_x_y_helmholtz = (1j/4) * hankel1(0, k * abs_dist)
 #========================= LAPLACE 2D ====================================
-#interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, laplace2d, g_x_y_laplace, 9)
+interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, laplace2d, g_x_y_laplace, 9,m=1e2/2)
 
-#relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
-#plt.figure(1)
-#create_plot(relerr_on, "Laplace (2D): On-Axis Recurrence, 9th Order Derivative Evaluation Error $(u_{recur}-u_{sym})/u_{sym}$")
+relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
+relerr_off = np.abs((interactions_off_axis-interactions_true)/interactions_true)
+relerr_comb = np.abs((interactions_total-interactions_true)/interactions_true)
+
+create_suite_plot(relerr_on, relerr_off, relerr_comb, "Laplace 2D: 9th Order Derivative Evaluation Error $(u_{recur}-u_{sympy})/u_{recur}$")
 
 #========================= HELMOLTZ 2D ====================================
-#interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, helmholtz2d, g_x_y_helmholtz, 9)
+interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, helmholtz2d, g_x_y_helmholtz, 8)
 
-#relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
-#create_plot(relerr_on, "Helmholtz (2D): On-Axis Recurrence, 8th Order Derivative Evaluation Error $(u_{recur}-u_{sym})/u_{sym}$")
+relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
+relerr_off = np.abs((interactions_off_axis-interactions_true)/interactions_true)
+relerr_comb = np.abs((interactions_total-interactions_true)/interactions_true)
+
+create_suite_plot(relerr_on, relerr_off, relerr_comb, "Helmholtz 2D: 8th Order Derivative Evaluation Error $(u_{recur}-u_{sympy})/u_{recur}$")
 
 
 #======================== BIHARMONIC 2D ===================================
-interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, biharmonic_pde, g_x_y_biharmonic, 7)
+#interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, biharmonic_pde, g_x_y_biharmonic, 7)
 
-relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
-create_plot(relerr_on, "Biharmonic (2D): On-Axis Recurrence, 8th Order Derivative Evaluation Error $(u_{recur}-u_{sym})/u_{sym}$")
+#relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
+#create_plot(relerr_on, "Biharmonic (2D): On-Axis Recurrence, 8th Order Derivative Evaluation Error $(u_{recur}-u_{sym})/u_{sym}$")
 
 plt.show()
