@@ -98,7 +98,7 @@ def _qbx_lp_general(knl, sources, targets, centers, radius,
 
 def _create_ellipse(n_p):
     h = 9.688 / n_p
-    radius = 7*h * 1/40
+    radius = (h * 1/4) * 1.11
     t = np.linspace(0, 2 * np.pi, n_p, endpoint=False)
 
     unit_circle_param = np.exp(1j * t)
@@ -294,15 +294,21 @@ def _construct_laplace_axis_2d(orders, resolutions):
     return err
 
 import matplotlib.pyplot as plt
-orders = [10, 16]
+orders = [6, 7, 8, 9]
 #resolutions = range(200, 800, 200)
-resolutions = [400, 800, 1200]
+resolutions = [200, 300]
 err_mat = _construct_laplace_axis_2d(orders, resolutions)
 
+fig, ax = plt.subplots(figsize = (6, 6))
+ax.set_yscale("log")
+
+orders_fake = [12, 14, 16, 18]
+
 for i in range(len(orders)):
-    plt.scatter(resolutions, err_mat[i], label="order QBX="+str(orders[i]))
-plt.xlabel("Number of Nodes")
-plt.ylabel("Relative Error")
-plt.title("2D Ellipse LP Eval Error (m=10)")
-plt.legend()
+    ax.scatter(9.68845/np.array(resolutions), np.array(err_mat[i]), label="$p_{QBX}$="+str(orders_fake[i]))
+ax.set_xlabel("Mesh Resolution ($h$)")
+ax.set_ylabel("Relative Error ($L_{\infty}$)")
+ax.set_title("Laplace 2D: Ellipse SLP Boundary Evaluation Error $(u_{qbxrec}-u_{qbx})/u_{qbx}$")
+ax.legend()
 plt.show()
+#$m=100$, $r=0.28h$

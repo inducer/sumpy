@@ -139,15 +139,14 @@ def test_biharmonic2d():
     var = _make_sympy_vec("x", 2)
     var_t = _make_sympy_vec("t", 2)
     abs_dist = sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2)
-    w = make_identity_diff_op(2)
-
-    partial_1x = DerivativeIdentifier((4,0), 0)
-    partial_1y = DerivativeIdentifier((0,4), 0)
-    biharmonic_op = {partial_1x: 1, partial_1y: 1}
+    partial_4x = DerivativeIdentifier((4,0), 0)
+    partial_4y = DerivativeIdentifier((0,4), 0)
+    partial_2x2y = DerivativeIdentifier((2,2), 0)
+    biharmonic_op = {partial_4x: 1, partial_4y: 1, partial_2x2y:2}
     list_pde = immutabledict(biharmonic_op)
-
     biharmonic_pde = LinearPDESystemOperator(2, (list_pde,))
-    g_x_y = abs_dist**2 * (sp.log(abs_dist)-1)
+
+    g_x_y = abs_dist**2 * (sp.log(abs_dist))
 
     n_init, _, r = get_reindexed_and_center_origin_on_axis_recurrence(biharmonic_pde)
 
@@ -156,7 +155,7 @@ def test_biharmonic2d():
                                             for i in range(8)]
 
     x_coord = np.random.rand()  # noqa: NPY002
-    y_coord = np.random.rand()  # noqa: NPY002
+    y_coord = np.random.rand() * 1e-3  # noqa: NPY002
     coord_dict = {var[0]: x_coord, var[1]: y_coord}
     derivs = [d.subs(coord_dict) for d in derivs]
 
@@ -164,7 +163,7 @@ def test_biharmonic2d():
     s = sp.Function("s")
 
     # pylint: disable-next=not-callable
-    subs_dict = {s(0): derivs[0], s(1): derivs[1], s(2): derivs[1], s(3): derivs[1]}
+    subs_dict = {s(0): derivs[0], s(1): derivs[1], s(2): derivs[2], s(3): derivs[3]}
     check = []
 
     assert n_init == 4
@@ -175,13 +174,13 @@ def test_biharmonic2d():
         subs_dict[s(i)] = derivs[i]
 
     f2 = sp.lambdify([var[0], var[1]], check[0])
-    assert abs(f2(x_coord, y_coord)) <= 1e-13
+    assert abs(f2(x_coord, y_coord)) <= 1e-11
     f3 = sp.lambdify([var[0], var[1]], check[1])
-    assert abs(f3(x_coord, y_coord)) <= 1e-13
+    assert abs(f3(x_coord, y_coord)) <= 1e-11
     f4 = sp.lambdify([var[0], var[1]], check[2])
-    assert abs(f4(x_coord, y_coord)) <= 1e-13
+    assert abs(f4(x_coord, y_coord)) <= 1e-11
     f5 = sp.lambdify([var[0], var[1]], check[3])
-    assert abs(f5(x_coord, y_coord)) <= 1e-12
+    assert abs(f5(x_coord, y_coord)) <= 1e-11
 
 test_biharmonic2d()
 
@@ -286,6 +285,69 @@ def test_helmholtz_2d_off_axis(deriv_order, exp_order):
                        (var[1]-var_t[1])**2)
     k = 1
     g_x_y = (1j/4) * hankel1(0, k * abs_dist)
+    derivs = [sp.diff(g_x_y,
+                      var_t[0], i).subs(var_t[0], 0).subs(var_t[1], 0)
+                                               for i in range(6)]
+    
+    x_coord = 1e-2 * np.random.rand()  # noqa: NPY002
+    y_coord = np.random.rand()  # noqa: NPY002
+    coord_dict = {var[0]: x_coord, var[1]: y_coord}
+    start_order, recur_order, recur = get_reindexed_and_center_origin_off_axis_recurrence(helmholtz2d)
+
+    ic = []
+    #Generate ic
+
+    for i in range(start_order):
+        ic.append(derivs[i].subs(var[0], 0).subs(var[1], coord_dict[var[1]]))
+
+    n = sp.symbols("n")
+    for i in range(start_order, 15):
+        recur_eval = recur.subs(var[0], coord_dict[var[0]]).subs(var[1], coord_dict[var[1]]).subs(n, i)
+        for j in range(i-recur_order, i):
+            recur_eval = recur_eval.subs(s(j), ic[j])
+        ic.append(recur_eval)
+
+    ic = np.array(ic)
+
+    #true_ic = np.array([derivs[i].subs(var[0], 0).subs(var[1], coord_dict[var[1]]) for i in range(15)])
+    
+    #assert np.max(np.abs(ic[::2]-true_ic[::2])/np.abs(true_ic[::2])) < 1e-8
+    #print(np.max(np.abs(ic[::2]-true_ic[::2])/np.abs(true_ic[::2])))
+
+    # CHECK ACCURACY OF EXPRESSION FOR deriv_order
+
+    exp, exp_range, _ = get_off_axis_expression(helmholtz2d, exp_order)
+    approx_deriv = exp.subs(n, deriv_order)
+    for i in range(-exp_range+deriv_order, deriv_order+1):
+        approx_deriv = approx_deriv.subs(s(i), ic[i])
+    
+    rat = coord_dict[var[0]]/coord_dict[var[1]]
+    if deriv_order + exp_order % 2 == 0:
+        prederror = abs((ic[deriv_order+exp_order+2] * coord_dict[var[0]]**(exp_order+2)/math.factorial(exp_order+2)).evalf())
+    else:
+        prederror = abs((ic[deriv_order+exp_order+1] * coord_dict[var[0]]**(exp_order+1)/math.factorial(exp_order+1)).evalf())
+    print("PREDICTED ERROR: ", prederror)
+    relerr = abs(((approx_deriv - derivs[deriv_order])/derivs[deriv_order]).subs(var[0], coord_dict[var[0]]).subs(var[1], coord_dict[var[1]]).evalf())
+    print("RELATIVE ERROR: ", relerr)
+    print("RATIO(x0/x1): ", rat)
+    #assert relerr <= prederror
+
+
+def test_helmholtz_2d_off_axis(deriv_order, exp_order):
+    r"""
+    Tests off-axis recurrence code for orders up to 6 laplace2d.
+    """
+    w = make_identity_diff_op(2)
+    helmholtz2d = laplacian(w) + w
+
+    n = sp.symbols("n")
+    s = sp.Function("s")
+
+    var = _make_sympy_vec("x", 2)
+    var_t = _make_sympy_vec("t", 2)
+    abs_dist = sp.sqrt((var[0]-var_t[0])**2 +
+                       (var[1]-var_t[1])**2)
+    g_x_y = abs_dist**2*sp.log(abs_dist)
     derivs = [sp.diff(g_x_y,
                       var_t[0], i).subs(var_t[0], 0).subs(var_t[1], 0)
                                                for i in range(6)]

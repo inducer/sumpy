@@ -374,7 +374,7 @@ def _get_initial_order_off_axis(recurrence):
 
     i = 0
     r_c = recurrence.subs(n, i)
-    while _check_neg_ind(r_c) or r_c == 0:
+    while (_check_neg_ind(r_c) or r_c == 0) or i % 2 != 0:
         i += 1
         r_c = recurrence.subs(n, i)
     return i
@@ -455,15 +455,6 @@ def get_reindexed_and_center_origin_off_axis_recurrence(pde: LinearPDESystemOper
     """
     var = _make_sympy_vec("x", 1)
     r_exp = _move_center_origin_source_arbitrary_expression(pde).subs(var[0], 0)
-
-    var = _make_sympy_vec("x", 2)
-    var_t = _make_sympy_vec("t", 2)
-    g_x_y = sp.log(sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2))
-    derivs = [sp.diff(g_x_y,
-                      var_t[0], i).subs(var_t[0], 0).subs(var_t[1], 0)
-                      for i in range(8)]
-    
-
     recur_order, recur = reindex_recurrence_relation(r_exp)
     start_order = _get_initial_order_off_axis(recur)
     return start_order, recur_order, recur

@@ -86,6 +86,8 @@ def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
     t_exp, t_exp_order, _ = get_off_axis_expression(pde, 8)
     storage_taylor_order = max(t_recur_order, t_exp_order+1)
 
+    start_order = max(start_order, order)
+
     storage_taylor = [np.zeros((1, n_p))] * storage_taylor_order
     def gen_lamb_expr_t_recur(i, start_order):
         arg_list = []
@@ -95,7 +97,7 @@ def produce_error_for_recurrences(coords, pde, g_x_y, deriv_order, m=100):
         for j in range(ndim):
             arg_list.append(var[j])
 
-        if i < start_order+4:
+        if i < start_order:
             lamb_expr_symb_deriv = sp.diff(g_x_y, var_t[0], i)
             for j in range(ndim):
                 lamb_expr_symb_deriv = lamb_expr_symb_deriv.subs(var_t[j], 0)
@@ -267,12 +269,12 @@ g_x_y_helmholtz = (1j/4) * hankel1(0, k * abs_dist)
 
 
 #======================== BIHARMONIC 2D ===================================
-interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, biharmonic_pde, g_x_y_biharmonic, 7)
+interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, biharmonic_pde, g_x_y_biharmonic, 12, m=1e2/2)
 
 relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
 relerr_off = np.abs((interactions_off_axis-interactions_true)/interactions_true)
 relerr_comb = np.abs((interactions_total-interactions_true)/interactions_true)
 
-create_suite_plot(relerr_on, relerr_off+1e-20, relerr_comb+1e-20, "Biharmonic 2D: 7th Order Derivative Evaluation Error $(u_{recur}-u_{sympy})/u_{recur}$")
+create_suite_plot(relerr_on+1e-20, relerr_off+1e-20, relerr_comb+1e-20, "Biharmonic 2D: 8th Order Derivative Evaluation Error $(u_{recur}-u_{sympy})/u_{recur}$")
 
 plt.show()
