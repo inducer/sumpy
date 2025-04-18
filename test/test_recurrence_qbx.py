@@ -308,7 +308,8 @@ for i in range(len(orders)):
     ax.scatter(9.68845/np.array(resolutions), np.array(err_mat[i]), label="$p_{QBX}$="+str(orders_fake[i]))
 ax.set_xlabel("Mesh Resolution ($h$)")
 ax.set_ylabel("Relative Error ($L_{\infty}$)")
-ax.set_title("Laplace 2D: Ellipse SLP Boundary Evaluation Error $(u_{qbxrec}-u_{qbx})/u_{qbx}$")
+plt.suptitle("Laplace 2D: Ellipse SLP Boundary Evaluation Error $(u_{qbxrec}-u_{qbx})/u_{qbx}$")
+ax.set_title("($r=0.28h$, $m=100$, $p_{offaxis}=8$)")
 ax.legend()
 plt.show()
 #$m=100$, $r=0.28h$
