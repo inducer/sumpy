@@ -109,8 +109,11 @@ def _create_ellipse(n_p):
     normals = normals / np.linalg.norm(normals, axis=0)
     centers = sources - normals * radius
 
-    mode_nr = 25
-    density = np.cos(mode_nr * t)
+    phi = sp.symbols("phi")
+    jacob = sp.sqrt(2**2 * sp.sin(phi)**2 + sp.cos(phi)**2)
+
+    mode_nr = 10
+    density = np.cos(mode_nr * t) * sp.lambdify(phi, 1/jacob)(t)
 
     return sources, centers, normals, density, h, radius
 
@@ -293,23 +296,23 @@ def _construct_laplace_axis_2d(orders, resolutions):
 
     return err
 
-import matplotlib.pyplot as plt
-orders = [6, 7, 8, 9]
-#resolutions = range(200, 800, 200)
-resolutions = [200, 300]
-err_mat = _construct_laplace_axis_2d(orders, resolutions)
+def plot():
+    import matplotlib.pyplot as plt
+    orders = [6, 7, 8, 9]
+    resolutions = [200, 300]
+    err_mat = _construct_laplace_axis_2d(orders, resolutions)
 
-fig, ax = plt.subplots(figsize = (6, 6))
-ax.set_yscale("log")
+    fig, ax = plt.subplots(figsize = (6, 6))
+    ax.set_yscale("log")
 
-orders_fake = [12, 14, 16, 18]
+    orders_fake = [12, 14, 16, 18]
 
-for i in range(len(orders)):
-    ax.scatter(9.68845/np.array(resolutions), np.array(err_mat[i]), label="$p_{QBX}$="+str(orders_fake[i]))
-ax.set_xlabel("Mesh Resolution ($h$)")
-ax.set_ylabel("Relative Error ($L_{\infty}$)")
-plt.suptitle("Laplace 2D: Ellipse SLP Boundary Evaluation Error $(u_{qbxrec}-u_{qbx})/u_{qbx}$")
-ax.set_title("($r=0.28h$, $m=100$, $p_{offaxis}=8$)")
-ax.legend()
-plt.show()
-#$m=100$, $r=0.28h$
+    for i in range(len(orders)):
+        ax.scatter(9.68845/np.array(resolutions), np.array(err_mat[i]), label="$p_{QBX}$="+str(orders_fake[i]))
+    ax.set_xlabel("Mesh Resolution ($h$)")
+    ax.set_ylabel("Relative Error ($L_{\infty}$)")
+    plt.suptitle("Laplace 2D: Ellipse SLP Boundary Evaluation Error $(u_{qbxrec}-u_{qbx})/u_{qbx}$")
+    ax.set_title("($r=0.28h$, $m=100$, $p_{offaxis}=8$)")
+    ax.legend()
+    plt.show()
+    #$m=100$, $r=0.28h$
