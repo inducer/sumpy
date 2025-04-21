@@ -96,10 +96,16 @@ def _qbx_lp_general(knl, sources, targets, centers, radius,
     return result_qbx
 
 
-def _create_ellipse(n_p):
-    h = 9.688 / n_p
-    radius = (h * 1/4) * 1.11
+def _create_ellipse(n_p, mode_nr = 10, quad_convg_rate=0.75):
     t = np.linspace(0, 2 * np.pi, n_p, endpoint=False)
+
+    phi = sp.symbols("phi")
+    jacob = sp.sqrt(4 * sp.sin(phi)**2 + sp.cos(phi)**2)
+
+    jacobs = sp.lambdify(phi, jacob)(t)
+
+    h = ((2*np.pi)/n_p * np.min(jacobs))
+    radius = (h/4) * quad_convg_rate
 
     unit_circle_param = np.exp(1j * t)
     unit_circle = np.array([2 * unit_circle_param.real, unit_circle_param.imag])
@@ -109,13 +115,9 @@ def _create_ellipse(n_p):
     normals = normals / np.linalg.norm(normals, axis=0)
     centers = sources - normals * radius
 
-    phi = sp.symbols("phi")
-    jacob = sp.sqrt(2**2 * sp.sin(phi)**2 + sp.cos(phi)**2)
-
-    mode_nr = 10
     density = np.cos(mode_nr * t) * sp.lambdify(phi, 1/jacob)(t)
 
-    return sources, centers, normals, density, h, radius
+    return sources, centers, normals, density, jacobs, radius
 
 
 def _create_sphere(refinment_rounds, exp_radius):
@@ -229,8 +231,8 @@ def test_recurrence_laplace_2d_ellipse():
     p = 4
     err = []
     for n_p in range(200, 1001, 200):
-        sources, centers, normals, density, h, radius = _create_ellipse(n_p)
-        strengths = h * density
+        sources, centers, normals, density, jacobs, radius = _create_ellipse(n_p)
+        strengths = density * jacobs
         exp_res = recurrence_qbx_lp(sources, centers, normals,
                                     strengths, radius, laplace2d,
                                     g_x_y, 2, p)
@@ -258,8 +260,8 @@ def test_recurrence_helmholtz_2d_ellipse():
     p = 5
     err = []
     for n_p in range(200, 1001, 200):
-        sources, centers, normals, density, h, radius = _create_ellipse(n_p)
-        strengths = h * density
+        sources, centers, normals, density, jacobs, radius = _create_ellipse(n_p)
+        strengths = density * jacobs
         exp_res = recurrence_qbx_lp(sources, centers, normals, strengths,
         radius, helmholtz2d, g_x_y, 2, p)
         qbx_res = _qbx_lp_general(hknl2d, sources, sources,
@@ -282,8 +284,8 @@ def _construct_laplace_axis_2d(orders, resolutions):
     for p in orders:
         err_per_order = []
         for n_p in resolutions:
-            sources, centers, normals, density, h, radius = _create_ellipse(n_p)
-            strengths = h * density
+            sources, centers, normals, density, jacobs, radius = _create_ellipse(n_p)
+            strengths = density * jacobs
             exp_res = recurrence_qbx_lp(sources, centers, normals,
                                         strengths, radius, laplace2d,
                                         g_x_y, 2, p)
