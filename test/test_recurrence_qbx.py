@@ -96,11 +96,11 @@ def _qbx_lp_general(knl, sources, targets, centers, radius,
     return result_qbx
 
 
-def _create_ellipse(n_p, mode_nr = 10, quad_convg_rate=0.75):
+def _create_ellipse(n_p, mode_nr = 10, quad_convg_rate=0.75, a=2):
     t = np.linspace(0, 2 * np.pi, n_p, endpoint=False)
 
     phi = sp.symbols("phi")
-    jacob = sp.sqrt(4 * sp.sin(phi)**2 + sp.cos(phi)**2)
+    jacob = sp.sqrt(a**2 * sp.sin(phi)**2 + sp.cos(phi)**2)
 
     jacobs = sp.lambdify(phi, jacob)(t)
 
@@ -108,10 +108,10 @@ def _create_ellipse(n_p, mode_nr = 10, quad_convg_rate=0.75):
     radius = (h/4) * quad_convg_rate
 
     unit_circle_param = np.exp(1j * t)
-    unit_circle = np.array([2 * unit_circle_param.real, unit_circle_param.imag])
+    unit_circle = np.array([a * unit_circle_param.real, unit_circle_param.imag])
 
     sources = unit_circle
-    normals = np.array([unit_circle_param.real, 2*unit_circle_param.imag])
+    normals = np.array([unit_circle_param.real, a*unit_circle_param.imag])
     normals = normals / np.linalg.norm(normals, axis=0)
     centers = sources - normals * radius
 
