@@ -96,7 +96,7 @@ def _qbx_lp_general(knl, sources, targets, centers, radius,
     return result_qbx
 
 
-def _create_ellipse(n_p, mode_nr = 10, quad_convg_rate=0.75, a=2):
+def _create_ellipse(n_p, mode_nr = 10, quad_convg_rate=100, a=2):
     t = np.linspace(0, 2 * np.pi, n_p, endpoint=False)
 
     phi = sp.symbols("phi")
@@ -270,37 +270,7 @@ def test_recurrence_helmholtz_2d_ellipse():
     assert np.max(err) <= 1e-13
 
 
-# ============ Plotting Functionality
-def _construct_laplace_axis_2d(orders, resolutions):
-    w = make_identity_diff_op(2)
-    laplace2d = laplacian(w)
-
-    var = _make_sympy_vec("x", 2)
-    var_t = _make_sympy_vec("t", 2)
-    g_x_y = (-1/(2*np.pi)) * sp.log(sp.sqrt((var[0]-var_t[0])**2 +
-                                            (var[1]-var_t[1])**2))
-
-    err = []
-    for p in orders:
-        err_per_order = []
-        for n_p in resolutions:
-            sources, centers, normals, density, jacobs, radius = _create_ellipse(n_p)
-            strengths = jacobs * density * (2*np.pi/n_p)
-            exp_res = recurrence_qbx_lp(sources, centers, normals,
-                                        strengths, radius, laplace2d,
-                                        g_x_y, 2, p)
-            qbx_res = _qbx_lp_general(lknl2d, sources, sources, centers,
-                                            radius, strengths, p)
-            # qbx_res,_ = lpot_eval_circle(sources.shape[1], p)
-            err_per_order.append(np.max(np.abs(exp_res - qbx_res)/
-                                        np.max(np.abs(qbx_res))))
-        err.append(err_per_order)
-
-    return err
-
-
-def give_true_sol(n_p, a=2, n=10):
-    n = 10
+def _laplace_2d_true_solution(n_p, density, a=2, n=10):
     r = 1/a
     mu_n = 1/(2*n) * (1 + ((1-r)/(1+r))**n)
 
@@ -313,21 +283,62 @@ def give_true_sol(n_p, a=2, n=10):
     return true_sol
 
 
+# ============ Plotting Functionality
+def _construct_laplace_axis_2d(orders, resolutions):
+    w = make_identity_diff_op(2)
+    laplace2d = laplacian(w)
+
+    var = _make_sympy_vec("x", 2)
+    var_t = _make_sympy_vec("t", 2)
+    g_x_y = (-1/(2*np.pi)) * sp.log(sp.sqrt((var[0]-var_t[0])**2 +
+                                            (var[1]-var_t[1])**2))
+
+    err = []
+    err1 = []
+    for p in orders:
+        err_per_order = []
+        err_per_order1 = []
+        for n_p in resolutions:
+            print("Order:", p, " res:", n_p)
+            sources, centers, normals, density, jacobs, radius = _create_ellipse(n_p)
+            strengths = jacobs * density * (2*np.pi/n_p)
+            exp_res = recurrence_qbx_lp(sources, centers, normals,
+                                        strengths, radius, laplace2d,
+                                        g_x_y, 2, p)
+            qbx_res = _qbx_lp_general(lknl2d, sources, sources, centers,
+                                            radius, strengths, p)
+            true_sol = _laplace_2d_true_solution(n_p, density)
+            # qbx_res,_ = lpot_eval_circle(sources.shape[1], p)
+            err_per_order.append(np.max(np.abs(exp_res - true_sol)/
+                                        np.max(np.abs(true_sol))))
+            err_per_order1.append(np.max(np.abs(true_sol - qbx_res)/
+                                        np.max(np.abs(true_sol))))
+        err.append(err_per_order)
+        err1.append(err_per_order1)
+
+    return err, err1
+
+
 def plot():
     import matplotlib.pyplot as plt
-    orders = [6, 7, 8, 9]
-    resolutions = [200, 300]
-    err_mat = _construct_laplace_axis_2d(orders, resolutions)
+    orders = [5, 7, 9, 11]
+    colors = ['b', 'g', 'r', 'c']
+    resolutions = [2000, 3000, 4000]
+    err_mat, err_mat1 = _construct_laplace_axis_2d(orders, resolutions)
 
-    fig, ax = plt.subplots(figsize = (6, 6))
-    ax.set_yscale("log")
+    fig, ax1 = plt.subplots(1, 1, sharey=True, figsize=(6, 6))
 
+    ax1.set_yscale("log")
     for i in range(len(orders)):
-        ax.scatter(9.68845/np.array(resolutions), np.array(err_mat[i]), label="$p_{QBX}$="+str(orders[i]))
-    ax.set_xlabel("Mesh Resolution ($h$)")
-    ax.set_ylabel("Relative Error ($L_{\infty}$)")
-    plt.suptitle("Laplace 2D: Ellipse SLP Boundary Evaluation Error $(u_{qbxrec}-u_{qbx})/u_{qbx}$")
-    ax.set_title("($r=0.28h$, $m=100$, $p_{offaxis}=8$)")
-    ax.legend()
+        ax1.scatter(9.68845/np.array(resolutions), np.array(err_mat[i]), marker='+', label="$u = u_{qbxrec}$ ("+"$p_{QBX}$="+str(orders[i])+ ")", c=colors[i])
+        ax1.scatter(9.68845/np.array(resolutions), np.array(err_mat1[i]), marker='x', label="$u = u_{qbx}$ ("+"$p_{QBX}$="+str(orders[i]) + ")", c=colors[i])
+
+    ax1.set_xlabel("Mesh Resolution ($h$)")
+    ax1.set_ylabel("Relative Error ($L_{\infty}$)")
+    ax1.set_title("$(u-u_{true})/u_{true}$")
+    ax1.legend()
+
+    plt.suptitle("Laplace 2D: Ellipse SLP Boundary Evaluation Error ($m=100$, $p_{offaxis}=8$)", )
     plt.show()
-    #$m=100$, $r=0.28h$
+
+plot()
