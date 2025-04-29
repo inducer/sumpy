@@ -110,6 +110,7 @@ multiline-quotes = "double"
 combine-as-imports = true
 known-first-party = [
     "arraycontext",
+    "boxtree",
     "loopy",
     "pymbolic",
     "pyopencl",

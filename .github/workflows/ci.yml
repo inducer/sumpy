@@ -120,8 +120,8 @@ jobs:
             run: |
                 curl -L -O https://tiker.net/ci-support-v0
                 . ./ci-support-v0
-                if [[ "$DOWNSTREAM_PROJECT" == "pytential" && "$GITHUB_HEAD_REF" == "e2p" ]]; then
-                    DOWNSTREAM_PROJECT=https://github.com/isuruf/pytential.git@e2p
+                if [[ "$DOWNSTREAM_PROJECT" == "pytential" && "$GITHUB_HEAD_REF" == "towards-array-context" ]]; then
+                   DOWNSTREAM_PROJECT=https://github.com/alexfikl/pytential.git@towards-array-context
                 fi
                 test_downstream "$DOWNSTREAM_PROJECT"
 
