@@ -105,12 +105,12 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
     def _evaluate(self, sac, avec, bvec, rscale, expansion_nr, coefficients):
         from sumpy.expansion.local import LineTaylorLocalExpansion
         tgt_knl = self.target_kernels[expansion_nr]
-        if isinstance(tgt_knl, LineTaylorLocalExpansion):
+        if isinstance(self.expansion, LineTaylorLocalExpansion):
             # In LineTaylorLocalExpansion.evaluate, we can't run
             # postprocess_at_target because the coefficients are assigned
             # symbols and postprocess with a derivative will make them zero.
             # Instead run postprocess here before the coefficients are assigned.
-            coefficients = [tgt_knl.postprocess_at_target(coeff, bvec) for
+            coefficients = [tgt_knl.postprocess_at_target(coeff, avec) for
                     coeff in coefficients]
 
         assigned_coeffs = [
@@ -512,7 +512,6 @@ def find_jump_term(kernel, arg_provider):
         AxisTargetDerivative,
         DerivativeBase,
         DirectionalSourceDerivative,
-        DirectionalTargetDerivative,
     )
 
     tgt_derivatives = []
@@ -521,9 +520,6 @@ def find_jump_term(kernel, arg_provider):
     while isinstance(kernel, DerivativeBase):
         if isinstance(kernel, AxisTargetDerivative):
             tgt_derivatives.append(kernel.axis)
-            kernel = kernel.kernel
-        elif isinstance(kernel, DirectionalTargetDerivative):
-            tgt_derivatives.append(kernel.dir_vec_name)
             kernel = kernel.kernel
         elif isinstance(kernel, AxisSourceDerivative):
             src_derivatives.append(kernel.axis)

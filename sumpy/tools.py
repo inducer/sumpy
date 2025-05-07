@@ -298,7 +298,7 @@ class KernelComputation(ABC):
             device: Any | None = None) -> None:
         """
         :arg target_kernels: list of :class:`~sumpy.kernel.Kernel` instances,
-            with :class:`sumpy.kernel.DirectionalTargetDerivative` as
+            with :class:`sumpy.kernel.AxisTargetDerivative` as
             the outermost kernel wrappers, if present.
         :arg source_kernels: list of :class:`~sumpy.kernel.Kernel` instances
             with :class:`~sumpy.kernel.DirectionalSourceDerivative` as the
