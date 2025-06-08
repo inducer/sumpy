@@ -23,9 +23,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-
 import logging
 import re
+from abc import ABC
+from typing import ParamSpec
 
 import numpy as np
 from constantdict import constantdict
@@ -41,6 +42,9 @@ from sumpy.symbolic import SympyToPymbolicMapper as SympyToPymbolicMapperBase
 
 
 logger = logging.getLogger(__name__)
+
+
+P = ParamSpec("P")
 
 
 __doc__ = """
@@ -237,7 +241,8 @@ def register_optimization_preambles(loopy_knl, device):
 
 # {{{ custom mapper base classes
 
-class CSECachingIdentityMapper(IdentityMapper, CSECachingMapperMixin):
+class CSECachingIdentityMapper(
+                    IdentityMapper[P], CSECachingMapperMixin[Expression, P], ABC):
     pass
 
 

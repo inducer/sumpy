@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pyopencl import MemoryObjectHolder
+
 
 __copyright__ = """
 Copyright (C) 2012 Andreas Kloeckner
@@ -972,7 +974,7 @@ def run_opencl_fft(
         input_vec: Any,
         inverse: bool = False,
         wait_for: list[pyopencl.Event] | None = None
-    ) -> tuple[pyopencl.Event, Any]:
+    ) -> tuple[pyopencl.Event | MarkerBasedProfilingEvent, Any]:
     """Runs an FFT on input_vec and returns a :class:`MarkerBasedProfilingEvent`
     that indicate the end and start of the operations carried out and the output
     vector.
@@ -1015,6 +1017,7 @@ def run_opencl_fft(
         else:
             meth = _vkfft_opencl.fft
 
+        assert isinstance(output_vec.data, MemoryObjectHolder)
         meth(app.app, int(input_vec.data.int_ptr),
             int(output_vec.data.int_ptr), int(queue.int_ptr))
 
