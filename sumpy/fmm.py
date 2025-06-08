@@ -30,7 +30,7 @@ __doc__ = """Integrates :mod:`boxtree` with :mod:`sumpy`.
 """
 
 
-from typing import Protocol
+from typing import Protocol, cast
 
 from boxtree.fmm import ExpansionWranglerInterface, TreeIndependentDataForWrangler
 
@@ -537,15 +537,19 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     @memoize_method
     def max_nsources_in_one_box(self):
         with cl.CommandQueue(self.tree_indep.cl_context) as queue:
-            return int(cl_array.max(self.tree.box_source_counts_nonchild,
-                queue).get())
+            return int(
+                       cast("cl_array.Array",
+                            cl_array.max(self.tree.box_source_counts_nonchild, queue))
+                       .get())
 
     @property
     @memoize_method
     def max_ntargets_in_one_box(self):
         with cl.CommandQueue(self.tree_indep.cl_context) as queue:
-            return int(cl_array.max(self.tree.box_target_counts_nonchild,
-                queue).get())
+            return int(
+                       cast("cl_array.Array",
+                            cl_array.max(self.tree.box_target_counts_nonchild, queue))
+                       .get())
 
     # }}}
 
