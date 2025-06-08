@@ -25,9 +25,8 @@ THE SOFTWARE.
 
 import logging
 import sys
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import numpy.linalg as la
@@ -63,6 +62,10 @@ from sumpy.kernel import (
     StressletKernel,
     YukawaKernel,
 )
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 logger = logging.getLogger(__name__)

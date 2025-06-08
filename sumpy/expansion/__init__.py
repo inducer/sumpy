@@ -25,16 +25,21 @@ THE SOFTWARE.
 
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Hashable, Sequence
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
-import loopy as lp
 import pymbolic.primitives as prim
 from pytools import memoize_method
 
 import sumpy.symbolic as sym
-from sumpy.kernel import Kernel
 from sumpy.tools import add_mi
+
+
+if TYPE_CHECKING:
+    from collections.abc import Hashable, Sequence
+
+    import loopy as lp
+
+    from sumpy.kernel import Kernel
 
 
 logger = logging.getLogger(__name__)

@@ -40,7 +40,6 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 import loopy as lp
-import pyopencl as cl
 from pymbolic.mapper import WalkMapper
 from pytools import memoize_method
 from pytools.tag import Tag, tag_dataclass
@@ -52,6 +51,7 @@ if TYPE_CHECKING:
     import numpy
 
     import pyopencl
+    import pyopencl as cl
 
     from sumpy.kernel import Kernel
 

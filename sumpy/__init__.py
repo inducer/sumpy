@@ -24,9 +24,8 @@ THE SOFTWARE.
 """
 
 import os
-from collections.abc import Hashable
+from typing import TYPE_CHECKING
 
-import loopy as lp
 from pytools.persistent_dict import WriteOncePersistentDict
 
 from sumpy.e2e import (
@@ -42,6 +41,12 @@ from sumpy.e2p import E2PFromCSR, E2PFromSingleBox
 from sumpy.p2e import P2EFromCSR, P2EFromSingleBox
 from sumpy.p2p import P2P, P2PFromCSR
 from sumpy.version import VERSION_TEXT
+
+
+if TYPE_CHECKING:
+    from collections.abc import Hashable
+
+    import loopy as lp
 
 
 __all__ = [
