@@ -50,7 +50,7 @@ import numpy as np
 
 import loopy as lp  # noqa: F401
 import pyopencl as cl
-import pyopencl.array
+import pyopencl.array as cl_array
 
 
 logger = logging.getLogger(__name__)
@@ -265,15 +265,15 @@ def _p2e(psource, center, rscale, order, p2e, expn_class, expn_kwargs):
     toy_ctx = psource.toy_ctx
     queue = toy_ctx.queue
 
-    source_boxes = cl.array.to_device(
+    source_boxes = cl_array.to_device(
         queue, np.array([0], dtype=np.int32))
-    box_source_starts = cl.array.to_device(
+    box_source_starts = cl_array.to_device(
         queue, np.array([0], dtype=np.int32))
-    box_source_counts_nonchild = cl.array.to_device(
+    box_source_counts_nonchild = cl_array.to_device(
         queue, np.array([psource.points.shape[-1]], dtype=np.int32))
 
     center = np.asarray(center)
-    centers = cl.array.to_device(
+    centers = cl_array.to_device(
         queue,
         np.array(center, dtype=np.float64).reshape(toy_ctx.kernel.dim, 1))
 
@@ -282,8 +282,8 @@ def _p2e(psource, center, rscale, order, p2e, expn_class, expn_kwargs):
             box_source_starts=box_source_starts,
             box_source_counts_nonchild=box_source_counts_nonchild,
             centers=centers,
-            sources=cl.array.to_device(queue, psource.points),
-            strengths=(cl.array.to_device(queue, psource.weights),),
+            sources=cl_array.to_device(queue, psource.points),
+            strengths=(cl_array.to_device(queue, psource.weights),),
             rscale=rscale,
             nboxes=1,
             tgt_base_ibox=0,
@@ -298,14 +298,14 @@ def _e2p(psource, targets, e2p):
     queue = toy_ctx.queue
 
     ntargets = targets.shape[-1]
-    boxes = cl.array.to_device(
+    boxes = cl_array.to_device(
         queue, np.array([0], dtype=np.int32))
-    box_target_starts = cl.array.to_device(
+    box_target_starts = cl_array.to_device(
         queue, np.array([0], dtype=np.int32))
-    box_target_counts_nonchild = cl.array.to_device(
+    box_target_counts_nonchild = cl_array.to_device(
         queue, np.array([ntargets], dtype=np.int32))
 
-    centers = cl.array.to_device(
+    centers = cl_array.to_device(
         queue,
         np.array(psource.center, dtype=np.float64).reshape(toy_ctx.kernel.dim, 1))
 
@@ -313,7 +313,7 @@ def _e2p(psource, targets, e2p):
 
     from sumpy.tools import vector_to_device
 
-    coeffs = cl.array.to_device(queue, np.array([psource.coeffs]))
+    coeffs = cl_array.to_device(queue, np.array([psource.coeffs]))
     _evt, (pot,) = e2p(
             toy_ctx.queue,
             src_expansions=coeffs,
@@ -334,14 +334,14 @@ def _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
     toy_ctx = psource.toy_ctx
     queue = toy_ctx.queue
 
-    target_boxes = cl.array.to_device(
+    target_boxes = cl_array.to_device(
         queue, np.array([1], dtype=np.int32))
-    src_box_starts = cl.array.to_device(
+    src_box_starts = cl_array.to_device(
         queue, np.array([0, 1], dtype=np.int32))
-    src_box_lists = cl.array.to_device(
+    src_box_lists = cl_array.to_device(
         queue, np.array([0], dtype=np.int32))
 
-    centers = cl.array.to_device(
+    centers = cl_array.to_device(
         queue,
         np.array(
             [
@@ -354,7 +354,7 @@ def _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
             dtype=np.float64).T.copy()
         )
 
-    coeffs = cl.array.to_device(queue, np.array([psource.coeffs]))
+    coeffs = cl_array.to_device(queue, np.array([psource.coeffs]))
     args = {
         "queue": toy_ctx.queue,
         "src_expansions": coeffs,
@@ -383,7 +383,7 @@ def _m2l(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
     toy_ctx = psource.toy_ctx
     queue = toy_ctx.queue
 
-    coeffs = cl.array.to_device(queue, np.array([psource.coeffs]))
+    coeffs = cl_array.to_device(queue, np.array([psource.coeffs]))
 
     m2l_use_translation_classes_dependent_data = \
             toy_ctx.use_translation_classes_dependent_data()
@@ -395,7 +395,7 @@ def _m2l(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
         expn_size = translation_classes_kwargs["m2l_expn_size"]
 
         # Preprocess the mpole expansion
-        preprocessed_src_expansions = cl.array.zeros(queue, (1, expn_size),
+        preprocessed_src_expansions = cl_array.zeros(queue, (1, expn_size),
                 dtype=np.complex128)
         evt, _ = preprocess_kernel(queue,
                 src_expansions=coeffs,
@@ -415,12 +415,12 @@ def _m2l(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
                     preprocessed_src_expansions, inverse=False, wait_for=[evt])
 
         # Compute translation classes data
-        m2l_translation_classes_lists = cl.array.to_device(queue,
+        m2l_translation_classes_lists = cl_array.to_device(queue,
                 np.array([0], dtype=np.int32))
         dist = np.array(to_center - psource.center, dtype=np.float64)
         dim = toy_ctx.kernel.dim
-        m2l_translation_vectors = cl.array.to_device(queue, dist.reshape(dim, 1))
-        m2l_translation_classes_dependent_data = cl.array.zeros(queue,
+        m2l_translation_vectors = cl_array.to_device(queue, dist.reshape(dim, 1))
+        m2l_translation_classes_dependent_data = cl_array.zeros(queue,
                 (1, expn_size), dtype=np.complex128)
 
         evt, _ = data_kernel(
@@ -452,8 +452,8 @@ def _m2l(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
         )
 
         # Postprocess the local expansion
-        local_before = cl.array.to_device(queue, np.array([ret.coeffs]))
-        to_coeffs = cl.array.zeros(queue, (1, len(data_kernel.tgt_expansion)),
+        local_before = cl_array.to_device(queue, np.array([ret.coeffs]))
+        to_coeffs = cl_array.zeros(queue, (1, len(data_kernel.tgt_expansion)),
                                            dtype=coeffs.dtype)
 
         if toy_ctx.use_fft:
@@ -628,9 +628,9 @@ class PointSources(PotentialSource):
         queue = self.toy_ctx.queue
         _evt, (potential,) = self.toy_ctx.get_p2p()(
                 queue,
-                cl.array.to_device(queue, targets),
-                cl.array.to_device(queue, self.points),
-                [cl.array.to_device(queue, self.weights)],
+                cl_array.to_device(queue, targets),
+                cl_array.to_device(queue, self.points),
+                [cl_array.to_device(queue, self.weights)],
                 **self.toy_ctx.extra_source_and_kernel_kwargs)
 
         return potential.get(queue)
