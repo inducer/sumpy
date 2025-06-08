@@ -24,7 +24,7 @@ THE SOFTWARE.
 """
 
 import logging
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -33,9 +33,14 @@ import pymbolic
 
 import sumpy.symbolic as sym
 from sumpy.assignment_collection import SymbolicAssignmentCollection
-from sumpy.expansion import ExpansionBase
-from sumpy.kernel import Kernel
 from sumpy.tools import gather_loopy_arguments, gather_loopy_source_arguments
+
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from sumpy.expansion import ExpansionBase
+    from sumpy.kernel import Kernel
 
 
 logger = logging.getLogger(__name__)

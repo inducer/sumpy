@@ -28,7 +28,6 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
-import sympy as sp
 
 import loopy as lp
 import pymbolic.primitives as prim
@@ -42,6 +41,8 @@ from sumpy.symbolic import SpatialConstant, pymbolic_real_norm_2
 
 
 if TYPE_CHECKING:
+    import sympy as sp
+
     from sumpy.expansion.diff_op import LinearPDESystemOperator
 
 

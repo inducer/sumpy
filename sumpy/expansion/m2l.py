@@ -1076,8 +1076,8 @@ def loopy_translation_classes_dependent_data(tgt_expansion, src_expansion,
     for i in range(len(insns)):
         insn = insns[i]
         if isinstance(insn, lp.Assignment) and \
-                cast(p.Variable, insn.assignee).name.startswith(vec_name):
-            idx = int(cast(p.Variable, insn.assignee).name[len(vec_name):])
+                cast("p.Variable", insn.assignee).name.startswith(vec_name):
+            idx = int(cast("p.Variable", insn.assignee).name[len(vec_name):])
             insns[i] = lp.Assignment(
                 assignee=data[idx],
                 expression=insn.expression,

@@ -26,9 +26,9 @@ THE SOFTWARE.
 """
 
 import logging
-from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from itertools import accumulate
+from typing import TYPE_CHECKING
 
 import numpy as np
 import sympy as sp
@@ -39,6 +39,10 @@ from pytools import memoize
 
 import sumpy.symbolic as sym
 from sumpy.tools import add_mi
+
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
 
 
 logger = logging.getLogger(__name__)

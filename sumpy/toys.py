@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from sumpy.expansion.m2l import M2LTranslationClassFactoryBase
-
 
 __copyright__ = """
 Copyright (C) 2017 Andreas Kloeckner
@@ -28,7 +26,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from collections.abc import Sequence
 from functools import partial
 from numbers import Number
 from typing import TYPE_CHECKING
@@ -39,8 +36,11 @@ from sumpy.kernel import TargetTransformationRemover
 
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     import pyopencl
 
+    from sumpy.expansion.m2l import M2LTranslationClassFactoryBase
     from sumpy.kernel import Kernel
     from sumpy.visualization import FieldPlotter
 
