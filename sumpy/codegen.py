@@ -466,7 +466,7 @@ class PowerRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
 
 # {{{ convert big integers into floats
 
-from loopy.tools import is_integer
+from loopy.typing import is_integer
 
 
 class BigIntegerKiller(CSECachingIdentityMapper, CallExternalRecMapper):
