@@ -68,6 +68,7 @@ DAMAGE.
 # }}}
 
 import sys
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -75,7 +76,7 @@ import sumpy.symbolic as sym
 from sumpy.cse import cse, postprocess_for_cse, preprocess_for_cse
 
 
-if not sym.USE_SYMENGINE:
+if TYPE_CHECKING or not sym.USE_SYMENGINE:
     from sympy.functions.special.hyper import meijerg
     from sympy.simplify import cse_opts
     from sympy.simplify.cse_opts import sub_post, sub_pre
