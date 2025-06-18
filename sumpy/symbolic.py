@@ -91,19 +91,19 @@ _find_symbolic_backend()
 
 # }}}
 
-if USE_SYMENGINE:
-    import symengine as sym
-
-    from pymbolic.interop.symengine import (
-        PymbolicToSymEngineMapper as PymbolicToSympyMapperBase,
-        SymEngineToPymbolicMapper as SympyToPymbolicMapperBase,
-    )
-else:
+if TYPE_CHECKING or not USE_SYMENGINE:
     import sympy as sym
 
     from pymbolic.interop.sympy import (  # type: ignore[assignment]
         PymbolicToSympyMapper as PymbolicToSympyMapperBase,
         SympyToPymbolicMapper as SympyToPymbolicMapperBase,
+    )
+else:
+    import symengine as sym
+
+    from pymbolic.interop.symengine import (
+        PymbolicToSymEngineMapper as PymbolicToSympyMapperBase,
+        SymEngineToPymbolicMapper as SympyToPymbolicMapperBase,
     )
 
 # Symbolic API common to SymEngine and sympy.

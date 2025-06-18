@@ -25,7 +25,7 @@ THE SOFTWARE.
 
 from boxtree.distributed.calculation import DistributedExpansionWrangler
 
-import pyopencl as cl
+import pyopencl.array as cl_array
 
 from sumpy.fmm import SumpyExpansionWrangler
 
@@ -49,7 +49,7 @@ class DistributedSumpyExpansionWrangler(
             src_weight_vecs_host, src_idx_all_ranks)
 
         local_src_weight_vecs_device = [
-            cl.array.to_device(src_weight.queue, local_src_weight)
+            cl_array.to_device(src_weight.queue, local_src_weight)
             for local_src_weight, src_weight in
             zip(local_src_weight_vecs_host, src_weight_vecs, strict=True)]
 
@@ -68,7 +68,7 @@ class DistributedSumpyExpansionWrangler(
         if mpi_rank == 0:
             from pytools.obj_array import make_obj_array
             return make_obj_array([
-                cl.array.to_device(potentials_dev.queue, gathered_potentials_host)
+                cl_array.to_device(potentials_dev.queue, gathered_potentials_host)
                 for gathered_potentials_host, potentials_dev in
                 zip(gathered_potentials_host_vec, potentials, strict=True)])
         else:

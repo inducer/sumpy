@@ -30,12 +30,12 @@ __doc__ = """Integrates :mod:`boxtree` with :mod:`sumpy`.
 """
 
 
-from typing import Protocol
+from typing import Protocol, cast
 
 from boxtree.fmm import ExpansionWranglerInterface, TreeIndependentDataForWrangler
 
 import pyopencl as cl
-import pyopencl.array
+import pyopencl.array as cl_array
 from pytools import memoize_method
 
 from sumpy import (
@@ -243,7 +243,7 @@ class SumpyTimingFuture:
             return TimingResult(wall_elapsed=None)
 
         if self.events:
-            pyopencl.wait_for_events(self.native_events)
+            cl.wait_for_events(self.native_events)
 
         result = 0
         for event in self.events:
@@ -410,7 +410,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             (e.g. :class:`pyopencl.CommandQueue`) the returned array should
             reuse.
         """
-        return cl.array.zeros(
+        return cl_array.zeros(
                 template_ary.queue,
                 self.multipole_expansions_level_starts()[-1],
                 dtype=self.dtype)
@@ -424,7 +424,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             (e.g. :class:`pyopencl.CommandQueue`) the returned array should
             reuse.
         """
-        return cl.array.zeros(
+        return cl_array.zeros(
                 template_ary.queue,
                 self.local_expansions_level_starts()[-1],
                 dtype=self.dtype)
@@ -437,7 +437,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     level:level+2]
             translation_class_start, translation_class_stop = \
                 self.m2l_translation_class_level_start_box_nrs()[level:level+2]
-            exprs_level = cl.array.zeros(queue, expn_stop - expn_start,
+            exprs_level = cl_array.zeros(queue, expn_stop - expn_start,
                                  dtype=self.preprocessed_mpole_dtype)
             result.append(exprs_level.reshape(
                             translation_class_stop - translation_class_start, -1))
@@ -484,7 +484,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             expn_start, expn_stop = \
                 self.m2l_preproc_mpole_expansions_level_starts()[level:level+2]
             box_start, box_stop = self.tree.level_start_box_nrs[level:level+2]
-            exprs_level = cl.array.zeros(template_ary.queue, expn_stop - expn_start,
+            exprs_level = cl_array.zeros(template_ary.queue, expn_stop - expn_start,
                                  dtype=self.preprocessed_mpole_dtype)
             result.append(exprs_level.reshape(box_stop - box_start, -1))
         return result
@@ -511,7 +511,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         """
         from pytools.obj_array import make_obj_array
         return make_obj_array([
-                cl.array.zeros(
+                cl_array.zeros(
                     template_ary.queue,
                     self.tree.ntargets,
                     dtype=self.dtype)
@@ -537,15 +537,19 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     @memoize_method
     def max_nsources_in_one_box(self):
         with cl.CommandQueue(self.tree_indep.cl_context) as queue:
-            return int(pyopencl.array.max(self.tree.box_source_counts_nonchild,
-                queue).get())
+            return int(
+                       cast("cl_array.Array",
+                            cl_array.max(self.tree.box_source_counts_nonchild, queue))
+                       .get())
 
     @property
     @memoize_method
     def max_ntargets_in_one_box(self):
         with cl.CommandQueue(self.tree_indep.cl_context) as queue:
-            return int(pyopencl.array.max(self.tree.box_target_counts_nonchild,
-                queue).get())
+            return int(
+                       cast("cl_array.Array",
+                            cl_array.max(self.tree.box_target_counts_nonchild, queue))
+                       .get())
 
     # }}}
 
@@ -719,7 +723,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                         m2l_translation_classes_dependent_data_view.shape[0]
 
                 if ntranslation_classes == 0:
-                    result.append(pyopencl.array.empty_like(
+                    result.append(cl_array.empty_like(
                         m2l_translation_classes_dependent_data_view))
                     continue
 

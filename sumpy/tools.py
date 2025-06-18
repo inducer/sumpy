@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pyopencl import MemoryObjectHolder
+
 
 __copyright__ = """
 Copyright (C) 2012 Andreas Kloeckner
@@ -38,7 +40,6 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 import loopy as lp
-import pyopencl as cl
 from pymbolic.mapper import WalkMapper
 from pytools import memoize_method
 from pytools.tag import Tag, tag_dataclass
@@ -50,6 +51,7 @@ if TYPE_CHECKING:
     import numpy
 
     import pyopencl
+    import pyopencl as cl
 
     from sumpy.kernel import Kernel
 
@@ -603,7 +605,7 @@ def nullspace(m, atol=0):
         vec = [0]*cols
         vec[free_var] = 1
         for piv_row, piv_col in enumerate(pivot_cols):
-            for pos in pivot_cols[piv_row+1:] + [free_var]:
+            for pos in (*pivot_cols[piv_row+1:], free_var):
                 if isinstance(mat[piv_row, pos], sym.Integer):
                     vec[piv_col] -= int(mat[piv_row, pos])
                 else:
@@ -972,7 +974,7 @@ def run_opencl_fft(
         input_vec: Any,
         inverse: bool = False,
         wait_for: list[pyopencl.Event] | None = None
-    ) -> tuple[pyopencl.Event, Any]:
+    ) -> tuple[pyopencl.Event | MarkerBasedProfilingEvent, Any]:
     """Runs an FFT on input_vec and returns a :class:`MarkerBasedProfilingEvent`
     that indicate the end and start of the operations carried out and the output
     vector.
@@ -1015,6 +1017,7 @@ def run_opencl_fft(
         else:
             meth = _vkfft_opencl.fft
 
+        assert isinstance(output_vec.data, MemoryObjectHolder)
         meth(app.app, int(input_vec.data.int_ptr),
             int(output_vec.data.int_ptr), int(queue.int_ptr))
 
