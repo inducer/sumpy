@@ -323,22 +323,22 @@ def plot():
     import matplotlib.pyplot as plt
     orders = [5, 7, 9, 11]
     colors = ['b', 'g', 'r', 'c']
-    resolutions = [200, 300, 400]
+    resolutions = [2000, 3000, 4000]
     err_mat, err_mat1 = _construct_laplace_axis_2d(orders, resolutions)
 
     fig, ax1 = plt.subplots(1, 1, sharey=True, figsize=(6, 6))
 
     ax1.set_yscale("log")
     for i in range(len(orders)):
-        ax1.scatter(9.68845/np.array(resolutions), np.array(err_mat[i]), marker='+', label="$u = u_{qbxrec}$ ("+"$p_{QBX}$="+str(orders[i])+ ")", c=colors[i], s=20)
-        ax1.scatter(9.68845/np.array(resolutions), np.array(err_mat1[i]), marker='x', label="$u = u_{qbx}$ ("+"$p_{QBX}$="+str(orders[i]) + ")", c=colors[i], s=20)
+        ax1.scatter(9.68845/np.array(resolutions), np.array(err_mat[i]), marker='+', label="$u = u_{qbxrec}$ ("+"$p_{QBX}$="+str(orders[i])+ ")", c=colors[i], s=50)
+        ax1.scatter(9.68845/np.array(resolutions), np.array(err_mat1[i]), marker='x', label="$u = u_{qbx}$ ("+"$p_{QBX}$="+str(orders[i]) + ")", c=colors[i], s=50)
 
-    ax1.set_xlabel("Mesh Resolution ($h$)", fontsize=16)
-    ax1.set_ylabel("Relative Error ($L_{\infty}$)", fontsize=16)
-    ax1.set_title("$(u-u_{true})/u_{true}$", fontsize=18)
+    ax1.set_xlabel("Mesh Resolution ($h$)", fontsize=14)
+    ax1.set_ylabel("Relative Error ($L_{\infty}$)", fontsize=14)
+    ax1.set_title("$(u-u_{true})/u_{true}$", fontsize=16)
     ax1.legend()
 
-    plt.suptitle("Laplace 2D: Ellipse SLP Boundary Evaluation Error ($m=100$, $p_{offaxis}=8$)", fontsize=18)
+    plt.suptitle("Laplace 2D: Ellipse SLP Boundary Evaluation Error ($m=100$, $p_{offaxis}=8$)", fontsize=16)
     plt.show()
     fig.savefig("qbxrecurrence.svg")
 
