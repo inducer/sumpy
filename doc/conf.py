@@ -31,9 +31,13 @@ nitpick_ignore_regex = [
 sphinxconfig_missing_reference_aliases = {
     # sympy
     "sp.Matrix": "class:sympy.matrices.dense.DenseMatrix",
+    # pytools
+    "ObjectArray1D": "obj:pytools.obj_array.ObjectArray1D",
     # pymbolic
     "ArithmeticExpression": "obj:pymbolic.ArithmeticExpression",
     "Expression": "obj:pymbolic.typing.Expression",
+    # arraycontext
+    "Array": "obj:arraycontext.Array",
     # sumpy
     "ArithmeticExpr": "obj:sumpy.kernel.ArithmeticExpr",
 }
