@@ -28,7 +28,7 @@ THE SOFTWARE.
 
 from functools import partial
 from numbers import Number
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytools.obj_array as obj_array
 from pytools import memoize_method
@@ -632,7 +632,7 @@ class PointSources(PotentialSource):
                 [cl_array.to_device(queue, self.weights)],
                 **self.toy_ctx.extra_source_and_kernel_kwargs)
 
-        return potential.get(queue)
+        return cast("cl_array.Array", potential).get(queue)
 
     @property
     def center(self):

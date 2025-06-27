@@ -26,6 +26,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from typing import TYPE_CHECKING, Any
+
 import numpy as np
 
 import loopy as lp
@@ -33,6 +35,14 @@ from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 
 from sumpy.codegen import register_optimization_preambles
 from sumpy.tools import KernelCacheMixin, KernelComputation, is_obj_array_like
+
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    import pyopencl as cl
+    from arraycontext import Array
+    from pytools.obj_array import ObjectArray1D
 
 
 __doc__ = """
@@ -198,7 +208,6 @@ class P2PBase(KernelCacheMixin, KernelComputation):
 
         return knl
 
-
 # }}}
 
 
@@ -257,7 +266,13 @@ class P2P(P2PBase):
 
         return loopy_knl
 
-    def __call__(self, queue, targets, sources, strength, **kwargs):
+    def __call__(self,
+            queue: cl.CommandQueue,
+            targets: ObjectArray1D[Array] | Array,
+            sources: ObjectArray1D[Array] | Array,
+            strength: Sequence[Array],
+            **kwargs: Any,
+        ) -> tuple[cl.Event, Sequence[Array]]:
         knl = self.get_cached_kernel_executor(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
@@ -319,7 +334,12 @@ class P2PMatrixGenerator(P2PBase):
 
         return loopy_knl
 
-    def __call__(self, queue, targets, sources, **kwargs):
+    def __call__(self,
+            queue: cl.CommandQueue,
+            targets: ObjectArray1D[Array] | Array,
+            sources: ObjectArray1D[Array] | Array,
+            **kwargs: Any,
+        ) -> tuple[cl.Event, Sequence[Array]]:
         knl = self.get_cached_kernel_executor(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
@@ -417,7 +437,15 @@ class P2PMatrixSubsetGenerator(P2PBase):
 
         return knl
 
-    def __call__(self, queue, targets, sources, tgtindices, srcindices, **kwargs):
+    def __call__(self,
+            queue: cl.CommandQueue,
+            targets: ObjectArray1D[Array] | Array,
+            sources: ObjectArray1D[Array] | Array,
+            *,
+            tgtindices: Array,
+            srcindices: Array,
+            **kwargs: Any,
+        ) -> tuple[cl.Event, Sequence[Array]]:
         """Evaluate a subset of the P2P matrix interactions.
 
         :arg targets: target point coordinates, which can be an object
@@ -749,12 +777,18 @@ class P2PFromCSR(P2PBase):
 
         return knl
 
-    def __call__(self, queue, **kwargs):
-        max_nsources_in_one_box = kwargs.pop("max_nsources_in_one_box")
-        max_ntargets_in_one_box = kwargs.pop("max_ntargets_in_one_box")
+    def __call__(self,
+            queue: cl.CommandQueue,
+            targets: ObjectArray1D[Array] | Array,
+            sources: ObjectArray1D[Array] | Array,
+            *,
+            max_nsources_in_one_box: int,
+            max_ntargets_in_one_box: int,
+            **kwargs: Any,
+        ) -> tuple[cl.Event, Sequence[Array]]:
 
         if self.is_gpu:
-            source_dtype = kwargs.get("sources")[0].dtype
+            source_dtype = sources[0].dtype
             strength_dtype = kwargs.get("strength").dtype
         else:
             # these are unused for not GPU and defeats the caching
@@ -769,7 +803,7 @@ class P2PFromCSR(P2PBase):
                 strength_dtype=strength_dtype,
                 )
 
-        return knl(queue, **kwargs)
+        return knl(queue, targets=targets, sources=sources, **kwargs)
 
 # }}}
 
