@@ -71,8 +71,13 @@ def test_lpot_dx_jump_relation_convergence(kernel_type):
     )
     targets = actx.from_numpy(targets_h)
 
+    from sumpy.qbx import LayerPotential
+    lplot_dx = LayerPotential(actx.context, expansion=LineTaylorLocalExpansion(knl, qbx_order),
+                                  target_kernels=(AxisTargetDerivative(0, knl),), source_kernels=(knl,))
+    lplot_dy = LayerPotential(actx.context, expansion=LineTaylorLocalExpansion(knl, qbx_order),
+                                  target_kernels=(AxisTargetDerivative(1, knl),), source_kernels=(knl,))
     eocrec = EOCRecorder()
-
+    
     for nelement in nelements:
         mesh = make_curve_mesh(starfish, np.linspace(0, 1, nelement + 1), target_order)
         pre_density_discr = Discretization(
@@ -97,76 +102,50 @@ def test_lpot_dx_jump_relation_convergence(kernel_type):
             sym.weights_and_area_elements(ambient_dim=2, dim=1, dofdesc=dofdesc)
         )(actx)
         weights_nodes_h = actx.to_numpy(flatten(weights_nodes, actx))
-        
+        strengths = (actx.from_numpy(weights_nodes_h),)
+
         expansion_radii_h = jac / (2 * nelement)
         centers_in = actx.from_numpy(targets_h - targets_normals_h * expansion_radii_h)
         centers_out = actx.from_numpy(targets_h + targets_normals_h * expansion_radii_h)
-        
-        mat_gen_x = LayerPotentialMatrixGenerator(
-            actx.context,
-            expansion=LineTaylorLocalExpansion(knl, qbx_order),
-            source_kernels=(knl,),
-            target_kernels=(AxisTargetDerivative(0, knl),)
-        )
-        
-        mat_gen_y = LayerPotentialMatrixGenerator(
-            actx.context,
-            expansion=LineTaylorLocalExpansion(knl, qbx_order),
-            source_kernels=(knl,),
-            target_kernels=(AxisTargetDerivative(1, knl),)
-        )
-        
-        _, (mat_in_x,) = mat_gen_x(
+       
+        _, (eval_in_dx,) = lplot_dx(
             actx.queue,
-            targets=targets,
-            sources=sources,
-            expansion_radii=expansion_radii_h,
-            centers=centers_in,
+            targets, sources, centers_in, strengths,
+            expansion_radii=expansion_radii_h
         )
-        mat_in_x = actx.to_numpy(mat_in_x)
-        weighted_mat_in_x = mat_in_x * weights_nodes_h[None, :]
         
-        _, (mat_in_y,) = mat_gen_y(
+        _, (eval_in_dy,) = lplot_dy(
             actx.queue,
-            targets=targets,
-            sources=sources,
-            expansion_radii=expansion_radii_h,
-            centers=centers_in,
+            targets, sources, centers_in, strengths,
+            expansion_radii=expansion_radii_h
         )
-        mat_in_y = actx.to_numpy(mat_in_y)
-        weighted_mat_in_y = mat_in_y * weights_nodes_h[None, :]
         
-        _, (mat_out_x,) = mat_gen_x(
+        _, (eval_out_dx,) = lplot_dx(
             actx.queue,
-            targets=targets,
-            sources=sources,
-            expansion_radii=expansion_radii_h,
-            centers=centers_out,
+            targets, sources, centers_out, strengths,
+            expansion_radii=expansion_radii_h
         )
-        mat_out_x = actx.to_numpy(mat_out_x)
-        weighted_mat_out_x = mat_out_x * weights_nodes_h[None, :]
         
-        _, (mat_out_y,) = mat_gen_y(
+        _, (eval_out_dy,) = lplot_dy(
             actx.queue,
-            targets=targets,
-            sources=sources,
-            expansion_radii=expansion_radii_h,
-            centers=centers_out,
+            targets, sources, centers_out, strengths,
+            expansion_radii=expansion_radii_h
         )
-        mat_out_y = actx.to_numpy(mat_out_y)
-        weighted_mat_out_y = mat_out_y * weights_nodes_h[None, :]
         
-        eval_in = (weighted_mat_in_x.sum(axis=1) * targets_normals_h[0] + 
-                   weighted_mat_in_y.sum(axis=1) * targets_normals_h[1])
-        eval_out = (weighted_mat_out_x.sum(axis=1) * targets_normals_h[0] + 
-                    weighted_mat_out_y.sum(axis=1) * targets_normals_h[1])
+        eval_in_dx = actx.to_numpy(eval_in_dx)
+        eval_in_dy = actx.to_numpy(eval_in_dy)
+        eval_out_dx = actx.to_numpy(eval_out_dx)
+        eval_out_dy = actx.to_numpy(eval_out_dy)
         
+        eval_in = eval_in_dx * targets_normals_h[0] + eval_in_dy * targets_normals_h[1]
+        eval_out = eval_out_dx * targets_normals_h[0] + eval_out_dy * targets_normals_h[1]
+
         # check jump relation: S'_int - S'_ext = sigma (=1 for constant density)
         jump_error = np.abs(eval_in - eval_out - 1)
         
         h_max = actx.to_numpy(bind(places, sym.h_max(places.ambient_dim))(actx))
         eocrec.add_data_point(h_max, np.max(jump_error))
-        
+    
     assert eocrec.order_estimate() > qbx_order - 1
   
     
