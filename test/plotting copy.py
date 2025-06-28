@@ -20,11 +20,16 @@ from sympy import hankel1
 from immutabledict import immutabledict
 from sumpy.expansion.diff_op import LinearPDESystemOperator
 
-def produce_assumption_values(coords, g_x_y, n, p):
+nmin = -2
+nmax = 3
+n_levels = (nmax-nmin)+1
+levels = 10**np.linspace(nmin, nmax, n_levels)
+tcklabels = ["1e"+str(int(np.round(np.log10(i)))) for i in levels]
+
+def produce_assumption_values(coords, g_x_y, deriv_order):
     ndim = 2
     cts_r_s = coords.reshape(2,coords.shape[1],1)
     coord = [cts_r_s[j] for j in range(ndim)]
-    deriv_order = n + p + 1
     ndim = cts_r_s.shape[0]
     var = _make_sympy_vec("x", ndim)
     var_t = _make_sympy_vec("t", ndim)
@@ -42,6 +47,7 @@ def produce_assumption_values(coords, g_x_y, n, p):
 
         #print("=============== ORDER = " + str(i))
         #print(lamb_expr_symb)
+        print(lamb_expr_symb)
         return sp.lambdify(arg_list, lamb_expr_symb)#, sp.lambdify(arg_list, lamb_expr_symb_deriv)
 
     interactions_true = 0
@@ -50,7 +56,8 @@ def produce_assumption_values(coords, g_x_y, n, p):
     a4 = [*coord]
     s_new_true = lamb_expr_true(*a4)
     interactions_true += s_new_true
-    return interactions_true
+    denom = coord[0]/coord[1]**(deriv_order+1)
+    return np.abs(interactions_true)/denom
     ###############
 
 
@@ -223,13 +230,11 @@ def create_logarithmic_mesh(res):
     return mesh_points, x_grid, y_grid
 
 def create_plot(relerr_on, ax, str_title, acbar=True):
-    n_levels = 18
-    levels = 10**np.linspace(-n_levels+2, 1, n_levels)
-    cs = ax.contourf(x_grid, y_grid, relerr_on.reshape(res, res), locator=ticker.LogLocator(), cmap=cm.coolwarm, levels=levels, extend="both")
+    cs = ax.contourf(x_grid, y_grid, relerr_on.reshape(res, res), locator=ticker.LogLocator(), cmap=cm.plasma, levels=levels, extend="both")
     if acbar:
         cbar = fig.colorbar(cs)
         cbar.set_ticks(levels)
-        cbar.set_ticklabels(["1e"+str(int(i)) for i in np.linspace(-n_levels+2, 1, n_levels)])
+        cbar.set_ticklabels(tcklabels)
 
     ax.set_xscale('log')
     ax.set_yscale('log')
@@ -241,19 +246,18 @@ def create_plot(relerr_on, ax, str_title, acbar=True):
 
 def create_suite_plot(relerr_on, relerr_off, relerr_comb, str_title):
     fig, (ax1,ax2,ax3) = plt.subplots(1, 3, figsize=(15, 8))
-    cs = create_plot(relerr_on, ax1, "On-Axis Recurrence", False)
-    cs = create_plot(relerr_off, ax2, "Off-Axis Recurrence ($p_{offaxis}=8$)", False)
-    cs = create_plot(relerr_comb, ax3, "On/Off-Axis Recurrence ($m=100$)", False)
+    cs = create_plot(relerr_on, ax1, "Laplace 2D", False)
+    cs = create_plot(relerr_off, ax2, "Helmholtz 2D", False)
+    cs = create_plot(relerr_comb, ax3, "Biharmonic 2D", False)
 
-    n_levels = 18
-    levels = 10**np.linspace(-n_levels+2, 1, n_levels)
+    n_levels = 3
 
 
     fig.subplots_adjust(wspace=0.3, hspace=0.5)
 
     cbar = fig.colorbar(cs, ax=[ax1,ax2,ax3], shrink=0.9, location='bottom')
     cbar.set_ticks(levels)
-    cbar.set_ticklabels(["1e"+str(int(i)) for i in np.linspace(-n_levels+2, 1, n_levels)])
+    cbar.set_ticklabels(tcklabels)
     fig.suptitle(str_title, fontsize=16)
 
 #========================= DEFINE PLOT RESOLUTION ====================================
@@ -304,14 +308,14 @@ g_x_y_helmholtz = (1j/4) * hankel1(0, k * abs_dist)
 
 #======================== BIHARMONIC 2D ===================================
 #interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, biharmonic_pde, g_x_y_biharmonic, 12, m=1e2/2)
-relerr_on = produce_assumption_values(mesh_points, g_x_y_laplace, 3, 1)
-relerr_off = produce_assumption_values(mesh_points, g_x_y_laplace, 3, 1)
-relerr_comb = produce_assumption_values(mesh_points, g_x_y_laplace, 3, 1)
+relerr_on = produce_assumption_values(mesh_points, g_x_y_laplace, 5)
+relerr_off = produce_assumption_values(mesh_points, g_x_y_helmholtz, 5)
+relerr_comb = produce_assumption_values(mesh_points, g_x_y_biharmonic, 5)
 
 #relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
 #relerr_off = np.abs((interactions_off_axis-interactions_true)/interactions_true)
 #relerr_comb = np.abs((interactions_total-interactions_true)/interactions_true)
 
-create_suite_plot(relerr_on, relerr_off, relerr_comb, "Biharmonic 2D: 8th Order Derivative Evaluation Error $(u_{recur}-u_{sympy})/u_{recur}$")
+create_suite_plot(relerr_on+1e-20, relerr_off+1e-20, relerr_comb+1e-20, "Eq. 80 for different Green's Functions in 2D ($c=5$)")
 
 plt.show()
