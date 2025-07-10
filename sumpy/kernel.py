@@ -213,7 +213,7 @@ class Kernel:
         """
         return new_base_kernel
 
-    def prepare_loopy_kernel(self, loopy_knl):
+    def prepare_loopy_kernel(self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
         """Apply some changes (such as registering function
         manglers) to the kernel. Return the new kernel.
         """

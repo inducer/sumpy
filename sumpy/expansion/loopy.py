@@ -24,7 +24,7 @@ THE SOFTWARE.
 """
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
@@ -109,7 +109,9 @@ def make_e2p_loopy_kernel(
             idx = int(insn.assignee.name[len(result.name):])
             insns[i] = lp.Assignment(
                 assignee=result[idx],
-                expression=result[idx] + insn.expression,
+                expression=(
+                    result[idx]
+                    + cast("pymbolic.ArithmeticExpression", insn.expression)),
                 id=f"result_{idx}",
                 happens_after=insn.happens_after,
             )
@@ -207,7 +209,9 @@ def make_p2e_loopy_kernel(
             idx = int(insn.assignee.name[len(coeffs.name):])
             insns[i] = lp.Assignment(
                 assignee=coeffs[idx],
-                expression=coeffs[idx] + insn.expression,
+                expression=(
+                    coeffs[idx]
+                    + cast("pymbolic.ArithmeticExpression", insn.expression)),
                 id=f"coeff_{idx}",
                 happens_after=insn.happens_after,
             )

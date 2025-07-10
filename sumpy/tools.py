@@ -49,6 +49,7 @@ import sumpy.symbolic as sym
 
 if TYPE_CHECKING:
     import numpy
+    from numpy.typing import DTypeLike
 
     import pyopencl
     import pyopencl as cl
@@ -113,6 +114,13 @@ Profiling
 .. autoclass:: ProfileGetter
 .. autoclass:: AggregateProfilingEvent
 .. autoclass:: MarkerBasedProfilingEvent
+
+References
+----------
+
+.. class:: DTypeLike
+
+    See :data:`numpy.typing.DTypeLike`.
 """
 
 
@@ -291,11 +299,11 @@ class KernelComputation(ABC):
     .. automethod:: get_kernel
     """
 
-    def __init__(self, ctx: Any,
-            target_kernels: list[Kernel],
-            source_kernels: list[Kernel],
-            strength_usage: list[int] | None = None,
-            value_dtypes: list[numpy.dtype[Any]] | None = None,
+    def __init__(self, ctx: cl.Context,
+            target_kernels: Sequence[Kernel],
+            source_kernels: Sequence[Kernel],
+            strength_usage: Sequence[int] | None = None,
+            value_dtypes: Sequence[numpy.dtype[Any]] | numpy.dtype[Any] | None = None,
             name: str | None = None,
             device: Any | None = None) -> None:
         """
@@ -321,7 +329,7 @@ class KernelComputation(ABC):
                 else:
                     value_dtypes.append(np.dtype(np.float64))
 
-        if not isinstance(value_dtypes, list | tuple):
+        if not isinstance(value_dtypes, Sequence):
             value_dtypes = [np.dtype(value_dtypes)] * len(target_kernels)
         value_dtypes = [np.dtype(vd) for vd in value_dtypes]
 
@@ -341,14 +349,14 @@ class KernelComputation(ABC):
         if device is None:
             device = ctx.devices[0]
 
-        self.context = ctx
-        self.device = device
+        self.context: cl.Context = ctx
+        self.device: cl.Device = device
 
-        self.source_kernels = tuple(source_kernels)
-        self.target_kernels = tuple(target_kernels)
-        self.value_dtypes = value_dtypes
-        self.strength_usage = strength_usage
-        self.strength_count = strength_count
+        self.source_kernels: Sequence[Kernel] = tuple(source_kernels)
+        self.target_kernels: Sequence[Kernel] = tuple(target_kernels)
+        self.value_dtypes: Sequence[np.dtype[Any]] = value_dtypes
+        self.strength_usage: Sequence[int] = strength_usage
+        self.strength_count: int = strength_count
 
         self.name = name or self.default_name
 
@@ -507,7 +515,9 @@ class KernelCacheMixin(ABC):
         return knl.executor(self.context)
 
     @staticmethod
-    def _allow_redundant_execution_of_knl_scaling(knl):
+    def _allow_redundant_execution_of_knl_scaling(
+                knl: lp.TranslationUnit
+            ) -> lp.TranslationUnit:
         from loopy.match import ObjTagged
         return lp.add_inames_for_unused_hw_axes(
                 knl, within=ObjTagged(ScalingAssignmentTag()))
@@ -734,12 +744,19 @@ class MarkerBasedProfilingEvent:
         return self.native_event.wait()
 
 
-def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
-        name=None):
+def loopy_fft(
+            shape: tuple[int, ...],
+            inverse: bool,
+            complex_dtype: DTypeLike,
+            index_dtype: DTypeLike | None = None,
+            name: str | None = None
+        ):
     from math import pi
 
     from pymbolic import var
     from pymbolic.algorithm import find_factors
+
+    complex_dtype = np.dtype(complex_dtype)
 
     sign = 1 if not inverse else -1
     n = shape[-1]
@@ -766,7 +783,7 @@ def loopy_fft(shape, inverse, complex_dtype, index_dtype=None,
     i2 = var("i2")
     i3 = var("i3")
 
-    fixed_parameters = {"const": complex_dtype(sign*(-2j)*pi/n), "n": n}
+    fixed_parameters = {"const": complex_dtype.type(sign*(-2j)*pi/n), "n": int(n)}
 
     index = (*broadcast_dims, i2)
     insns = [

@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 
 __doc__ = """
 
+.. autoclass:: MultipoleExpansionBase
 .. autoclass:: VolumeTaylorMultipoleExpansion
 .. autoclass:: H2DMultipoleExpansion
 .. autoclass:: Y2DMultipoleExpansion

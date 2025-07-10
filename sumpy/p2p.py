@@ -252,7 +252,7 @@ class P2P(P2PBase):
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
-        for knl in self.target_kernels + self.source_kernels:
+        for knl in [*self.target_kernels, *self.source_kernels]:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
@@ -314,7 +314,7 @@ class P2PMatrixGenerator(P2PBase):
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
 
-        for knl in self.target_kernels + self.source_kernels:
+        for knl in [*self.target_kernels, *self.source_kernels]:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
@@ -395,7 +395,7 @@ class P2PMatrixSubsetGenerator(P2PBase):
         loopy_knl = lp.add_dtypes(
                 loopy_knl, {"nsources": np.int32, "ntargets": np.int32})
 
-        for knl in self.target_kernels + self.source_kernels:
+        for knl in [*self.target_kernels, *self.source_kernels]:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
@@ -657,7 +657,7 @@ class P2PFromCSR(P2PBase):
         loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
         loopy_knl = lp.tag_array_axes(loopy_knl, "sources", "sep,C")
 
-        for knl in self.target_kernels + self.source_kernels:
+        for knl in [*self.target_kernels, *self.source_kernels]:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
