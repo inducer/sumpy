@@ -27,10 +27,21 @@ __doc__ = """Integrates :mod:`boxtree` with :mod:`sumpy`.
 
 .. autoclass:: SumpyTreeIndependentDataForWrangler
 .. autoclass:: SumpyExpansionWrangler
+
+.. autodata:: MultipoleExpansionFactory
+    :noindex:
+.. class:: MultipoleExpansionFactory
+
+    See above.
+.. autodata:: LocalExpansionFactory
+    :noindex:
+.. class:: LocalExpansionFactory
+
+    See above.
 """
 
-
-from typing import Protocol, cast
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, Protocol, TypeAlias, cast
 
 from boxtree.fmm import ExpansionWranglerInterface, TreeIndependentDataForWrangler
 
@@ -52,6 +63,8 @@ from sumpy import (
     P2EFromSingleBox,
     P2PFromCSR,
 )
+from sumpy.expansion.local import LocalExpansionBase
+from sumpy.expansion.multipole import MultipoleExpansionBase
 from sumpy.tools import (
     AggregateProfilingEvent,
     get_native_event,
@@ -59,6 +72,17 @@ from sumpy.tools import (
     run_opencl_fft,
     to_complex_dtype,
 )
+
+
+if TYPE_CHECKING:
+    from sumpy.kernel import Kernel
+
+
+# parameters here are order, use_rscale
+MultipoleExpansionFactory: TypeAlias = Callable[
+    [int, bool | None], MultipoleExpansionBase]
+LocalExpansionFactory: TypeAlias = Callable[
+    [int, bool | None], LocalExpansionBase]
 
 
 # {{{ tree-independent data for wrangler
@@ -75,11 +99,24 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
     profiling enabled.
     """
 
-    def __init__(self, cl_context,
-            multipole_expansion_factory,
-            local_expansion_factory,
-            target_kernels, exclude_self=False, use_rscale=None,
-            strength_usage=None, source_kernels=None):
+    cl_context: cl.Context
+    multipole_expansion_factory: MultipoleExpansionFactory
+    local_expansion_factory: LocalExpansionFactory
+    source_kernels: Sequence[Kernel] | None
+    target_kernels: Sequence[Kernel]
+    exclude_self: bool
+    use_rscale: bool | None
+    strength_usage: Sequence[int] | None
+
+    def __init__(self,
+                 cl_context: cl.Context,
+                 multipole_expansion_factory: MultipoleExpansionFactory,
+                 local_expansion_factory: LocalExpansionFactory,
+                 target_kernels: Sequence[Kernel],
+                 exclude_self: bool = False,
+                 use_rscale: bool | None = None,
+                 strength_usage: Sequence[int] | None = None,
+                 source_kernels: Sequence[Kernel] | None = None):
         """
         :arg multipole_expansion_factory: a callable of a single argument (order)
             that returns a multipole expansion.

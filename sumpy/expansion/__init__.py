@@ -39,6 +39,8 @@ if TYPE_CHECKING:
 
     import loopy as lp
 
+    from sumpy.expansion.local import LocalExpansionBase
+    from sumpy.expansion.multipole import MultipoleExpansionBase
     from sumpy.kernel import Kernel
 
 
@@ -915,13 +917,17 @@ class ExpansionFactoryBase(ABC):
     """
 
     @abstractmethod
-    def get_local_expansion_class(self, base_kernel):
+    def get_local_expansion_class(self,
+                base_kernel: Kernel
+            ) -> type[LocalExpansionBase]:
         """
         :returns: a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
 
     @abstractmethod
-    def get_multipole_expansion_class(self, base_kernel):
+    def get_multipole_expansion_class(self,
+                base_kernel: Kernel
+            ) -> type[MultipoleExpansionBase]:
         """
         :returns: a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
@@ -981,6 +987,24 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
             return VolumeTaylorMultipoleExpansion
 
 # }}}
+
+
+__all__ = [
+    "BiharmonicConformingVolumeTaylorExpansion",
+    "CSEMatVecOperator",
+    "DefaultExpansionFactory",
+    "ExpansionBase",
+    "ExpansionFactoryBase",
+    "ExpansionTermsWrangler",
+    "FullExpansionTermsWrangler",
+    "HelmholtzConformingVolumeTaylorExpansion",
+    "LaplaceConformingVolumeTaylorExpansion",
+    "LinearPDEBasedExpansionTermsWrangler",
+    "LinearPDEConformingVolumeTaylorExpansion",
+    "VolumeTaylorExpansion",
+    "VolumeTaylorExpansionFactory",
+    "VolumeTaylorExpansionMixin",
+]
 
 
 # vim: fdm=marker

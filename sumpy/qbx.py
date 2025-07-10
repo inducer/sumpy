@@ -30,6 +30,7 @@ THE SOFTWARE.
 import logging
 
 import numpy as np
+from typing_extensions import override
 
 import loopy as lp
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
@@ -145,8 +146,8 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
 
         sac.run_global_cse()
 
-        pymbolic_expr_maps = [knl.get_code_transformer() for knl in (
-            self.target_kernels + self.source_kernels)]
+        pymbolic_expr_maps = [knl.get_code_transformer() for knl in [
+            *self.target_kernels, *self.source_kernels]]
 
         from sumpy.codegen import to_loopy_insns
         loopy_insns = to_loopy_insns(
@@ -235,6 +236,7 @@ class LayerPotential(LayerPotentialBase):
     """
 
     @property
+    @override
     def default_name(self):
         return "qbx_apply"
 
@@ -283,7 +285,7 @@ class LayerPotential(LayerPotentialBase):
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-        for knl in self.target_kernels + self.source_kernels:
+        for knl in [*self.target_kernels, *self.source_kernels]:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
@@ -360,7 +362,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
             lang_version=MOST_RECENT_LANGUAGE_VERSION)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-        for expn in self.source_kernels + self.target_kernels:
+        for expn in [*self.source_kernels, *self.target_kernels]:
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
@@ -443,11 +445,12 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
         loopy_knl = lp.add_dtypes(
                 loopy_knl, {"nsources": np.int32, "ntargets": np.int32})
 
-        for knl in self.source_kernels + self.target_kernels:
+        for knl in [*self.source_kernels, *self.target_kernels]:
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         return loopy_knl
 
+    @override
     def get_optimized_kernel(self,
             targets_is_obj_array, sources_is_obj_array, centers_is_obj_array):
         loopy_knl = self.get_kernel()
