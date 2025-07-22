@@ -30,6 +30,7 @@ from functools import partial
 from numbers import Number
 from typing import TYPE_CHECKING
 
+import pytools.obj_array as obj_array
 from pytools import memoize_method
 
 from sumpy.kernel import TargetTransformationRemover
@@ -309,8 +310,6 @@ def _e2p(psource, targets, e2p):
         queue,
         np.array(psource.center, dtype=np.float64).reshape(toy_ctx.kernel.dim, 1))
 
-    from pytools.obj_array import make_obj_array
-
     from sumpy.tools import vector_to_device
 
     coeffs = cl_array.to_device(queue, np.array([psource.coeffs]))
@@ -323,7 +322,7 @@ def _e2p(psource, targets, e2p):
             box_target_counts_nonchild=box_target_counts_nonchild,
             centers=centers,
             rscale=psource.rscale,
-            targets=vector_to_device(queue, make_obj_array(targets)),
+            targets=vector_to_device(queue, obj_array.new_1d(targets)),
             **toy_ctx.extra_kernel_kwargs)
 
     return pot.get(queue)

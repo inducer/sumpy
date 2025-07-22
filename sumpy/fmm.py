@@ -47,6 +47,7 @@ from boxtree.fmm import ExpansionWranglerInterface, TreeIndependentDataForWrangl
 
 import pyopencl as cl
 import pyopencl.array as cl_array
+import pytools.obj_array as obj_array
 from pytools import memoize_method
 
 from sumpy import (
@@ -546,8 +547,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             (e.g. :class:`pyopencl.CommandQueue`) the returned array should
             reuse.
         """
-        from pytools.obj_array import make_obj_array
-        return make_obj_array([
+        return obj_array.new_1d([
                 cl_array.zeros(
                     template_ary.queue,
                     self.tree.ntargets,
@@ -560,7 +560,6 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     def reorder_potentials(self, potentials):
         import numpy as np
 
-        from pytools.obj_array import obj_array_vectorize
         assert (
                 isinstance(potentials, np.ndarray)
                 and potentials.dtype.char == "O")
@@ -568,7 +567,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         def reorder(x):
             return x[self.tree.sorted_target_ids]
 
-        return obj_array_vectorize(reorder, potentials)
+        return obj_array.vectorize(reorder, potentials)
 
     @property
     @memoize_method

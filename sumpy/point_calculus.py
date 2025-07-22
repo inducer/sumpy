@@ -26,6 +26,7 @@ THE SOFTWARE.
 import numpy as np
 import numpy.linalg as la
 
+import pytools.obj_array as obj_array
 from pytools import memoize_method
 
 
@@ -232,8 +233,7 @@ class CalculusPatch:
             :class:`numpy.ndarray`\ s with shape ``(npoints_total,)``.
         """
         from pytools import levi_civita
-        from pytools.obj_array import make_obj_array
-        return make_obj_array([
+        return obj_array.new_1d([
             sum(
                 levi_civita((k, m, n)) * self.diff(m, arg[n])
                 for m in range(3) for n in range(3))

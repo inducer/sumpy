@@ -30,6 +30,7 @@ import numpy as np
 import numpy.linalg as la
 import pytest
 
+import pytools.obj_array as obj_array
 from arraycontext import pytest_generate_tests_for_array_contexts
 
 from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
@@ -141,9 +142,8 @@ def test_qbx_direct(actx_factory, factor, lpot_id, visualize=False):
 
         extra_kwargs = {}
         if lpot_id == 2:
-            from pytools.obj_array import make_obj_array
             extra_kwargs["dsource_vec"] = (
-                    actx.from_numpy(make_obj_array(np.ones((ndim, n))))
+                    actx.from_numpy(obj_array.new_1d(np.ones((ndim, n))))
                     )
 
         _, (result_lpot,) = lpot(actx.queue,
@@ -229,9 +229,8 @@ def test_p2p_direct(actx_factory, exclude_self, factor, lpot_id, visualize=False
                 actx.from_numpy(np.arange(n, dtype=np.int32))
                 )
         if lpot_id == 2:
-            from pytools.obj_array import make_obj_array
             extra_kwargs["dsource_vec"] = (
-                    actx.from_numpy(make_obj_array(np.ones((ndim, n)))))
+                    actx.from_numpy(obj_array.new_1d(np.ones((ndim, n)))))
 
         _, (result_lpot,) = lpot(actx.queue,
                 targets=targets,

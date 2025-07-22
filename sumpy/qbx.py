@@ -33,6 +33,7 @@ import numpy as np
 from typing_extensions import override
 
 import loopy as lp
+import pytools.obj_array as obj_array
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 from pymbolic import parse, var
 from pytools import memoize_method
@@ -646,8 +647,7 @@ class _JumpTermSymbolicArgumentProvider:
         self.arguments["normal"] = (
                 lp.GlobalArg("normal", self.geometry_dtype,
                              shape=("ntargets", self.dim), order="C"))
-        from pytools.obj_array import make_obj_array
-        return make_obj_array([
+        return obj_array.new_1d([
             parse(f"normal[itgt, {i}]")
             for i in range(self.dim)])
 
@@ -657,8 +657,7 @@ class _JumpTermSymbolicArgumentProvider:
         self.arguments["tangent"] = (
                 lp.GlobalArg("tangent", self.geometry_dtype,
                              shape=("ntargets", self.dim), order="C"))
-        from pytools.obj_array import make_obj_array
-        return make_obj_array([
+        return obj_array.new_1d([
             parse(f"tangent[itgt, {i}]")
             for i in range(self.dim)])
 
@@ -678,8 +677,7 @@ class _JumpTermSymbolicArgumentProvider:
                 lp.GlobalArg("src_derivative_dir",
                              self.geometry_dtype, shape=("ntargets", self.dim),
                              order="C"))
-        from pytools.obj_array import make_obj_array
-        return make_obj_array([
+        return obj_array.new_1d([
             parse(f"src_derivative_dir[itgt, {i}]")
             for i in range(self.dim)])
 
@@ -690,8 +688,7 @@ class _JumpTermSymbolicArgumentProvider:
                 lp.GlobalArg("tgt_derivative_dir",
                              self.geometry_dtype, shape=("ntargets", self.dim),
                              order="C"))
-        from pytools.obj_array import make_obj_array
-        return make_obj_array([
+        return obj_array.new_1d([
             parse(f"tgt_derivative_dir[itgt, {i}]")
             for i in range(self.dim)])
 
