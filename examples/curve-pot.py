@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.linalg as la
+from numpy.typing import NDArray
 
 import pyopencl as cl
 
@@ -120,7 +121,7 @@ def draw_pot_figure(aspect_ratio,
     a = 1
     b = 1/aspect_ratio
 
-    def map_to_curve(t):
+    def map_to_curve(t: NDArray[np.floating]):
         t = t*(2*np.pi)
 
         x = a*np.cos(t)
@@ -185,8 +186,8 @@ def draw_pot_figure(aspect_ratio,
 
         from sumpy.tools import build_matrix
 
-        def apply_lpot(x):
-            xovsmp = np.dot(fim, x)
+        def apply_lpot(x: NDArray[np.inexact]) -> NDArray[np.inexact]:
+            xovsmp = fim @ x
             _evt, (y,) = lpot(actx.queue,
                     sources,
                     ovsmp_sources,
@@ -197,7 +198,7 @@ def draw_pot_figure(aspect_ratio,
 
             return actx.to_numpy(y)
 
-        op = LinearOperator((nsrc, nsrc), apply_lpot)
+        op = LinearOperator((nsrc, nsrc), np.dtype(np.complex128), apply_lpot)
         mat = build_matrix(op, dtype=np.complex128)
         w, _v = la.eig(mat)
         plt.plot(w.real, "o-")

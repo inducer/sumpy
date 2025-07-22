@@ -1,13 +1,14 @@
 import numpy as np
+from numpy.typing import NDArray
 
 
-def make_fourier_vdm(n, inverse):
+def make_fourier_vdm(n: int, inverse: bool) -> NDArray[np.complex128]:
     i = np.arange(n, dtype=np.float64)
     imat = i[:, np.newaxis]*i/n
     result = np.exp((2j*np.pi)*imat)
 
     if inverse:
-        result = result.T.conj()/n
+        result = np.conj(result.T)/n
     return result
 
 
@@ -30,9 +31,7 @@ def make_fourier_mode_extender(m, n, dtype):
     return result
 
 
-def make_fourier_interp_matrix(m, n):
-    return np.dot(
-            np.dot(
-                make_fourier_vdm(m, inverse=False),
-                make_fourier_mode_extender(m, n, np.float64)),
-            make_fourier_vdm(n, inverse=True))
+def make_fourier_interp_matrix(m: int, n: int):
+    return (make_fourier_vdm(m, inverse=False)
+        @ make_fourier_mode_extender(m, n, np.float64)
+        @  make_fourier_vdm(n, inverse=True))

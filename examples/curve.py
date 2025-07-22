@@ -1,8 +1,11 @@
+from typing import final
+
 import numpy as np
 import scipy as sp
 import scipy.fftpack
 
 
+@final
 class CurveGrid:
     def __init__(self, x, y):
         self.pos = np.vstack([x, y]).copy()
