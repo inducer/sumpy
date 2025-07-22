@@ -32,6 +32,7 @@ import numpy as np
 import numpy.linalg as la
 import pytest
 
+import pytools.obj_array as obj_array
 from arraycontext import pytest_generate_tests_for_array_contexts
 
 from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
@@ -142,8 +143,7 @@ def _test_sumpy_fmm(actx_factory, knl, local_expn_class, mpole_expn_class,
         from sumpy.visualization import FieldPlotter
         fp = FieldPlotter(np.array([0.5, 0]), extent=3, npoints=200)
 
-        from pytools.obj_array import make_obj_array
-        targets = make_obj_array([fp.points[i] for i in range(knl.dim)])
+        targets = obj_array.new_1d([fp.points[i] for i in range(knl.dim)])
 
     from boxtree import TreeBuilder
     tb = TreeBuilder(actx.context)

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pyopencl import MemoryObjectHolder
-
 
 __copyright__ = """
 Copyright (C) 2012 Andreas Kloeckner
@@ -29,6 +27,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+
 import enum
 import logging
 import warnings
@@ -40,7 +39,9 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 import loopy as lp
+import pytools.obj_array as obj_array
 from pymbolic.mapper import WalkMapper
+from pyopencl import MemoryObjectHolder
 from pytools import memoize_method
 from pytools.tag import Tag, tag_dataclass
 
@@ -226,17 +227,14 @@ def build_matrix(op, dtype=None, shape=None):
 
 def vector_to_device(queue, vec):
     from pyopencl.array import to_device
-    from pytools.obj_array import obj_array_vectorize
 
     def to_dev(ary):
         return to_device(queue, ary)
 
-    return obj_array_vectorize(to_dev, vec)
+    return obj_array.vectorize(to_dev, vec)
 
 
 def vector_from_device(queue, vec):
-    from pytools.obj_array import obj_array_vectorize
-
     def from_dev(ary):
         from numbers import Number
         if isinstance(ary, np.number | Number):
@@ -245,7 +243,7 @@ def vector_from_device(queue, vec):
 
         return ary.get(queue=queue)
 
-    return obj_array_vectorize(from_dev, vec)
+    return obj_array.vectorize(from_dev, vec)
 
 
 def _merge_kernel_arguments(dictionary, arg):

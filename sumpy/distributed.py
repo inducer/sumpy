@@ -26,6 +26,7 @@ THE SOFTWARE.
 from boxtree.distributed.calculation import DistributedExpansionWrangler
 
 import pyopencl.array as cl_array
+import pytools.obj_array as obj_array
 
 from sumpy.fmm import SumpyExpansionWrangler
 
@@ -66,8 +67,7 @@ class DistributedSumpyExpansionWrangler(
                 super().gather_potential_results(potentials_host, tgt_idx_all_ranks))
 
         if mpi_rank == 0:
-            from pytools.obj_array import make_obj_array
-            return make_obj_array([
+            return obj_array.new_1d([
                 cl_array.to_device(potentials_dev.queue, gathered_potentials_host)
                 for gathered_potentials_host, potentials_dev in
                 zip(gathered_potentials_host_vec, potentials, strict=True)])
@@ -85,7 +85,6 @@ class DistributedSumpyExpansionWrangler(
         if self.comm.Get_rank() == 0:
             import numpy as np
 
-            from pytools.obj_array import obj_array_vectorize
             assert (
                     isinstance(potentials, np.ndarray)
                     and potentials.dtype.char == "O")
@@ -93,7 +92,7 @@ class DistributedSumpyExpansionWrangler(
             def reorder(x):
                 return x[self.global_traversal.tree.sorted_target_ids]
 
-            return obj_array_vectorize(reorder, potentials)
+            return obj_array.vectorize(reorder, potentials)
         else:
             return None
 

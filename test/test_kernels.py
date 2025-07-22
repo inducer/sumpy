@@ -31,9 +31,9 @@ import numpy as np
 import numpy.linalg as la
 import pytest
 
+import pytools.obj_array as obj_array
 from arraycontext import pytest_generate_tests_for_array_contexts
 from pytools.convergence import PConvergenceVerifier
-from pytools.obj_array import make_obj_array
 
 import sumpy.symbolic as sym
 import sumpy.toys as t
@@ -350,7 +350,7 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
                         + center[:, np.newaxis])
 
         centers = actx.from_numpy(centers)
-        targets = actx.from_numpy(make_obj_array(fp.points))
+        targets = actx.from_numpy(obj_array.new_1d(fp.points))
 
         rscale = 0.5  # pick something non-1
 
