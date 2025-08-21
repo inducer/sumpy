@@ -323,7 +323,7 @@ def plot():
     import matplotlib.pyplot as plt
     orders = [5, 7, 9, 11]
     colors = ['b', 'g', 'r', 'c']
-    resolutions = [2000, 3000, 4000]
+    resolutions = [2000, 300, 4000]
     err_mat, err_mat1 = _construct_laplace_axis_2d(orders, resolutions)
 
     fig, ax1 = plt.subplots(1, 1, sharey=True, figsize=(6, 6))
@@ -339,7 +339,7 @@ def plot():
     ax1.legend()
 
     plt.suptitle("Laplace 2D: Ellipse SLP Boundary Evaluation Error ($m=100$, $p_{offaxis}=8$)", fontsize=16)
+    plt.savefig("../../S_on_surface_convergence.pgf", bbox_inches='tight', pad_inches=0)
     plt.show()
-    fig.savefig("qbxrecurrence.svg")
 
 plot()

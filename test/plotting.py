@@ -207,9 +207,9 @@ def create_plot(relerr_on, ax, str_title, acbar=True):
 
 def create_suite_plot(relerr_on, relerr_off, relerr_comb, str_title):
     fig, (ax1,ax2,ax3) = plt.subplots(1, 3, figsize=(15, 8))
-    cs = create_plot(relerr_on, ax1, "On-Axis Recurrence", False)
-    cs = create_plot(relerr_off, ax2, "Off-Axis Recurrence ($p_{offaxis}=8$)", False)
-    cs = create_plot(relerr_comb, ax3, "On/Off-Axis Recurrence ($m=100$)", False)
+    cs = create_plot(relerr_on, ax1, "Large-$|x_1|$ Recurrence", False)
+    cs = create_plot(relerr_off, ax2, "Small-$|x_1|$ Recurrence ($p_{offaxis}=8$)", False)
+    cs = create_plot(relerr_comb, ax3, "Large/Small-$|x_1|$ Recurrence ($\\xi=50$)", False)
 
     n_levels = 18
     levels = 10**np.linspace(-n_levels+2, 1, n_levels)
@@ -250,13 +250,13 @@ k = 1
 helmholtz2d = laplacian(w) + w
 g_x_y_helmholtz = (1j/4) * hankel1(0, k * abs_dist)
 #========================= LAPLACE 2D ====================================
-#interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, laplace2d, g_x_y_laplace, 10,m=1e2/2)
+interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, laplace2d, g_x_y_laplace, 10,m=1e2/2)
 
-#relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
-#relerr_off = np.abs((interactions_off_axis-interactions_true)/interactions_true)
-#relerr_comb = np.abs((interactions_total-interactions_true)/interactions_true)
+relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
+relerr_off = np.abs((interactions_off_axis-interactions_true)/interactions_true)
+relerr_comb = np.abs((interactions_total-interactions_true)/interactions_true)
 
-#create_suite_plot(relerr_on, relerr_off, relerr_comb, "Laplace 2D: 9th Order Derivative Evaluation Error $(u_{recur}-u_{sympy})/u_{recur}$")
+create_suite_plot(relerr_on+1e-20, relerr_off+1e-20, relerr_comb+1e-20, "Laplace 2D: 9th Order Derivative Evaluation Error $(u_{recur}-u_{sympy})/u_{recur}$")
 
 #========================= HELMOLTZ 2D ====================================
 #interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, helmholtz2d, g_x_y_helmholtz, 8)
@@ -269,12 +269,13 @@ g_x_y_helmholtz = (1j/4) * hankel1(0, k * abs_dist)
 
 
 #======================== BIHARMONIC 2D ===================================
-interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, biharmonic_pde, g_x_y_biharmonic, 12, m=1e2/2)
+#interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, biharmonic_pde, g_x_y_biharmonic, 8, m=1e2/2)
 
-relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
-relerr_off = np.abs((interactions_off_axis-interactions_true)/interactions_true)
-relerr_comb = np.abs((interactions_total-interactions_true)/interactions_true)
+#relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
+#relerr_off = np.abs((interactions_off_axis-interactions_true)/interactions_true)
+#relerr_comb = np.abs((interactions_total-interactions_true)/interactions_true)
 
-create_suite_plot(relerr_on+1e-20, relerr_off+1e-20, relerr_comb+1e-20, "Biharmonic 2D: 8th Order Derivative Evaluation Error $(u_{recur}-u_{sympy})/u_{recur}$")
+#create_suite_plot(relerr_on+1e-20, relerr_off+1e-20, relerr_comb+1e-20, "Biharmonic 2D: 8th Order Derivative Evaluation Error $(u_{recur}-u_{sympy})/u_{recur}$")
 
+plt.savefig("../S_on_surface_convergence.pgf", bbox_inches='tight', pad_inches=0)
 plt.show()

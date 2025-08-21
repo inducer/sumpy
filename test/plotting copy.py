@@ -56,8 +56,12 @@ def produce_assumption_values(coords, g_x_y, deriv_order):
     a4 = [*coord]
     s_new_true = lamb_expr_true(*a4)
     interactions_true += s_new_true
-    denom = coord[0]/coord[1]**(deriv_order+1)
-    return np.abs(interactions_true)/denom
+    if deriv_order % 2 == 0:
+        denom = coord[1]/coord[1]**(deriv_order+1)
+    else:
+        denom = coord[0]/coord[1]**(deriv_order+1)
+
+    return np.abs(interactions_true)/denom, coord[1]
     ###############
 
 
@@ -246,9 +250,9 @@ def create_plot(relerr_on, ax, str_title, acbar=True):
 
 def create_suite_plot(relerr_on, relerr_off, relerr_comb, str_title):
     fig, (ax1,ax2,ax3) = plt.subplots(1, 3, figsize=(15, 8))
-    cs = create_plot(relerr_on, ax1, "Laplace 2D", False)
-    cs = create_plot(relerr_off, ax2, "Helmholtz 2D", False)
-    cs = create_plot(relerr_comb, ax3, "Biharmonic 2D", False)
+    cs = create_plot(relerr_on, ax1, "Laplace 2D (eq. 107)", False)
+    cs = create_plot(relerr_off, ax2, "Helmholtz 2D (eq. 105)", False)
+    cs = create_plot(relerr_comb, ax3, "Biharmonic 2D (eq. 107)", False)
 
     n_levels = 3
 
@@ -308,14 +312,15 @@ g_x_y_helmholtz = (1j/4) * hankel1(0, k * abs_dist)
 
 #======================== BIHARMONIC 2D ===================================
 #interactions_on_axis, interactions_off_axis, interactions_true, interactions_total = produce_error_for_recurrences(mesh_points, biharmonic_pde, g_x_y_biharmonic, 12, m=1e2/2)
-relerr_on = produce_assumption_values(mesh_points, g_x_y_laplace, 5)
-relerr_off = produce_assumption_values(mesh_points, g_x_y_helmholtz, 5)
-relerr_comb = produce_assumption_values(mesh_points, g_x_y_biharmonic, 5)
+deriv_order = 6
+relerr_on, _ = produce_assumption_values(mesh_points, g_x_y_laplace, deriv_order)
+relerr_off, _ = produce_assumption_values(mesh_points, g_x_y_helmholtz, deriv_order)
+relerr_comb, coord1 = produce_assumption_values(mesh_points, g_x_y_biharmonic, deriv_order)
 
 #relerr_on = np.abs((interactions_on_axis-interactions_true)/interactions_true)
 #relerr_off = np.abs((interactions_off_axis-interactions_true)/interactions_true)
 #relerr_comb = np.abs((interactions_total-interactions_true)/interactions_true)
 
-create_suite_plot(relerr_on+1e-20, relerr_off+1e-20, relerr_comb+1e-20, "Eq. 80 for different Green's Functions in 2D ($c=5$)")
-
+create_suite_plot(relerr_on+1e-20, relerr_off+1e-20, relerr_comb/coord1**2+1e-20, "Asymptotic Behavior of Derivatives ($d="+str(deriv_order)+"$)")
+plt.savefig("../S_on_surface_convergence.pgf", bbox_inches='tight', pad_inches=0)
 plt.show()
