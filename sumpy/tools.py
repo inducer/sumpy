@@ -34,7 +34,7 @@ import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Hashable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 import numpy as np
 
@@ -55,7 +55,8 @@ if TYPE_CHECKING:
     import pyopencl
     import pyopencl as cl
 
-    from sumpy.kernel import Kernel
+    from sumpy.expansion import ExpansionBase
+    from sumpy.kernel import Kernel, KernelArgument
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,12 @@ Symbolic Helpers
 .. autofunction:: reduced_row_echelon_form
 .. autofunction:: nullspace
 
+.. class:: KernelLike
+    See below.
+
+.. autodata:: KernelLike
+    :no-index:
+
 FFT
 ---
 
@@ -123,6 +130,9 @@ References
 
     See :data:`numpy.typing.DTypeLike`.
 """
+
+
+KernelLike: TypeAlias = "Kernel | ExpansionBase"
 
 
 # {{{ multi_index helpers
@@ -246,15 +256,17 @@ def vector_from_device(queue, vec):
     return obj_array.vectorize(from_dev, vec)
 
 
-def _merge_kernel_arguments(dictionary, arg):
+def _merge_kernel_arguments(
+            dictionary: dict[str, KernelArgument],
+            arg: KernelArgument):
     # Check for strict equality until there's a usecase
     if dictionary.setdefault(arg.name, arg) != arg:
         msg = "Merging two different kernel arguments {} and {} with the same name"
-        raise ValueError(msg.format(arg.loopy_arg, dictionary[arg].loopy_arg))
+        raise ValueError(msg.format(arg.loopy_arg, dictionary[arg.name].loopy_arg))
 
 
-def gather_arguments(kernel_likes):
-    result = {}
+def gather_arguments(kernel_likes: Sequence[KernelLike]):
+    result: dict[str, KernelArgument] = {}
     for knl in kernel_likes:
         for arg in knl.get_args():
             _merge_kernel_arguments(result, arg)
@@ -262,20 +274,20 @@ def gather_arguments(kernel_likes):
     return sorted(result.values(), key=lambda arg: arg.name)
 
 
-def gather_source_arguments(kernel_likes):
-    result = {}
+def gather_source_arguments(kernel_likes: Sequence[KernelLike]):
+    result: dict[str, KernelArgument] = {}
     for knl in kernel_likes:
-        for arg in knl.get_args() + knl.get_source_args():
+        for arg in [*knl.get_args(), *knl.get_source_args()]:
             _merge_kernel_arguments(result, arg)
 
     return sorted(result.values(), key=lambda arg: arg.name)
 
 
-def gather_loopy_arguments(kernel_likes):
+def gather_loopy_arguments(kernel_likes: Sequence[KernelLike]):
     return [arg.loopy_arg for arg in gather_arguments(kernel_likes)]
 
 
-def gather_loopy_source_arguments(kernel_likes):
+def gather_loopy_source_arguments(kernel_likes: Sequence[KernelLike]):
     return [arg.loopy_arg for arg in gather_source_arguments(kernel_likes)]
 
 
