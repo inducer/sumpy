@@ -28,3 +28,13 @@ intersphinx_mapping = {
 nitpick_ignore_regex = [
     ["py:class", r"symengine\.(.+)"],  # :cry:
 ]
+
+sphinxconfig_missing_reference_aliases = {
+    # pymbolic
+    "Expression": "obj:pymbolic.typing.Expression",
+    "ArithmeticExpression": "obj:pymbolic.ArithmeticExpression",
+}
+
+
+def setup(app):
+    app.connect("missing-reference", process_autodoc_missing_reference)  # noqa: F821
