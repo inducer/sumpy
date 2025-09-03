@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing_extensions import override
+
 
 __copyright__ = "Copyright (C) 2017 Andreas Kloeckner"
 
@@ -526,9 +528,14 @@ pdes = [
 def test_weird_kernel(pde):
     class MyKernel(ExpressionKernel):
         def __init__(self):
-            super().__init__(dim=2, expression=1, global_scaling_const=1,
-                is_complex_valued=False)
+            super().__init__(dim=2, expression=1, global_scaling_const=1)
 
+        @property
+        @override
+        def is_complex_valued(self) -> bool:
+            return False
+
+        @override
         def get_pde_as_diff_op(self):
             return pde
 
@@ -554,10 +561,15 @@ def test_weird_kernel(pde):
 
 class StorageIndexTestKernel(ExpressionKernel):
     def __init__(self, dim, max_mi):
-        super().__init__(dim=dim, expression=1, global_scaling_const=1,
-                is_complex_valued=False)
+        super().__init__(dim=dim, expression=1, global_scaling_const=1)
         self._max_mi = max_mi
 
+    @property
+    @override
+    def is_complex_valued(self) -> bool:
+        return False
+
+    @override
     def get_pde_as_diff_op(self):
         w = make_identity_diff_op(self.dim)
         pde = diff(w, tuple(self._max_mi))
