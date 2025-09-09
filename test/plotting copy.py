@@ -251,8 +251,8 @@ def create_plot(relerr_on, ax, str_title, acbar=True):
 def create_suite_plot(relerr_on, relerr_off, relerr_comb, str_title):
     fig, (ax1,ax2,ax3) = plt.subplots(1, 3, figsize=(15, 8))
     cs = create_plot(relerr_on, ax1, "Laplace 2D (eq. 107)", False)
-    cs = create_plot(relerr_off, ax2, "Helmholtz 2D (eq. 105)", False)
-    cs = create_plot(relerr_comb, ax3, "Biharmonic 2D (eq. 107)", False)
+    cs = create_plot(relerr_off, ax2, "Helmholtz 2D (eq. 107)", False)
+    cs = create_plot(relerr_comb, ax3, "Biharmonic 2D (eq. 109)", False)
 
     n_levels = 3
 
