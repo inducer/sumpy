@@ -69,25 +69,46 @@ __doc__ = """
 Kernel interface
 ----------------
 
-.. autoclass:: Kernel
+.. autoclass:: ArithmeticExpr
+
 .. autoclass:: KernelArgument
+.. autoclass:: Kernel
+    :show-inheritance:
 
 Symbolic kernels
 ----------------
 
 .. autoclass:: ExpressionKernel
+    :show-inheritance:
+    :members: mapper_method
 
 PDE kernels
 -----------
 
 .. autoclass:: LaplaceKernel
+    :show-inheritance:
+    :members: mapper_method
 .. autoclass:: BiharmonicKernel
+    :show-inheritance:
+    :members: mapper_method
 .. autoclass:: HelmholtzKernel
+    :show-inheritance:
+    :members: mapper_method
 .. autoclass:: YukawaKernel
+    :show-inheritance:
+    :members: mapper_method
 .. autoclass:: StokesletKernel
+    :show-inheritance:
+    :members: mapper_method
 .. autoclass:: StressletKernel
+    :show-inheritance:
+    :members: mapper_method
 .. autoclass:: ElasticityKernel
+    :show-inheritance:
+    :members: mapper_method
 .. autoclass:: LineOfCompressionKernel
+    :show-inheritance:
+    :members: mapper_method
 
 Derivatives
 -----------
@@ -97,22 +118,50 @@ of them in the process.
 
 .. autoclass:: DerivativeBase
 .. autoclass:: AxisTargetDerivative
+    :show-inheritance:
+    :undoc-members:
+    :members: mapper_method,target_array_name
 .. autoclass:: AxisSourceDerivative
+    :show-inheritance:
+    :members: mapper_method
+.. autoclass:: DirectionalDerivative
+    :show-inheritance:
+    :members: directional_kind
 .. autoclass:: DirectionalSourceDerivative
+    :show-inheritance:
+    :members: mapper_method,directional_kind
 .. autoclass:: DirectionalTargetDerivative
+    :show-inheritance:
+    :undoc-members:
+    :members: mapper_method,directional_kind,target_array_name
 
 Transforming kernels
 --------------------
 
-.. autoclass:: KernelMapper
-.. autoclass:: KernelCombineMapper
-.. autoclass:: KernelIdentityMapper
-.. autoclass:: AxisSourceDerivativeRemover
-.. autoclass:: AxisTargetDerivativeRemover
-.. autoclass:: SourceDerivativeRemover
-.. autoclass:: TargetDerivativeRemover
 .. autoclass:: TargetPointMultiplier
+    :undoc-members:
+    :members: mapper_method,target_array_name
+
+.. autoclass:: ResultT
+
+.. autoclass:: KernelMapper
+    :show-inheritance:
+.. autoclass:: KernelCombineMapper
+    :show-inheritance:
+.. autoclass:: KernelIdentityMapper
+    :show-inheritance:
+.. autoclass:: AxisSourceDerivativeRemover
+    :show-inheritance:
+.. autoclass:: AxisTargetDerivativeRemover
+    :show-inheritance:
+.. autoclass:: SourceDerivativeRemover
+    :show-inheritance:
+.. autoclass:: TargetDerivativeRemover
+    :show-inheritance:
+.. autoclass:: TargetTransformationRemover
+    :show-inheritance:
 .. autoclass:: DerivativeCounter
+    :show-inheritance:
 """
 
 ArithmeticExpr: TypeAlias = int | float | complex | sym.Basic
@@ -145,7 +194,7 @@ class Kernel(ABC):
     .. autoattribute:: is_translation_invariant
 
     .. autoattribute:: dim
-    .. autoattribute:: is_complex_valued
+    .. autoproperty:: is_complex_valued
 
     .. automethod:: get_base_kernel
     .. automethod:: replace_base_kernel
@@ -517,6 +566,11 @@ class BiharmonicKernel(ExpressionKernel):
 
 @dataclass(frozen=True)
 class HelmholtzKernel(ExpressionKernel):
+    """
+    .. autoattribute:: helmholtz_k_name
+    .. autoattribute:: allow_evanescent
+    """
+
     mapper_method: ClassVar[str] = "map_helmholtz_kernel"
 
     helmholtz_k_name: str
@@ -593,6 +647,10 @@ class HelmholtzKernel(ExpressionKernel):
 
 @dataclass(frozen=True)
 class YukawaKernel(ExpressionKernel):
+    """
+    .. autoattribute:: yukawa_lambda_name
+    """
+
     mapper_method: ClassVar[str] = "map_yukawa_kernel"
 
     yukawa_lambda_name: str
@@ -676,6 +734,12 @@ class YukawaKernel(ExpressionKernel):
 
 @dataclass(frozen=True)
 class ElasticityKernel(ExpressionKernel):
+    """
+    .. autoattribute:: icomp
+    .. autoattribute:: jcomp
+    .. autoattribute:: viscosity_mu
+    .. autoattribute:: poisson_ratio
+    """
     mapper_method: ClassVar[str] = "map_elasticity_kernel"
 
     icomp: int
@@ -799,6 +863,12 @@ class ElasticityKernel(ExpressionKernel):
 
 @dataclass(frozen=True)
 class StokesletKernel(ElasticityKernel):
+    """
+    .. autoattribute:: icomp
+    .. autoattribute:: jcomp
+    .. autoattribute:: viscosity_mu
+    """
+
     def __new__(cls,
                 dim: int,
                 icomp: int,
@@ -833,6 +903,12 @@ class StokesletKernel(ElasticityKernel):
 
 @dataclass(frozen=True)
 class StressletKernel(ExpressionKernel):
+    """
+    .. autoattribute:: icomp
+    .. autoattribute:: jcomp
+    .. autoattribute:: kcomp
+    .. autoattribute:: viscosity_mu
+    """
     mapper_method: ClassVar[str] = "map_stresslet_kernel"
 
     icomp: int
@@ -920,6 +996,10 @@ class LineOfCompressionKernel(ExpressionKernel):
          *Force at a Point in the Interior of a Semi-Infinite Solid*.
          Physics. 7 (5): 195-202.
          `doi:10.1063/1.1745385 <https://doi.org/10.1063/1.1745385>`__.
+
+    .. autoattribute:: axis
+    .. autoattribute:: viscosity_mu
+    .. autoattribute:: poisson_ratio
     """
 
     mapper_method: ClassVar[str] = "map_line_of_compression_kernel"
@@ -1003,6 +1083,7 @@ class LineOfCompressionKernel(ExpressionKernel):
 @dataclass(frozen=True)
 class KernelWrapper(Kernel, ABC):
     inner_kernel: Kernel
+    """The kernel that is being wrapped (to take a derivative of, etc.)."""
 
     def __init__(self, inner_kernel: Kernel) -> None:
         Kernel.__init__(self, inner_kernel.dim)
@@ -1083,6 +1164,12 @@ class KernelWrapper(Kernel, ABC):
 # {{{ derivatives
 
 class DerivativeBase(KernelWrapper, ABC):
+    """Bases: :class:`Kernel`
+
+    .. autoattribute:: inner_kernel
+    .. automethod:: replace_inner_kernel
+    """
+
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
         return self.inner_kernel.get_pde_as_diff_op()
@@ -1098,9 +1185,14 @@ class DerivativeBase(KernelWrapper, ABC):
 
 @dataclass(frozen=True)
 class AxisSourceDerivative(DerivativeBase):
+    """
+    .. autoattribute:: axis
+    """
+
     mapper_method: ClassVar[str] = "map_axis_source_derivative"
 
     axis: int
+    """Direction axis for the source derivative."""
 
     def __init__(self, axis: int, inner_kernel: Kernel) -> None:
         super().__init__(inner_kernel)
@@ -1135,6 +1227,10 @@ class AxisSourceDerivative(DerivativeBase):
 
 @dataclass(frozen=True)
 class AxisTargetDerivative(DerivativeBase):
+    """
+    .. autoattribute:: axis
+    """
+
     mapper_method: ClassVar[str] = "map_axis_target_derivative"
     target_array_name: ClassVar[str] = "targets"
 
@@ -1222,8 +1318,14 @@ class _VectorIndexAdder(CSECachingMapperMixin[Expression, []], IdentityMapper[[]
 
 @dataclass(frozen=True)
 class DirectionalDerivative(DerivativeBase):
+    """
+    .. autoattribute:: dir_vec_name
+    """
     directional_kind: ClassVar[Literal["src", "tgt"]]
+    """The kind of this directional derivative (can only be a source or target)."""
+
     dir_vec_name: str
+    """Name of the vector used for the direction."""
 
     def __init__(self, inner_kernel: Kernel, dir_vec_name: str | None = None) -> None:
         if dir_vec_name is None:
@@ -1250,7 +1352,6 @@ class DirectionalDerivative(DerivativeBase):
 
 class DirectionalTargetDerivative(DirectionalDerivative):
     mapper_method: ClassVar[str] = "map_directional_target_derivative"
-
     directional_kind: ClassVar[Literal["src", "tgt"]] = "tgt"
     target_array_name: ClassVar[str] = "targets"
 
@@ -1384,14 +1485,19 @@ class DirectionalSourceDerivative(DirectionalDerivative):
 
 
 class TargetPointMultiplier(KernelWrapper):
-    """Wraps a kernel :math:`G(x, y)` and outputs :math:`x_j G(x, y)`
+    """Bases: :class:`Kernel`
+
+    Wraps a kernel :math:`G(x, y)` and outputs :math:`x_j G(x, y)`
     where :math:`x, y` are targets and sources respectively.
+
+    .. autoattribute:: axis
     """
 
     mapper_method: ClassVar[str] = "map_target_point_multiplier"
     target_array_name: ClassVar[str] = "targets"
 
     axis: int
+    """Coordinate axis with which to multiply the kernel."""
 
     def __init__(self, axis: int, inner_kernel: Kernel) -> None:
         KernelWrapper.__init__(self, inner_kernel)
@@ -1466,6 +1572,9 @@ ResultT = TypeVar("ResultT")
 
 
 class KernelMapper(Generic[ResultT]):
+    """
+    .. automethod:: __call__
+    """
     def rec(self, kernel: Kernel) -> ResultT:
         try:
             method = cast(
@@ -1481,6 +1590,10 @@ class KernelMapper(Generic[ResultT]):
 
 
 class KernelCombineMapper(KernelMapper[ResultT], ABC):
+    """
+    .. automethod:: combine
+    """
+
     @abstractmethod
     def combine(self, values: Iterable[ResultT]) -> ResultT:
         raise NotImplementedError
@@ -1539,18 +1652,24 @@ class KernelIdentityMapper(KernelMapper[Kernel]):
 
 
 class AxisSourceDerivativeRemover(KernelIdentityMapper):
+    """Removes all axis source derivatives from the kernel."""
+
     @override
     def map_axis_source_derivative(self, kernel: AxisSourceDerivative) -> Kernel:
         return self.rec(kernel.inner_kernel)
 
 
 class AxisTargetDerivativeRemover(KernelIdentityMapper):
+    """Removes all axis target derivatives from the kernel."""
+
     @override
     def map_axis_target_derivative(self, kernel: AxisTargetDerivative) -> Kernel:
         return self.rec(kernel.inner_kernel)
 
 
 class TargetDerivativeRemover(AxisTargetDerivativeRemover):
+    """Removes all target derivatives from the kernel."""
+
     @override
     def map_directional_target_derivative(
             self, kernel: DirectionalTargetDerivative) -> Kernel:
@@ -1558,6 +1677,8 @@ class TargetDerivativeRemover(AxisTargetDerivativeRemover):
 
 
 class SourceDerivativeRemover(AxisSourceDerivativeRemover):
+    """Removes all source derivatives from the kernel."""
+
     @override
     def map_directional_source_derivative(
             self, kernel: DirectionalSourceDerivative) -> Kernel:
@@ -1565,6 +1686,8 @@ class SourceDerivativeRemover(AxisSourceDerivativeRemover):
 
 
 class TargetTransformationRemover(TargetDerivativeRemover):
+    """Removes all target transformations from the kernel."""
+
     @override
     def map_target_point_multiplier(self, kernel: TargetPointMultiplier) -> Kernel:
         return self.rec(kernel.inner_kernel)
@@ -1574,6 +1697,8 @@ SourceTransformationRemover = SourceDerivativeRemover
 
 
 class DerivativeCounter(KernelCombineMapper[int]):
+    """Counts the number of derivatives in the kernel."""
+
     @override
     def combine(self, values: Iterable[int]) -> int:
         return sum(values)
