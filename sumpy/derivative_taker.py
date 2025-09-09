@@ -39,7 +39,7 @@ __doc__ = """
 """
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -48,6 +48,9 @@ from pytools.tag import tag_dataclass
 import sumpy.symbolic as sym
 from sumpy.tools import add_mi, add_to_sac
 
+
+if TYPE_CHECKING:
+    import sympy as sp
 
 logger = logging.getLogger(__name__)
 
@@ -341,7 +344,7 @@ class HelmholtzDerivativeTaker(RadialDerivativeTaker):
 
 # {{{ DifferentiatedExprDerivativeTaker
 
-DerivativeCoeffDict = dict[tuple[int, ...], Any]
+DerivativeCoeffDict = dict[tuple[int, ...], int | float | complex | sym.Expr]
 
 
 @tag_dataclass
@@ -387,8 +390,10 @@ class DifferentiatedExprDerivativeTaker:
 
 # {{{ Helper functions
 
-def diff_derivative_coeff_dict(derivative_coeff_dict: DerivativeCoeffDict,
-        variable_idx, variables):
+def diff_derivative_coeff_dict(
+        derivative_coeff_dict: DerivativeCoeffDict,
+        variable_idx: int,
+        variables: sp.Matrix) -> DerivativeCoeffDict:
     """Differentiate a derivative transformation dictionary given by
     *derivative_coeff_dict* using the variable given by **variable_idx**
     and return a new derivative transformation dictionary.
@@ -397,15 +402,17 @@ def diff_derivative_coeff_dict(derivative_coeff_dict: DerivativeCoeffDict,
     new_derivative_coeff_dict: DerivativeCoeffDict = defaultdict(lambda: 0)
 
     for mi, coeff in derivative_coeff_dict.items():
-        # In the case where we have x * u.diff(x), the result should
-        # be x.diff(x) + x * u.diff(x, x)
+        # In the case where we have x * u.diff(x), the result should be
+        #       x.diff(x) + x * u.diff(x, x)
         # Calculate the first term by differentiating the coefficients
         new_coeff = sym.sympify(coeff).diff(variables[variable_idx])
         new_derivative_coeff_dict[mi] += new_coeff
+
         # Next calculate the second term by differentiating the derivatives
         new_mi = list(mi)
         new_mi[variable_idx] += 1
         new_derivative_coeff_dict[tuple(new_mi)] += coeff
+
     return {derivative: coeff for derivative, coeff in
             new_derivative_coeff_dict.items() if coeff != 0}
 
