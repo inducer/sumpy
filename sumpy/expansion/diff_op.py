@@ -113,7 +113,7 @@ class LinearPDESystemOperator:
             deg = max(deg, max(sum(ident.mi) for ident in eq))
         return deg
 
-    def __mul__(self, param: Number_ish) -> LinearPDESystemOperator:
+    def __mul__(self, param: Number_ish | sym.Expr) -> LinearPDESystemOperator:
         eqs: list[Mapping[DerivativeIdentifier, sp.Expr]] = []
         for eq in self.eqs:
             deriv_ident_to_coeff = {}
