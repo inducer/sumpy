@@ -387,7 +387,7 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
             ncoeff_src = len(self.src_expansion)
             ncoeff_tgt = len(self.tgt_expansion)
 
-        domains = []
+        domains: list[str] = []
         insns = self.get_translation_loopy_insns(result_dtype)
         tgt_coeffs = pymbolic.var("tgt_coeffs")
         for i in range(ncoeff_tgt):
