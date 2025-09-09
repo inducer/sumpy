@@ -54,6 +54,8 @@ if TYPE_CHECKING:
 
     import pyopencl
     import pyopencl as cl
+    from pymbolic.primitives import Variable
+    from pymbolic.typing import Expression
 
     from sumpy.expansion import ExpansionBase
     from sumpy.kernel import Kernel, KernelArgument
@@ -203,7 +205,7 @@ class GatherAllVariables(WalkMapper):
         self.vars.add(expr)
 
 
-def get_all_variables(expr):
+def get_all_variables(expr: Expression) -> set[Variable]:
     mapper = GatherAllVariables()
     mapper(expr)
     return mapper.vars
