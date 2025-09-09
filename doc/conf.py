@@ -2,8 +2,7 @@ from importlib import metadata
 from urllib.request import urlopen
 
 
-_conf_url = \
-        "https://raw.githubusercontent.com/inducer/sphinxconfig/main/sphinxconfig.py"
+_conf_url = "https://raw.githubusercontent.com/inducer/sphinxconfig/main/sphinxconfig.py"
 with urlopen(_conf_url) as _inf:
     exec(compile(_inf.read(), _conf_url, "exec"), globals())
 
@@ -30,9 +29,13 @@ nitpick_ignore_regex = [
 ]
 
 sphinxconfig_missing_reference_aliases = {
+    # sympy
+    "sp.Matrix": "class:sympy.matrices.dense.DenseMatrix",
     # pymbolic
-    "Expression": "obj:pymbolic.typing.Expression",
     "ArithmeticExpression": "obj:pymbolic.ArithmeticExpression",
+    "Expression": "obj:pymbolic.typing.Expression",
+    # sumpy
+    "ArithmeticExpr": "obj:sumpy.kernel.ArithmeticExpr",
 }
 
 
