@@ -110,6 +110,7 @@ else:
 # Before adding a function here, make sure it's present in both modules.
 Add = sym.Add
 Basic = sym.Basic
+Expr = sym.Expr
 Mul = sym.Mul
 Pow = sym.Pow
 exp = sym.exp
@@ -253,7 +254,7 @@ def pymbolic_real_norm_2(x):
     return var("sqrt")(np.dot(x, x))
 
 
-def make_sym_vector(name, components):
+def make_sym_vector(name: str, components: int) -> Matrix:
     return sym.Matrix([sym.Symbol(f"{name}{i}") for i in range(components)])
 
 
