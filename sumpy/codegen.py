@@ -549,7 +549,12 @@ INDEXED_VAR_RE = re.compile(r"^([a-zA-Z_]+)([0-9]+)$")
 class VectorComponentRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
     """For names in name_whitelist, turn ``a3`` into ``a[3]``."""
 
-    def __init__(self, name_whitelist=frozenset()):
+    name_whitelist: frozenset[str]
+
+    def __init__(self, name_whitelist: frozenset[str] | None = None) -> None:
+        if name_whitelist is None:
+            name_whitelist = frozenset()
+
         self.name_whitelist = name_whitelist
 
     def map_variable(self, expr, *args):
