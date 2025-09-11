@@ -58,7 +58,7 @@ jobs:
                 curl -L -O https://tiker.net/ci-support-v0
                 . ci-support-v0
                 build_py_project
-                run_pylint "$(basename $GITHUB_REPOSITORY)" examples/*.py test/*.py
+                run_pylint "$(basename $GITHUB_REPOSITORY)" examples/*.py
 
     docs:
         name: Documentation

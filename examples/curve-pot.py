@@ -131,7 +131,7 @@ def draw_pot_figure(aspect_ratio,
 
         return x, y, w
 
-    from curve import CurveGrid
+    from sumpy.test.curve import CurveGrid
 
     native_t = np.linspace(0, 1, nsrc, endpoint=False)
     native_x, native_y, native_weights = map_to_curve(native_t)

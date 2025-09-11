@@ -6,6 +6,7 @@ channels:
 dependencies:
 - git
 - numpy
+- scipy
 - sympy
 - pocl
 - pocl-cuda
