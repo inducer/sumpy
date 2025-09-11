@@ -31,7 +31,7 @@ import numpy.linalg as la
 import pytest
 
 import pytools.obj_array as obj_array
-from arraycontext import pytest_generate_tests_for_array_contexts
+from arraycontext import ArrayContextFactory, pytest_generate_tests_for_array_contexts
 
 from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
 
@@ -92,7 +92,11 @@ def _build_subset_indices(actx, ntargets, nsources, factor):
 
 @pytest.mark.parametrize("factor", [1.0, 0.6])
 @pytest.mark.parametrize("lpot_id", [1, 2])
-def test_qbx_direct(actx_factory, factor, lpot_id, visualize=False):
+def test_qbx_direct(
+            actx_factory: ArrayContextFactory,
+            factor,
+            lpot_id,
+            visualize=False):
     if visualize:
         logging.basicConfig(level=logging.INFO)
 
@@ -186,7 +190,12 @@ def test_qbx_direct(actx_factory, factor, lpot_id, visualize=False):
 @pytest.mark.parametrize("exclude_self", [True, False])
 @pytest.mark.parametrize("factor", [1.0, 0.6])
 @pytest.mark.parametrize("lpot_id", [1, 2])
-def test_p2p_direct(actx_factory, exclude_self, factor, lpot_id, visualize=False):
+def test_p2p_direct(
+            actx_factory: ArrayContextFactory,
+            exclude_self,
+            factor,
+            lpot_id,
+            visualize=False):
     if visualize:
         logging.basicConfig(level=logging.INFO)
 

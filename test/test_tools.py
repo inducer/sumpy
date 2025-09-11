@@ -29,7 +29,7 @@ import sys
 import numpy as np
 import pytest
 
-from arraycontext import pytest_generate_tests_for_array_contexts
+from arraycontext import ArrayContextFactory, pytest_generate_tests_for_array_contexts
 
 import sumpy.symbolic as sym
 from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
@@ -86,7 +86,7 @@ def test_matvec_fft_small_floats():
 # {{{ test_fft
 
 @pytest.mark.parametrize("size", [1, 2, 7, 10, 30, 210])
-def test_fft(actx_factory, size):
+def test_fft(actx_factory: ArrayContextFactory, size: int):
     actx = actx_factory()
 
     inp = np.arange(size, dtype=np.complex64)

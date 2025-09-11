@@ -32,7 +32,7 @@ import numpy.linalg as la
 import pytest
 
 import pytools.obj_array as obj_array
-from arraycontext import pytest_generate_tests_for_array_contexts
+from arraycontext import ArrayContextFactory, pytest_generate_tests_for_array_contexts
 from pytools.convergence import PConvergenceVerifier
 
 import sumpy.symbolic as sym
@@ -58,6 +58,7 @@ from sumpy.kernel import (
     BiharmonicKernel,
     DirectionalSourceDerivative,
     HelmholtzKernel,
+    Kernel,
     LaplaceKernel,
     StokesletKernel,
 )
@@ -73,7 +74,7 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts([
 # {{{ test_p2p
 
 @pytest.mark.parametrize("exclude_self", (True, False))
-def test_p2p(actx_factory, exclude_self):
+def test_p2p(actx_factory: ArrayContextFactory, exclude_self):
     actx = actx_factory()
 
     dimensions = 3
@@ -134,7 +135,10 @@ def test_p2p(actx_factory, exclude_self):
     (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion),
     (LaplaceKernel(2), LinearPDEConformingVolumeTaylorMultipoleExpansion),
 ])
-def test_p2e_multiple(actx_factory, base_knl, expn_class):
+def test_p2e_multiple(
+            actx_factory: ArrayContextFactory,
+            base_knl: Kernel,
+            expn_class):
     order = 4
     actx = actx_factory()
 
@@ -275,7 +279,12 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
     False,
     True
     ])
-def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative):
+def test_p2e2p(
+            actx_factory: ArrayContextFactory,
+            base_knl,
+            expn_class,
+            order,
+            with_source_derivative):
     actx = actx_factory()
 
     res = 100
@@ -508,8 +517,13 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
     (StokesletKernel(2, 0, 0), LinearPDEConformingVolumeTaylorLocalExpansion,
      LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
     ])
-def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
-        use_fft, visualize=False):
+def test_translations(
+            actx_factory: ArrayContextFactory,
+            knl,
+            local_expn_class,
+            mpole_expn_class,
+            use_fft,
+            visualize=False):
     if visualize:
         logging.basicConfig(level=logging.INFO)
 
@@ -763,7 +777,7 @@ def test_m2l_toeplitz():
 
 @pytest.mark.parametrize("dim", [2, 3])
 @pytest.mark.parametrize("order", [2, 4, 6])
-def test_m2m_compressed_error_helmholtz(actx_factory, dim, order):
+def test_m2m_compressed_error_helmholtz(actx_factory: ArrayContextFactory, dim, order):
     from sumpy import toys
 
     actx = actx_factory()

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing_extensions import override
-
 
 __copyright__ = "Copyright (C) 2017 Andreas Kloeckner"
 
@@ -25,6 +23,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+
 import logging
 import sys
 from dataclasses import dataclass
@@ -33,8 +32,9 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import numpy.linalg as la
 import pytest
+from typing_extensions import override
 
-from arraycontext import pytest_generate_tests_for_array_contexts
+from arraycontext import ArrayContextFactory, pytest_generate_tests_for_array_contexts
 
 import sumpy.symbolic as sym
 import sumpy.toys as t
@@ -128,7 +128,7 @@ class KernelInfo:
     KernelInfo(LineOfCompressionKernel(3, 0), mu=5, nu=0.2),
     KernelInfo(LineOfCompressionKernel(3, 1), mu=5, nu=0.2),
     ])
-def test_pde_check_kernels(actx_factory, knl_info, order=5):
+def test_pde_check_kernels(actx_factory: ArrayContextFactory, knl_info, order=5):
     actx = actx_factory()
 
     dim = knl_info.kernel.dim
@@ -309,7 +309,7 @@ RTOL_P2E2E2P = 1e-2
 
 
 @pytest.mark.parametrize("case", P2E2E2P_TEST_CASES)
-def test_toy_p2e2e2p(actx_factory, case):
+def test_toy_p2e2e2p(actx_factory: ArrayContextFactory, case):
     dim = case.dim
 
     src = case.source.reshape(dim, -1)
