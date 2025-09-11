@@ -33,7 +33,7 @@ import numpy.linalg as la
 import pytest
 
 import pytools.obj_array as obj_array
-from arraycontext import pytest_generate_tests_for_array_contexts
+from arraycontext import ArrayContextFactory, pytest_generate_tests_for_array_contexts
 
 from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
 from sumpy.expansion.local import (
@@ -49,7 +49,13 @@ from sumpy.expansion.multipole import (
     Y2DMultipoleExpansion,
 )
 from sumpy.fmm import SumpyExpansionWrangler, SumpyTreeIndependentDataForWrangler
-from sumpy.kernel import BiharmonicKernel, HelmholtzKernel, LaplaceKernel, YukawaKernel
+from sumpy.kernel import (
+    BiharmonicKernel,
+    HelmholtzKernel,
+    Kernel,
+    LaplaceKernel,
+    YukawaKernel,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -92,9 +98,16 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts([
             (YukawaKernel(2), Y2DLocalExpansion, Y2DMultipoleExpansion,
                 False),
             ])
-def test_sumpy_fmm(actx_factory, knl, local_expn_class, mpole_expn_class,
-        order_varies_with_level, use_translation_classes, use_fft,
-        fft_backend, visualize=False):
+def test_sumpy_fmm(
+            actx_factory: ArrayContextFactory,
+            knl: Kernel,
+            local_expn_class,
+            mpole_expn_class,
+            order_varies_with_level,
+            use_translation_classes,
+            use_fft,
+            fft_backend,
+            visualize=False):
     if fft_backend == "pyvkfft":
         pytest.importorskip("pyvkfft")
 
@@ -120,9 +133,15 @@ def test_sumpy_fmm(actx_factory, knl, local_expn_class, mpole_expn_class,
             fft_backend)
 
 
-def _test_sumpy_fmm(actx_factory, knl, local_expn_class, mpole_expn_class,
-        order_varies_with_level, use_translation_classes, use_fft,
-        fft_backend):
+def _test_sumpy_fmm(
+            actx_factory: ArrayContextFactory,
+            knl: Kernel,
+            local_expn_class,
+            mpole_expn_class,
+            order_varies_with_level,
+            use_translation_classes,
+            use_fft,
+            fft_backend):
 
     actx = actx_factory()
 
@@ -264,7 +283,7 @@ def _test_sumpy_fmm(actx_factory, knl, local_expn_class, mpole_expn_class,
 # {{{ test_coeff_magnitude_rscale
 
 @pytest.mark.parametrize("knl", [LaplaceKernel(2), BiharmonicKernel(2)])
-def test_coeff_magnitude_rscale(actx_factory, knl):
+def test_coeff_magnitude_rscale(actx_factory: ArrayContextFactory, knl):
     """Checks that the rscale used keeps the coefficient magnitude
     difference small
     """
@@ -346,7 +365,7 @@ def test_coeff_magnitude_rscale(actx_factory, knl):
 
 # {{{ test_unified_single_and_double
 
-def test_unified_single_and_double(actx_factory, visualize=False):
+def test_unified_single_and_double(actx_factory: ArrayContextFactory, visualize=False):
     """
     Test that running one FMM for single layer + double layer gives the
     same result as running one FMM for each and adding the results together
@@ -505,7 +524,7 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory, use_fft, visualize=False)
     assert timing_data
 
 
-def test_sumpy_fmm_exclude_self(actx_factory, visualize=False):
+def test_sumpy_fmm_exclude_self(actx_factory: ArrayContextFactory, visualize=False):
     if visualize:
         logging.basicConfig(level=logging.INFO)
 
@@ -573,7 +592,9 @@ def test_sumpy_fmm_exclude_self(actx_factory, visualize=False):
 
 # {{{ test_sumpy_axis_source_derivative
 
-def test_sumpy_axis_source_derivative(actx_factory, visualize=False):
+def test_sumpy_axis_source_derivative(
+            actx_factory: ArrayContextFactory,
+            visualize=False):
     if visualize:
         logging.basicConfig(level=logging.INFO)
 
@@ -641,7 +662,10 @@ def test_sumpy_axis_source_derivative(actx_factory, visualize=False):
 # {{{ test_sumpy_target_point_multiplier
 
 @pytest.mark.parametrize("deriv_axes", [(), (0,), (1,)])
-def test_sumpy_target_point_multiplier(actx_factory, deriv_axes, visualize=False):
+def test_sumpy_target_point_multiplier(
+            actx_factory: ArrayContextFactory,
+            deriv_axes,
+            visualize=False):
     if visualize:
         logging.basicConfig(level=logging.INFO)
 

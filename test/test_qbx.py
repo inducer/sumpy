@@ -29,7 +29,7 @@ import sys
 import numpy as np
 import pytest
 
-from arraycontext import pytest_generate_tests_for_array_contexts
+from arraycontext import ArrayContextFactory, pytest_generate_tests_for_array_contexts
 
 from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
 from sumpy.expansion.local import LineTaylorLocalExpansion, VolumeTaylorLocalExpansion
@@ -48,7 +48,10 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts([
             LineTaylorLocalExpansion,
             VolumeTaylorLocalExpansion,
             ])
-def test_direct_qbx_vs_eigval(actx_factory, expn_class, visualize=False):
+def test_direct_qbx_vs_eigval(
+            actx_factory: ArrayContextFactory,
+            expn_class,
+            visualize=False):
     """This evaluates a single layer potential on a circle using a known
     eigenvalue/eigenvector combination.
     """
