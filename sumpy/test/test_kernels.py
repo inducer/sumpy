@@ -32,7 +32,11 @@ import numpy.linalg as la
 import pytest
 
 import pytools.obj_array as obj_array
-from arraycontext import ArrayContextFactory, pytest_generate_tests_for_array_contexts
+from arraycontext import (
+    ArrayContextFactory,
+    PyOpenCLArrayContext,
+    pytest_generate_tests_for_array_contexts,
+)
 from pytools.convergence import PConvergenceVerifier
 
 import sumpy.symbolic as sym
@@ -41,6 +45,7 @@ from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa:
 from sumpy.expansion.local import (
     H2DLocalExpansion,
     LinearPDEConformingVolumeTaylorLocalExpansion,
+    LineTaylorLocalExpansion,
     VolumeTaylorLocalExpansion,
 )
 from sumpy.expansion.m2l import (
@@ -61,7 +66,9 @@ from sumpy.kernel import (
     Kernel,
     LaplaceKernel,
     StokesletKernel,
+    YukawaKernel,
 )
+from sumpy.test.geometries import make_ellipsoid, make_torus
 
 
 logger = logging.getLogger(__name__)
@@ -847,6 +854,72 @@ def test_m2m_compressed_error_helmholtz(actx_factory: ArrayContextFactory, dim, 
     assert eoc_rec.order_estimate() >= order + 1
 
 # }}}
+
+
+@pytest.mark.parametrize(("kernel_cls", "kernel_kwargs"), [
+                         (LaplaceKernel, {}),
+                         (HelmholtzKernel, {"k": 1}),
+                         (YukawaKernel, {"lam": 1})
+                     ])
+@pytest.mark.parametrize("dim", [2, 3])
+def test_jump(
+            actx_factory: ArrayContextFactory,
+            kernel_cls: type[Kernel],
+            kernel_kwargs: dict[str, float],
+            dim: int,
+            order: int = 3,
+        ):
+    # x-ref https://github.com/inducer/sumpy/pull/224
+    # fails for Yukawa on then-main
+
+    actx = actx_factory()
+    if not isinstance(actx, PyOpenCLArrayContext):
+        pytest.skip()
+
+    if dim == 2:
+        geo = make_ellipsoid(npoints=1600)
+        qbx_radius = 0.02
+        tol = 3e-7
+
+    elif dim == 3:
+        geo = make_torus()
+        qbx_radius = 0.25
+        tol = 1e-3
+
+    else:
+        raise ValueError(f"unexpected dim: {dim}")
+
+    center_dist = qbx_radius*np.ones(2)
+    center_sides = np.array([-1, 1], dtype=np.float64)
+
+    targets = geo.nodes[:, 0][:, np.newaxis] + np.zeros(2)
+    centers = (geo.nodes[:, 0][:, np.newaxis]
+            + center_sides * center_dist*geo.normals[:, 0][:, np.newaxis])
+
+    from sumpy.kernel import DirectionalSourceDerivative
+    kernel = kernel_cls(dim)
+    dlp_knl = DirectionalSourceDerivative(kernel)
+
+    from sumpy.qbx import LayerPotential
+    lpot = LayerPotential(actx.context,
+            expansion=LineTaylorLocalExpansion(kernel, order=order),
+            source_kernels=(dlp_knl,),
+            target_kernels=(kernel,),
+            value_dtypes=np.complex128,)
+
+    _evt, (y,) = lpot(actx.queue,
+            actx.from_numpy(targets),
+            actx.from_numpy(geo.nodes),
+            actx.from_numpy(centers),
+            [actx.from_numpy(geo.weights * geo.area_elements)],
+            expansion_radii=actx.from_numpy(center_dist),
+            src_derivative_dir=actx.from_numpy(geo.normals),
+            **kernel_kwargs,
+        )
+
+    inside, outside = actx.to_numpy(y)
+    err = abs((inside-outside) - -1)
+    assert err < tol, err
 
 
 # You can test individual routines by typing
