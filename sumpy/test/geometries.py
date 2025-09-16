@@ -42,21 +42,15 @@ class Geometry:
     area_elements: NDArray[np.floating]
 
 
-def make_ellipsoid(a: float = 1, b: float = 0.5, npoints: int = 100):
-    def map_to_curve(t: NDArray[np.floating]):
-        t = t*(2*np.pi)
-
-        x = a*np.cos(t)
-        y = b*np.sin(t)
-
-        w = (np.zeros_like(t)+1)/len(t)
-
-        return x, y, w
+def _geometry_from_curve_nodes(
+            x: NDArray[np.floating],
+            y: NDArray[np.floating]
+        ):
+    npts: int
+    npts, = x.shape
+    weights = np.ones(npts, dtype=np.float64)/npts
 
     from sumpy.test.curve import CurveGrid
-
-    t = np.linspace(0, 1, npoints, endpoint=False)
-    x, y, weights = map_to_curve(t)
     curve = CurveGrid(x, y)
 
     return Geometry(
@@ -65,6 +59,25 @@ def make_ellipsoid(a: float = 1, b: float = 0.5, npoints: int = 100):
         weights=weights,
         area_elements=curve.speed,
     )
+
+
+def make_ellipsoid(a: float = 1, b: float = 0.5, npoints: int = 100):
+    t = np.linspace(0, 1, npoints, endpoint=False)
+    x = a*np.cos(2*np.pi*t)
+    y = b*np.sin(2*np.pi*t)
+
+    return _geometry_from_curve_nodes(x, y)
+
+
+def make_starfish(n_arms: int = 5, amplitude: float = 0.25, npoints: int = 100):
+    t = np.linspace(0, 1, npoints, endpoint=False)
+    theta = 2 * np.pi * t
+
+    r = 1 + amplitude * np.sin(n_arms * theta)
+
+    x = r * np.cos(theta)
+    y = r * np.sin(theta)
+    return _geometry_from_curve_nodes(x, y)
 
 
 def make_torus(
