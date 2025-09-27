@@ -33594,6 +33594,14 @@
                 }
             },
             {
+                "code": "reportAny",
+                "range": {
+                    "startColumn": 12,
+                    "endColumn": 17,
+                    "lineCount": 1
+                }
+            },
+            {
                 "code": "reportUnknownMemberType",
                 "range": {
                     "startColumn": 19,
@@ -36488,38 +36496,6 @@
             {
                 "code": "reportAny",
                 "range": {
-                    "startColumn": 8,
-                    "endColumn": 31,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAny",
-                "range": {
-                    "startColumn": 8,
-                    "endColumn": 31,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalSubscript",
-                "range": {
-                    "startColumn": 27,
-                    "endColumn": 48,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownMemberType",
-                "range": {
-                    "startColumn": 27,
-                    "endColumn": 57,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAny",
-                "range": {
                     "startColumn": 12,
                     "endColumn": 26,
                     "lineCount": 1
@@ -36546,22 +36522,6 @@
                 "range": {
                     "startColumn": 14,
                     "endColumn": 45,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAny",
-                "range": {
-                    "startColumn": 40,
-                    "endColumn": 63,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAny",
-                "range": {
-                    "startColumn": 40,
-                    "endColumn": 63,
                     "lineCount": 1
                 }
             },
@@ -54378,6 +54338,22 @@
                 "range": {
                     "startColumn": 13,
                     "endColumn": 27,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnknownMemberType",
+                "range": {
+                    "startColumn": 19,
+                    "endColumn": 37,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnknownMemberType",
+                "range": {
+                    "startColumn": 19,
+                    "endColumn": 36,
                     "lineCount": 1
                 }
             },
