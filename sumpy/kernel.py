@@ -219,6 +219,20 @@ class Kernel(ABC):
     def is_complex_valued(self) -> bool:
         """A boolean flag indicating whether this kernel is complex valued."""
 
+    @override
+    def __repr__(self) -> str:
+        from dataclasses import fields
+
+        args: list[str] = []
+        for f in fields(self):
+            value = getattr(self, f.name)
+            if isinstance(value, prim.ExpressionNode):
+                args.append(f"{f.name}={value}")
+            else:
+                args.append(f"{f.name}={value!r}")
+
+        return f"{type(self).__name__}({', '.join(args)})"
+
     def get_base_kernel(self) -> Kernel:
         """
         :returns: the kernel being wrapped by this one, or else *self*.
@@ -381,7 +395,7 @@ class Kernel(ABC):
 # }}}
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class ExpressionKernel(Kernel, ABC):
     r"""
     .. autoattribute:: expression
@@ -561,7 +575,7 @@ class BiharmonicKernel(ExpressionKernel):
         return laplacian(laplacian(w))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class HelmholtzKernel(ExpressionKernel):
     """
     .. autoattribute:: helmholtz_k_name
@@ -642,7 +656,7 @@ class HelmholtzKernel(ExpressionKernel):
         return laplacian(w) + k**2 * w
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class YukawaKernel(ExpressionKernel):
     """
     .. autoattribute:: yukawa_lambda_name
@@ -729,7 +743,7 @@ class YukawaKernel(ExpressionKernel):
         return laplacian(w) - lam**2 * w
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class ElasticityKernel(ExpressionKernel):
     """
     .. autoattribute:: icomp
@@ -858,7 +872,7 @@ class ElasticityKernel(ExpressionKernel):
         return laplacian(laplacian(w))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class StokesletKernel(ElasticityKernel):
     """
     .. autoattribute:: icomp
@@ -898,7 +912,7 @@ class StokesletKernel(ElasticityKernel):
             f"({self.viscosity_mu}, {self.poisson_ratio})")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class StressletKernel(ExpressionKernel):
     """
     .. autoattribute:: icomp
@@ -981,7 +995,7 @@ class StressletKernel(ExpressionKernel):
         return laplacian(laplacian(w))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class LineOfCompressionKernel(ExpressionKernel):
     """A kernel for the line of compression or dilatation of constant strength
     along the axis "axis" from zero to negative infinity.
