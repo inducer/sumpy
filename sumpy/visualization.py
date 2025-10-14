@@ -168,7 +168,7 @@ class FieldPlotter:
     def show_vector_in_mayavi(self, fld, do_show=True, **kwargs):
         c = self.points
 
-        from mayavi import mlab  # pylint: disable=import-error
+        from mayavi import mlab
 
         mlab.quiver3d(c[0], c[1], c[2], fld[0], fld[1], fld[2],
                 **kwargs)
@@ -193,7 +193,7 @@ class FieldPlotter:
         nd_points = self.nd_points.squeeze()[self._get_nontrivial_dims()]
         squeezed_fld = fld.squeeze()
 
-        from mayavi import mlab  # pylint: disable=import-error
+        from mayavi import mlab
         mlab.surf(nd_points[0], nd_points[1], squeezed_fld, **kwargs)
 
 # vim: foldmethod=marker

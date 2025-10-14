@@ -149,7 +149,7 @@ class CalculusPatch:
             a high-order interpolation basis on the :py:attr:`points`.
         """
 
-        from scipy.special import eval_chebyt  # pylint: disable=no-name-in-module
+        from scipy.special import eval_chebyt
 
         from pytools import indices_in_shape
 

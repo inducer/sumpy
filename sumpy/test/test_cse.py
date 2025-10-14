@@ -151,7 +151,7 @@ def test_cse_not_possible():
     assert reduced == [x + y]
     # issue 6329
     eq = (
-        meijerg((1, 2), (y, 4), (5,), [], x)  # pylint: disable=possibly-used-before-assignment
+        meijerg((1, 2), (y, 4), (5,), [], x)
         + meijerg((1, 3), (y, 4), (5,), [], x))
     assert cse(eq) == ([], [eq])
 
@@ -177,7 +177,7 @@ def test_subtraction_opt():
     # Make sure subtraction is optimized.
     e = (x - y)*(z - y) + sym.exp((x - y)*(z - y))
     substs, reduced = cse(
-        [e], optimizations=[(cse_opts.sub_pre, cse_opts.sub_post)])  # pylint: disable=possibly-used-before-assignment
+        [e], optimizations=[(cse_opts.sub_pre, cse_opts.sub_post)])
     assert substs == [(x0, (x - y)*(y - z))]
     assert reduced == [-x0 + sym.exp(-x0)]
     e = -(x - y)*(z - y) + sym.exp(-(x - y)*(z - y))
@@ -341,7 +341,7 @@ def test_issue_6169():
     assert cse(r) == ([], [r])
     # and a check that the right thing is done with the new
     # mechanism
-    assert sub_post(sub_pre((-x - y)*z - x - y)) == -z*(x + y) - x - y  # pylint: disable=possibly-used-before-assignment
+    assert sub_post(sub_pre((-x - y)*z - x - y)) == -z*(x + y) - x - y
 
 # }}}
 
