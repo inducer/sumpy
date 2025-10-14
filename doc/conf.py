@@ -29,6 +29,14 @@ nitpick_ignore_regex = [
 ]
 
 sphinxconfig_missing_reference_aliases = {
+    # numpy
+    "Array1D": "class:numpy.ndarray",
+    "Array2D": "class:numpy.ndarray",
+    "np.floating": "class:numpy.floating",
+    "np.complexfloating": "class:numpy.complexfloating",
+    "np.inexact": "class:numpy.inexact",
+    # pytools
+    "obj_array.ObjectArray1D": "obj:pytools.obj_array.ObjectArray1D",
     # sympy
     "sp.Matrix": "class:sympy.matrices.dense.DenseMatrix",
     # pytools
