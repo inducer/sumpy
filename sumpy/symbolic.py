@@ -394,10 +394,10 @@ _SympyBesselJ = BesselJ
 _SympyHankel1 = Hankel1
 
 if not TYPE_CHECKING and USE_SYMENGINE:
-    def BesselJ(*args):   # noqa: N802  # pylint: disable=function-redefined
+    def BesselJ(*args):   # noqa: N802
         return sym.sympify(_SympyBesselJ(*args))
 
-    def Hankel1(*args):   # noqa: N802  # pylint: disable=function-redefined
+    def Hankel1(*args):   # noqa: N802
         return sym.sympify(_SympyHankel1(*args))
 
 # vim: fdm=marker

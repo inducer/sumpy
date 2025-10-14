@@ -51,7 +51,7 @@ class FMMLibExpansionOrderFinder:
         self.extra_order = extra_order
 
     def __call__(self, kernel, kernel_args, tree, level):
-        from pyfmmlib import (  # pylint: disable=no-name-in-module
+        from pyfmmlib import (
             h2dterms,
             h3dterms,
             l2dterms,

@@ -46,20 +46,6 @@ jobs:
                 cipip install basedpyright
                 basedpyright
 
-    pylint:
-        name: Pylint
-        runs-on: ubuntu-latest
-        steps:
-        -   uses: actions/checkout@v5
-        -   name: "Main Script"
-            run: |
-                USE_CONDA_BUILD=1
-                EXTRA_INSTALL="pyvisfile scipy matplotlib"
-                curl -L -O https://tiker.net/ci-support-v0
-                . ci-support-v0
-                build_py_project
-                run_pylint "$(basename $GITHUB_REPOSITORY)" examples/*.py
-
     docs:
         name: Documentation
         runs-on: ubuntu-latest

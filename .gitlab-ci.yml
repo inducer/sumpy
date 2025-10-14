@@ -128,18 +128,6 @@ Ruff:
   except:
   - tags
 
-Pylint:
-  script:
-  - EXTRA_INSTALL="pybind11 numpy mako scipy matplotlib pyvisfile mpi4py"
-  - curl -L -O https://tiker.net/ci-support-v0
-  - . ci-support-v0
-  - build_py_project
-  - run_pylint "$(get_proj_name)" examples/*.py
-  tags:
-  - python3
-  except:
-  - tags
-
 Downstream:
   parallel:
     matrix:
