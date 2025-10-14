@@ -40,9 +40,13 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    {include-group = "type"},
     {include-group = "doc"},
     {include-group = "test"},
     {include-group = "lint"},
+]
+type = [
+    "optype"
 ]
 lint = [
     "pylint",
