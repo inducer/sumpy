@@ -30,6 +30,7 @@ from typing import ParamSpec
 
 import numpy as np
 from constantdict import constantdict
+from typing_extensions import override
 
 import loopy as lp
 import pymbolic.primitives as prim
@@ -38,7 +39,7 @@ from pymbolic.mapper import CSECachingMapperMixin, IdentityMapper
 from pymbolic.typing import Expression
 from pytools import memoize_method
 
-from sumpy.symbolic import SympyToPymbolicMapper as SympyToPymbolicMapperBase
+import sumpy.symbolic as sym
 
 
 logger = logging.getLogger(__name__)
@@ -63,23 +64,20 @@ def wrap_in_cse(expr: Expression, prefix: str | None = None) -> Expression:
 
 # {{{ sympy -> pymbolic mapper
 
-import sumpy.symbolic as sym
-
-
 _SPECIAL_FUNCTION_NAMES = frozenset(dir(sym.functions))
 
 
-class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
-
-    def not_supported(self, expr):
+class SympyToPymbolicMapper(sym.SympyToPymbolicMapper):
+    @override
+    def not_supported(self, expr: object) -> Expression:
         if isinstance(expr, int):
             return expr
         elif getattr(expr, "is_Function", False):
-            func_name = SympyToPymbolicMapperBase.function_name(self, expr)
+            func_name = sym.SympyToPymbolicMapper.function_name(self, expr)
             return prim.Variable(func_name)(
                     *tuple(self.rec(arg) for arg in expr.args))
         else:
-            return SympyToPymbolicMapperBase.not_supported(self, expr)
+            return sym.SympyToPymbolicMapper.not_supported(self, expr)
 
 # }}}
 
