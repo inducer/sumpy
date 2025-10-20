@@ -268,28 +268,6 @@ def make_sym_vector(name: str, components: int) -> Matrix:
     return Matrix([Symbol(f"{name}{i}") for i in range(components)])
 
 
-def vector_xreplace(expr: Expr, from_vec: Matrix, to_vec: Matrix) -> Expr:
-    substs = {}
-    assert (from_vec.rows, from_vec.cols) == (to_vec.rows, to_vec.cols)
-    for irow in range(from_vec.rows):
-        for icol in range(from_vec.cols):
-            substs[from_vec[irow, icol]] = to_vec[irow, icol]
-
-    return expr.xreplace(substs)
-
-
-def find_power_of(base: Basic, prod: Basic) -> int | Basic:
-    # FIXME: this does not actually work with symengine (Wild is not implemented)
-    remdr = sym.Wild("remdr")
-    power = sym.Wild("power")
-
-    result = prod.match(remdr*base**power)
-    if result is None:
-        return 0
-
-    return result[power]
-
-
 @prim.expr_dataclass()
 class SpatialConstant(prim.Variable):
     """A symbolic constant to represent a symbolic variable that is spatially constant.
