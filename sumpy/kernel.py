@@ -31,7 +31,6 @@ from typing import (
     ClassVar,
     Generic,
     Literal,
-    TypeAlias,
     TypeVar,
     cast,
     overload,
@@ -68,8 +67,6 @@ if TYPE_CHECKING:
 __doc__ = """
 Kernel interface
 ----------------
-
-.. autoclass:: ArithmeticExpr
 
 .. autoclass:: KernelArgument
 .. autoclass:: Kernel
@@ -159,8 +156,6 @@ Transforming kernels
 .. autoclass:: DerivativeCounter
     :show-inheritance:
 """
-
-ArithmeticExpr: TypeAlias = int | float | complex | sym.Basic
 
 
 @dataclass(frozen=True)
@@ -262,7 +257,7 @@ class Kernel(ABC):
         return lambda expr: expr
 
     @abstractmethod
-    def get_expression(self, dist_vec: sp.Matrix) -> ArithmeticExpr:
+    def get_expression(self, dist_vec: sp.Matrix) -> sym.Expr:
         """
         :returns: a :mod:`sympy` expression for the kernel.
         """
@@ -291,8 +286,8 @@ class Kernel(ABC):
     def get_derivative_taker(
             self,
             dvec: sp.Matrix,
-            rscale: ArithmeticExpr,
-            sac: SymbolicAssignmentCollection,
+            rscale: sym.Expr,
+            sac: SymbolicAssignmentCollection | None,
         ) -> ExprDerivativeTaker:
         """
         :returns: an :class:`~sumpy.derivative_taker.ExprDerivativeTaker` instance
@@ -302,16 +297,16 @@ class Kernel(ABC):
 
     @overload
     def postprocess_at_source(
-            self, expr: sym.Expr, avec: sp.Matrix
+            self, expr: sym.Expr, avec: sym.Matrix
         ) -> sym.Expr: ...
 
     @overload
     def postprocess_at_source(
-            self, expr: ExprDerivativeTaker, avec: sp.Matrix
+            self, expr: ExprDerivativeTaker, avec: sym.Matrix
         ) -> DifferentiatedExprDerivativeTaker: ...
 
     def postprocess_at_source(
-            self, expr: sym.Expr | ExprDerivativeTaker, avec: sp.Matrix,
+            self, expr: sym.Expr | ExprDerivativeTaker, avec: sym.Matrix,
         ) -> sym.Expr | DifferentiatedExprDerivativeTaker:
         """Transform a kernel evaluation or expansion expression in a place
         where the vector :math:`a` (something - source) is known. ("something" may be
@@ -334,17 +329,20 @@ class Kernel(ABC):
 
     @overload
     def postprocess_at_target(
-            self, expr: sym.Expr, bvec: sp.Matrix,
+            self, expr: sym.Expr, bvec: sym.Matrix,
         ) -> sym.Expr: ...
 
     @overload
     def postprocess_at_target(
-            self, expr: ExprDerivativeTaker, bvec: sp.Matrix,
+            self, expr: ExprDerivativeTaker | DifferentiatedExprDerivativeTaker,
+            bvec: sym.Matrix,
         ) -> DifferentiatedExprDerivativeTaker: ...
 
-    def postprocess_at_target(
-            self, expr: sym.Expr | ExprDerivativeTaker, bvec: sp.Matrix,
-        ) -> sym.Expr | DifferentiatedExprDerivativeTaker:
+    def postprocess_at_target(self,
+                expr:
+                    sym.Expr | ExprDerivativeTaker | DifferentiatedExprDerivativeTaker,
+                bvec: sym.Matrix,
+            ) -> sym.Expr | DifferentiatedExprDerivativeTaker:
         """Transform a kernel evaluation or expansion expression in a place
         where the vector :math:`b` (target - something) is known. ("something" may
         be an expansion center or a target.)
@@ -368,7 +366,7 @@ class Kernel(ABC):
         return expr_dict
 
     @abstractmethod
-    def get_global_scaling_const(self) -> ArithmeticExpr:
+    def get_global_scaling_const(self) -> sym.Expr:
         r"""A global scaling constant of the kernel.
 
         Typically, this ensures that the kernel is scaled so that
@@ -426,9 +424,9 @@ class ExpressionKernel(Kernel, ABC):
         return f"ExprKnl{self.dim}D"
 
     @override
-    def get_expression(self, dist_vec: sp.Matrix) -> ArithmeticExpr:
+    def get_expression(self, dist_vec: sym.Matrix) -> sym.Expr:
         from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
-        expr = PymbolicToSympyMapperWithSymbols()(self.expression)
+        expr = PymbolicToSympyMapperWithSymbols().to_expr(self.expression)
 
         if self.dim != len(dist_vec):
             raise ValueError(
@@ -444,16 +442,16 @@ class ExpressionKernel(Kernel, ABC):
         return expr
 
     @override
-    def get_global_scaling_const(self) -> ArithmeticExpr:
+    def get_global_scaling_const(self) -> sym.Expr:
         from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
-        return PymbolicToSympyMapperWithSymbols()(self.global_scaling_const)
+        return PymbolicToSympyMapperWithSymbols().to_expr(self.global_scaling_const)
 
     @override
     def get_derivative_taker(
             self,
-            dvec: sp.Matrix,
-            rscale: ArithmeticExpr,
-            sac: SymbolicAssignmentCollection,
+            dvec: sym.Matrix,
+            rscale: sym.Expr,
+            sac: SymbolicAssignmentCollection | None,
         ) -> ExprDerivativeTaker:
         return ExprDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
@@ -512,9 +510,9 @@ class LaplaceKernel(ExpressionKernel):
     @override
     def get_derivative_taker(
             self,
-            dvec: sp.Matrix,
-            rscale: ArithmeticExpr,
-            sac: SymbolicAssignmentCollection,
+            dvec: sym.Matrix,
+            rscale: sym.Expr,
+            sac: SymbolicAssignmentCollection | None,
         ) -> ExprDerivativeTaker:
         from sumpy.derivative_taker import LaplaceDerivativeTaker
         return LaplaceDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
@@ -562,8 +560,8 @@ class BiharmonicKernel(ExpressionKernel):
     def get_derivative_taker(
             self,
             dvec: sp.Matrix,
-            rscale: ArithmeticExpr,
-            sac: SymbolicAssignmentCollection,
+            rscale: sym.Expr,
+            sac: SymbolicAssignmentCollection | None,
         ) -> ExprDerivativeTaker:
         from sumpy.derivative_taker import RadialDerivativeTaker
         return RadialDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
@@ -640,9 +638,9 @@ class HelmholtzKernel(ExpressionKernel):
     @override
     def get_derivative_taker(
             self,
-            dvec: sp.Matrix,
-            rscale: ArithmeticExpr,
-            sac: SymbolicAssignmentCollection,
+            dvec: sym.Matrix,
+            rscale: sym.Expr,
+            sac: SymbolicAssignmentCollection | None,
         ) -> ExprDerivativeTaker:
         from sumpy.derivative_taker import HelmholtzDerivativeTaker
         return HelmholtzDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
@@ -727,9 +725,9 @@ class YukawaKernel(ExpressionKernel):
     @override
     def get_derivative_taker(
             self,
-            dvec: sp.Matrix,
-            rscale: ArithmeticExpr,
-            sac: SymbolicAssignmentCollection,
+            dvec: sym.Matrix,
+            rscale: sym.Expr,
+            sac: SymbolicAssignmentCollection | None,
         ) -> ExprDerivativeTaker:
         from sumpy.derivative_taker import HelmholtzDerivativeTaker
         return HelmholtzDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
@@ -1114,7 +1112,7 @@ class KernelWrapper(Kernel, ABC):
         return self.inner_kernel.prepare_loopy_kernel(loopy_knl)
 
     @override
-    def get_expression(self, dist_vec: sp.Matrix) -> ArithmeticExpr:
+    def get_expression(self, dist_vec: sym.Matrix) -> sym.Expr:
         return self.inner_kernel.get_expression(dist_vec)
 
     @override
@@ -1140,7 +1138,7 @@ class KernelWrapper(Kernel, ABC):
         return self.inner_kernel.postprocess_at_target(expr, bvec)
 
     @override
-    def get_global_scaling_const(self) -> ArithmeticExpr:
+    def get_global_scaling_const(self) -> sym.Expr:
         return self.inner_kernel.get_global_scaling_const()
 
     @override
@@ -1161,11 +1159,10 @@ class KernelWrapper(Kernel, ABC):
             f"'replace_base_kernel' is not implemented for '{type(self).__name__}'")
 
     @override
-    def get_derivative_taker(
-            self,
-            dvec: sp.Matrix,
-            rscale: ArithmeticExpr,
-            sac: SymbolicAssignmentCollection,
+    def get_derivative_taker(self,
+            dvec: sym.Matrix,
+            rscale: sym.Expr,
+            sac: SymbolicAssignmentCollection | None,
         ) -> ExprDerivativeTaker:
         return self.inner_kernel.get_derivative_taker(dvec, rscale, sac)
 
