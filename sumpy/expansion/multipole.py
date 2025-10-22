@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from sumpy.assignment_collection import SymbolicAssignmentCollection
+    from sumpy.expansion.diff_op import MultiIndex
     from sumpy.kernel import Kernel
 
 
@@ -405,11 +406,14 @@ class HankelBased2DMultipoleExpansion(MultipoleExpansionBase, ABC):
     def get_bessel_arg_scaling(self):
         return
 
-    def get_storage_index(self, k):
-        return self.order+k
+    @override
+    def get_storage_index(self, mi: MultiIndex):
+        ind, = mi
+        return self.order+ind
 
+    @override
     def get_coefficient_identifiers(self):
-        return list(range(-self.order, self.order+1))
+        return [(i,) for i in range(-self.order, self.order+1)]
 
     def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
         if not self.use_rscale:
@@ -431,7 +435,7 @@ class HankelBased2DMultipoleExpansion(MultipoleExpansionBase, ABC):
                     / rscale ** abs(c)
                     * sym.exp(sym.I * c * -source_angle_rel_center),
                     avec)
-                for c in self.get_coefficient_identifiers()]
+                for c, in self.get_coefficient_identifiers()]
 
     def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
         if not self.use_rscale:
@@ -443,12 +447,12 @@ class HankelBased2DMultipoleExpansion(MultipoleExpansionBase, ABC):
 
         arg_scale = self.get_bessel_arg_scaling()
 
-        return sum(coeffs[self.get_storage_index(c)]
+        return sum(coeffs[self.get_storage_index((c,))]
                    * kernel.postprocess_at_target(
                        Hankel1(c, arg_scale * bvec_len, 0)
                        * rscale ** abs(c)
                        * sym.exp(sym.I * c * target_angle_rel_center), bvec)
-                for c in self.get_coefficient_identifiers())
+                for c, in self.get_coefficient_identifiers())
 
     def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, sac=None):
@@ -468,14 +472,14 @@ class HankelBased2DMultipoleExpansion(MultipoleExpansionBase, ABC):
         arg_scale = self.get_bessel_arg_scaling()
 
         translated_coeffs = []
-        for j in self.get_coefficient_identifiers():
+        for j, in self.get_coefficient_identifiers():
             translated_coeffs.append(
-                sum(src_coeff_exprs[src_expansion.get_storage_index(m)]
+                sum(src_coeff_exprs[src_expansion.get_storage_index((m,))]
                     * BesselJ(m - j, arg_scale * dvec_len, 0)
                     * src_rscale ** abs(m)
                     / tgt_rscale ** abs(j)
                     * sym.exp(sym.I * (m - j) * new_center_angle_rel_old_center)
-                for m in src_expansion.get_coefficient_identifiers()))
+                for m, in src_expansion.get_coefficient_identifiers()))
         return translated_coeffs
 
 
