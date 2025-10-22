@@ -23,23 +23,48 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias, cast
 
 import numpy as np
+from typing_extensions import override
 
 import loopy as lp
 import pymbolic
 import pymbolic.primitives as p
 
 import sumpy.symbolic as sym
+from sumpy.expansion.local import (
+    FourierBesselLocalExpansionMixin,
+    VolumeTaylorLocalExpansionBase,
+)
+from sumpy.expansion.multipole import (
+    HankelBased2DMultipoleExpansion,
+    VolumeTaylorMultipoleExpansionBase,
+)
 from sumpy.tools import add_to_sac, matvec_toeplitz_upper_triangular
+
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from sumpy.assignment_collection import SymbolicAssignmentCollection
+    from sumpy.expansion.local import (
+        LocalExpansionBase,
+        VolumeTaylorLocalExpansion,
+    )
+    from sumpy.expansion.multipole import (
+        MultipoleExpansionBase,
+        VolumeTaylorMultipoleExpansion,
+    )
 
 
 logger = logging.getLogger(__name__)
 
 __doc__ = """
+.. class:: TranslationClassesDepData
 .. autoclass:: M2LTranslationClassFactoryBase
 .. autoclass:: NonFFTM2LTranslationClassFactory
 .. autoclass:: FFTM2LTranslationClassFactory
@@ -76,12 +101,12 @@ class NonFFTM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
         *base_kernel* and *local_expansion_class*.
         """
         from sumpy.expansion.local import (
+            FourierBesselLocalExpansionMixin,
             VolumeTaylorLocalExpansionBase,
-            _FourierBesselLocalExpansion,
         )
         if issubclass(local_expansion_class, VolumeTaylorLocalExpansionBase):
             return VolumeTaylorM2LTranslation
-        elif issubclass(local_expansion_class, _FourierBesselLocalExpansion):
+        elif issubclass(local_expansion_class, FourierBesselLocalExpansionMixin):
             return FourierBesselM2LTranslation
         else:
             raise RuntimeError(
@@ -98,12 +123,12 @@ class FFTM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
         *base_kernel* and *local_expansion_class*.
         """
         from sumpy.expansion.local import (
+            FourierBesselLocalExpansionMixin,
             VolumeTaylorLocalExpansionBase,
-            _FourierBesselLocalExpansion,
         )
         if issubclass(local_expansion_class, VolumeTaylorLocalExpansionBase):
             return VolumeTaylorM2LWithFFT
-        elif issubclass(local_expansion_class, _FourierBesselLocalExpansion):
+        elif issubclass(local_expansion_class, FourierBesselLocalExpansionMixin):
             return FourierBesselM2LWithFFT
         else:
             raise RuntimeError(
@@ -115,12 +140,12 @@ class DefaultM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
     'best known' translation type for each kernel and local expansion class"""
     def get_m2l_translation_class(self, base_kernel, local_expansion_class):
         from sumpy.expansion.local import (
+            FourierBesselLocalExpansionMixin,
             VolumeTaylorLocalExpansionBase,
-            _FourierBesselLocalExpansion,
         )
         if issubclass(local_expansion_class, VolumeTaylorLocalExpansionBase):
             return VolumeTaylorM2LWithFFT
-        elif issubclass(local_expansion_class, _FourierBesselLocalExpansion):
+        elif issubclass(local_expansion_class, FourierBesselLocalExpansionMixin):
             return FourierBesselM2LTranslation
         else:
             raise RuntimeError(
@@ -130,6 +155,9 @@ class DefaultM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
 
 
 # {{{ M2LTranslationBase
+
+TranslationClassesDepData: TypeAlias = tuple[Any, ...]
+
 
 class M2LTranslationBase(ABC):
     """Base class for Multipole to Local Translation
@@ -158,17 +186,34 @@ class M2LTranslationBase(ABC):
         return type(self) is type(other)
 
     @abstractmethod
-    def translate(self, tgt_expansion, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale, sac=None, translation_classes_dependent_data=None):
-        pass
+    def translate(self,
+                tgt_expansion: LocalExpansionBase,
+                src_expansion: MultipoleExpansionBase,
+                src_coeff_exprs: Sequence[sym.Expr],
+                src_rscale: sym.Expr,
+                dvec: sym.Matrix,
+                tgt_rscale: sym.Expr,
+                sac: SymbolicAssignmentCollection | None = None,
+                translation_classes_dependent_data:
+                    TranslationClassesDepData | None = None
+            ) -> Sequence[sym.Expr]:
+        ...
 
-    def loopy_translate(self, tgt_expansion, src_expansion):
+    def loopy_translate(self,
+                tgt_expansion: LocalExpansionBase,
+                src_expansion: MultipoleExpansionBase,
+            ) -> lp.TranslationUnit:
         raise NotImplementedError(
             f"A direct loopy kernel for translation from "
             f"{src_expansion} to {tgt_expansion} using {self} is not implemented.")
 
-    def translation_classes_dependent_data(self, tgt_expansion, src_expansion,
-            src_rscale, dvec, sac) -> tuple[Any, ...]:
+    def translation_classes_dependent_data(self,
+                tgt_expansion: LocalExpansionBase,
+                src_expansion: MultipoleExpansionBase,
+                src_rscale: sym.Expr,
+                dvec: sym.Matrix,
+                sac: SymbolicAssignmentCollection | None = None,
+            ) -> TranslationClassesDepData:
         """Return an iterable of expressions that needs to be precomputed
         for multipole-to-local translations that depend only on the
         distance between the multipole center and the local center which
@@ -184,7 +229,10 @@ class M2LTranslationBase(ABC):
         """
         return ()
 
-    def translation_classes_dependent_ndata(self, tgt_expansion, src_expansion):
+    def translation_classes_dependent_ndata(self,
+                tgt_expansion: LocalExpansionBase,
+                src_expansion: MultipoleExpansionBase,
+            ) -> int:
         """Return the number of expressions returned by
         :func:`~sumpy.expansion.m2l.M2LTranslationBase.translation_classes_dependent_data`.
         This method exists because calculating the number of expressions using
@@ -359,6 +407,9 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
     def translation_classes_dependent_data(self, tgt_expansion, src_expansion,
             src_rscale, dvec, sac):
 
+        assert isinstance(tgt_expansion, VolumeTaylorLocalExpansionBase)
+        assert isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase)
+
         # We know the general form of the multipole expansion is:
         #
         #  coeff0 * diff(kernel(src - c1), mi0) +
@@ -375,7 +426,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         # m2l.
 
         if not tgt_expansion.use_rscale:
-            src_rscale = 1
+            src_rscale = sym.sympify(1)
 
         circulant_matrix_mis, needed_vector_terms, max_mi = \
             self._translation_classes_dependent_data_mis(tgt_expansion,
@@ -756,8 +807,15 @@ class VolumeTaylorM2LWithPreprocessedMultipoles(VolumeTaylorM2LTranslation):
 class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
     use_fft: ClassVar[bool] = True
 
-    def translate(self, tgt_expansion, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale, sac=None, translation_classes_dependent_data=None):
+    def translate(self,
+                tgt_expansion: VolumeTaylorLocalExpansion,
+                src_expansion: VolumeTaylorMultipoleExpansion,
+                src_coeff_exprs: Sequence[sym.Expr],
+                src_rscale: sym.Expr,
+                dvec: sym.Matrix,
+                tgt_rscale: sym.Expr,
+                sac: SymbolicAssignmentCollection | None = None,
+                translation_classes_dependent_data=None):
 
         assert translation_classes_dependent_data
         derivatives = translation_classes_dependent_data
@@ -848,8 +906,16 @@ class FourierBesselM2LTranslation(M2LTranslationBase):
         nexpr = 2 * tgt_expansion.order + 2 * src_expansion.order + 1
         return nexpr
 
-    def translation_classes_dependent_data(self, tgt_expansion, src_expansion,
-            src_rscale, dvec, sac):
+    @override
+    def translation_classes_dependent_data(self,
+                tgt_expansion: LocalExpansionBase,
+                src_expansion: MultipoleExpansionBase,
+                src_rscale: sym.Expr,
+                dvec: sym.Matrix,
+                sac: SymbolicAssignmentCollection | None = None):
+
+        assert isinstance(tgt_expansion, FourierBesselLocalExpansionMixin)
+        assert isinstance(src_expansion, HankelBased2DMultipoleExpansion)
 
         from sumpy.symbolic import Hankel1, sym_real_norm_2
 
@@ -857,8 +923,8 @@ class FourierBesselM2LTranslation(M2LTranslationBase):
         new_center_angle_rel_old_center = sym.atan2(dvec[1], dvec[0])
         arg_scale = tgt_expansion.get_bessel_arg_scaling()
         # [-(src_order+tgt_order), ..., 0, ..., (src_order + tgt_order)]
-        translation_classes_dependent_data = \
-                [0] * (2*tgt_expansion.order + 2 * src_expansion.order + 1)
+        translation_classes_dependent_data: list[sym.Expr] = \
+                [sym.sympify(0)] * (2*tgt_expansion.order + 2 * src_expansion.order + 1)
 
         # The M2L is a mirror image of a Toeplitz matvec with Hankel function
         # evaluations. https://dlmf.nist.gov/10.23.F1
@@ -872,7 +938,7 @@ class FourierBesselM2LTranslation(M2LTranslationBase):
                     Hankel1(m + j, arg_scale * dvec_len, 0)
                     * sym.exp(sym.I * (m + j) * new_center_angle_rel_old_center))
 
-        return translation_classes_dependent_data
+        return tuple(translation_classes_dependent_data)
 
     def preprocess_multipole_exprs(self, tgt_expansion, src_expansion,
             src_coeff_exprs, sac, src_rscale):
@@ -989,7 +1055,7 @@ class FourierBesselM2LWithFFT(FourierBesselM2LWithPreprocessedMultipoles):
         raise NotImplementedError
 
     def translation_classes_dependent_data(self, tgt_expansion, src_expansion,
-            src_rscale, dvec, sac):
+            src_rscale, dvec, sac=None):
 
         translation_classes_dependent_data = \
             super().translation_classes_dependent_data(tgt_expansion,
@@ -1012,7 +1078,7 @@ class FourierBesselM2LWithFFT(FourierBesselM2LWithPreprocessedMultipoles):
 
         first_column_circulant = list(first_column_toeplitz) + \
                 list(reversed(first_row_toeplitz))
-        return first_column_circulant
+        return tuple(first_column_circulant)
 
     def preprocess_multipole_exprs(self, tgt_expansion, src_expansion,
             src_coeff_exprs, sac, src_rscale):

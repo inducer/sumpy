@@ -142,7 +142,7 @@ class ToyContext:
                     m2l_translation_class_factory.get_m2l_translation_class(
                         kernel, local_expn_class)
             local_expn_class = partial(local_expn_class,
-                    m2l_translation=m2l_translation_class())
+                    m2l_translation_override=m2l_translation_class())
         elif m2l_use_fft is not None:
             raise ValueError("local_expn_class and m2l_use_fft are both supplied. "
                              "Use only one of these arguments")

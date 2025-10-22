@@ -28,20 +28,11 @@ __doc__ = """Integrates :mod:`boxtree` with :mod:`sumpy`.
 .. autoclass:: SumpyTreeIndependentDataForWrangler
 .. autoclass:: SumpyExpansionWrangler
 
-.. autodata:: MultipoleExpansionFactory
-    :noindex:
-.. class:: MultipoleExpansionFactory
-
-    See above.
-.. autodata:: LocalExpansionFactory
-    :noindex:
-.. class:: LocalExpansionFactory
-
-    See above.
+.. autoclass:: MultipoleExpansionFromOrderFactory
+.. autoclass:: LocalExpansionFromOrderFactory
 """
 
-from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Protocol, TypeAlias, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 from boxtree.fmm import ExpansionWranglerInterface, TreeIndependentDataForWrangler
 
@@ -64,8 +55,6 @@ from sumpy import (
     P2EFromSingleBox,
     P2PFromCSR,
 )
-from sumpy.expansion.local import LocalExpansionBase
-from sumpy.expansion.multipole import MultipoleExpansionBase
 from sumpy.tools import (
     AggregateProfilingEvent,
     get_native_event,
@@ -76,14 +65,23 @@ from sumpy.tools import (
 
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from sumpy.expansion.local import LocalExpansionBase
+    from sumpy.expansion.multipole import MultipoleExpansionBase
     from sumpy.kernel import Kernel
 
 
-# parameters here are order, use_rscale
-MultipoleExpansionFactory: TypeAlias = Callable[
-    [int, bool | None], MultipoleExpansionBase]
-LocalExpansionFactory: TypeAlias = Callable[
-    [int, bool | None], LocalExpansionBase]
+class MultipoleExpansionFromOrderFactory(Protocol):
+    def __call__(self,
+            order: int,
+            *, use_rscale: bool = True) -> MultipoleExpansionBase:
+        ...
+
+
+class LocalExpansionFromOrderFactory(Protocol):
+    def __call__(self, order: int, *, use_rscale: bool = True) -> LocalExpansionBase:
+        ...
 
 
 # {{{ tree-independent data for wrangler
@@ -101,8 +99,8 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
     """
 
     cl_context: cl.Context
-    multipole_expansion_factory: MultipoleExpansionFactory
-    local_expansion_factory: LocalExpansionFactory
+    multipole_expansion_factory: MultipoleExpansionFromOrderFactory
+    local_expansion_factory: LocalExpansionFromOrderFactory
     source_kernels: Sequence[Kernel] | None
     target_kernels: Sequence[Kernel]
     exclude_self: bool
@@ -111,8 +109,8 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
 
     def __init__(self,
                  cl_context: cl.Context,
-                 multipole_expansion_factory: MultipoleExpansionFactory,
-                 local_expansion_factory: LocalExpansionFactory,
+                 multipole_expansion_factory: MultipoleExpansionFromOrderFactory,
+                 local_expansion_factory: LocalExpansionFromOrderFactory,
                  target_kernels: Sequence[Kernel],
                  exclude_self: bool = False,
                  use_rscale: bool | None = None,
@@ -146,12 +144,18 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
         return single_valued(k.get_base_kernel() for k in self.target_kernels)
 
     @memoize_method
-    def multipole_expansion(self, order):
-        return self.multipole_expansion_factory(order, self.use_rscale)
+    def multipole_expansion(self, order: int):
+        if self.use_rscale is None:
+            return self.multipole_expansion_factory(order)
+        else:
+            return self.multipole_expansion_factory(order, use_rscale=self.use_rscale)
 
     @memoize_method
-    def local_expansion(self, order):
-        return self.local_expansion_factory(order, self.use_rscale)
+    def local_expansion(self, order: int):
+        if self.use_rscale is None:
+            return self.local_expansion_factory(order)
+        else:
+            return self.local_expansion_factory(order, use_rscale=self.use_rscale)
 
     @property
     def m2l_translation(self):

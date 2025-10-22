@@ -28,7 +28,7 @@ THE SOFTWARE.
 import logging
 from dataclasses import dataclass
 from itertools import accumulate
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeAlias
 
 import numpy as np
 import sympy as sp
@@ -48,6 +48,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 __doc__ = """
+.. autodata:: MultiIndex
+    :no-index:
+
+.. class:: MultiIndex
+
+    See above.
+
 Differential operator interface
 -------------------------------
 
@@ -58,6 +65,9 @@ Differential operator interface
 """
 
 
+MultiIndex: TypeAlias = tuple[int, ...]
+
+
 @dataclass(frozen=True)
 class DerivativeIdentifier:
     """
@@ -65,7 +75,7 @@ class DerivativeIdentifier:
     .. autoattribute: vec_idx
     """
 
-    mi: tuple[int, ...]
+    mi: MultiIndex
     """
     Multi-index of the derivative being taken, a tuple with a number of entries
     corresponding to the dimension.

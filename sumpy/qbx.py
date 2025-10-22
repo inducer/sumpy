@@ -46,7 +46,10 @@ from sumpy.tools import KernelCacheMixin, KernelComputation, is_obj_array_like
 if TYPE_CHECKING:
     import pyopencl as cl
 
-    from sumpy.expansion.local import LineTaylorLocalExpansion
+    from sumpy.expansion.local import (
+        LineTaylorLocalExpansion,
+        LocalExpansionBase,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -80,11 +83,11 @@ def stringify_expn_index(i):
 # {{{ base class
 
 class LayerPotentialBase(KernelCacheMixin, KernelComputation, ABC):
-    expansion: LineTaylorLocalExpansion
+    expansion: LineTaylorLocalExpansion | LocalExpansionBase
 
     def __init__(self,
             ctx: cl.Context,
-            expansion: LineTaylorLocalExpansion,
+            expansion: LineTaylorLocalExpansion | LocalExpansionBase,
             strength_usage=None,
             value_dtypes=None,
             name=None,
