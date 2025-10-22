@@ -892,9 +892,9 @@ class FourierBesselM2LTranslation(M2LTranslationBase):
 
         translated_coeffs = [
             sum(derivatives[m + j + tgt_expansion.order + src_expansion.order]
-                    * src_coeff_exprs[src_expansion.get_storage_index(m)]
-                for m in src_expansion.get_coefficient_identifiers())
-            for j in tgt_expansion.get_coefficient_identifiers()]
+                    * src_coeff_exprs[src_expansion.get_storage_index((m,))]
+                for m, in src_expansion.get_coefficient_identifiers())
+            for j, in tgt_expansion.get_coefficient_identifiers()]
 
         translated_coeffs = self.postprocess_local_exprs(tgt_expansion,
                 src_expansion, translated_coeffs, src_rscale, tgt_rscale,
@@ -930,10 +930,10 @@ class FourierBesselM2LTranslation(M2LTranslationBase):
         # evaluations. https://dlmf.nist.gov/10.23.F1
         # This loop computes the first row and the last column vector sufficient
         # to specify the matrix entries.
-        for j in tgt_expansion.get_coefficient_identifiers():
-            idx_j = tgt_expansion.get_storage_index(j)
-            for m in src_expansion.get_coefficient_identifiers():
-                idx_m = src_expansion.get_storage_index(m)
+        for j, in tgt_expansion.get_coefficient_identifiers():
+            idx_j = tgt_expansion.get_storage_index((j,))
+            for m, in src_expansion.get_coefficient_identifiers():
+                idx_m = src_expansion.get_storage_index((m,))
                 translation_classes_dependent_data[idx_j + idx_m] = (
                     Hankel1(m + j, arg_scale * dvec_len, 0)
                     * sym.exp(sym.I * (m + j) * new_center_angle_rel_old_center))
@@ -944,8 +944,8 @@ class FourierBesselM2LTranslation(M2LTranslationBase):
             src_coeff_exprs, sac, src_rscale):
 
         src_coeff_exprs = list(src_coeff_exprs)
-        for m in src_expansion.get_coefficient_identifiers():
-            src_coeff_exprs[src_expansion.get_storage_index(m)] *= src_rscale**abs(m)
+        for m, in src_expansion.get_coefficient_identifiers():
+            src_coeff_exprs[src_expansion.get_storage_index((m,))] *= src_rscale**abs(m)
         return src_coeff_exprs
 
     def preprocess_multipole_nexprs(self, tgt_expansion, src_expansion):
@@ -956,8 +956,8 @@ class FourierBesselM2LTranslation(M2LTranslationBase):
 
         # Filter out the dummy rows and scale them for target
         result = []
-        for j in tgt_expansion.get_coefficient_identifiers():
-            result.append(m2l_result[tgt_expansion.get_storage_index(j)]
+        for j, in tgt_expansion.get_coefficient_identifiers():
+            result.append(m2l_result[tgt_expansion.get_storage_index((j,))]
                     * tgt_rscale**(abs(j)) * sym.Integer(-1)**j)
 
         return result
