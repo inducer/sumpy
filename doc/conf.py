@@ -39,6 +39,9 @@ sphinxconfig_missing_reference_aliases = {
     "obj_array.ObjectArray1D": "obj:pytools.obj_array.ObjectArray1D",
     # sympy
     "sp.Matrix": "class:sympy.matrices.dense.DenseMatrix",
+    "sym.Expr": "class:sympy.core.expr.Expr",
+    "sym.Symbol": "class:sympy.core.symbol.Symbol",
+    "sym.Matrix": "class:sympy.matrices.dense.DenseMatrix",
     # pytools
     "ObjectArray1D": "obj:pytools.obj_array.ObjectArray1D",
     # pymbolic

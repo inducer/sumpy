@@ -27,20 +27,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-
 import enum
 import logging
 import warnings
 from abc import ABC, abstractmethod
-from collections.abc import Hashable, Sequence
+from collections.abc import Hashable, Sequence, Set
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
 import numpy as np
 
 import loopy as lp
 import pytools.obj_array as obj_array
-from pymbolic.mapper import WalkMapper
+from pymbolic.mapper.dependency import DependencyMapper
 from pyopencl import MemoryObjectHolder
 from pytools import memoize_method
 from pytools.tag import Tag, tag_dataclass
@@ -51,12 +50,14 @@ import sumpy.symbolic as sym
 if TYPE_CHECKING:
     import numpy
     from numpy.typing import DTypeLike
+    from optype.numpy import Array2D
 
     import pyopencl
     import pyopencl as cl
     from pymbolic.primitives import Variable
     from pymbolic.typing import Expression
 
+    from sumpy.assignment_collection import SymbolicAssignmentCollection
     from sumpy.expansion import ExpansionBase
     from sumpy.kernel import Kernel, KernelArgument
 
@@ -144,6 +145,11 @@ def add_mi(mi1: Sequence[int], mi2: Sequence[int]) -> tuple[int, ...]:
     return tuple([mi1i + mi2i for mi1i, mi2i in zip(mi1, mi2, strict=True)])  # noqa: C409
 
 
+def sub_mi(mi1: Sequence[int], mi2: Sequence[int]) -> tuple[int, ...]:
+    # NOTE: these are used a lot and `tuple([])` is faster
+    return tuple([mi1i - mi2i for mi1i, mi2i in zip(mi1, mi2, strict=True)])  # noqa: C409
+
+
 def mi_factorial(mi: Sequence[int]) -> int:
     import math
     result = 1
@@ -167,9 +173,9 @@ def mi_set_axis(mi: Sequence[int], axis: int, value: int) -> tuple[int, ...]:
 
 
 def mi_power(
-        vector: Sequence[Any], mi: Sequence[int],
-        evaluate: bool = True) -> Any:
-    result = 1
+        vector: Sequence[sym.Expr], mi: Sequence[int],
+        evaluate: bool = True) -> sym.Expr:
+    result = sym.sympify(1)
     for mi_i, vec_i in zip(mi, vector, strict=True):
         if mi_i == 1:
             result *= vec_i
@@ -180,7 +186,7 @@ def mi_power(
     return result
 
 
-def add_to_sac(sac, expr):
+def add_to_sac(sac: SymbolicAssignmentCollection | None, expr: sym.Expr):
     if sac is None:
         return expr
 
@@ -191,24 +197,13 @@ def add_to_sac(sac, expr):
     name = sac.assign_temp("temp", expr)
     return sym.Symbol(name)
 
-
 # }}}
 
 
 # {{{ get variables
 
-class GatherAllVariables(WalkMapper):
-    def __init__(self):
-        self.vars = set()
-
-    def map_variable(self, expr):
-        self.vars.add(expr)
-
-
-def get_all_variables(expr: Expression) -> set[Variable]:
-    mapper = GatherAllVariables()
-    mapper(expr)
-    return mapper.vars
+def get_all_variables(expr: Expression) -> Set[Variable]:
+    return cast("Set[Variable]", DependencyMapper()(expr))
 
 # }}}
 
@@ -374,7 +369,7 @@ class KernelComputation(ABC):
 
     @property
     @abstractmethod
-    def default_name(self):
+    def default_name(self) -> str:
         pass
 
     def get_kernel_scaling_assignments(self):
@@ -392,7 +387,7 @@ class KernelComputation(ABC):
                     zip(self.target_kernels, self.value_dtypes, strict=True))]
 
     @abstractmethod
-    def get_kernel(self):
+    def get_kernel(self) -> lp.TranslationUnit:
         pass
 
 # }}}
@@ -477,11 +472,11 @@ class KernelCacheMixin(ABC):
         ...
 
     @abstractmethod
-    def get_kernel(self, **kwargs: Any) -> lp.TranslationUnit:
+    def get_kernel(self) -> lp.TranslationUnit:
         ...
 
     @abstractmethod
-    def get_optimized_kernel(self, **kwargs: Any) -> lp.TranslationUnit:
+    def get_optimized_kernel(self) -> lp.TranslationUnit:
         ...
 
     @memoize_method
@@ -546,7 +541,7 @@ def is_obj_array_like(ary):
 
 # {{{ matrices
 
-def reduced_row_echelon_form(m, atol=0):
+def reduced_row_echelon_form(m: Array2D[Any], atol: float = 0):
     """Calculates a reduced row echelon form of a
     matrix `m`.
 
@@ -609,7 +604,7 @@ def reduced_row_echelon_form(m, atol=0):
     return mat, pivot_cols
 
 
-def nullspace(m, atol=0):
+def nullspace(m: Array2D[Any], atol: float = 0):
     """Calculates the nullspace of a matrix `m`.
 
     :arg m: a 2D :class:`numpy.ndarray` or a list of lists or a sympy Matrix
@@ -693,7 +688,7 @@ def matvec_toeplitz_upper_triangular(first_row, vector):
     return output
 
 
-to_complex_type_dict = {
+to_complex_type_dict: dict[type[Any], type[np.complexfloating]] = {
     np.complex64: np.complex64,
     np.complex128: np.complex128,
     np.float32: np.complex64,
@@ -701,10 +696,10 @@ to_complex_type_dict = {
 }
 
 
-def to_complex_dtype(dtype):
+def to_complex_dtype(dtype: DTypeLike) -> np.dtype[np.complexfloating]:
     np_type = np.dtype(dtype).type
     try:
-        return to_complex_type_dict[np_type]
+        return np.dtype(to_complex_type_dict[np_type])
     except KeyError as err:
         raise RuntimeError(f"Unknown dtype: {dtype}") from err
 

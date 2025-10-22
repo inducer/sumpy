@@ -26,8 +26,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-
 import logging
+from abc import ABC
+from typing import TYPE_CHECKING
 
 import numpy as np
 from typing_extensions import override
@@ -41,6 +42,11 @@ from pytools import memoize_method
 import sumpy.symbolic as sym
 from sumpy.tools import KernelCacheMixin, KernelComputation, is_obj_array_like
 
+
+if TYPE_CHECKING:
+    import pyopencl as cl
+
+    from sumpy.expansion.local import LineTaylorLocalExpansion
 
 logger = logging.getLogger(__name__)
 
@@ -73,11 +79,18 @@ def stringify_expn_index(i):
 
 # {{{ base class
 
-class LayerPotentialBase(KernelCacheMixin, KernelComputation):
-    def __init__(self, ctx, expansion, strength_usage=None,
-            value_dtypes=None, name=None, device=None,
-            source_kernels=None, target_kernels=None):
+class LayerPotentialBase(KernelCacheMixin, KernelComputation, ABC):
+    expansion: LineTaylorLocalExpansion
 
+    def __init__(self,
+            ctx: cl.Context,
+            expansion: LineTaylorLocalExpansion,
+            strength_usage=None,
+            value_dtypes=None,
+            name=None,
+            device=None,
+            source_kernels=None,
+            target_kernels=None):
         from pytools import single_valued
 
         KernelComputation.__init__(self, ctx=ctx, target_kernels=target_kernels,
@@ -96,7 +109,7 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
     def _expand(self, sac, avec, bvec, rscale, isrc):
         from sumpy.symbolic import PymbolicToSympyMapper
         conv = PymbolicToSympyMapper()
-        strengths = [conv(self.get_strength_or_not(isrc, idx))
+        strengths = [conv.to_expr(self.get_strength_or_not(isrc, idx))
                      for idx in range(len(self.source_kernels))]
         coefficients = self.expansion.coefficients_from_source_vec(
             self.source_kernels, avec, bvec, rscale=rscale, weights=strengths,
@@ -189,9 +202,7 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation):
                 *gather_loopy_source_arguments(self.source_kernels)
             ]
 
-    def get_kernel(self):
-        raise NotImplementedError
-
+    @override
     def get_optimized_kernel(self,
             targets_is_obj_array, sources_is_obj_array, centers_is_obj_array,
             # Used by pytential to override the name of the loop to be

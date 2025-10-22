@@ -510,16 +510,17 @@ class BigIntegerKiller(CSECachingIdentityMapper, CallExternalRecMapper):
 
 # {{{ convert complex to np.complex
 
-class ComplexRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
+class ComplexRewriter(CSECachingIdentityMapper[[]], CallExternalRecMapper):
+    complex_dtype: np.dtype[np.complexfloating] | None
 
-    def __init__(self, complex_dtype=None):
+    def __init__(self, complex_dtype: np.dtype[np.complexfloating] | None = None):
         super().__init__()
         self.complex_dtype = complex_dtype
 
-    def map_constant(self, expr, rec_self=None):
+    def map_constant(self, expr: object, rec_self=None):
         """Convert complex values to numpy types
         """
-        if not isinstance(expr, complex | np.complex64 | np.complex128):
+        if not isinstance(expr, (complex, np.complex64, np.complex128)):
             return IdentityMapper.map_constant(rec_self or self, expr,
                     rec_self=rec_self)
 
@@ -544,7 +545,7 @@ class ComplexRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
 INDEXED_VAR_RE = re.compile(r"^([a-zA-Z_]+)([0-9]+)$")
 
 
-class VectorComponentRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
+class VectorComponentRewriter(CSECachingIdentityMapper[[]], CallExternalRecMapper):
     """For names in name_whitelist, turn ``a3`` into ``a[3]``."""
 
     name_whitelist: frozenset[str]
@@ -574,7 +575,7 @@ class VectorComponentRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
 
 # {{{ sum sign grouper
 
-class SumSignGrouper(CSECachingIdentityMapper, CallExternalRecMapper):
+class SumSignGrouper(CSECachingIdentityMapper[[]], CallExternalRecMapper):
     """Anti-cancellation cargo-cultism."""
 
     def map_sum(self, expr, *args):
@@ -613,7 +614,7 @@ class SumSignGrouper(CSECachingIdentityMapper, CallExternalRecMapper):
 # }}}
 
 
-class MathConstantRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
+class MathConstantRewriter(CSECachingIdentityMapper[[]], CallExternalRecMapper):
     def map_variable(self, expr, *args):
         if expr.name == "pi":
             return prim.Variable("M_PI")
@@ -625,7 +626,7 @@ class MathConstantRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
 
 # {{{ combine mappers
 
-def combine_mappers(*mappers):
+def combine_mappers(*mappers: CallExternalRecMapper):
     """Returns a mapper that combines the work of several other mappers.  For
     this to work, the mappers need to be instances of
     :class:`sumpy.codegen.CallExternalRecMapper`.  When calling parent class

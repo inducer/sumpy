@@ -39,7 +39,7 @@ __doc__ = """
 
 import logging
 import math
-from typing import TYPE_CHECKING, ClassVar, TypeAlias
+from typing import TYPE_CHECKING, ClassVar
 
 from typing_extensions import override
 
@@ -138,8 +138,6 @@ functions = sym.functions
 Number = sym.Number
 Float = sym.Float
 
-ArithmeticExpr: TypeAlias = int | float | complex | Expr
-
 
 def _coeff_isneg(a: Basic) -> bool:
     if a.is_Mul:
@@ -163,13 +161,13 @@ if USE_SYMENGINE:
     def doit(expr: Expr) -> Expr:
         return expr
 
-    def unevaluated_pow(a: Expr, b: complex | Expr) -> ArithmeticExpr:
+    def unevaluated_pow(a: Expr, b: complex | Expr) -> Expr:
         return Pow(a, b)
 else:
     def doit(expr: Expr) -> Expr:
         return expr.doit()
 
-    def unevaluated_pow(a: Expr, b: complex | Expr) -> ArithmeticExpr:
+    def unevaluated_pow(a: Expr, b: complex | Expr) -> Expr:
         return Pow(a, b, evaluate=False)
 
 
@@ -341,7 +339,7 @@ class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):
             return PymbolicToSympyMapper.map_variable(self, expr)
 
     @override
-    def map_subscript(self, expr: prim.Subscript) -> Basic:
+    def map_subscript(self, expr: prim.Subscript) -> sym.Basic:
         if isinstance(expr.aggregate, prim.Variable) and isinstance(expr.index, int):
             return Symbol(f"{expr.aggregate.name}{expr.index}")
         else:
@@ -349,7 +347,7 @@ class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):
             raise
 
     @override
-    def map_call(self, expr: prim.Call) -> Basic:
+    def map_call(self, expr: prim.Call) -> sym.Basic:
         function = expr.function
         if isinstance(function, prim.Variable):
             if function.name == "hankel_1":

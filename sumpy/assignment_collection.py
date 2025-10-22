@@ -23,10 +23,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-
 import logging
+from typing import TYPE_CHECKING
+
+from typing_extensions import override
 
 import sumpy.symbolic as sym
+
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 logger = logging.getLogger(__name__)
@@ -100,7 +106,12 @@ class SymbolicAssignmentCollection:
     by this class, but not expressions using names defined in this collection.
     """
 
-    def __init__(self, assignments=None):
+    assignments: dict[str, sym.Expr]
+    reversed_assignments: dict[sym.Expr, str]
+    symbol_generator: _SymbolGenerator
+    all_dependencies_cache: dict[str, set[sym.Symbol]]
+
+    def __init__(self, assignments: dict[str, sym.Expr] | None = None):
         """
         :arg assignments: mapping from *var_name* to expression
         """
@@ -114,12 +125,13 @@ class SymbolicAssignmentCollection:
         self.symbol_generator = _SymbolGenerator(self.assignments)
         self.all_dependencies_cache = {}
 
+    @override
     def __str__(self):
         return "\n".join(
             f"{name} <- {expr}"
             for name, expr in self.assignments.items())
 
-    def get_all_dependencies(self, var_name):
+    def get_all_dependencies(self, var_name: str):
         """Including recursive dependencies."""
         try:
             return self.all_dependencies_cache[var_name]
@@ -129,7 +141,7 @@ class SymbolicAssignmentCollection:
         if var_name not in self.assignments:
             return set()
 
-        result = set()
+        result: set[sym.Symbol] = set()
         for dep in self.assignments[var_name].atoms():
             if not isinstance(dep, sym.Symbol):
                 continue
@@ -143,13 +155,14 @@ class SymbolicAssignmentCollection:
         self.all_dependencies_cache[var_name] = result
         return result
 
-    def add_assignment(self, name, expr, root_name=None, wrt_set=None,
-            retain_name=True):
+    def add_assignment(self,
+                name: str,
+                expr: sym.Expr,
+                root_name: str | None = None,
+                retain_name: bool = True):
         assert isinstance(name, str)
         assert name not in self.assignments
 
-        if wrt_set is None:
-            wrt_set = frozenset()
         if root_name is None:
             root_name = name
 
@@ -163,7 +176,7 @@ class SymbolicAssignmentCollection:
 
         return name
 
-    def assign_unique(self, name_base, expr):
+    def assign_unique(self, name_base: str, expr: sym.Expr):
         """Assign *expr* to a new variable whose name is based on *name_base*.
         Return the new variable name.
         """
@@ -171,7 +184,7 @@ class SymbolicAssignmentCollection:
 
         return self.add_assignment(new_name, expr)
 
-    def assign_temp(self, name_base, expr):
+    def assign_temp(self, name_base: str, expr: sym.Expr):
         """If *expr* is mapped to a existing variable, then return the existing
         variable or assign *expr* to a new variable whose name is based on
         *name_base*. Return the variable name *expr* is mapped to in either case.
@@ -179,7 +192,7 @@ class SymbolicAssignmentCollection:
         new_name = self.symbol_generator(name_base).name
         return self.add_assignment(new_name, expr, retain_name=False)
 
-    def run_global_cse(self, extra_exprs=None):
+    def run_global_cse(self, extra_exprs: Sequence[sym.Expr] | None = None):
         if extra_exprs is None:
             extra_exprs = []
 
@@ -199,7 +212,7 @@ class SymbolicAssignmentCollection:
         # from sumpy.symbolic import checked_cse
 
         from sumpy.cse import cse
-        new_assignments, new_exprs = cse(assign_exprs + extra_exprs,
+        new_assignments, new_exprs = cse([*assign_exprs, *extra_exprs],
                 symbols=self.symbol_generator)
 
         new_assign_exprs = new_exprs[:len(assign_exprs)]
