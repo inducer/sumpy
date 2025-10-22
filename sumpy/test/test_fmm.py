@@ -26,6 +26,7 @@ THE SOFTWARE.
 import logging
 import os
 import sys
+from dataclasses import fields
 from functools import partial
 
 import numpy as np
@@ -239,10 +240,16 @@ def _test_sumpy_fmm(
         m2l_translation = m2l_translation_factory.get_m2l_translation_class(
                 knl, local_expn_class)()
 
+        if any(f.name == "m2l_translation_override" for f in fields(local_expn_class)):
+            local_expansion_factory = partial(local_expn_class, knl,
+                                              m2l_translation_override=m2l_translation)
+        else:
+            local_expansion_factory = partial(local_expn_class, knl)
+
         tree_indep = SumpyTreeIndependentDataForWrangler(
                 actx.context,
                 partial(mpole_expn_class, knl),
-                partial(local_expn_class, knl, m2l_translation=m2l_translation),
+                local_expansion_factory,
                 target_kernels)
 
         if order_varies_with_level:
@@ -510,7 +517,7 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory, use_fft, visualize=False)
     tree_indep = SumpyTreeIndependentDataForWrangler(
             actx.context,
             partial(mpole_expn_class, knl),
-            partial(local_expn_class, knl, m2l_translation=m2l_translation),
+            partial(local_expn_class, knl, m2l_translation_override=m2l_translation),
             target_kernels)
 
     wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,

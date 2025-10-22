@@ -25,7 +25,11 @@ THE SOFTWARE.
 
 import logging
 import math
-from abc import abstractmethod
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+from typing_extensions import override
 
 from pytools import single_valued
 
@@ -36,7 +40,20 @@ from sumpy.expansion import (
     VolumeTaylorExpansion,
     VolumeTaylorExpansionMixin,
 )
+from sumpy.expansion.multipole import H2DMultipoleExpansion, Y2DMultipoleExpansion
 from sumpy.tools import add_to_sac, mi_increment_axis
+
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from sumpy.assignment_collection import SymbolicAssignmentCollection
+    from sumpy.expansion.m2l import M2LTranslationBase
+    from sumpy.expansion.multipole import (
+        HankelBased2DMultipoleExpansion,
+        MultipoleExpansionBase,
+    )
+    from sumpy.kernel import Kernel
 
 
 logger = logging.getLogger(__name__)
@@ -52,39 +69,28 @@ __doc__ = """
 """
 
 
-class LocalExpansionBase(ExpansionBase):
+@dataclass(frozen=True)
+class LocalExpansionBase(ExpansionBase, ABC):
     """Base class for local expansions.
 
     .. automethod:: translate_from
     """
 
-    init_arg_names = ("kernel", "order", "use_rscale", "m2l_translation")
-
-    def __init__(self, kernel, order, use_rscale=None,
-            m2l_translation=None):
-        super().__init__(kernel, order, use_rscale)
-        self.m2l_translation = m2l_translation
-
-    def with_kernel(self, kernel):
-        return type(self)(kernel, self.order, self.use_rscale,
-            self.m2l_translation)
-
-    def update_persistent_hash(self, key_hash, key_builder):
-        super().update_persistent_hash(key_hash, key_builder)
-        key_builder.rec(key_hash, self.m2l_translation)
-
-    def __eq__(self, other):
-        return (
-            type(self) is type(other)
-            and self.kernel == other.kernel
-            and self.order == other.order
-            and self.use_rscale == other.use_rscale
-            and self.m2l_translation == other.m2l_translation
-        )
+    @property
+    @abstractmethod
+    def m2l_translation(self) -> M2LTranslationBase:
+        ...
 
     @abstractmethod
-    def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale, sac=None, m2l_translation_classes_dependent_data=None):
+    def translate_from(self,
+                src_expansion: LocalExpansionBase | MultipoleExpansionBase,
+                src_coeff_exprs: Sequence[sym.Expr],
+                src_rscale: sym.Expr,
+                dvec: sym.Matrix,
+                tgt_rscale: sym.Expr,
+                sac: SymbolicAssignmentCollection | None = None,
+                m2l_translation_classes_dependent_data=None
+            ) -> Sequence[sym.Expr]:
         """Translate from a multipole or local expansion to a local expansion
 
         :arg src_expansion: The source expansion to translate from.
@@ -106,13 +112,27 @@ class LocalExpansionBase(ExpansionBase):
 # {{{ line taylor
 
 class LineTaylorLocalExpansion(LocalExpansionBase):
+    @property
+    @override
+    def m2l_translation(self):
+        # FIXME: Um...
+        raise NotImplementedError()
+
     def get_storage_index(self, k):
         return k
+
 
     def get_coefficient_identifiers(self):
         return list(range(self.order+1))
 
-    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
+    @override
+    def coefficients_from_source(self,
+                kernel: Kernel,
+                avec: sym.Matrix,
+                bvec: sym.Matrix | None,
+                rscale: sym.Expr,
+                sac: SymbolicAssignmentCollection | None = None
+            ):
         # no point in heeding rscale here--just ignore it
         if bvec is None:
             raise RuntimeError("cannot use line-Taylor expansions in a setting "
@@ -121,7 +141,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
 
         tau = sym.Symbol("tau")
 
-        avec_line = avec + tau*bvec
+        avec_line: sym.Matrix = avec + tau*bvec
 
         line_kernel = kernel.get_expression(avec_line)
 
@@ -156,8 +176,16 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
                     coeffs[self.get_storage_index(i)] / math.factorial(i)
                     for i in self.get_coefficient_identifiers()))
 
-    def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale, sac=None, m2l_translation_classes_dependent_data=None):
+    @override
+    def translate_from(self,
+                src_expansion: LocalExpansionBase | MultipoleExpansionBase,
+                src_coeff_exprs: Sequence[sym.Expr],
+                src_rscale: sym.Expr,
+                dvec: sym.Matrix,
+                tgt_rscale: sym.Expr,
+                sac: SymbolicAssignmentCollection | None = None,
+                m2l_translation_classes_dependent_data=None
+            ) -> Sequence[sym.Expr]:
         raise NotImplementedError
 
 # }}}
@@ -165,22 +193,35 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
 
 # {{{ volume taylor
 
+@dataclass(frozen=True)
 class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionBase):
     """
     Coefficients represent derivative values of the kernel.
     """
 
-    def __init__(self, kernel, order, use_rscale=None,
-            m2l_translation=None):
-        if not m2l_translation:
+    m2l_translation_override: M2LTranslationBase | None = \
+        field(kw_only=True, default=None)
+
+    @property
+    @override
+    def m2l_translation(self) -> M2LTranslationBase:
+        if self.m2l_translation_override is not None:
+            return self.m2l_translation_override
+        else:
             from sumpy.expansion.m2l import DefaultM2LTranslationClassFactory
             factory = DefaultM2LTranslationClassFactory()
-            m2l_translation = factory.get_m2l_translation_class(kernel,
+            return factory.get_m2l_translation_class(self.kernel,
                 self.__class__)()
-        super().__init__(kernel, order, use_rscale, m2l_translation)
 
-    def coefficients_from_source_vec(self, kernels, avec, bvec, rscale, weights,
-            sac=None):
+    @override
+    def coefficients_from_source_vec(self,
+                kernels: Sequence[Kernel],
+                avec: sym.Matrix,
+                bvec: sym.Matrix | None,
+                rscale: sym.Expr,
+                weights: Sequence[sym.Expr],
+                sac: SymbolicAssignmentCollection | None = None
+            ) -> Sequence[sym.Expr]:
         """Form an expansion with a linear combination of kernels and weights.
         Since all of the kernels share a base kernel, this method uses one
         derivative taker with one SymbolicAssignmentCollection object
@@ -196,11 +237,11 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
             the coefficients of the expansion.
         """
         if not self.use_rscale:
-            rscale = 1
+            rscale = sym.sympify(1)
 
         base_kernel = single_valued(knl.get_base_kernel() for knl in kernels)
         base_taker = base_kernel.get_derivative_taker(avec, rscale, sac)
-        result = [0]*len(self)
+        result: list[sym.Expr] = [sym.sympify(0)]*len(self)
 
         for knl, weight in zip(kernels, weights, strict=True):
             taker = knl.postprocess_at_source(base_taker, avec)
@@ -220,13 +261,26 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
 
         return result
 
-    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
+    @override
+    def coefficients_from_source(self,
+                kernel: Kernel,
+                avec: sym.Matrix,
+                bvec: sym.Matrix | None,
+                rscale: sym.Expr,
+                sac: SymbolicAssignmentCollection | None = None
+            ) -> Sequence[sym.Expr]:
         return self.coefficients_from_source_vec((kernel,), avec, bvec,
-                rscale=rscale, weights=(1,), sac=sac)
+                rscale=rscale, weights=(sym.sympify(1),), sac=sac)
 
-    def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
-        if not self.use_rscale:
-            rscale = 1
+    @override
+    def evaluate(self,
+                kernel: Kernel,
+                coeffs: Sequence[sym.Expr],
+                bvec: sym.Matrix,
+                rscale: sym.Expr,
+                sac: SymbolicAssignmentCollection | None = None,
+            ) -> sym.Expr:
+        rscale = sym.sympify(1 if not self.use_rscale else rscale)
 
         evaluated_coeffs = (
             self.expansion_terms_wrangler.get_full_kernel_derivatives_from_stored(
@@ -235,19 +289,27 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
         bvec_scaled = [b*rscale**-1 for b in bvec]
         from sumpy.tools import mi_factorial, mi_power
 
-        result = sum(
+        result = sym.sympify(sum(
             coeff
             * mi_power(bvec_scaled, mi, evaluate=False)
             / mi_factorial(mi)
             for coeff, mi in zip(
                     evaluated_coeffs, self.get_full_coefficient_identifiers(),
-                    strict=True))
+                    strict=True)))
 
         return kernel.postprocess_at_target(result, bvec)
 
-    def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale, sac=None, _fast_version=True,
-            m2l_translation_classes_dependent_data=None):
+    @override
+    def translate_from(self,
+                src_expansion: LocalExpansionBase | MultipoleExpansionBase,
+                src_coeff_exprs: Sequence[sym.Expr],
+                src_rscale: sym.Expr,
+                dvec: sym.Matrix,
+                tgt_rscale: sym.Expr,
+                sac: SymbolicAssignmentCollection | None = None,
+                m2l_translation_classes_dependent_data=None,
+                _fast_version: bool = True,
+            ) -> Sequence[sym.Expr]:
         logger.info("building translation operator for %s: %s(%d) -> %s(%d): start",
                     src_expansion.kernel,
                     type(src_expansion).__name__,
@@ -256,8 +318,8 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
                     self.order)
 
         if not self.use_rscale:
-            src_rscale = 1
-            tgt_rscale = 1
+            src_rscale = sym.sympify(1)
+            tgt_rscale = sym.sympify(1)
 
         from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansionBase
 
@@ -273,10 +335,12 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
 
         # }}}
 
+        assert isinstance(src_expansion, VolumeTaylorLocalExpansionBase)
+
         # {{{ L2L
 
         # not coming from a Taylor multipole: expand via derivatives
-        rscale_ratio = add_to_sac(sac, tgt_rscale/src_rscale)
+        rscale_ratio = add_to_sac(sac, sym.sympify(tgt_rscale/src_rscale))
 
         src_wrangler = src_expansion.expansion_terms_wrangler
         src_coeffs = (
@@ -354,7 +418,7 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
             cur_dim_input_coeffs = src_coeffs
             # O(1) iterations
             for d in dims:
-                cur_dim_output_coeffs = [0] * len(src_mis)
+                cur_dim_output_coeffs: list[sym.Expr] = [sym.sympify(0)] * len(src_mis)
                 # Only O(p^{d-1}) operations are used in compressed
                 # O(p^d) operations are used in full
                 for out_i, out_mi in enumerate(src_mis):
@@ -417,73 +481,44 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
 class VolumeTaylorLocalExpansion(
         VolumeTaylorExpansion,
         VolumeTaylorLocalExpansionBase):
-
-    def __init__(self, kernel, order, use_rscale=None, m2l_translation=None):
-        VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale,
-            m2l_translation=m2l_translation)
-        VolumeTaylorExpansion.__init__(self, kernel, order, use_rscale)
+    pass
 
 
 class LinearPDEConformingVolumeTaylorLocalExpansion(
         LinearPDEConformingVolumeTaylorExpansion,
         VolumeTaylorLocalExpansionBase):
-
-    def __init__(self, kernel, order, use_rscale=None, m2l_translation=None):
-        VolumeTaylorLocalExpansionBase.__init__(self, kernel, order, use_rscale,
-            m2l_translation=m2l_translation)
-        LinearPDEConformingVolumeTaylorExpansion.__init__(
-                self, kernel, order, use_rscale)
-
-
-class LaplaceConformingVolumeTaylorLocalExpansion(
-        LinearPDEConformingVolumeTaylorLocalExpansion):
-
-    def __init__(self, *args, **kwargs):
-        from warnings import warn
-        warn("LaplaceConformingVolumeTaylorLocalExpansion is deprecated. "
-             "Use LinearPDEConformingVolumeTaylorLocalExpansion instead.",
-                DeprecationWarning, stacklevel=2)
-        super().__init__(*args, **kwargs)
-
-
-class HelmholtzConformingVolumeTaylorLocalExpansion(
-        LinearPDEConformingVolumeTaylorLocalExpansion):
-
-    def __init__(self, *args, **kwargs):
-        from warnings import warn
-        warn("HelmholtzConformingVolumeTaylorLocalExpansion is deprecated. "
-             "Use LinearPDEConformingVolumeTaylorLocalExpansion instead.",
-                DeprecationWarning, stacklevel=2)
-        super().__init__(*args, **kwargs)
-
-
-class BiharmonicConformingVolumeTaylorLocalExpansion(
-        LinearPDEConformingVolumeTaylorLocalExpansion):
-
-    def __init__(self, *args, **kwargs):
-        from warnings import warn
-        warn("BiharmonicConformingVolumeTaylorLocalExpansion is deprecated. "
-             "Use LinearPDEConformingVolumeTaylorLocalExpansion instead.",
-                DeprecationWarning, stacklevel=2)
-        super().__init__(*args, **kwargs)
+    pass
 
 # }}}
 
 
 # {{{ 2D Bessel-based-expansion
 
-class _FourierBesselLocalExpansion(LocalExpansionBase):
-    def __init__(self,
-            kernel, order, mpole_expn_class,
-            use_rscale=None, m2l_translation=None):
-        if not m2l_translation:
+@dataclass(frozen=True)
+class FourierBesselLocalExpansionMixin(LocalExpansionBase, ABC):
+
+    m2l_translation_override: M2LTranslationBase | None = field(
+                                                kw_only=True, default=None)
+
+    @property
+    @abstractmethod
+    def mpole_expn_class(self) -> type[HankelBased2DMultipoleExpansion]:
+        ...
+
+    @property
+    @override
+    def m2l_translation(self) -> M2LTranslationBase:
+        if self.m2l_translation_override is not None:
+            return self.m2l_translation_override
+        else:
             from sumpy.expansion.m2l import DefaultM2LTranslationClassFactory
             factory = DefaultM2LTranslationClassFactory()
-            m2l_translation = (
-                factory.get_m2l_translation_class(kernel, self.__class__)())
-
-        super().__init__(kernel, order, use_rscale, m2l_translation)
-        self.mpole_expn_class = mpole_expn_class
+            return (
+                factory.get_m2l_translation_class(self.kernel, self.__class__)())
+            from sumpy.expansion.m2l import DefaultM2LTranslationClassFactory
+            factory = DefaultM2LTranslationClassFactory()
+            return factory.get_m2l_translation_class(self.kernel,
+                self.__class__)()
 
     @abstractmethod
     def get_bessel_arg_scaling(self):
@@ -495,9 +530,16 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
     def get_coefficient_identifiers(self):
         return list(range(-self.order, self.order+1))
 
-    def coefficients_from_source(self, kernel, avec, bvec, rscale, sac=None):
+    @override
+    def coefficients_from_source(self,
+                kernel: Kernel,
+                avec: sym.Matrix,
+                bvec: sym.Matrix | None,
+                rscale: sym.Expr,
+                sac: SymbolicAssignmentCollection | None = None
+            ) -> Sequence[sym.Expr]:
         if not self.use_rscale:
-            rscale = 1
+            rscale = sym.sympify(1)
 
         from sumpy.symbolic import Hankel1, sym_real_norm_2
 
@@ -512,9 +554,16 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
                     * sym.exp(sym.I * c * source_angle_rel_center), avec)
                     for c in self.get_coefficient_identifiers()]
 
-    def evaluate(self, kernel, coeffs, bvec, rscale, sac=None):
+    @override
+    def evaluate(self,
+                kernel: Kernel,
+                coeffs: Sequence[sym.Expr],
+                bvec: sym.Matrix,
+                rscale: sym.Expr,
+                sac: SymbolicAssignmentCollection | None = None,
+            ) -> sym.Expr:
         if not self.use_rscale:
-            rscale = 1
+            rscale = sym.sympify(1)
 
         from sumpy.symbolic import BesselJ, sym_real_norm_2
         bvec_len = sym_real_norm_2(bvec)
@@ -522,20 +571,28 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
 
         arg_scale = self.get_bessel_arg_scaling()
 
-        return sum(coeffs[self.get_storage_index(c)]
+        return sym.sympify(sum(coeffs[self.get_storage_index(c)]
                    * kernel.postprocess_at_target(
                        BesselJ(c, arg_scale * bvec_len, 0)
                        / rscale ** abs(c)
                        * sym.exp(sym.I * c * -target_angle_rel_center), bvec)
-                for c in self.get_coefficient_identifiers())
+                for c in self.get_coefficient_identifiers()))
 
-    def translate_from(self, src_expansion, src_coeff_exprs, src_rscale,
-            dvec, tgt_rscale, sac=None, m2l_translation_classes_dependent_data=None):
+    @override
+    def translate_from(self,
+                src_expansion: LocalExpansionBase | MultipoleExpansionBase,
+                src_coeff_exprs: Sequence[sym.Expr],
+                src_rscale: sym.Expr,
+                dvec: sym.Matrix,
+                tgt_rscale: sym.Expr,
+                sac: SymbolicAssignmentCollection | None = None,
+                m2l_translation_classes_dependent_data=None
+            ) -> Sequence[sym.Expr]:
         from sumpy.symbolic import BesselJ, sym_real_norm_2
 
         if not self.use_rscale:
-            src_rscale = 1
-            tgt_rscale = 1
+            src_rscale = sym.sympify(1)
+            tgt_rscale = sym.sympify(1)
 
         arg_scale = self.get_bessel_arg_scaling()
 
@@ -572,32 +629,34 @@ class _FourierBesselLocalExpansion(LocalExpansionBase):
             f"{src_expansion} to {self} is not implemented.")
 
 
-class H2DLocalExpansion(_FourierBesselLocalExpansion):
-    def __init__(self, kernel, order, use_rscale=None, m2l_translation=None):
+class H2DLocalExpansion(FourierBesselLocalExpansionMixin):
+    def __post_init__(self):
         from sumpy.kernel import HelmholtzKernel
-        assert (isinstance(kernel.get_base_kernel(), HelmholtzKernel)
-                and kernel.dim == 2)
+        assert (isinstance(self.kernel.get_base_kernel(), HelmholtzKernel)
+                and self.kernel.dim == 2)
 
-        from sumpy.expansion.multipole import H2DMultipoleExpansion
-        super().__init__(kernel, order, H2DMultipoleExpansion,
-            use_rscale=use_rscale,
-            m2l_translation=m2l_translation)
+    @property
+    @override
+    def mpole_expn_class(self) -> type[HankelBased2DMultipoleExpansion]:
+        return H2DMultipoleExpansion
 
+    @override
     def get_bessel_arg_scaling(self):
         return sym.Symbol(self.kernel.get_base_kernel().helmholtz_k_name)
 
 
-class Y2DLocalExpansion(_FourierBesselLocalExpansion):
-    def __init__(self, kernel, order, use_rscale=None, m2l_translation=None):
+class Y2DLocalExpansion(FourierBesselLocalExpansionMixin):
+    def __post_init__(self):
         from sumpy.kernel import YukawaKernel
-        assert (isinstance(kernel.get_base_kernel(), YukawaKernel)
-                and kernel.dim == 2)
+        assert (isinstance(self.kernel.get_base_kernel(), YukawaKernel)
+                and self.kernel.dim == 2)
 
-        from sumpy.expansion.multipole import Y2DMultipoleExpansion
-        super().__init__(kernel, order, Y2DMultipoleExpansion,
-            use_rscale=use_rscale,
-            m2l_translation=m2l_translation)
+    @property
+    @override
+    def mpole_expn_class(self) -> type[HankelBased2DMultipoleExpansion]:
+        return Y2DMultipoleExpansion
 
+    @override
     def get_bessel_arg_scaling(self):
         return sym.I * sym.Symbol(self.kernel.get_base_kernel().yukawa_lambda_name)
 

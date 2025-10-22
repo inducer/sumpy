@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from sumpy.expansion.local import LinearPDEConformingVolumeTaylorLocalExpansion
+
 
 __copyright__ = "Copyright (C) 2017 Andreas Kloeckner"
 
@@ -378,12 +380,12 @@ def test_cse_matvec():
     rng = np.random.default_rng(42)
     vec = rng.random(2)
     expected_result = m @ vec
-    actual_result = op.matvec(vec)
+    actual_result = [float(x) for x in op.matvec(vec)]
     assert np.allclose(expected_result, actual_result)
 
     vec = rng.random(4)
     expected_result = m.T @ vec
-    actual_result = op.transpose_matvec(vec)
+    actual_result = [float(x) for x in op.transpose_matvec(vec)]
     assert np.allclose(expected_result, actual_result)
 
 # }}}
@@ -542,11 +544,9 @@ def test_weird_kernel(pde):
     from functools import reduce
     from operator import mul
 
-    from sumpy.expansion import LinearPDEConformingVolumeTaylorExpansion
-
     knl = MyKernel()
     order = 10
-    expn = LinearPDEConformingVolumeTaylorExpansion(kernel=knl,
+    expn = LinearPDEConformingVolumeTaylorLocalExpansion(kernel=knl,
             order=order, use_rscale=False)
 
     coeffs = expn.get_coefficient_identifiers()
@@ -592,9 +592,9 @@ class StorageIndexTestKernel(ExpressionKernel):
 def test_get_storage_index(order, knl, compressed):
     dim = knl.dim
     if compressed:
-        wrangler = LinearPDEBasedExpansionTermsWrangler(order, dim, knl=knl)
+        wrangler = LinearPDEBasedExpansionTermsWrangler(order, dim, None, knl=knl)
     else:
-        wrangler = FullExpansionTermsWrangler(order, dim)
+        wrangler = FullExpansionTermsWrangler(order, dim, max_mi=None)
     for i, mi in enumerate(wrangler.get_coefficient_identifiers()):
         assert i == wrangler.get_storage_index(mi)
 

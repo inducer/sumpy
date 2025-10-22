@@ -597,7 +597,7 @@ def test_translations(
             actx.context,
             kernel=knl,
             local_expn_class=partial(local_expn_class,
-                m2l_translation=m2l_translation),
+                m2l_translation_override=m2l_translation),
             mpole_expn_class=mpole_expn_class,
             extra_kernel_kwargs=extra_kwargs,
     )
@@ -753,7 +753,8 @@ def test_m2l_toeplitz():
     m2l_factory = NonFFTM2LTranslationClassFactory()
     m2l_translation = m2l_factory.get_m2l_translation_class(knl, local_expn_class)()
 
-    local_expn = local_expn_class(knl, order=5, m2l_translation=m2l_translation)
+    local_expn = local_expn_class(knl, order=5,
+                                  m2l_translation_override=m2l_translation)
     mpole_expn = mpole_expn_class(knl, order=5)
 
     dvec = sym.make_sym_vector("d", dim)
