@@ -313,7 +313,7 @@ class ExpansionTermsWrangler(ABC):
 
     # {{{ hyperplane helpers
 
-    def _get_mi_hyperpplanes(self) -> list[tuple[int, int]]:
+    def _get_mi_hyperplanes(self) -> list[tuple[int, int]]:
         r"""
         Coefficient storage is organized into "hyperplanes" in multi-index
         space. Potentially only a subset of these hyperplanes contain
@@ -359,7 +359,7 @@ class ExpansionTermsWrangler(ABC):
           (2, [(0, 0, 1), (1, 0, 1), (2, 0, 1), (0, 1, 1), (1, 1, 1), (0, 2, 1)]),
         ]
         """
-        hyperplanes = self._get_mi_hyperpplanes()
+        hyperplanes = self._get_mi_hyperplanes()
         res = []
         seen_mis = set()
         for d, const in hyperplanes:
@@ -610,7 +610,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         return mi_key, axis_permutation
 
     @override
-    def _get_mi_hyperpplanes(self) -> list[tuple[int, int]]:
+    def _get_mi_hyperplanes(self) -> list[tuple[int, int]]:
         mis = self.get_full_coefficient_identifiers()
         mi_to_index = {mi: i for i, mi in enumerate(mis)}
 
@@ -620,7 +620,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         if not all(ident.mi in mi_to_index for ident in deriv_id_to_coeff):
             # The order of the expansion is less than the order of the PDE.
             # Treat as if full expansion.
-            hyperplanes = super()._get_mi_hyperpplanes()
+            hyperplanes = super()._get_mi_hyperplanes()
         else:
             # Calculate the multi-index that appears last in in the PDE in
             # the degree lexicographic order given by
