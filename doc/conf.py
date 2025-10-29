@@ -35,6 +35,7 @@ sphinxconfig_missing_reference_aliases = {
     "np.floating": "class:numpy.floating",
     "np.complexfloating": "class:numpy.complexfloating",
     "np.inexact": "class:numpy.inexact",
+    "np.dtype": "class:numpy.dtype",
     # pytools
     "obj_array.ObjectArray1D": "obj:pytools.obj_array.ObjectArray1D",
     # sympy
@@ -49,6 +50,8 @@ sphinxconfig_missing_reference_aliases = {
     "Expression": "obj:pymbolic.typing.Expression",
     # arraycontext
     "Array": "obj:arraycontext.Array",
+    # boxtree
+    "FMMTraversalInfo": "class:boxtree.traversal.FMMTraversalInfo",
     # sumpy
     "ArithmeticExpr": "obj:sumpy.kernel.ArithmeticExpr",
 }
