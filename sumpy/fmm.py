@@ -26,15 +26,24 @@ THE SOFTWARE.
 __doc__ = """Integrates :mod:`boxtree` with :mod:`sumpy`.
 
 .. autoclass:: SumpyTreeIndependentDataForWrangler
+.. autodata:: FMMLevelToOrder
+    :no-index:
+.. class:: FMMLevelToOrder
+
+    See above.
+
 .. autoclass:: SumpyExpansionWrangler
 
 .. autoclass:: MultipoleExpansionFromOrderFactory
 .. autoclass:: LocalExpansionFromOrderFactory
 """
 
-from typing import TYPE_CHECKING, Protocol, cast
+from collections.abc import Callable, Mapping
+from typing import TYPE_CHECKING, Any, Protocol, TypeAlias, cast
 
+import numpy as np
 from boxtree.fmm import ExpansionWranglerInterface, TreeIndependentDataForWrangler
+from boxtree.tree import Tree
 
 import pyopencl as cl
 import pyopencl.array as cl_array
@@ -55,6 +64,7 @@ from sumpy import (
     P2EFromSingleBox,
     P2PFromCSR,
 )
+from sumpy.kernel import Kernel
 from sumpy.tools import (
     AggregateProfilingEvent,
     get_native_event,
@@ -67,9 +77,11 @@ from sumpy.tools import (
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from boxtree.traversal import FMMTraversalInfo
+    from numpy.typing import DTypeLike
+
     from sumpy.expansion.local import LocalExpansionBase
     from sumpy.expansion.multipole import MultipoleExpansionBase
-    from sumpy.kernel import Kernel
 
 
 class MultipoleExpansionFromOrderFactory(Protocol):
@@ -306,6 +318,11 @@ class SumpyTimingFuture:
 
 # {{{ expansion wrangler
 
+FMMLevelToOrder: TypeAlias = Callable[
+        [Kernel, frozenset[tuple[str, object]], Tree, int],
+        int]
+
+
 class SumpyExpansionWrangler(ExpansionWranglerInterface):
     """Implements the :class:`boxtree.fmm.ExpansionWranglerInterface`
     by using :mod:`sumpy` expansions/translations.
@@ -331,23 +348,44 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         Type for the preprocessed multipole expansion if used for M2L.
     """
 
-    def __init__(self, tree_indep, traversal, dtype, fmm_level_to_order,
-            source_extra_kwargs=None,
-            kernel_extra_kwargs=None,
-            self_extra_kwargs=None,
-            translation_classes_data=None,
-            preprocessed_mpole_dtype=None,
-            *, _disable_translation_classes=False):
+    tree_indep: SumpyTreeIndependentDataForWrangler
+    traversal: FMMTraversalInfo
+
+    source_extra_kwargs: Mapping[str, object]
+    kernel_extra_kwargs: Mapping[str, object]
+    self_extra_kwargs: Mapping[str, object]
+    extra_kwargs: Mapping[str, object]
+
+    dtype: np.dtype[Any]
+    preprocessed_mpole_dtype: np.dtype[Any]
+
+    level_order: Sequence[int]
+
+    issued_timing_data_warning: bool
+
+    def __init__(self,
+                tree_indep: SumpyTreeIndependentDataForWrangler,
+                traversal: FMMTraversalInfo,
+                dtype: DTypeLike,
+                fmm_level_to_order: FMMLevelToOrder,
+                source_extra_kwargs: Mapping[str, object] | None = None,
+                kernel_extra_kwargs: Mapping[str, object] | None = None,
+                self_extra_kwargs: Mapping[str, object] | None = None,
+                translation_classes_data=None,
+                preprocessed_mpole_dtype: DTypeLike | None = None,
+                *,
+                _disable_translation_classes=False
+            ):
         super().__init__(tree_indep, traversal)
         self.issued_timing_data_warning = False
 
-        self.dtype = dtype
+        self.dtype = np.dtype(dtype)
 
         if not self.tree_indep.m2l_translation.use_fft:
             # If not FFT, we don't need complex dtypes
-            self.preprocessed_mpole_dtype = dtype
+            self.preprocessed_mpole_dtype = self.dtype
         elif preprocessed_mpole_dtype is not None:
-            self.preprocessed_mpole_dtype = preprocessed_mpole_dtype
+            self.preprocessed_mpole_dtype = np.dtype(preprocessed_mpole_dtype)
         else:
             # FIXME: It is weird that the wrangler has to compute this.
             self.preprocessed_mpole_dtype = to_complex_dtype(dtype)
@@ -372,7 +410,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         self.kernel_extra_kwargs = kernel_extra_kwargs
         self.self_extra_kwargs = self_extra_kwargs
 
-        self.extra_kwargs = source_extra_kwargs.copy()
+        self.extra_kwargs = dict(source_extra_kwargs)
         self.extra_kwargs.update(self.kernel_extra_kwargs)
 
         if _disable_translation_classes or not base_kernel.is_translation_invariant:
@@ -390,7 +428,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
         self.translation_classes_data = translation_classes_data
 
-    def level_to_rscale(self, level):
+    def level_to_rscale(self, level: int) -> float:
         tree = self.tree
         order = self.level_orders[level]
         r = tree.root_extent * (2**-level)
@@ -411,7 +449,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
     # {{{ data vector utilities
 
-    def _expansions_level_starts(self, order_to_size):
+    def _expansions_level_starts(self, order_to_size: Callable[[int], int]):
         return build_csr_level_starts(self.level_orders, order_to_size,
                 self.tree.level_start_box_nrs)
 
@@ -433,7 +471,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
     @memoize_method
     def m2l_translation_classes_dependent_data_level_starts(self):
-        def order_to_size(order):
+        def order_to_size(order: int):
             mpole_expn = self.tree_indep.multipole_expansion(order)
             local_expn = self.tree_indep.local_expansion(order)
             m2l_translation = local_expn.m2l_translation
@@ -623,7 +661,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             src_weight_vecs):
         mpoles = self.multipole_expansion_zeros(src_weight_vecs[0])
 
-        kwargs = self.extra_kwargs.copy()
+        kwargs = dict(self.extra_kwargs)
         kwargs.update(self.box_source_list_kwargs())
 
         events = []
@@ -716,7 +754,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             source_box_lists, src_weight_vecs):
         pot = self.output_zeros(src_weight_vecs[0])
 
-        kwargs = self.extra_kwargs.copy()
+        kwargs = dict(self.extra_kwargs)
         kwargs.update(self.self_extra_kwargs)
         kwargs.update(self.box_source_list_kwargs())
         kwargs.update(self.box_target_list_kwargs())
@@ -963,7 +1001,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             target_boxes_by_source_level, source_boxes_by_level, mpole_exps):
         pot = self.output_zeros(mpole_exps)
 
-        kwargs = self.kernel_extra_kwargs.copy()
+        kwargs = dict(self.kernel_extra_kwargs)
         kwargs.update(self.box_target_list_kwargs())
 
         events = []
@@ -1015,7 +1053,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             target_or_target_parent_boxes, starts, lists, src_weight_vecs):
         local_exps = self.local_expansion_zeros(src_weight_vecs[0])
 
-        kwargs = self.extra_kwargs.copy()
+        kwargs = dict(self.extra_kwargs)
         kwargs.update(self.box_source_list_kwargs())
 
         events = []
@@ -1102,7 +1140,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     def eval_locals(self, level_start_target_box_nrs, target_boxes, local_exps):
         pot = self.output_zeros(local_exps)
 
-        kwargs = self.kernel_extra_kwargs.copy()
+        kwargs = dict(self.kernel_extra_kwargs)
         kwargs.update(self.box_target_list_kwargs())
 
         events = []

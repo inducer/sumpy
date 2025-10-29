@@ -37,10 +37,15 @@ from sumpy.kernel import TargetTransformationRemover
 
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
     import pyopencl
 
+    from sumpy.expansion import (
+        ExpansionFactoryBase,
+        LocalExpansionFactory,
+        MultipoleExpansionFactory,
+    )
     from sumpy.expansion.m2l import M2LTranslationClassFactoryBase
     from sumpy.kernel import Kernel
     from sumpy.visualization import FieldPlotter
@@ -107,13 +112,27 @@ class ToyContext:
 
     .. automethod:: __init__
     """
+    cl_context: pyopencl.Context
+    queue: pyopencl.CommandQueue
+    kernel: Kernel
+    no_target_deriv_kernel: Kernel
 
-    def __init__(self, cl_context: pyopencl.Context, kernel: Kernel,
-            mpole_expn_class=None,
-            local_expn_class=None,
-            expansion_factory=None,
-            extra_source_kwargs=None,
-            extra_kernel_kwargs=None, m2l_use_fft=None):
+    mpole_expn_class: MultipoleExpansionFactory
+    local_expn_class: LocalExpansionFactory
+
+    extra_source_kwargs: Mapping[str, object]
+    extra_kernel_kwargs: Mapping[str, object]
+    extra_source_and_kernel_kwargs: Mapping[str, object]
+
+    def __init__(self,
+                cl_context: pyopencl.Context,
+                kernel: Kernel,
+                mpole_expn_class: MultipoleExpansionFactory | None = None,
+                local_expn_class: LocalExpansionFactory | None = None,
+                expansion_factory: ExpansionFactoryBase | None = None,
+                extra_source_kwargs: Mapping[str, object] | None = None,
+                extra_kernel_kwargs: Mapping[str, object] | None = None,
+                m2l_use_fft: bool | None = None):
         self.cl_context = cl_context
         self.queue = cl.CommandQueue(self.cl_context)
         self.kernel = kernel
@@ -143,6 +162,7 @@ class ToyContext:
                         kernel, local_expn_class)
             local_expn_class = partial(local_expn_class,
                     m2l_translation_override=m2l_translation_class())
+            assert local_expn_class is not None
         elif m2l_use_fft is not None:
             raise ValueError("local_expn_class and m2l_use_fft are both supplied. "
                              "Use only one of these arguments")
@@ -158,7 +178,7 @@ class ToyContext:
         self.extra_source_kwargs = extra_source_kwargs
         self.extra_kernel_kwargs = extra_kernel_kwargs
 
-        extra_source_and_kernel_kwargs = extra_source_kwargs.copy()
+        extra_source_and_kernel_kwargs = dict(extra_source_kwargs)
         extra_source_and_kernel_kwargs.update(extra_kernel_kwargs)
         self.extra_source_and_kernel_kwargs = extra_source_and_kernel_kwargs
 
@@ -168,35 +188,35 @@ class ToyContext:
         return P2P(self.cl_context, (self.kernel,), exclude_self=False)
 
     @memoize_method
-    def get_p2m(self, order):
+    def get_p2m(self, order: int):
         from sumpy import P2EFromSingleBox
         return P2EFromSingleBox(self.cl_context,
                 self.mpole_expn_class(self.no_target_deriv_kernel, order),
                 kernels=(self.kernel,))
 
     @memoize_method
-    def get_p2l(self, order):
+    def get_p2l(self, order: int):
         from sumpy import P2EFromSingleBox
         return P2EFromSingleBox(self.cl_context,
                 self.local_expn_class(self.no_target_deriv_kernel, order),
                 kernels=(self.kernel,))
 
     @memoize_method
-    def get_m2p(self, order):
+    def get_m2p(self, order: int):
         from sumpy import E2PFromSingleBox
         return E2PFromSingleBox(self.cl_context,
                 self.mpole_expn_class(self.no_target_deriv_kernel, order),
                 (self.kernel,))
 
     @memoize_method
-    def get_l2p(self, order):
+    def get_l2p(self, order: int):
         from sumpy import E2PFromSingleBox
         return E2PFromSingleBox(self.cl_context,
                 self.local_expn_class(self.no_target_deriv_kernel, order),
                 (self.kernel,))
 
     @memoize_method
-    def get_m2m(self, from_order, to_order):
+    def get_m2m(self, from_order: int, to_order: int):
         from sumpy import E2EFromCSR
         return E2EFromCSR(self.cl_context,
                 self.mpole_expn_class(self.no_target_deriv_kernel, from_order),
@@ -213,7 +233,7 @@ class ToyContext:
         return l_expn.m2l_translation.use_fft
 
     @memoize_method
-    def get_m2l(self, from_order, to_order):
+    def get_m2l(self, from_order: int, to_order: int):
         from sumpy import E2EFromCSR, M2LUsingTranslationClassesDependentData
         if self.use_translation_classes_dependent_data():
             m2l_class = M2LUsingTranslationClassesDependentData
@@ -224,34 +244,36 @@ class ToyContext:
                 self.local_expn_class(self.no_target_deriv_kernel, to_order))
 
     @memoize_method
-    def get_m2l_translation_class_dependent_data_kernel(self, from_order, to_order):
+    def get_m2l_translation_class_dependent_data_kernel(self,
+                from_order: int,
+                to_order: int):
         from sumpy import M2LGenerateTranslationClassesDependentData
         return M2LGenerateTranslationClassesDependentData(self.cl_context,
                 self.mpole_expn_class(self.no_target_deriv_kernel, from_order),
                 self.local_expn_class(self.no_target_deriv_kernel, to_order))
 
     @memoize_method
-    def get_m2l_expansion_size(self, from_order, to_order):
+    def get_m2l_expansion_size(self, from_order: int, to_order: int):
         m_expn = self.mpole_expn_class(self.no_target_deriv_kernel, from_order)
         l_expn = self.local_expn_class(self.no_target_deriv_kernel, to_order)
         return l_expn.m2l_translation.preprocess_multipole_nexprs(l_expn, m_expn)
 
     @memoize_method
-    def get_m2l_preprocess_mpole_kernel(self, from_order, to_order):
+    def get_m2l_preprocess_mpole_kernel(self, from_order: int, to_order: int):
         from sumpy import M2LPreprocessMultipole
         return M2LPreprocessMultipole(self.cl_context,
                 self.mpole_expn_class(self.no_target_deriv_kernel, from_order),
                 self.local_expn_class(self.no_target_deriv_kernel, to_order))
 
     @memoize_method
-    def get_m2l_postprocess_local_kernel(self, from_order, to_order):
+    def get_m2l_postprocess_local_kernel(self, from_order: int, to_order: int):
         from sumpy import M2LPostprocessLocal
         return M2LPostprocessLocal(self.cl_context,
                 self.mpole_expn_class(self.no_target_deriv_kernel, from_order),
                 self.local_expn_class(self.no_target_deriv_kernel, to_order))
 
     @memoize_method
-    def get_l2l(self, from_order, to_order):
+    def get_l2l(self, from_order: int, to_order: int):
         from sumpy import E2EFromCSR
         return E2EFromCSR(self.cl_context,
                 self.local_expn_class(self.no_target_deriv_kernel, from_order),
@@ -262,7 +284,7 @@ class ToyContext:
 
 # {{{ helpers
 
-def _p2e(psource, center, rscale, order, p2e, expn_class, expn_kwargs):
+def _p2e(psource, center, rscale, order: int, p2e, expn_class, expn_kwargs):
     toy_ctx = psource.toy_ctx
     queue = toy_ctx.queue
 
@@ -328,7 +350,7 @@ def _e2p(psource, targets, e2p):
     return pot.get(queue)
 
 
-def _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
+def _e2e(psource, to_center, to_rscale, to_order: int, e2e, expn_class, expn_kwargs,
          extra_kernel_kwargs):
     toy_ctx = psource.toy_ctx
     queue = toy_ctx.queue
@@ -377,7 +399,7 @@ def _e2e(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
             derived_from=psource, **expn_kwargs)
 
 
-def _m2l(psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
+def _m2l(psource, to_center, to_rscale, to_order: int, e2e, expn_class, expn_kwargs,
          translation_classes_kwargs):
     toy_ctx = psource.toy_ctx
     queue = toy_ctx.queue
@@ -658,7 +680,7 @@ class ExpansionPotentialSource(PotentialSource):
 
     .. automethod:: __init__
     """
-    def __init__(self, toy_ctx, center, rscale, order, coeffs, derived_from,
+    def __init__(self, toy_ctx, center, rscale, order: int, coeffs, derived_from,
             radius=None, expn_style=None, text_kwargs=None):
         super().__init__(toy_ctx)
         self.center = np.asarray(center)
