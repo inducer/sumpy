@@ -708,7 +708,7 @@ def to_loopy_insns(assignments, vector_names=frozenset(), pymbolic_expr_maps=(),
         # https://github.com/inducer/sumpy/pull/40#issuecomment-852635444
         cmb_mapper = combine_mappers(bdr, btog, vcr, pwr, ssg, bik, cmr)
     else:
-        def cmb_mapper(expr):
+        def cmb_mapper(expr, /):
             expr = bdr(expr)
             expr = vcr(expr)
             expr = pwr(expr)
