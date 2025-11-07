@@ -257,7 +257,7 @@ class Kernel(ABC):
         return lambda expr: expr
 
     @abstractmethod
-    def get_expression(self, dist_vec: sp.Matrix) -> sym.Expr:
+    def get_expression(self, dist_vec: sym.Matrix) -> sym.Expr:
         """
         :returns: a :mod:`sympy` expression for the kernel.
         """
