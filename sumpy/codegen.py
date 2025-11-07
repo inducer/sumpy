@@ -298,7 +298,7 @@ class BesselTopOrderGatherer(CSECachingIdentityMapper[P]):
 
     @override
     def map_call(self,
-                 expr: prim.Call,
+                 expr: prim.Call, /,
                  *args: P.args, **kwargs: P.kwargs) -> Expression:
         function = expr.function
         if isinstance(function, prim.Variable) and function.name == "bessel_j":
@@ -315,7 +315,7 @@ class BesselTopOrderGatherer(CSECachingIdentityMapper[P]):
     @override
     def map_common_subexpression_uncached(
                 self,
-                expr: prim.CommonSubexpression,
+                expr: prim.CommonSubexpression, /,
                 *args: P.args, **kwargs: P.kwargs) -> Expression:
         return IdentityMapper.map_common_subexpression(self, expr, *args, **kwargs)
 
@@ -323,7 +323,7 @@ class BesselTopOrderGatherer(CSECachingIdentityMapper[P]):
 class BesselDerivativeReplacer(CSECachingIdentityMapper[P]):
     @override
     def map_call(self,
-                 expr: prim.Call,
+                 expr: prim.Call, /,
                  *args: P.args, **kwargs: P.kwargs) -> Expression:
         call = expr
 
@@ -357,7 +357,7 @@ class BesselDerivativeReplacer(CSECachingIdentityMapper[P]):
     @override
     def map_common_subexpression_uncached(
                 self,
-                expr: prim.CommonSubexpression,
+                expr: prim.CommonSubexpression, /,
                 *args: P.args, **kwargs: P.kwargs) -> Expression:
         return IdentityMapper.map_common_subexpression(self, expr, *args, **kwargs)
 
@@ -379,7 +379,7 @@ class BesselSubstitutor(CSECachingIdentityMapper[P]):
         self.assignments = list(assignments)
 
     @override
-    def map_call(self, expr: prim.Call,
+    def map_call(self, expr: prim.Call, /,
                  *args: P.args, **kwargs: P.kwargs) -> Expression:
         if isinstance(expr.function, prim.Variable):
             name = expr.function.name
@@ -484,7 +484,7 @@ class BesselSubstitutor(CSECachingIdentityMapper[P]):
     @override
     def map_common_subexpression_uncached(
                 self,
-                expr: prim.CommonSubexpression,
+                expr: prim.CommonSubexpression, /,
                 *args: P.args, **kwargs: P.kwargs) -> Expression:
         return IdentityMapper.map_common_subexpression(self, expr, *args, **kwargs)
 
@@ -496,7 +496,7 @@ class BesselSubstitutor(CSECachingIdentityMapper[P]):
 class PowerRewriter(CSECachingIdentityMapper[P]):
     @override
     def map_power(self,
-                  expr: prim.Power,
+                  expr: prim.Power, /,
                   *args: P.args, **kwargs: P.kwargs) -> Expression:
         exp = expr.exponent
         new_base = wrap_in_cse(expr.base)
@@ -544,7 +544,7 @@ class PowerRewriter(CSECachingIdentityMapper[P]):
     @override
     def map_common_subexpression_uncached(
                 self,
-                expr: prim.CommonSubexpression,
+                expr: prim.CommonSubexpression, /,
                 *args: P.args, **kwargs: P.kwargs) -> Expression:
         return IdentityMapper.map_common_subexpression(self, expr, *args, **kwargs)
 
@@ -569,7 +569,7 @@ class BigIntegerKiller(CSECachingIdentityMapper[P]):
         self.iinfo = np.iinfo(int_type)
 
     @override
-    def map_constant(self, expr: object,
+    def map_constant(self, expr: object, /,
                      *args: P.args, **kwargs: P.kwargs) -> Expression:
         """Convert integer values not within the range of `self.int_type` to float.
         """
@@ -597,7 +597,7 @@ class BigIntegerKiller(CSECachingIdentityMapper[P]):
     @override
     def map_common_subexpression_uncached(
                 self,
-                expr: prim.CommonSubexpression,
+                expr: prim.CommonSubexpression, /,
                 *args: P.args, **kwargs: P.kwargs) -> Expression:
         return IdentityMapper.map_common_subexpression(self, expr, *args, **kwargs)
 
@@ -615,7 +615,7 @@ class ComplexRewriter(CSECachingIdentityMapper[[]]):
         self.complex_dtype = complex_dtype
 
     @override
-    def map_constant(self, expr: object) -> Expression:
+    def map_constant(self, expr: object, /) -> Expression:
         """Convert complex values to numpy types
         """
         if not isinstance(expr, (complex, np.complex64, np.complex128)):
@@ -636,7 +636,7 @@ class ComplexRewriter(CSECachingIdentityMapper[[]]):
     @override
     def map_common_subexpression_uncached(
                 self,
-                expr: prim.CommonSubexpression) -> Expression:
+                expr: prim.CommonSubexpression, /) -> Expression:
         return IdentityMapper.map_common_subexpression(self, expr)
 
 # }}}
@@ -659,7 +659,7 @@ class VectorComponentRewriter(CSECachingIdentityMapper[P]):
         self.name_whitelist = name_whitelist
 
     @override
-    def map_variable(self, expr: prim.Variable,
+    def map_variable(self, expr: prim.Variable, /,
                      *args: P.args, **kwargs: P.kwargs) -> Expression:
         match_obj = INDEXED_VAR_RE.match(expr.name)
         if match_obj is not None:
@@ -676,7 +676,7 @@ class VectorComponentRewriter(CSECachingIdentityMapper[P]):
     @override
     def map_common_subexpression_uncached(
                 self,
-                expr: prim.CommonSubexpression,
+                expr: prim.CommonSubexpression, /,
                 *args: P.args, **kwargs: P.kwargs) -> Expression:
         return IdentityMapper.map_common_subexpression(self, expr, *args, **kwargs)
 
@@ -689,7 +689,7 @@ class SumSignGrouper(CSECachingIdentityMapper[P]):
     """Anti-cancellation cargo-cultism."""
 
     @override
-    def map_sum(self, expr: prim.Sum,
+    def map_sum(self, expr: prim.Sum, /,
                 *args: P.args, **kwargs: P.kwargs) -> Expression:
         first_group: list[ArithmeticExpression] = []
         second_group: list[ArithmeticExpression] = []
@@ -724,7 +724,7 @@ class SumSignGrouper(CSECachingIdentityMapper[P]):
     @override
     def map_common_subexpression_uncached(
                 self,
-                expr: prim.CommonSubexpression,
+                expr: prim.CommonSubexpression, /,
                 *args: P.args, **kwargs: P.kwargs) -> Expression:
         return IdentityMapper.map_common_subexpression(self, expr, *args, **kwargs)
 
@@ -733,7 +733,7 @@ class SumSignGrouper(CSECachingIdentityMapper[P]):
 
 class MathConstantRewriter(CSECachingIdentityMapper[P]):
     @override
-    def map_variable(self, expr: prim.Variable,
+    def map_variable(self, expr: prim.Variable, /,
                      *args: P.args, **kwargs: P.kwargs) -> Expression:
         if expr.name == "pi":
             return prim.Variable("M_PI")
@@ -743,7 +743,7 @@ class MathConstantRewriter(CSECachingIdentityMapper[P]):
     @override
     def map_common_subexpression_uncached(
                 self,
-                expr: prim.CommonSubexpression,
+                expr: prim.CommonSubexpression, /,
                 *args: P.args, **kwargs: P.kwargs) -> Expression:
         return IdentityMapper.map_common_subexpression(self, expr, *args, **kwargs)
 
