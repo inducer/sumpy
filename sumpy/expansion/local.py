@@ -27,7 +27,7 @@ import logging
 import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from typing_extensions import override
 
@@ -49,7 +49,7 @@ if TYPE_CHECKING:
 
     from sumpy.assignment_collection import SymbolicAssignmentCollection
     from sumpy.expansion.diff_op import MultiIndex
-    from sumpy.expansion.m2l import M2LTranslationBase
+    from sumpy.expansion.m2l import M2LTranslationBase, TranslationClassesDepData
     from sumpy.expansion.multipole import (
         HankelBased2DMultipoleExpansion,
         MultipoleExpansionBase,
@@ -60,13 +60,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 __doc__ = """
-
 .. autoclass:: LocalExpansionBase
 .. autoclass:: VolumeTaylorLocalExpansion
 .. autoclass:: H2DLocalExpansion
 .. autoclass:: Y2DLocalExpansion
 .. autoclass:: LineTaylorLocalExpansion
-
 """
 
 
@@ -90,7 +88,8 @@ class LocalExpansionBase(ExpansionBase, ABC):
                 dvec: sym.Matrix,
                 tgt_rscale: sym.Expr,
                 sac: SymbolicAssignmentCollection | None = None,
-                m2l_translation_classes_dependent_data=None
+                m2l_translation_classes_dependent_data: (
+                       TranslationClassesDepData | None) = None
             ) -> Sequence[sym.Expr]:
         """Translate from a multipole or local expansion to a local expansion
 
@@ -115,17 +114,17 @@ class LocalExpansionBase(ExpansionBase, ABC):
 class LineTaylorLocalExpansion(LocalExpansionBase):
     @property
     @override
-    def m2l_translation(self):
+    def m2l_translation(self) -> M2LTranslationBase:
         # FIXME: Um...
         raise NotImplementedError()
 
     @override
-    def get_storage_index(self, mi: MultiIndex):
+    def get_storage_index(self, mi: MultiIndex) -> int:
         ind, = mi
         return ind
 
     @override
-    def get_coefficient_identifiers(self):
+    def get_coefficient_identifiers(self) -> Sequence[MultiIndex]:
         return [(i,) for i in range(self.order+1)]
 
     @override
@@ -135,7 +134,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
                 bvec: sym.Matrix | None,
                 rscale: sym.Expr,
                 sac: SymbolicAssignmentCollection | None = None
-            ):
+            ) -> Sequence[sym.Expr]:
         # no point in heeding rscale here--just ignore it
         if bvec is None:
             raise RuntimeError("cannot use line-Taylor expansions in a setting "
@@ -144,15 +143,15 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
 
         tau = sym.Symbol("tau")
 
-        avec_line: sym.Matrix = avec + tau*bvec
-
+        avec_line = cast("sym.Matrix", avec + tau*bvec)
         line_kernel = kernel.get_expression(avec_line)
 
         from sumpy.symbolic import USE_SYMENGINE
 
         if USE_SYMENGINE:
             from sumpy.derivative_taker import ExprDerivativeTaker
-            deriv_taker = ExprDerivativeTaker(line_kernel, (tau,), sac=sac, rscale=1)
+            deriv_taker = ExprDerivativeTaker(line_kernel, (tau,), sac=sac,
+                                              rscale=sym.sympify(1))
 
             return [kernel.postprocess_at_source(
                         deriv_taker.diff(i), avec).subs(tau, 0)
@@ -165,12 +164,17 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
             #
             # See also https://gitlab.tiker.net/inducer/pytential/merge_requests/12
 
-            return [kernel.postprocess_at_source(
-                            line_kernel.diff(tau, i), avec)
+            return [kernel.postprocess_at_source(line_kernel.diff(tau, i), avec)
                     .subs(tau, 0)
                     for i, in self.get_coefficient_identifiers()]
 
-    def evaluate(self, tgt_kernel, coeffs, bvec, rscale, sac=None):
+    @override
+    def evaluate(self,
+                 kernel: Kernel,
+                 coeffs: Sequence[sym.Expr],
+                 bvec: sym.Matrix,
+                 rscale: sym.Expr,
+                 sac: SymbolicAssignmentCollection | None = None) -> sym.Expr:
         # no point in heeding rscale here--just ignore it
 
         # NOTE: We can't meaningfully apply target derivatives here.
@@ -187,7 +191,8 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
                 dvec: sym.Matrix,
                 tgt_rscale: sym.Expr,
                 sac: SymbolicAssignmentCollection | None = None,
-                m2l_translation_classes_dependent_data=None
+                m2l_translation_classes_dependent_data: (
+                       TranslationClassesDepData | None) = None
             ) -> Sequence[sym.Expr]:
         raise NotImplementedError
 
@@ -197,7 +202,8 @@ class LineTaylorLocalExpansion(LocalExpansionBase):
 # {{{ volume taylor
 
 @dataclass(frozen=True)
-class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionBase):
+class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin,
+                                     LocalExpansionBase, ABC):
     """
     Coefficients represent derivative values of the kernel.
     """
@@ -213,8 +219,7 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
         else:
             from sumpy.expansion.m2l import DefaultM2LTranslationClassFactory
             factory = DefaultM2LTranslationClassFactory()
-            return factory.get_m2l_translation_class(self.kernel,
-                self.__class__)()
+            return factory.get_m2l_translation_class(self.kernel, self.__class__)()
 
     @override
     def coefficients_from_source_vec(self,
@@ -250,13 +255,13 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
             taker = knl.postprocess_at_source(base_taker, avec)
             # Following is a hack to make sure cse works.
             if 1:
-                def save_temp(x):
+                def save_temp(x: sym.Expr) -> sym.Expr:
                     return add_to_sac(sac, weight * x)  # noqa: B023
 
                 for i, mi in enumerate(self.get_coefficient_identifiers()):
                     result[i] += taker.diff(mi, save_temp)
             else:
-                def save_temp(x):
+                def save_temp(x: sym.Expr) -> sym.Expr:
                     return add_to_sac(sac, x)
 
                 for i, mi in enumerate(self.get_coefficient_identifiers()):
@@ -289,7 +294,7 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
             self.expansion_terms_wrangler.get_full_kernel_derivatives_from_stored(
                 coeffs, rscale, sac=sac))
 
-        bvec_scaled = [b*rscale**-1 for b in bvec]
+        bvec_scaled = [cast("sym.Expr", b*rscale**-1) for b in bvec]
         from sumpy.tools import mi_factorial, mi_power
 
         result = sym.sympify(sum(
@@ -310,7 +315,8 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin, LocalExpansionB
                 dvec: sym.Matrix,
                 tgt_rscale: sym.Expr,
                 sac: SymbolicAssignmentCollection | None = None,
-                m2l_translation_classes_dependent_data=None,
+                m2l_translation_classes_dependent_data: (
+                       TranslationClassesDepData | None) = None,
                 _fast_version: bool = True,
             ) -> Sequence[sym.Expr]:
         logger.info("building translation operator for %s: %s(%d) -> %s(%d): start",

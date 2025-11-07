@@ -25,7 +25,7 @@ THE SOFTWARE.
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Any, ClassVar, Protocol
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, TypeAlias
 from warnings import warn
 
 from typing_extensions import Self, override
@@ -34,6 +34,7 @@ import pymbolic.primitives as prim
 from pytools import memoize_method
 
 import sumpy.symbolic as sym
+from sumpy.expansion.diff_op import DerivativeIdentifier
 from sumpy.tools import add_mi
 
 
@@ -41,12 +42,13 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Hashable, Sequence
 
     import loopy as lp
+    from pymbolic.typing import Expression
 
     from sumpy.assignment_collection import SymbolicAssignmentCollection
     from sumpy.expansion.diff_op import MultiIndex
     from sumpy.expansion.local import LocalExpansionBase
     from sumpy.expansion.multipole import MultipoleExpansionBase
-    from sumpy.kernel import Kernel
+    from sumpy.kernel import Kernel, KernelArgument
 
 
 logger = logging.getLogger(__name__)
@@ -101,7 +103,7 @@ class ExpansionBase(ABC):
     order: int
     use_rscale: bool = field(kw_only=True, default=True)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.use_rscale is None:
             warn("use_rscale is None in ExpansionBase. "
                  "This is deprecated and will stop working in 2026.",
@@ -122,16 +124,16 @@ class ExpansionBase(ABC):
     def is_complex_valued(self) -> bool:
         return self.kernel.is_complex_valued
 
-    def get_code_transformer(self):
+    def get_code_transformer(self) -> Callable[[Expression], Expression]:
         return self.kernel.get_code_transformer()
 
-    def get_global_scaling_const(self):
+    def get_global_scaling_const(self) -> sym.Expr:
         return self.kernel.get_global_scaling_const()
 
-    def get_args(self):
+    def get_args(self) -> Sequence[KernelArgument]:
         return self.kernel.get_args()
 
-    def get_source_args(self):
+    def get_source_args(self) -> Sequence[KernelArgument]:
         return self.kernel.get_source_args()
 
     # }}}
@@ -237,12 +239,12 @@ class ExpansionBase(ABC):
     def with_kernel(self, kernel: Kernel) -> ExpansionBase:
         return replace(self, kernel=kernel)
 
-    def copy(self, **kwargs) -> Self:
+    def copy(self, **kwargs: Any) -> Self:
         return replace(self, **kwargs)
 
     # }}}
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.get_coefficient_identifiers())
 
 # }}}
@@ -261,7 +263,7 @@ class ExpansionTermsWrangler(ABC):
     .. automethod:: get_full_kernel_derivatives_from_stored
     .. automethod:: get_stored_mpole_coefficients_from_full
 
-    .. automethod:: get_full_coefficient_identifiers
+    . automethod:: get_full_coefficient_identifiers
     """
     order: int
     dim: int
@@ -270,8 +272,8 @@ class ExpansionTermsWrangler(ABC):
     # {{{ abstract interface
 
     @abstractmethod
-    def get_coefficient_identifiers(self) -> list[tuple[int, ...]]:
-        pass
+    def get_coefficient_identifiers(self) -> Sequence[MultiIndex]:
+        ...
 
     @abstractmethod
     def get_full_kernel_derivatives_from_stored(self,
@@ -279,7 +281,7 @@ class ExpansionTermsWrangler(ABC):
                 rscale: sym.Expr,
                 sac: SymbolicAssignmentCollection | None = None
             ) -> Sequence[sym.Expr]:
-        pass
+        ...
 
     @abstractmethod
     def get_stored_mpole_coefficients_from_full(self,
@@ -287,7 +289,7 @@ class ExpansionTermsWrangler(ABC):
                 rscale: sym.Expr,
                 sac: SymbolicAssignmentCollection | None = None,
             ) -> Sequence[sym.Expr]:
-        pass
+        ...
 
     # }}}
 
@@ -308,7 +310,7 @@ class ExpansionTermsWrangler(ABC):
         return [mi for mi in res if
             all(mi[i] <= self.max_mi[i] for i in range(self.dim))]
 
-    def copy(self, **kwargs):
+    def copy(self, **kwargs: Any) -> Self:
         return replace(self, **kwargs)
 
     # {{{ hyperplane helpers
@@ -334,7 +336,8 @@ class ExpansionTermsWrangler(ABC):
 
     @memoize_method
     def _split_coeffs_into_hyperplanes(
-            self) -> list[tuple[int, list[tuple[int, ...]]]]:
+                self
+            ) -> list[tuple[int, list[MultiIndex]]]:
         r"""
         This splits the coefficients into :math:`O(p)` disjoint sets
         so that for each set, all the identifiers have the form,
@@ -360,10 +363,12 @@ class ExpansionTermsWrangler(ABC):
         ]
         """
         hyperplanes = self._get_mi_hyperplanes()
-        res = []
-        seen_mis = set()
+
+        res: list[tuple[int, list[MultiIndex]]] = []
+        seen_mis: set[MultiIndex] = set()
+
         for d, const in hyperplanes:
-            coeffs_in_hyperplane = []
+            coeffs_in_hyperplane: list[MultiIndex] = []
             for mi in self.get_coefficient_identifiers():
                 # Check if the multi-index is in this hyperplane and
                 # if it is not in any of the hyperplanes we saw before
@@ -372,6 +377,7 @@ class ExpansionTermsWrangler(ABC):
                 if mi[d] == const and mi not in seen_mis:
                     coeffs_in_hyperplane.append(mi)
                     seen_mis.add(mi)
+
             res.append((d, coeffs_in_hyperplane))
 
         return res
@@ -380,7 +386,7 @@ class ExpansionTermsWrangler(ABC):
 
 
 class FullExpansionTermsWrangler(ExpansionTermsWrangler):
-    def get_storage_index(self, mi: MultiIndex, order: int | None = None):
+    def get_storage_index(self, mi: MultiIndex, order: int | None = None) -> int:
         if not order:
             order = sum(mi)
         if self.dim == 3:
@@ -391,11 +397,17 @@ class FullExpansionTermsWrangler(ExpansionTermsWrangler):
         else:
             raise NotImplementedError
 
-    def get_coefficient_identifiers(self):
+    @override
+    def get_coefficient_identifiers(self) -> Sequence[MultiIndex]:
         return super().get_full_coefficient_identifiers()
 
-    def get_full_kernel_derivatives_from_stored(self,
-            stored_kernel_derivatives, rscale, sac=None):
+    @override
+    def get_full_kernel_derivatives_from_stored(
+                self,
+                stored_kernel_derivatives: Sequence[sym.Expr],
+                rscale: sym.Expr,
+                sac: SymbolicAssignmentCollection | None = None,
+            ) -> Sequence[sym.Expr]:
         return stored_kernel_derivatives
 
     @override
@@ -408,22 +420,24 @@ class FullExpansionTermsWrangler(ExpansionTermsWrangler):
             full_mpole_coefficients, rscale, sac=sac)
 
     @memoize_method
-    def _get_mi_ordering_key_and_axis_permutation(self):
+    def _get_mi_ordering_key_and_axis_permutation(
+                self
+            ) -> tuple[Callable[[MultiIndex | DerivativeIdentifier], tuple[int, ...]],
+                       Sequence[int]]:
         """
         Returns a degree lexicographic order as a callable that can be used as a
         ``sort`` key on multi-indices and a permutation of the axis ordered
         from the slowest varying axis to the fastest varying axis of the
         multi-indices when sorted.
         """
-        from sumpy.expansion.diff_op import DerivativeIdentifier
+        axis_permutation = list(reversed(range(self.dim)))
 
-        axis_permutation = list(reversed(list(range(self.dim))))
-
-        def mi_key(ident):
+        def mi_key(ident: MultiIndex | DerivativeIdentifier) -> tuple[int, ...]:
             if isinstance(ident, DerivativeIdentifier):  # noqa: SIM108
                 mi = ident.mi
             else:
                 mi = ident
+
             return (sum(mi), *list(reversed(mi)))
 
         return mi_key, axis_permutation
@@ -431,6 +445,9 @@ class FullExpansionTermsWrangler(ExpansionTermsWrangler):
 
 
 # {{{ sparse matrix-vector multiplication
+
+LinearCombinationCoefficients: TypeAlias = "Sequence[Sequence[tuple[int, sym.Expr]]]"
+
 
 class CSEMatVecOperator:
     """
@@ -449,7 +466,7 @@ class CSEMatVecOperator:
 
     shape: tuple[int, int]
 
-    from_input_coeffs_by_row: Sequence[Sequence[tuple[int, sym.Expr]]]
+    from_input_coeffs_by_row: LinearCombinationCoefficients
     """Each element in the list represents a row of the matrix using a
     linear combination of values from the input vector. Each element has the form
     ``(index of input vector, coeff)``.
@@ -457,17 +474,15 @@ class CSEMatVecOperator:
     Number of rows in the matrix represented is equal to the
     length of the `from_input_coeffs_by_row` list."""
 
-    from_output_coeffs_by_row: Sequence[Sequence[tuple[int, sym.Expr]]]
+    from_output_coeffs_by_row: LinearCombinationCoefficients
     """Each element in the list represents a row of the matrix using a linear
     combination of values from the output vector. Each element has the form
     ``(index of output vector, coeff)``."""
 
     def __init__(self,
-                from_input_coeffs_by_row:
-                    Sequence[Sequence[tuple[int, sym.Expr]]],
-                from_output_coeffs_by_row:
-                    Sequence[Sequence[tuple[int, sym.Expr]]],
-                shape: tuple[int, int]):
+                from_input_coeffs_by_row: LinearCombinationCoefficients,
+                from_output_coeffs_by_row: LinearCombinationCoefficients,
+                shape: tuple[int, int]) -> None:
         self.from_input_coeffs_by_row = from_input_coeffs_by_row
         self.from_output_coeffs_by_row = from_output_coeffs_by_row
         self.shape = shape
@@ -479,7 +494,7 @@ class CSEMatVecOperator:
                 wrap_intermediate:
                     Callable[[sym.Expr], sym.Expr]
                     = lambda x: x
-            ):
+            ) -> Sequence[sym.Expr]:
         """
         :arg inp: vector for the matrix vector multiplication
 
@@ -488,14 +503,19 @@ class CSEMatVecOperator:
              final expressions in the vector resulting in an expensive matvec.
         """
         assert len(inp) == self.shape[1]
+
         out: list[sym.Expr] = []
         for i in range(self.shape[0]):
             value = sym.sympify(0)
+
             for input_index, coeff in self.from_input_coeffs_by_row[i]:
                 value += inp[input_index] * coeff
+
             for output_index, coeff in self.from_output_coeffs_by_row[i]:
                 value += out[output_index] * coeff
+
             out.append(wrap_intermediate(value))
+
         return out
 
     def transpose_matvec(self,
@@ -503,16 +523,20 @@ class CSEMatVecOperator:
                 wrap_intermediate:
                     Callable[[sym.Expr], sym.Expr]
                     = lambda x: x
-            ):
+            ) -> Sequence[sym.Expr]:
         assert len(inp) == self.shape[0]
+
         res: list[sym.Expr] = [sym.sympify(0)]*self.shape[1]
         expr_all = list(inp)
+
         for i in reversed(range(self.shape[0])):
             for output_index, coeff in self.from_output_coeffs_by_row[i]:
                 expr_all[output_index] += expr_all[i] * coeff
                 expr_all[output_index] = wrap_intermediate(expr_all[output_index])
+
             for input_index, coeff in self.from_input_coeffs_by_row[i]:
                 res[input_index] += expr_all[i] * coeff
+
         return res
 
 # }}}
@@ -529,7 +553,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     knl: Kernel
 
     @override
-    def get_coefficient_identifiers(self):
+    def get_coefficient_identifiers(self) -> Sequence[MultiIndex]:
         return self.stored_identifiers
 
     @override
@@ -557,7 +581,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 lambda x: add_to_sac(sac, x))
 
     @property
-    def stored_identifiers(self):
+    def stored_identifiers(self) -> Sequence[MultiIndex]:
         stored_identifiers, _ = self.get_stored_ids_and_unscaled_projection_matrix()
         return stored_identifiers
 
@@ -570,7 +594,10 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     # the axes so that the axis with the on-axis coefficient comes first in the
     # multi-index tuple.
     @memoize_method
-    def _get_mi_ordering_key_and_axis_permutation(self):
+    def _get_mi_ordering_key_and_axis_permutation(
+                self
+            ) -> tuple[Callable[[MultiIndex | DerivativeIdentifier], tuple[int, ...]],
+                       Sequence[int]]:
         """
         A degree lexicographic order with the slowest varying index depending on
         the PDE is used, returned as a callable that can be used as a
@@ -597,14 +624,16 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         from sumpy.expansion.diff_op import DerivativeIdentifier
 
-        def mi_key(ident):
+        def mi_key(ident: MultiIndex | DerivativeIdentifier) -> tuple[int, ...]:
             if isinstance(ident, DerivativeIdentifier):  # noqa: SIM108
                 mi = ident.mi
             else:
                 mi = ident
             key = [sum(mi)]
+
             for i in range(dim):
                 key.append(mi[axis_permutation[i]])
+
             return tuple(key)
 
         return mi_key, axis_permutation
@@ -633,12 +662,13 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
         return hyperplanes
 
-    def get_full_coefficient_identifiers(self):
+    @override
+    def get_full_coefficient_identifiers(self) -> Sequence[MultiIndex]:
         identifiers = super().get_full_coefficient_identifiers()
         key, _ = self._get_mi_ordering_key_and_axis_permutation()
         return sorted(identifiers, key=key)
 
-    def get_storage_index(self, mi, order=None):
+    def get_storage_index(self, mi: MultiIndex, order: int | None = None):
         if not order:
             order = sum(mi)
 
@@ -684,13 +714,14 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             raise NotImplementedError
 
     @memoize_method
-    def get_stored_ids_and_unscaled_projection_matrix(self):
+    def get_stored_ids_and_unscaled_projection_matrix(
+                self
+            ) -> tuple[Sequence[MultiIndex], CSEMatVecOperator]:
         from pytools import ProcessLogger
         plog = ProcessLogger(logger, "compute PDE for Taylor coefficients")
 
         mis = self.get_full_coefficient_identifiers()
-        coeff_ident_enumerate_dict = {tuple(mi): i for
-                                            (i, mi) in enumerate(mis)}
+        coeff_ident_enumerate_dict = {tuple(mi): i for (i, mi) in enumerate(mis)}
 
         diff_op = self.knl.get_pde_as_diff_op()
         assert len(diff_op.eqs) == 1
@@ -700,13 +731,14 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 # Order of the expansion is less than the order of the PDE.
                 # In that case, the compression matrix is the identity matrix
                 # and there's nothing to project
-                from_input_coeffs_by_row = [
+                from_input_coeffs_by_row: LinearCombinationCoefficients = [
                     [(i, sym.sympify(1))] for i in range(len(mis))]
-                from_output_coeffs_by_row = [[] for _ in range(len(mis))]
+                from_output_coeffs_by_row: LinearCombinationCoefficients = [
+                    [] for _ in range(len(mis))]
+
                 shape = (len(mis), len(mis))
                 op = CSEMatVecOperator(from_input_coeffs_by_row,
                                        from_output_coeffs_by_row, shape)
-
                 plog.done()
 
                 return mis, op
@@ -716,13 +748,13 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         max_mi_coeff = mi_to_coeff[max_mi]
         max_mi_mult = -1/sym.sympify(max_mi_coeff)
 
-        def is_stored(mi):
+        def is_stored(mi: MultiIndex) -> bool:
             """
             A multi_index mi is not stored if mi >= max_mi
             """
             return any(mi[d] < max_mi[d] for d in range(self.dim))
 
-        stored_identifiers = []
+        stored_identifiers: list[MultiIndex] = []
 
         from_input_coeffs_by_row = []
         from_output_coeffs_by_row = []
@@ -732,22 +764,24 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             if is_stored(mi):
                 idx = len(stored_identifiers)
                 stored_identifiers.append(mi)
-                from_input_coeffs_by_row.append([(idx, 1)])
+                from_input_coeffs_by_row.append([(idx, sym.sympify(1))])
                 from_output_coeffs_by_row.append([])
                 continue
             diff = [mi[d] - max_mi[d] for d in range(self.dim)]
 
             # eg: u_xx + u_yy + u_zz is represented as
             # [((2, 0, 0), 1), ((0, 2, 0), 1), ((0, 0, 2), 1)]
-            assignment = []
+            assignment: list[tuple[int, sym.Expr]] = []
             for other_mi, coeff in mi_to_coeff.items():
                 j = coeff_ident_enumerate_dict[add_mi(other_mi, diff)]
                 if i == j:
                     # Skip the u_zz part here.
                     continue
+
                 # PDE might not have max_mi_coeff = -1, divide by -max_mi_coeff
                 # to get a relation of the form, u_zz = - u_xx - u_yy for Laplace 3D.
                 assignment.append((j, coeff*max_mi_mult))
+
             from_input_coeffs_by_row.append([])
             from_output_coeffs_by_row.append(assignment)
 
@@ -763,7 +797,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         return stored_identifiers, op
 
     @memoize_method
-    def get_projection_matrix(self, rscale: sym.Expr):
+    def get_projection_matrix(self, rscale: sym.Expr) -> CSEMatVecOperator:
         r"""
         Return a :class:`CSEMatVecOperator` object which exposes a matrix vector
         multiplication operator for the projection matrix that expresses
@@ -790,24 +824,23 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             c^{\text{local}}_{\text{full}} = M^T c^{\text{local}}_{\text{stored}}.\\
             c^{\text{mpole}}_{\text{stored}} = M c^{\text{mpole}}_{\text{full}}.
         """
-        _, projection_matrix = \
-            self.get_stored_ids_and_unscaled_projection_matrix()
+        _, projection_matrix = self.get_stored_ids_and_unscaled_projection_matrix()
 
         full_coeffs = self.get_full_coefficient_identifiers()
 
-        projection_with_rscale = []
-        for row, assignment in \
-                enumerate(projection_matrix.from_output_coeffs_by_row):
+        projection_with_rscale: LinearCombinationCoefficients = []
+        for row, assignment in enumerate(projection_matrix.from_output_coeffs_by_row):
             # For eg: (u_xxx / rscale**3) = (u_yy / rscale**2) * coeff1 +
             #                               (u_xx / rscale**2) * coeff2
             # is converted to u_xxx = u_yy * (rscale * coeff1) +
             #                         u_xx * (rscale * coeff2)
             row_rscale = sum(full_coeffs[row])
-            from_output_coeffs_with_rscale = []
+            from_output_coeffs_with_rscale: Sequence[tuple[int, sym.Expr]] = []
             for k, coeff in assignment:
                 diff = row_rscale - sum(full_coeffs[k])
                 mult = rscale**diff
                 from_output_coeffs_with_rscale.append((k, coeff * mult))
+
             projection_with_rscale.append(from_output_coeffs_with_rscale)
 
         shape = projection_matrix.shape
@@ -824,8 +857,14 @@ class VolumeTaylorExpansionMixin(ExpansionBase, ABC):
     expansion_terms_wrangler_class: ClassVar[type[ExpansionTermsWrangler]]
     expansion_terms_wrangler_cache: ClassVar[dict[Hashable, Any]] = {}
 
+    @property
+    @abstractmethod
+    def expansion_terms_wrangler_key(self) -> tuple[Hashable, ...]:
+        ...
+
     @classmethod
-    def get_or_make_expansion_terms_wrangler(cls, *key):
+    def get_or_make_expansion_terms_wrangler(
+                cls, *key: Hashable) -> ExpansionTermsWrangler:
         """
         This stores the expansion terms wrangler at the class attribute level
         because recreating the expansion terms wrangler implicitly empties its
@@ -840,28 +879,27 @@ class VolumeTaylorExpansionMixin(ExpansionBase, ABC):
         return wrangler
 
     @property
-    def expansion_terms_wrangler(self):
+    def expansion_terms_wrangler(self) -> ExpansionTermsWrangler:
         return self.get_or_make_expansion_terms_wrangler(
                 *self.expansion_terms_wrangler_key)
 
     @override
-    def get_coefficient_identifiers(self):
+    def get_coefficient_identifiers(self) -> Sequence[MultiIndex]:
         """
         Returns the identifiers of the coefficients that actually get stored.
         """
         return self.expansion_terms_wrangler.get_coefficient_identifiers()
 
-    def get_full_coefficient_identifiers(self):
+    def get_full_coefficient_identifiers(self) -> Sequence[MultiIndex]:
         return self.expansion_terms_wrangler.get_full_coefficient_identifiers()
 
     @property
     @memoize_method
-    def _storage_loc_dict(self):
-        return {i: idx for idx, i in
-                    enumerate(self.get_coefficient_identifiers())}
+    def _storage_loc_dict(self) -> dict[MultiIndex, int]:
+        return {i: idx for idx, i in enumerate(self.get_coefficient_identifiers())}
 
     @override
-    def get_storage_index(self, mi: MultiIndex):
+    def get_storage_index(self, mi: MultiIndex) -> int:
         return self._storage_loc_dict[mi]
 
 
@@ -870,7 +908,8 @@ class VolumeTaylorExpansion(VolumeTaylorExpansionMixin, ABC):
         = FullExpansionTermsWrangler
 
     @property
-    def expansion_terms_wrangler_key(self):
+    @override
+    def expansion_terms_wrangler_key(self) -> tuple[Hashable, ...]:
         return (self.order, self.kernel.dim, None)
 
 
@@ -879,7 +918,8 @@ class LinearPDEConformingVolumeTaylorExpansion(VolumeTaylorExpansionMixin, ABC):
         LinearPDEBasedExpansionTermsWrangler
 
     @property
-    def expansion_terms_wrangler_key(self):
+    @override
+    def expansion_terms_wrangler_key(self) -> tuple[Hashable, ...]:
         return (self.order, self.kernel.dim, None, self.kernel)
 
 # }}}
@@ -945,7 +985,9 @@ class VolumeTaylorExpansionFactory(ExpansionFactoryBase):
     """
 
     @override
-    def get_local_expansion_class(self, base_kernel: Kernel, /):
+    def get_local_expansion_class(
+                self, base_kernel: Kernel, /
+            ) -> type[LocalExpansionBase]:
         """
         :returns: a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
@@ -953,7 +995,9 @@ class VolumeTaylorExpansionFactory(ExpansionFactoryBase):
         return VolumeTaylorLocalExpansion
 
     @override
-    def get_multipole_expansion_class(self, base_kernel: Kernel, /):
+    def get_multipole_expansion_class(
+                self, base_kernel: Kernel, /
+            ) -> type[MultipoleExpansionBase]:
         """
         :returns: a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
         """
