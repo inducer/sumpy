@@ -26,7 +26,7 @@ THE SOFTWARE.
 import logging
 import re
 from abc import ABC
-from typing import ParamSpec
+from typing import TYPE_CHECKING, Protocol, cast
 
 import numpy as np
 from constantdict import constantdict
@@ -34,18 +34,27 @@ from typing_extensions import override
 
 import loopy as lp
 import pymbolic.primitives as prim
-from loopy.kernel.instruction import make_assignment
-from pymbolic.mapper import CSECachingMapperMixin, IdentityMapper
-from pymbolic.typing import Expression
+from loopy.kernel.instruction import Assignment, CallInstruction, make_assignment
+from pymbolic.mapper import CSECachingMapperMixin, IdentityMapper, P
+from pymbolic.typing import ArithmeticExpression, Expression
 from pytools import memoize_method
 
 import sumpy.symbolic as sym
 
 
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence, Set
+
+    from numpy.typing import DTypeLike
+
+    import pyopencl as cl
+    from loopy.codegen import PreambleInfo
+    from loopy.target import TargetBase
+    from loopy.translation_unit import CallablesInferenceContext
+    from loopy.types import LoopyType
+
+
 logger = logging.getLogger(__name__)
-
-
-P = ParamSpec("P")
 
 
 __doc__ = """
@@ -58,7 +67,8 @@ Conversion of :mod:`sympy` expressions to :mod:`loopy`
 """
 
 
-def wrap_in_cse(expr: Expression, prefix: str | None = None) -> Expression:
+def wrap_in_cse(expr: Expression,
+                prefix: str | None = None) -> prim.CommonSubexpression:
     return prim.make_common_subexpression(expr, prefix, wrap_vars=False)
 
 
@@ -124,10 +134,17 @@ cdouble_t hank1_01_complex(cdouble_t z, cdouble_t *order1)
 
 
 class BesselJvvp1(lp.ScalarCallable):
-    def with_types(self, arg_id_to_dtype, clbl_inf_ctx):
+    @override
+    def with_types(self,
+                   arg_id_to_dtype: Mapping[int | str, LoopyType],
+                   clbl_inf_ctx: CallablesInferenceContext,
+               ) -> tuple[BesselJvvp1, CallablesInferenceContext]:
         from loopy.types import NumpyType
 
         for i in arg_id_to_dtype:
+            if isinstance(i, str):
+                raise TypeError(f"{self.name} cannot handle keyword arguments")
+
             if not (-2 <= i <= 1):
                 raise TypeError(f"{self.name} can only take 2 arguments.")
 
@@ -161,9 +178,9 @@ class BesselJvvp1(lp.ScalarCallable):
                                   })),
                     clbl_inf_ctx)
 
-    def generate_preambles(self, target):
-        from loopy import PyOpenCLTarget
-        if not isinstance(target, PyOpenCLTarget):
+    @override
+    def generate_preambles(self, target: TargetBase) -> Iterator[tuple[str, str]]:
+        if not isinstance(target, lp.PyOpenCLTarget):
             raise NotImplementedError("Only the PyOpenCLTarget is supported as"
                                       "of now.")
 
@@ -171,10 +188,17 @@ class BesselJvvp1(lp.ScalarCallable):
 
 
 class Hankel1_01(lp.ScalarCallable):  # noqa: N801
-    def with_types(self, arg_id_to_dtype, clbl_inf_ctx):
+    @override
+    def with_types(self,
+                   arg_id_to_dtype: Mapping[int | str, LoopyType],
+                   clbl_inf_ctx: CallablesInferenceContext,
+               ) -> tuple[Hankel1_01, CallablesInferenceContext]:
         from loopy.types import NumpyType
 
         for i in arg_id_to_dtype:
+            if isinstance(i, str):
+                raise TypeError(f"{self.name} cannot handle keyword arguments")
+
             if not (-2 <= i <= 0):
                 raise TypeError(f"{self.name} can only take one argument.")
 
@@ -201,37 +225,48 @@ class Hankel1_01(lp.ScalarCallable):  # noqa: N801
                                   })),
                     clbl_inf_ctx)
 
-    def generate_preambles(self, target):
-        from loopy import PyOpenCLTarget
-        if not isinstance(target, PyOpenCLTarget):
+    @override
+    def generate_preambles(self, target: TargetBase) -> Iterator[tuple[str, str]]:
+        if not isinstance(target, lp.PyOpenCLTarget):
             raise NotImplementedError("Only the PyOpenCLTarget is supported as"
                                       "of now.")
 
         yield ("50-sumpy-hankel", HANKEL_PREAMBLE)
 
 
-def register_bessel_callables(loopy_knl):
-    from sumpy.codegen import BesselJvvp1, Hankel1_01
+def register_bessel_callables(loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
     if "bessel_jvvp1" not in loopy_knl.callables_table:
-        loopy_knl = lp.register_callable(loopy_knl, "bessel_jvvp1",
+        loopy_knl = lp.register_callable(
+            loopy_knl,
+            "bessel_jvvp1",
             BesselJvvp1("bessel_jvvp1"))
+
     if "hank1_01" not in loopy_knl.callables_table:
-        loopy_knl = lp.register_callable(loopy_knl, "hank1_01",
+        loopy_knl = lp.register_callable(
+            loopy_knl,
+            "hank1_01",
             Hankel1_01("hank1_01"))
+
     return loopy_knl
 
 
-def _fp_contract_fast_preamble(preamble_info):
+def _fp_contract_fast_preamble(
+        preamble_info: PreambleInfo
+    ) -> Iterator[tuple[str, str]]:
     yield ("fp_contract_fast_pocl", "#pragma clang fp contract(fast)")
 
 
-def register_optimization_preambles(loopy_knl, device):
+def register_optimization_preambles(
+        loopy_knl: lp.TranslationUnit, device: cl.Device
+    ) -> lp.TranslationUnit:
     if isinstance(loopy_knl.target, lp.PyOpenCLTarget):
         import pyopencl as cl
         if (device.platform.name == "Portable Computing Language"
                 and (device.type & cl.device_type.GPU)):
-            loopy_knl = lp.register_preamble_generators(loopy_knl,
+            loopy_knl = lp.register_preamble_generators(
+                loopy_knl,
                 [_fp_contract_fast_preamble])
+
     return loopy_knl
 
 # }}}
@@ -239,15 +274,20 @@ def register_optimization_preambles(loopy_knl, device):
 
 # {{{ custom mapper base classes
 
-class CSECachingIdentityMapper(
-                    IdentityMapper[P], CSECachingMapperMixin[Expression, P], ABC):
+class CSECachingIdentityMapper(IdentityMapper[P],
+                               CSECachingMapperMixin[Expression, P],
+                               ABC):
     pass
 
 
-class CallExternalRecMapper(IdentityMapper):
-    def rec(self, expr, rec_self=None, *args, **kwargs):
+class CallExternalRecMapper(IdentityMapper[P]):
+    @override
+    def rec(self,
+            expr: Expression, /,
+            rec_self: CallExternalRecMapper[P] | None = None,
+            *args: P.args, **kwargs: P.kwargs) -> Expression:
         if rec_self:
-            return rec_self.rec(expr, *args, **kwargs)
+            return rec_self.rec(expr, rec_self, *args, **kwargs)
         else:
             return super().rec(expr, *args, **kwargs)
 
@@ -256,31 +296,52 @@ class CallExternalRecMapper(IdentityMapper):
 
 # {{{ bessel handling
 
-class BesselTopOrderGatherer(CSECachingIdentityMapper, CallExternalRecMapper):
+class BesselTopOrderGatherer(CSECachingIdentityMapper[P],
+                             CallExternalRecMapper[P]):
     """This mapper walks the expression tree to find the highest-order
     Bessel J being used, so that all other Js can be computed by the
     (stable) downward recurrence.
     """
-    def __init__(self):
+
+    bessel_j_arg_to_top_order: dict[Expression, int]
+
+    def __init__(self) -> None:
         self.bessel_j_arg_to_top_order = {}
 
-    def map_call(self, expr, rec_self=None, *args):
-        if (isinstance(expr.function, prim.Variable)
-                and expr.function.name == "bessel_j"):
+    @override
+    def map_call(self,
+                 expr: prim.Call,
+                 rec_self: CallExternalRecMapper[P] | None = None,
+                 *args: P.args, **kwargs: P.kwargs) -> Expression:
+        function = expr.function
+        if isinstance(function, prim.Variable) and function.name == "bessel_j":
             order, arg = expr.parameters
-            self.rec(arg)
+            self.rec(arg, rec_self, *args, **kwargs)
+
             assert isinstance(order, int)
             self.bessel_j_arg_to_top_order[arg] = max(
                     self.bessel_j_arg_to_top_order.get(arg, 0),
                     abs(order))
-        return CSECachingIdentityMapper.map_call(rec_self or self,
-                expr, rec_self, *args)
 
-    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+        return CSECachingIdentityMapper.map_call(
+                rec_self or self,
+                expr, rec_self, *args, **kwargs)
+
+    @override
+    def map_common_subexpression_uncached(
+                self,
+                expr: prim.CommonSubexpression,
+                *args: P.args, **kwargs: P.kwargs) -> Expression:
+        return IdentityMapper.map_common_subexpression(self, expr, *args, **kwargs)
 
 
-class BesselDerivativeReplacer(CSECachingIdentityMapper, CallExternalRecMapper):
-    def map_call(self, expr, rec_self=None, *args):
+class BesselDerivativeReplacer(CSECachingIdentityMapper[P],
+                               CallExternalRecMapper[P]):
+    @override
+    def map_call(self,
+                 expr: prim.Call,
+                 rec_self: CallExternalRecMapper[P] | None = None,
+                 *args: P.args, **kwargs: P.kwargs) -> Expression:
         call = expr
 
         if (isinstance(call.function, prim.Variable)
@@ -289,8 +350,9 @@ class BesselDerivativeReplacer(CSECachingIdentityMapper, CallExternalRecMapper):
                 function = prim.Variable("hankel_1")
             else:
                 function = prim.Variable("bessel_j")
-            order, arg, n_derivs = call.parameters
-            import sympy as sym
+            order, arg, k = call.parameters
+            assert isinstance(order, int)
+            assert isinstance(k, int)
 
             # AS (9.1.31)
             # https://dlmf.nist.gov/10.6.7
@@ -299,59 +361,86 @@ class BesselDerivativeReplacer(CSECachingIdentityMapper, CallExternalRecMapper):
             else:
                 order_str = f"m{-order}"
 
-            k = n_derivs
+            from math import comb
             return prim.CommonSubexpression(
-                    2**(-k)*sum(
-                        (-1)**idx*int(sym.binomial(k, idx)) * function(i, arg)
+                    2.0**(-k) * sum(
+                        (-1)**idx * comb(k, idx) * function(i, arg)
                         for idx, i in enumerate(range(order-k, order+k+1, 2))),
-                    f"d{n_derivs}_{function.name}_{order_str}",
+                    f"d{k}_{function.name}_{order_str}",
                     scope=prim.cse_scope.EVALUATION)
         else:
             return CSECachingIdentityMapper.map_call(
-                    rec_self or self, expr, rec_self, *args)
+                    rec_self or self,
+                    expr, rec_self, *args, **kwargs)
 
-    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+    @override
+    def map_common_subexpression_uncached(
+                self,
+                expr: prim.CommonSubexpression,
+                *args: P.args, **kwargs: P.kwargs) -> Expression:
+        return IdentityMapper.map_common_subexpression(self, expr, *args, **kwargs)
 
 
-class BesselSubstitutor(CSECachingIdentityMapper):
-    def __init__(self, name_gen, bessel_j_arg_to_top_order, assignments):
+class BesselSubstitutor(CSECachingIdentityMapper[P]):
+    name_gen: Callable[[str], str]
+    bessel_j_arg_to_top_order: dict[Expression, int]
+    assignments: list[Assignment | CallInstruction]
+
+    cse_cache: dict[Expression, prim.CommonSubexpression]
+
+    def __init__(self,
+                 name_gen: Callable[[str], str],
+                 bessel_j_arg_to_top_order: dict[Expression, int],
+                 assignments: Sequence[Assignment | CallInstruction]) -> None:
         self.name_gen = name_gen
         self.bessel_j_arg_to_top_order = bessel_j_arg_to_top_order
         self.cse_cache = {}
-        self.assignments = assignments
+        self.assignments = list(assignments)
 
-    def map_call(self, expr, *args):
+    @override
+    def map_call(self, expr: prim.Call,
+                 *args: P.args, **kwargs: P.kwargs) -> Expression:
         if isinstance(expr.function, prim.Variable):
             name = expr.function.name
             if name == "bessel_j":
                 order, arg = expr.parameters
-                return self.bessel_j(order, self.rec(arg, *args))
+                assert isinstance(order, int)
+                assert prim.is_arithmetic_expression(arg)
+
+                return self.bessel_j(order, self.rec_arith(arg, *args, **kwargs))
             elif name == "hankel_1":
                 order, arg = expr.parameters
-                return self.hankel_1(order, self.rec(arg, *args))
+                assert isinstance(order, int)
 
-        return super().map_call(expr)
+                return self.hankel_1(order, self.rec(arg, *args, **kwargs))
 
-    def wrap_in_cse(self, expr, prefix):
+        return super().map_call(expr, *args, **kwargs)
+
+    def wrap_in_cse(self, expr: Expression, prefix: str) -> prim.CommonSubexpression:
         cse = wrap_in_cse(expr, prefix)
         return self.cse_cache.setdefault(expr, cse)
 
     # {{{ bessel implementation
 
     @memoize_method
-    def bessel_jv_two(self, order, arg):
-        name_om1 = self.name_gen(f"bessel_{order - 1}")
-        name_o = self.name_gen(f"bessel_{order}")
+    def bessel_jv_two(
+            self, order: int, arg: Expression
+        ) -> tuple[prim.Variable, prim.Variable]:
+        om0 = prim.Variable(self.name_gen(f"bessel_{order}"))
+        om1 = prim.Variable(self.name_gen(f"bessel_{order - 1}"))
+
         self.assignments.append(
                 make_assignment(
-                    (prim.Variable(name_om1), prim.Variable(name_o),),
+                    (om1, om0),
                     prim.Variable("bessel_jvvp1")(order, arg),
                     temp_var_types=(lp.Optional(None),)*2))
 
-        return prim.Variable(name_om1), prim.Variable(name_o)
+        return om1, om0
 
     @memoize_method
-    def bessel_j(self, order, arg):
+    def bessel_j(
+            self, order: int, arg: ArithmeticExpression
+        ) -> ArithmeticExpression:
         top_order = self.bessel_j_arg_to_top_order[arg]
         if order == top_order:
             return self.bessel_jv_two(top_order-1, arg)[1]
@@ -359,7 +448,7 @@ class BesselSubstitutor(CSECachingIdentityMapper):
             return self.bessel_jv_two(top_order-1, arg)[0]
         elif order < 0:
             return self.wrap_in_cse(
-                    (-1)**order*self.bessel_j(-order, arg),
+                    (-1.0)**order*self.bessel_j(-order, arg),
                     f"bessel_j_neg{-order}")
         else:
             assert abs(order) < top_order
@@ -375,18 +464,20 @@ class BesselSubstitutor(CSECachingIdentityMapper):
     # {{{ hankel implementation
 
     @memoize_method
-    def hank1_01(self, arg):
-        name_0 = self.name_gen("hank1_0")
-        name_1 = self.name_gen("hank1_1")
+    def hank1_01(self, arg: Expression) -> tuple[prim.Variable, prim.Variable]:
+        hank1_0 = prim.Variable(self.name_gen("hank1_0"))
+        hank1_1 = prim.Variable(self.name_gen("hank1_1"))
+
         self.assignments.append(
                 make_assignment(
-                    (prim.Variable(name_0), prim.Variable(name_1),),
+                    (hank1_0, hank1_1),
                     prim.Variable("hank1_01")(arg),
                     temp_var_types=(lp.Optional(None),)*2))
-        return prim.Variable(name_0), prim.Variable(name_1)
+
+        return hank1_0, hank1_1
 
     @memoize_method
-    def hankel_1(self, order, arg):
+    def hankel_1(self, order: int, arg: ArithmeticExpression) -> ArithmeticExpression:
         if order == 0:
             return self.hank1_01(arg)[0]
         elif order == 1:
@@ -395,7 +486,7 @@ class BesselSubstitutor(CSECachingIdentityMapper):
             # AS (9.1.6)
             nu = -order
             return self.wrap_in_cse(
-                    (-1) ** nu * self.hankel_1(nu, arg),
+                    (-1.0) ** nu * self.hankel_1(nu, arg),
                     f"hank1_neg{nu}")
         elif order > 1:
             # AS (9.1.27)
@@ -408,45 +499,55 @@ class BesselSubstitutor(CSECachingIdentityMapper):
 
     # }}}
 
-    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+    @override
+    def map_common_subexpression_uncached(
+                self,
+                expr: prim.CommonSubexpression,
+                *args: P.args, **kwargs: P.kwargs) -> Expression:
+        return IdentityMapper.map_common_subexpression(self, expr, *args, **kwargs)
 
 # }}}
 
 
 # {{{ power rewriter
 
-class PowerRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
-    def map_power(self, expr, rec_self=None, *args):
+class PowerRewriter(CSECachingIdentityMapper[P],
+                    CallExternalRecMapper[P]):
+    @override
+    def map_power(self,
+                  expr: prim.Power,
+                  rec_self: CallExternalRecMapper[P] | None = None,
+                  *args: P.args, **kwargs: P.kwargs) -> Expression:
         exp = expr.exponent
-        if isinstance(exp, int):
-            new_base = wrap_in_cse(expr.base)
+        new_base = wrap_in_cse(expr.base)
 
+        if isinstance(exp, int):
             if exp > 2 and exp % 2 == 0:
                 square = wrap_in_cse(new_base*new_base)
                 return self.rec(wrap_in_cse(square**(exp//2)),
-                        rec_self, *args)
+                                rec_self, *args, **kwargs)
             elif exp == 2:
                 return new_base * new_base
             elif exp > 1 and exp % 2 == 1:
                 square = wrap_in_cse(new_base*new_base)
                 return self.rec(wrap_in_cse(square**((exp-1)//2))*new_base,
-                        rec_self, *args)
+                                rec_self, *args, **kwargs)
             elif exp == 1:
                 return new_base
             elif exp < 0:
-                return self.rec((1/new_base)**(-exp), rec_self, *args)
+                return self.rec((1/new_base)**(-exp),
+                                rec_self, *args, **kwargs)
 
-        if (isinstance(expr.exponent, prim.Quotient)
-                and isinstance(expr.exponent.numerator, int)
-                and isinstance(expr.exponent.denominator, int)):
-
-            p, q = expr.exponent.numerator, expr.exponent.denominator
+        if (isinstance(exp, prim.Quotient)
+                and isinstance(exp.numerator, int)
+                and isinstance(exp.denominator, int)):
+            p, q = exp.numerator, exp.denominator
             if q < 0:
                 q *= -1
                 p *= -1
 
             if q == 1:
-                return self.rec(new_base**p, rec_self, *args)
+                return self.rec(new_base**p, rec_self, *args, **kwargs)
 
             if q == 2:
                 assert p != 0
@@ -458,32 +559,46 @@ class PowerRewriter(CSECachingIdentityMapper, CallExternalRecMapper):
                     new_base = wrap_in_cse(prim.Variable("rsqrt")(expr.base))
                     p *= -1
 
-                return self.rec(new_base**p, rec_self, *args)
+                return self.rec(new_base**p, rec_self, *args, **kwargs)
 
-        return CSECachingIdentityMapper.map_power(rec_self or self, expr)
+        return CSECachingIdentityMapper.map_power(
+            rec_self or self,
+            expr, *args, **kwargs)
 
-    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+    @override
+    def map_common_subexpression_uncached(
+                self,
+                expr: prim.CommonSubexpression,
+                *args: P.args, **kwargs: P.kwargs) -> Expression:
+        return IdentityMapper.map_common_subexpression(self, expr, *args, **kwargs)
 
 # }}}
 
 
 # {{{ convert big integers into floats
 
-from loopy.typing import is_integer
+class BigIntegerKiller(CSECachingIdentityMapper[P],
+                       CallExternalRecMapper[P]):
+    warn: bool
+    float_type: type[np.floating]
+    iinfo: np.iinfo
 
-
-class BigIntegerKiller(CSECachingIdentityMapper, CallExternalRecMapper):
-
-    def __init__(self, warn_on_digit_loss=True, int_type=np.int64,
-            float_type=np.float64):
+    def __init__(self,
+                 warn_on_digit_loss: bool = True,
+                 int_type: type[np.integer] = np.int64,
+                 float_type: type[np.floating] = np.float64) -> None:
         super().__init__()
         self.warn = warn_on_digit_loss
         self.float_type = float_type
         self.iinfo = np.iinfo(int_type)
 
-    def map_constant(self, expr, *args):
+    @override
+    def map_constant(self, expr: object,
+                     *args: P.args, **kwargs: P.kwargs) -> Expression:
         """Convert integer values not within the range of `self.int_type` to float.
         """
+        from loopy.typing import is_integer
+
         if not is_integer(expr):
             return expr
 
@@ -503,31 +618,40 @@ class BigIntegerKiller(CSECachingIdentityMapper, CallExternalRecMapper):
 
         return self.float_type(expr)
 
-    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+    @override
+    def map_common_subexpression_uncached(
+                self,
+                expr: prim.CommonSubexpression,
+                *args: P.args, **kwargs: P.kwargs) -> Expression:
+        return IdentityMapper.map_common_subexpression(self, expr, *args, **kwargs)
 
 # }}}
 
 
 # {{{ convert complex to np.complex
 
-class ComplexRewriter(CSECachingIdentityMapper[[]], CallExternalRecMapper):
+class ComplexRewriter(CSECachingIdentityMapper[[]],
+                      CallExternalRecMapper[[]]):
     complex_dtype: np.dtype[np.complexfloating] | None
 
-    def __init__(self, complex_dtype: np.dtype[np.complexfloating] | None = None):
+    def __init__(self,
+                 complex_dtype: np.dtype[np.complexfloating] | None = None) -> None:
         super().__init__()
         self.complex_dtype = complex_dtype
 
-    def map_constant(self, expr: object, rec_self=None):
+    @override
+    def map_constant(self, expr: object,
+                     rec_self: CallExternalRecMapper[[]] | None = None) -> Expression:
         """Convert complex values to numpy types
         """
         if not isinstance(expr, (complex, np.complex64, np.complex128)):
-            return IdentityMapper.map_constant(rec_self or self, expr,
-                    rec_self=rec_self)
+            return IdentityMapper.map_constant(rec_self or self, expr, rec_self)
 
         complex_dtype = self.complex_dtype
         if complex_dtype is None:
             if complex(np.complex64(expr)) == expr:
                 return np.complex64(expr)
+
             complex_dtype = np.complex128
 
         if isinstance(complex_dtype, np.dtype):
@@ -535,7 +659,11 @@ class ComplexRewriter(CSECachingIdentityMapper[[]], CallExternalRecMapper):
         else:
             return complex_dtype(expr)
 
-    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+    @override
+    def map_common_subexpression_uncached(
+                self,
+                expr: prim.CommonSubexpression) -> Expression:
+        return IdentityMapper.map_common_subexpression(self, expr)
 
 # }}}
 
@@ -545,7 +673,8 @@ class ComplexRewriter(CSECachingIdentityMapper[[]], CallExternalRecMapper):
 INDEXED_VAR_RE = re.compile(r"^([a-zA-Z_]+)([0-9]+)$")
 
 
-class VectorComponentRewriter(CSECachingIdentityMapper[[]], CallExternalRecMapper):
+class VectorComponentRewriter(CSECachingIdentityMapper[P],
+                              CallExternalRecMapper[P]):
     """For names in name_whitelist, turn ``a3`` into ``a[3]``."""
 
     name_whitelist: frozenset[str]
@@ -556,11 +685,14 @@ class VectorComponentRewriter(CSECachingIdentityMapper[[]], CallExternalRecMappe
 
         self.name_whitelist = name_whitelist
 
-    def map_variable(self, expr, *args):
+    @override
+    def map_variable(self, expr: prim.Variable,
+                     *args: P.args, **kwargs: P.kwargs) -> Expression:
         match_obj = INDEXED_VAR_RE.match(expr.name)
         if match_obj is not None:
             name = match_obj.group(1)
             subscript = int(match_obj.group(2))
+
             if name in self.name_whitelist:
                 return prim.Variable(name)[subscript]
             else:
@@ -568,22 +700,30 @@ class VectorComponentRewriter(CSECachingIdentityMapper[[]], CallExternalRecMappe
         else:
             return expr
 
-    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+    @override
+    def map_common_subexpression_uncached(
+                self,
+                expr: prim.CommonSubexpression,
+                *args: P.args, **kwargs: P.kwargs) -> Expression:
+        return IdentityMapper.map_common_subexpression(self, expr, *args, **kwargs)
 
 # }}}
 
 
 # {{{ sum sign grouper
 
-class SumSignGrouper(CSECachingIdentityMapper[[]], CallExternalRecMapper):
+class SumSignGrouper(CSECachingIdentityMapper[P],
+                     CallExternalRecMapper[P]):
     """Anti-cancellation cargo-cultism."""
 
-    def map_sum(self, expr, *args):
-        first_group = []
-        second_group = []
+    @override
+    def map_sum(self, expr: prim.Sum,
+                *args: P.args, **kwargs: P.kwargs) -> Expression:
+        first_group: list[ArithmeticExpression] = []
+        second_group: list[ArithmeticExpression] = []
 
         for orig_child in expr.children:
-            child = self.rec(orig_child, *args)
+            child = self.rec_arith(orig_child, *args, **kwargs)
             tchild = child
             if isinstance(tchild, prim.CommonSubexpression):
                 tchild = tchild.child
@@ -609,24 +749,47 @@ class SumSignGrouper(CSECachingIdentityMapper[[]], CallExternalRecMapper):
 
         return prim.Sum(tuple(first_group + second_group))
 
-    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+    @override
+    def map_common_subexpression_uncached(
+                self,
+                expr: prim.CommonSubexpression,
+                *args: P.args, **kwargs: P.kwargs) -> Expression:
+        return IdentityMapper.map_common_subexpression(self, expr, *args, **kwargs)
 
 # }}}
 
 
-class MathConstantRewriter(CSECachingIdentityMapper[[]], CallExternalRecMapper):
-    def map_variable(self, expr, *args):
+class MathConstantRewriter(CSECachingIdentityMapper[P],
+                           CallExternalRecMapper[P]):
+    @override
+    def map_variable(self, expr: prim.Variable,
+                     *args: P.args, **kwargs: P.kwargs) -> Expression:
         if expr.name == "pi":
             return prim.Variable("M_PI")
         else:
             return expr
 
-    map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
+    @override
+    def map_common_subexpression_uncached(
+                self,
+                expr: prim.CommonSubexpression,
+                *args: P.args, **kwargs: P.kwargs) -> Expression:
+        return IdentityMapper.map_common_subexpression(self, expr, *args, **kwargs)
 
 
 # {{{ combine mappers
 
-def combine_mappers(*mappers: CallExternalRecMapper):
+
+class MapperMethod(Protocol[P]):
+    def __call__(self,
+                 obj: CallExternalRecMapper[P],
+                 expr: Expression,
+                 rec_self: IdentityMapper[P] | None = None,
+                 *args: P.args, **kwargs: P.kwargs) -> Expression:
+        ...
+
+
+def combine_mappers(*mappers: CallExternalRecMapper[P]) -> CSECachingIdentityMapper[P]:
     """Returns a mapper that combines the work of several other mappers.  For
     this to work, the mappers need to be instances of
     :class:`sumpy.codegen.CallExternalRecMapper`.  When calling parent class
@@ -636,19 +799,26 @@ def combine_mappers(*mappers: CallExternalRecMapper):
     given. The mappers need to commute and be idempotent.
     """
     from collections import defaultdict
-    all_methods = defaultdict(list)
+
+    all_methods: dict[str, list[tuple[CallExternalRecMapper[P],
+                                      MapperMethod[P]]]] = defaultdict(list)
     base_classes = [CSECachingMapperMixin, IdentityMapper]
     for mapper in mappers:
         assert isinstance(mapper, CallExternalRecMapper)
+
         for method_name in dir(type(mapper)):
             if not method_name.startswith("map_"):
                 continue
+
             if method_name == "map_common_subexpression_uncached":
                 continue
-            method = getattr(type(mapper), method_name)
+
+            method = cast("MapperMethod[P]", getattr(type(mapper), method_name))
             method_equals_base_class_method = False
             for base_class in base_classes:
-                base_class_method = getattr(base_class, method_name, None)
+                base_class_method = cast("MapperMethod[P] | None",
+                                         getattr(base_class, method_name, None))
+
                 if base_class_method is not None:
                     method_equals_base_class_method = (base_class_method == method)
                     break
@@ -657,29 +827,44 @@ def combine_mappers(*mappers: CallExternalRecMapper):
 
             if method_equals_base_class_method:
                 continue
+
             all_methods[method_name].append((mapper, method))
 
-    class CombinedMapper(CSECachingIdentityMapper):
-        def __init__(self, all_methods):
+    class CombinedMapper(CSECachingIdentityMapper[P]):
+        all_methods: dict[str, list[tuple[CallExternalRecMapper[P],
+                                          MapperMethod[P]]]]
+
+        def __init__(self,
+                     all_methods: dict[str, list[
+                        tuple[CallExternalRecMapper[P], MapperMethod[P]]]]) -> None:
             self.all_methods = all_methods
+
         map_common_subexpression_uncached = IdentityMapper.map_common_subexpression
 
-    def _map(method_name, self, expr, rec_self=None, *args):
+    def _map(method_name: str,
+             self: CombinedMapper,
+             expr: Expression,
+             rec_self: CallExternalRecMapper[P] | None = None,
+             *args: P.args, **kwargs: P.kwargs) -> Expression:
         if method_name not in self.all_methods:
-            return getattr(IdentityMapper, method_name)(self, expr)
+            return getattr(IdentityMapper, method_name)(self, expr, *args, **kwargs)
+
         for mapper, method in self.all_methods[method_name]:
-            new_expr = method(mapper, expr, self)
+            new_expr = method(mapper, expr, rec_self, *args, **kwargs)
             if new_expr is not expr:
                 # Re-traverse the whole thing from the get-go.
-                return self.rec(new_expr)
+                return self.rec(new_expr, *args, **kwargs)
+
         return expr
 
     import types
     from functools import partial
+
     combine_mapper = CombinedMapper(all_methods)
     for method_name in all_methods:
         setattr(combine_mapper, method_name,
                 types.MethodType(partial(_map, method_name), combine_mapper))
+
     return combine_mapper
 
 # }}}
@@ -687,14 +872,31 @@ def combine_mappers(*mappers: CallExternalRecMapper):
 
 # {{{ to-loopy conversion
 
-def to_loopy_insns(assignments, vector_names=frozenset(), pymbolic_expr_maps=(),
-                   complex_dtype=None, retain_names=frozenset()):
+def to_loopy_insns(
+        assignments: Iterable[tuple[str, sym.Expr]],
+        vector_names: Set[str] | None = None,
+        pymbolic_expr_maps: Sequence[Callable[[Expression], Expression]] = (),
+        complex_dtype: DTypeLike = None,
+        retain_names: Set[str] | None = None,
+    ) -> Sequence[Assignment | CallInstruction]:
+    if vector_names is None:
+        vector_names = frozenset()
+    vector_names = frozenset(vector_names)
+
+    if retain_names is None:
+        retain_names = frozenset()
+    retain_names = frozenset(retain_names)
+
+    if complex_dtype is None:
+        complex_dtype = np.dtype(np.complex128)
+    complex_dtype = np.dtype(complex_dtype)
+
     logger.info("loopy instruction generation: start")
     assignments = list(assignments)
 
     # convert from sympy
     sympy_conv = SympyToPymbolicMapper()
-    assignments = [(name, sympy_conv(expr)) for name, expr in assignments]
+    pymbolic_assignments = [(name, sympy_conv(expr)) for name, expr in assignments]
 
     bdr = BesselDerivativeReplacer()
     btog = BesselTopOrderGatherer()
@@ -708,7 +910,7 @@ def to_loopy_insns(assignments, vector_names=frozenset(), pymbolic_expr_maps=(),
         # https://github.com/inducer/sumpy/pull/40#issuecomment-852635444
         cmb_mapper = combine_mappers(bdr, btog, vcr, pwr, ssg, bik, cmr)
     else:
-        def cmb_mapper(expr, /):
+        def cmb_mapper(expr: Expression, /) -> Expression:
             expr = bdr(expr)
             expr = vcr(expr)
             expr = pwr(expr)
@@ -718,26 +920,31 @@ def to_loopy_insns(assignments, vector_names=frozenset(), pymbolic_expr_maps=(),
             expr = btog(expr)
             return expr
 
-    def convert_expr(name, expr):
+    def convert_expr(name: str, expr: Expression) -> Expression:
         logger.debug("generate expression for: %s", name)
         expr = cmb_mapper(expr)
         for m in pymbolic_expr_maps:
             expr = m(expr)
+
         return expr
 
-    assignments = [(name, convert_expr(name, expr)) for name, expr in assignments]
-    from pytools import UniqueNameGenerator
-    name_gen = UniqueNameGenerator({name for name, expr in assignments})
+    pymbolic_assignments = [
+        (name, convert_expr(name, expr)) for name, expr in pymbolic_assignments
+    ]
 
-    result = []
+    from pytools import UniqueNameGenerator
+    name_gen = UniqueNameGenerator({name for name, _expr in pymbolic_assignments})
+
+    result: list[Assignment | CallInstruction] = []
     bessel_sub = BesselSubstitutor(
             name_gen, btog.bessel_j_arg_to_top_order,
             result)
 
     import loopy as lp
     from pytools import MinRecursionLimit
+
     with MinRecursionLimit(3000):
-        for name, expr in assignments:
+        for name, expr in pymbolic_assignments:
             result.append(lp.Assignment(id=None,
                     assignee=name, expression=bessel_sub(expr),
                     temp_var_type=lp.Optional(None)))
