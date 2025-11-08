@@ -80,9 +80,9 @@ Expansion Factories
 @dataclass(frozen=True)
 class ExpansionBase(ABC):
     """
-    .. attribute:: kernel
-    .. attribute:: order
-    .. attribute:: use_rscale
+    .. autoattribute:: kernel
+    .. autoattribute:: order
+    .. autoattribute:: use_rscale
 
     .. automethod:: get_coefficient_identifiers
     .. automethod:: coefficients_from_source
@@ -142,7 +142,7 @@ class ExpansionBase(ABC):
 
     @abstractmethod
     def get_storage_index(self, mi: MultiIndex) -> int:
-        ...
+        pass
 
     @abstractmethod
     def get_coefficient_identifiers(self) -> Sequence[MultiIndex]:
@@ -255,16 +255,18 @@ class ExpansionBase(ABC):
 @dataclass(frozen=True)
 class ExpansionTermsWrangler(ABC):
     """
-    .. attribute:: order
-    .. attribute:: dim
-    .. attribute:: max_mi
+    .. autoattribute:: order
+    .. autoattribute:: dim
+    .. autoattribute:: max_mi
 
+    .. automethod:: copy
     .. automethod:: get_coefficient_identifiers
     .. automethod:: get_full_kernel_derivatives_from_stored
     .. automethod:: get_stored_mpole_coefficients_from_full
 
-    . automethod:: get_full_coefficient_identifiers
+    .. automethod:: get_full_coefficient_identifiers
     """
+
     order: int
     dim: int
     max_mi: MultiIndex | None

@@ -48,6 +48,9 @@ sphinxconfig_missing_reference_aliases = {
     # pymbolic
     "ArithmeticExpression": "obj:pymbolic.ArithmeticExpression",
     "Expression": "obj:pymbolic.typing.Expression",
+    # loopy
+    "Assignment": "class:loopy.kernel.instruction.Assignment",
+    "CallInstruction": "class:loopy.kernel.instruction.CallInstruction",
     # arraycontext
     "Array": "obj:arraycontext.Array",
     # boxtree
