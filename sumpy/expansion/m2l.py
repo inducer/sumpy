@@ -59,6 +59,7 @@ if TYPE_CHECKING:
         MultipoleExpansionBase,
         VolumeTaylorMultipoleExpansion,
     )
+    from sumpy.kernel import Kernel
 
 
 logger = logging.getLogger(__name__)
@@ -85,9 +86,14 @@ class M2LTranslationClassFactoryBase(ABC):
     """
 
     @abstractmethod
-    def get_m2l_translation_class(self, base_kernel, local_expansion_class):
-        """Returns a subclass of :class:`M2LTranslationBase` suitable for
-        *base_kernel* and *local_expansion_class*.
+    def get_m2l_translation_class(
+                self,
+                base_kernel: Kernel,
+                local_expansion_class: type[LocalExpansionBase]
+            ) -> type[M2LTranslationBase]:
+        """
+        :returns: a subclass of :class:`M2LTranslationBase` suitable for
+            *base_kernel* and *local_expansion_class*.
         """
 
 
@@ -96,10 +102,12 @@ class NonFFTM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
     non FFT M2L translation class.
     """
 
-    def get_m2l_translation_class(self, base_kernel, local_expansion_class):
-        """Returns a subclass of :class:`M2LTranslationBase` suitable for
-        *base_kernel* and *local_expansion_class*.
-        """
+    @override
+    def get_m2l_translation_class(
+                self,
+                base_kernel: Kernel,
+                local_expansion_class: type[LocalExpansionBase]
+            ) -> type[M2LTranslationBase]:
         from sumpy.expansion.local import (
             FourierBesselLocalExpansionMixin,
             VolumeTaylorLocalExpansionBase,
@@ -110,7 +118,7 @@ class NonFFTM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
             return FourierBesselM2LTranslation
         else:
             raise RuntimeError(
-                f"Unknown local_expansion_class: {local_expansion_class}")
+                f"unknown local_expansion_class: {local_expansion_class}")
 
 
 class FFTM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
@@ -118,10 +126,12 @@ class FFTM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
     FFT M2L translation class.
     """
 
-    def get_m2l_translation_class(self, base_kernel, local_expansion_class):
-        """Returns a subclass of :class:`M2LTranslationBase` suitable for
-        *base_kernel* and *local_expansion_class*.
-        """
+    @override
+    def get_m2l_translation_class(
+                self,
+                base_kernel: Kernel,
+                local_expansion_class: type[LocalExpansionBase]
+            ) -> type[M2LTranslationBase]:
         from sumpy.expansion.local import (
             FourierBesselLocalExpansionMixin,
             VolumeTaylorLocalExpansionBase,
@@ -132,13 +142,20 @@ class FFTM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
             return FourierBesselM2LWithFFT
         else:
             raise RuntimeError(
-                f"Unknown local_expansion_class: {local_expansion_class}")
+                f"unknown local_expansion_class: {local_expansion_class}")
 
 
 class DefaultM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
     """An implementation of :class:`M2LTranslationClassFactoryBase` that gives the
-    'best known' translation type for each kernel and local expansion class"""
-    def get_m2l_translation_class(self, base_kernel, local_expansion_class):
+    'best known' translation type for each kernel and local expansion class.
+    """
+
+    @override
+    def get_m2l_translation_class(
+                self,
+                base_kernel: Kernel,
+                local_expansion_class: type[LocalExpansionBase]
+            ) -> type[M2LTranslationBase]:
         from sumpy.expansion.local import (
             FourierBesselLocalExpansionMixin,
             VolumeTaylorLocalExpansionBase,
@@ -149,7 +166,7 @@ class DefaultM2LTranslationClassFactory(M2LTranslationClassFactoryBase):
             return FourierBesselM2LTranslation
         else:
             raise RuntimeError(
-                f"Unknown local_expansion_class: {local_expansion_class}")
+                f"unknown local_expansion_class: {local_expansion_class}")
 
 # }}}
 
