@@ -39,7 +39,7 @@ __doc__ = """
 
 import logging
 import math
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast
 
 from typing_extensions import override
 
@@ -132,8 +132,8 @@ Integer = sym.Integer
 Rational = sym.Rational
 Matrix = sym.Matrix
 Subs = sym.Subs
-I = sym.I  # noqa: E741
-pi = sym.pi
+I = cast("Expr", sym.I)  # noqa: E741
+pi = cast("Expr", sym.pi)
 functions = sym.functions
 Number = sym.Number
 Float = sym.Float
