@@ -365,18 +365,17 @@ class BesselDerivativeReplacer(CSECachingIdentityMapper[P]):
 class BesselSubstitutor(CSECachingIdentityMapper[P]):
     name_gen: Callable[[str], str]
     bessel_j_arg_to_top_order: dict[Expression, int]
-    assignments: list[Assignment | CallInstruction]
 
+    assignments: list[Assignment | CallInstruction]
     cse_cache: dict[Expression, prim.CommonSubexpression]
 
     def __init__(self,
                  name_gen: Callable[[str], str],
-                 bessel_j_arg_to_top_order: dict[Expression, int],
-                 assignments: Sequence[Assignment | CallInstruction]) -> None:
+                 bessel_j_arg_to_top_order: dict[Expression, int]) -> None:
         self.name_gen = name_gen
         self.bessel_j_arg_to_top_order = bessel_j_arg_to_top_order
         self.cse_cache = {}
-        self.assignments = list(assignments)
+        self.assignments = []
 
     @override
     def map_call(self, expr: prim.Call, /,
@@ -809,19 +808,18 @@ def to_loopy_insns(
     from pytools import UniqueNameGenerator
     name_gen = UniqueNameGenerator({name for name, _expr in pymbolic_assignments})
 
-    result: list[Assignment | CallInstruction] = []
-    bessel_sub = BesselSubstitutor(
-            name_gen, btog.bessel_j_arg_to_top_order,
-            result)
-
-    import loopy as lp
     from pytools import MinRecursionLimit
+
+    result: list[Assignment | CallInstruction] = []
+    bessel_sub = BesselSubstitutor(name_gen, btog.bessel_j_arg_to_top_order)
 
     with MinRecursionLimit(3000):
         for name, expr in pymbolic_assignments:
             result.append(lp.Assignment(id=None,
                     assignee=name, expression=bessel_sub(expr),
                     temp_var_type=lp.Optional(None)))
+
+        result.extend(bessel_sub.assignments)
 
     logger.info("loopy instruction generation: done")
     return result
