@@ -247,10 +247,17 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
                           exclude_self=self.exclude_self,
                           strength_usage=self.strength_usage, name="p2p")
 
-    @memoize_method
     def opencl_fft_app(self, shape, dtype, inverse):
-        with cl.CommandQueue(self.cl_context) as queue:
-            return get_opencl_fft_app(queue, shape, dtype, inverse)
+        from pytools import memoize_in
+
+        @memoize_in(self.cl_context, (
+            SumpyTreeIndependentDataForWrangler.opencl_fft_app,
+            shape, dtype, inverse))
+        def app():
+            with cl.CommandQueue(self.cl_context) as queue:
+                return get_opencl_fft_app(queue, shape, dtype, inverse)
+
+        return app()
 
 # }}}
 
