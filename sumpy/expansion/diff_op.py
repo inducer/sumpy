@@ -92,17 +92,18 @@ class DerivativeIdentifier:
 class LinearPDESystemOperator:
     r"""
     Represents a constant-coefficient linear differential operator of a
-    vector-valued function with `dim` spatial variables. It is represented by a
-    tuple of immutable dictionaries. The dictionary maps a
-    :class:`DerivativeIdentifier` to the coefficient. This object is immutable.
-    Optionally supports a time variable as the last variable in the multi-index
-    of the :class:`DerivativeIdentifier`.
+    vector-valued function with `dim` spatial variables.
+
+    It is represented by a tuple of immutable dictionaries. The dictionary maps a
+    :class:`DerivativeIdentifier` to the coefficient. Optionally supports a
+    time variable as the last variable in the multi-index of the
+    :class:`DerivativeIdentifier`.
 
     .. autoattribute:: dim
     .. autoattribute:: eqs
 
-    .. autoattribute:: order
-    .. autoattribute:: total_dims
+    .. autoproperty:: order
+    .. autoproperty:: total_dims
     .. automethod:: to_sym
     """
 
@@ -322,14 +323,16 @@ def as_scalar_pde(
     eg:
 
     .. math::
-        \frac{\partial^2 u}{\partial x^2} + \
+
+        \frac{\partial^2 u}{\partial x^2} +
             2 \frac{\partial^2 v}{\partial x y} = 0 \\
-        3 \frac{\partial^2 u}{\partial y^2} + \
+        3 \frac{\partial^2 u}{\partial y^2} +
             \frac{\partial^2 v}{\partial x^2} = 0
 
-    is converted into,
+    is converted into
 
     .. math::
+
       \begin{bmatrix}
         x^2   & 2xy \\
         2y^2  & x^2
@@ -487,13 +490,11 @@ def make_identity_diff_op(
             time_dependent: bool = False
         ) -> LinearPDESystemOperator:
     """
-    Returns the identity as a linear PDE system operator.
-    if *include_time* is true, then the last dimension of the
-    multi-index is time.
-
-    :arg ninput: number of spatial variables of the function
-    :arg noutput: number of output values of function
-    :arg time_dependent: include time as a dimension
+    :arg ninput: number of spatial variables of the function.
+    :arg noutput: number of output values of function.
+    :arg time_dependent: include time as a dimension.
+    :returns: the identity as a linear PDE system operator. If *time_dependent*
+        is *True*, then the last dimension of the multi-index is time.
     """
 
     if time_dependent:  # noqa: SIM108
