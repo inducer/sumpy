@@ -635,7 +635,13 @@ def nullspace(m: Array2D[Any], atol: float = 0):
 
 # {{{ FFT
 
-def fft(seq, inverse=False, sac=None):
+# FIXME(pyright): this function can take `ndarrays` and sequences of other types
+# as well. The current types are just for uses in `sumpy.expansion.m2l` (same
+# for `fft_toeplitz_upper_triangular` and `matvec_toeplitz_upper_triangular`)
+
+def fft(seq: Sequence[sym.Expr],
+        inverse: bool = False,
+        sac: SymbolicAssignmentCollection | None = None) -> Sequence[sym.Expr]:
     """
     Return the discrete fourier transform of the sequence seq.
     seq should be a python iterable with tuples of length 2
@@ -644,21 +650,31 @@ def fft(seq, inverse=False, sac=None):
 
     from pymbolic.algorithm import fft as _fft, ifft as _ifft
 
-    def wrap(level, expr):
+    def wrap(level: int, expr: sym.Expr) -> sym.Expr:
         if isinstance(expr, np.ndarray):
             res = [wrap(level, a) for a in expr]
             return np.array(res, dtype=object).reshape(expr.shape)
-        return add_to_sac(sac, expr)
+        else:
+            return add_to_sac(sac, expr)
 
     if inverse:
-        return _ifft(np.array(seq), wrap_intermediate_with_level=wrap,
-                complex_dtype=np.complex128).tolist()
+        result = _ifft(
+                np.array(seq),
+                wrap_intermediate_with_level=wrap,
+                complex_dtype=np.complex128)
     else:
-        return _fft(np.array(seq), wrap_intermediate_with_level=wrap,
-                complex_dtype=np.complex128).tolist()
+        result = _fft(
+                np.array(seq),
+                wrap_intermediate_with_level=wrap,
+                complex_dtype=np.complex128)
+
+    return result.tolist()
 
 
-def fft_toeplitz_upper_triangular(first_row, x, sac=None):
+def fft_toeplitz_upper_triangular(
+            first_row: Sequence[sym.Expr],
+            x: Sequence[sym.Expr],
+            sac: SymbolicAssignmentCollection | None = None) -> Sequence[sym.Expr]:
     """
     Returns the matvec of the Toeplitz matrix given by
     the first row and the vector x using a Fourier transform
@@ -668,23 +684,28 @@ def fft_toeplitz_upper_triangular(first_row, x, sac=None):
     v = list(first_row)
     v += [0]*(n-1)
 
-    x = list(reversed(x))
-    x += [0]*(n-1)
+    y = list(reversed(x))
+    y += [0]*(n-1)
 
-    v_fft = fft(v, sac)
-    x_fft = fft(x, sac)
+    v_fft = fft(v, sac=sac)  # pyright: ignore[reportArgumentType]
+    x_fft = fft(y, sac=sac)  # pyright: ignore[reportArgumentType]
     res_fft = [add_to_sac(sac, a * b) for a, b in zip(v_fft, x_fft, strict=True)]
     res = fft(res_fft, inverse=True, sac=sac)
     return list(reversed(res[:n]))
 
 
-def matvec_toeplitz_upper_triangular(first_row, vector):
+def matvec_toeplitz_upper_triangular(
+            first_row: Sequence[sym.Expr],
+            vector: Sequence[sym.Expr],
+        ) -> Sequence[sym.Expr]:
     n = len(first_row)
     assert len(vector) == n
-    output = [0]*n
+
+    output: list[sym.Expr] = [sym.sympify(0)] * n
     for row in range(n):
         terms = tuple(first_row[col-row]*vector[col] for col in range(row, n))
         output[row] = sym.Add(*terms)
+
     return output
 
 
