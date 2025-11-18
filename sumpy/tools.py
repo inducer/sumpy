@@ -40,6 +40,7 @@ import numpy as np
 import loopy as lp
 import pytools.obj_array as obj_array
 from pymbolic.mapper.dependency import DependencyMapper
+from pyopencl.characterize import get_pocl_version
 from pytools import memoize_method
 from pytools.tag import Tag, tag_dataclass
 
@@ -955,15 +956,22 @@ def _get_fft_backend(queue: pyopencl.CommandQueue) -> FFTBackend:
     import platform
     import sys
 
-    if (sys.platform == "darwin"
-            and platform.machine() == "x86_64"
-            and queue.context.devices[0].platform.name
-            == "Portable Computing Language"):
-        warnings.warn(
-            "PoCL miscompiles some VkFFT kernels. "
-            "See https://github.com/inducer/sumpy/issues/129. "
-            "Falling back to slower implementation.", stacklevel=3)
-        return FFTBackend.loopy
+    pocl_ver = get_pocl_version(queue.device.platform)
+    if pocl_ver is not None:
+        if pocl_ver >= (7,):
+            warnings.warn(
+                "PoCL>=7 miscompiles VkFFT. "
+                "See https://github.com/pocl/pocl/issues/2069 for details. "
+                "Falling back to slower implementation.", stacklevel=3)
+            return FFTBackend.loopy
+
+        if (sys.platform == "darwin"
+                and platform.machine() == "x86_64"):
+            warnings.warn(
+                "PoCL crashes on some VkFFT kernels on MacOS. "
+                "See https://github.com/inducer/sumpy/issues/129. "
+                "Falling back to slower implementation.", stacklevel=3)
+            return FFTBackend.loopy
 
     return FFTBackend.pyvkfft
 
