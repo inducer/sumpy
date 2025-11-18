@@ -40,7 +40,6 @@ import numpy as np
 import loopy as lp
 import pytools.obj_array as obj_array
 from pymbolic.mapper.dependency import DependencyMapper
-from pyopencl import MemoryObjectHolder
 from pytools import memoize_method
 from pytools.tag import Tag, tag_dataclass
 
@@ -1033,17 +1032,9 @@ def run_opencl_fft(
         else:
             output_vec = cla.empty_like(input_vec, queue)
 
-        # FIXME: use the public API once
-        # https://github.com/vincefn/pyvkfft/pull/17 is in
-        from pyvkfft.opencl import _vkfft_opencl
-        if inverse:  # noqa: SIM108
-            meth = _vkfft_opencl.ifft
-        else:
-            meth = _vkfft_opencl.fft
+        meth = app.ifft if inverse else app.fft
 
-        assert isinstance(output_vec.data, MemoryObjectHolder)
-        meth(app.app, int(input_vec.data.int_ptr),
-            int(output_vec.data.int_ptr), int(queue.int_ptr))
+        meth(input_vec, output_vec, queue=queue)
 
         if queue.device.platform.name == "NVIDIA CUDA":
             end_evt = cl.enqueue_marker(queue)
