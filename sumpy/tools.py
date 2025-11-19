@@ -752,7 +752,8 @@ class MarkerBasedProfilingEvent:
 
 
 def loopy_fft(
-            shape: tuple[int, ...],
+            n: int,
+            *, n_batch_dims: int,
             inverse: bool,
             complex_dtype: DTypeLike,
             index_dtype: DTypeLike | None = None,
@@ -766,7 +767,6 @@ def loopy_fft(
     complex_dtype = np.dtype(complex_dtype)
 
     sign = 1 if not inverse else -1
-    n = shape[-1]
 
     m = n
     factors = []
@@ -776,13 +776,13 @@ def loopy_fft(
 
     nfft = n
 
-    broadcast_dims = tuple(var(f"j{d}") for d in range(len(shape) - 1))
+    batch_dims = tuple(var(f"j{d}") for d in range(n_batch_dims))
 
     domains = [
         "{[i]: 0<=i<n}",
         "{[i2]: 0<=i2<n}",
     ]
-    domains += [f"{{[j{d}]: 0<=j{d}<{shape[d]} }}" for d in range(len(shape) - 1)]
+    domains += [f"{{[j{d}]: 0<=j{d}<Nbatch{d} }}" for d in range(n_batch_dims)]
 
     x = var("x")
     y = var("y")
@@ -792,7 +792,7 @@ def loopy_fft(
 
     fixed_parameters = {"const": complex_dtype.type(sign*(-2j)*pi/n), "n": int(n)}
 
-    index = (*broadcast_dims, i2)
+    index = (*batch_dims, i2)
     insns = [
         "exp_table[i] = exp(const * i) {id=exp_table}",
         lp.Assignment(
@@ -819,19 +819,19 @@ def loopy_fft(
         table_idx = var(f"table_idx_{ilev}")
         exp = var(f"exp_{ilev}")
 
-        i_bcast = (*broadcast_dims, i)
-        i2_bcast = (*broadcast_dims, i2)
-        iN_bcast = (*broadcast_dims, ifft + nfft * (iN1 * N2 + iN2))  # noqa: N806
+        i_batch = (*batch_dims, i)
+        i2_batch = (*batch_dims, i2)
+        iN_batch = (*batch_dims, ifft + nfft * (iN1 * N2 + iN2))  # noqa: N806
 
         insns += [
             lp.Assignment(
                 assignee=temp[i],
-                expression=x[i_bcast],
+                expression=x[i_batch],
                 id=f"copy_{ilev}",
                 happens_after=frozenset([init_happens_after]),
             ),
             lp.Assignment(
-                assignee=x[i2_bcast],
+                assignee=x[i2_batch],
                 expression=0,
                 id=f"reset_{ilev}",
                 happens_after=frozenset([f"copy_{ilev}"])),
@@ -847,11 +847,11 @@ def loopy_fft(
                 id=f"exp_{ilev}",
                 happens_after=frozenset([f"idx_{ilev}"]),
                 within_inames=frozenset({x.name for x in
-                    [*broadcast_dims, iN1_sum, iN1, iN2]}),
+                    [*batch_dims, iN1_sum, iN1, iN2]}),
                 temp_var_type=lp.Optional(complex_dtype)),
             lp.Assignment(
-                assignee=x[iN_bcast],
-                expression=(x[iN_bcast]
+                assignee=x[iN_batch],
+                expression=(x[iN_batch]
                     + exp * temp[ifft + nfft * (iN2*N1 + iN1_sum)]),
                 id=f"update_{ilev}",
                 happens_after=frozenset([f"exp_{ilev}"])),
@@ -870,6 +870,7 @@ def loopy_fft(
         if not dom.startswith("{"):
             domains[idom] = "{" + dom + "}"
 
+    shape = (*[var(f"Nbatch{i}") for i in range(n_batch_dims)], n)
     kernel_data = [
         lp.GlobalArg("x", shape=shape, is_input=False, is_output=True,
             dtype=complex_dtype),
@@ -884,7 +885,7 @@ def loopy_fft(
 
     if n == 1:
         domains = domains[2:]
-        index = (*broadcast_dims, 0)
+        index = (*batch_dims, 0)
         insns = [
             lp.Assignment(
                 assignee=x[index],
@@ -894,7 +895,7 @@ def loopy_fft(
         kernel_data = kernel_data[:2]
     elif inverse:
         domains += ["{[i3]: 0<=i3<n}"]
-        index = (*broadcast_dims, i3)
+        index = (*batch_dims, i3)
         insns += [
             lp.Assignment(
                 assignee=x[index],
@@ -915,10 +916,12 @@ def loopy_fft(
         index_dtype=index_dtype,
     )
 
-    if broadcast_dims:
+    if batch_dims:
         knl = lp.split_iname(knl, "j0", 32, inner_tag="l.0", outer_tag="g.0")
         knl = lp.add_inames_for_unused_hw_axes(knl)
 
+    knl = lp.preprocess_kernel(knl)
+    knl = lp.linearize(knl)
     return knl
 
 
@@ -990,7 +993,11 @@ def get_opencl_fft_app(
     backend = _get_fft_backend(queue)
 
     if backend == FFTBackend.loopy:
-        return loopy_fft(shape, inverse=inverse, complex_dtype=dtype.type), backend
+        return loopy_fft(
+            shape[-1],
+            n_batch_dims=len(shape) - 1,
+            inverse=inverse,
+            complex_dtype=dtype.type), backend
     elif backend == FFTBackend.pyvkfft:
         from pyvkfft.opencl import VkFFTApp
         app = VkFFTApp(shape=shape, dtype=dtype, queue=queue, ndim=1, inplace=False)
