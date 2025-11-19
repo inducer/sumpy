@@ -71,6 +71,17 @@ jobs:
                 curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project-within-miniconda.sh
                 . ./build-and-test-py-project-within-miniconda.sh
 
+    pytest_symengine_loopy_fft:
+        name: Conda Pytest Symengine with Loopy FFT
+        runs-on: ubuntu-latest
+        steps:
+        -   uses: actions/checkout@v5
+        -   name: "Main Script"
+            run: |
+                curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project-within-miniconda.sh
+                export SUMPY_FFT_BACKEND=loopy
+                . ./build-and-test-py-project-within-miniconda.sh
+
     pytest_symengine:
         name: Conda Pytest Symengine
         runs-on: ubuntu-latest
