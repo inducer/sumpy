@@ -36153,8 +36153,8 @@
                 "code": "reportAny",
                 "range": {
                     "startColumn": 15,
-                    "endColumn": 83,
-                    "lineCount": 1
+                    "endColumn": 46,
+                    "lineCount": 5
                 }
             },
             {
@@ -36230,42 +36230,26 @@
                 }
             },
             {
-                "code": "reportMissingTypeStubs",
+                "code": "reportAny",
                 "range": {
-                    "startColumn": 13,
-                    "endColumn": 27,
+                    "startColumn": 8,
+                    "endColumn": 12,
                     "lineCount": 1
                 }
             },
             {
                 "code": "reportAny",
                 "range": {
-                    "startColumn": 13,
-                    "endColumn": 20,
+                    "startColumn": 15,
+                    "endColumn": 23,
                     "lineCount": 1
                 }
             },
             {
                 "code": "reportAny",
                 "range": {
-                    "startColumn": 26,
-                    "endColumn": 40,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAny",
-                "range": {
-                    "startColumn": 26,
-                    "endColumn": 48,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAny",
-                "range": {
-                    "startColumn": 26,
-                    "endColumn": 48,
+                    "startColumn": 40,
+                    "endColumn": 47,
                     "lineCount": 1
                 }
             },
@@ -37331,7 +37315,7 @@
                 "code": "reportUnknownArgumentType",
                 "range": {
                     "startColumn": 48,
-                    "endColumn": 60,
+                    "endColumn": 63,
                     "lineCount": 1
                 }
             },
@@ -37355,7 +37339,7 @@
                 "code": "reportUnknownArgumentType",
                 "range": {
                     "startColumn": 49,
-                    "endColumn": 61,
+                    "endColumn": 64,
                     "lineCount": 1
                 }
             },
