@@ -763,7 +763,7 @@ class P2PFromCSR(P2PBase):
             # be as large as before. Need to simplify before unprivatizing
             knl = lp.simplify_indices(knl)
             knl = lp.unprivatize_temporaries_with_inames(knl,
-                    "iprefetch", only_var_names=local_arrays)
+                    "iprefetch", only_var_names=frozenset(local_arrays))
 
             knl = lp.add_inames_to_insn(knl,
                     "inner", "id:init_* or id:*_scaling or id:src_box_insn_*")
