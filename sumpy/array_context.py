@@ -36,13 +36,15 @@ from arraycontext.pytest import (
 
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Sequence
 
+    import islpy
     from numpy.typing import DTypeLike
 
     from arraycontext import ArrayContext
     from loopy import TranslationUnit
     from loopy.codegen import PreambleInfo
+    from loopy.kernel.instruction import InstructionBase
     from pytools.tag import ToTagSetConvertible
 
 
@@ -58,7 +60,8 @@ Array Context
 # {{{ PyOpenCLArrayContext
 
 def make_loopy_program(
-        domains, statements,
+        domains: str | Sequence[str | islpy.BasicSet],
+        statements: Sequence[InstructionBase | str] | str,
         kernel_data: list[Any] | None = None, *,
         name: str = "sumpy_loopy_kernel",
         silenced_warnings: list[str] | str | None = None,
@@ -125,7 +128,7 @@ def is_cl_cpu(actx: ArrayContext) -> bool:
 
 # {{{ pytest
 
-def _acf():
+def _acf() -> ArrayContext:
     import pyopencl as cl
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
@@ -135,9 +138,13 @@ def _acf():
 
 class PytestPyOpenCLArrayContextFactory(
         _PytestPyOpenCLArrayContextFactoryWithClass):
-    actx_class = PyOpenCLArrayContext
+    @property
+    @override
+    def actx_class(self) -> type[ArrayContext]:
+        return PyOpenCLArrayContext
 
-    def __call__(self):
+    @override
+    def __call__(self) -> ArrayContext:
         # NOTE: prevent any cache explosions during testing!
         from sympy.core.cache import clear_cache
         clear_cache()
