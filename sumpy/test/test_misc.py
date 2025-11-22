@@ -60,6 +60,7 @@ from sumpy.kernel import (
     ElasticityKernel,
     ExpressionKernel,
     HelmholtzKernel,
+    Kernel,
     LaplaceKernel,
     LineOfCompressionKernel,
     StokesletKernel,
@@ -199,7 +200,7 @@ class FakeTree:
 @pytest.mark.parametrize("knl", [
         LaplaceKernel(2), HelmholtzKernel(2),
         LaplaceKernel(3), HelmholtzKernel(3)])
-def test_order_finder(knl):
+def test_order_finder(knl: Kernel) -> None:
     from sumpy.expansion.level_to_order import SimpleExpansionOrderFinder
 
     ofind = SimpleExpansionOrderFinder(1e-5)
