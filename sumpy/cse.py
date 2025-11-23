@@ -67,9 +67,11 @@ DAMAGE.
 
 # }}}
 
-from sympy.utilities.iterables import numbered_symbols
+from typing import TYPE_CHECKING, TypeAlias, cast
 
-from sumpy.symbolic import Add, Basic, Derivative, Mul, Pow, Subs, Symbol, _coeff_isneg
+from typing_extensions import override
+
+import sumpy.symbolic as sym
 
 
 try:
@@ -78,6 +80,8 @@ except ImportError:
     # NOTE: deprecated and moved in sympy 1.10
     from sympy.core.compatibility import iterable
 
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator, Sequence
 
 __doc__ = """
 
@@ -90,12 +94,17 @@ Common subexpression elimination
 
 
 # Don't CSE child nodes of these classes.
-CSE_NO_DESCEND_CLASSES = (Derivative, Subs)
+CSE_NO_DESCEND_CLASSES = (sym.Derivative, sym.Subs)
+
+OptimizationCallable: TypeAlias = "Callable[[sym.Basic], sym.Basic]"
+OptimizationPair: TypeAlias = "tuple[OptimizationCallable, OptimizationCallable]"
 
 
 # {{{ cse pre/postprocessing
 
-def preprocess_for_cse(expr, optimizations):
+def preprocess_for_cse(
+        expr: sym.Basic, optimizations: Sequence[OptimizationPair],
+    ) -> sym.Basic:
     """
     Preprocess an expression to optimize for common subexpression elimination.
 
@@ -111,7 +120,9 @@ def preprocess_for_cse(expr, optimizations):
     return expr
 
 
-def postprocess_for_cse(expr, optimizations):
+def postprocess_for_cse(
+        expr: sym.Basic, optimizations: Sequence[OptimizationPair],
+    ) -> sym.Basic:
     """
     Postprocess an expression after common subexpression elimination to
     return the expression to canonical sympy form.
@@ -259,16 +270,23 @@ class FuncArgTracker:
 
 
 class Unevaluated:
+    func: type[sym.Basic]
+    args: Sequence[int | float | sym.Expr]
 
-    def __init__(self, func, args):
+    def __init__(self,
+                 func: type[sym.Basic],
+                 args: Sequence[int | float | sym.Expr]) -> None:
         self.func = func
         self.args = args
 
-    def __str__(self):
+    @override
+    def __str__(self) -> str:
         return "Uneval<{}>({})".format(
                 self.func, ", ".join(str(a) for a in self.args))
 
-    __repr__ = __str__
+    @override
+    def __repr__(self) -> str:
+        return str(self)
 
 
 def match_common_args(func_class, funcs, opt_subs):
@@ -362,7 +380,7 @@ def match_common_args(func_class, funcs, opt_subs):
         arg_tracker.stop_arg_tracking(i)
 
 
-def opt_cse(exprs):
+def opt_cse(exprs: Sequence[sym.Basic]) -> dict[sym.Basic, sym.Basic | Unevaluated]:
     """
     Find optimization opportunities in Adds, Muls, Pows and negative coefficient
     Muls
@@ -370,18 +388,20 @@ def opt_cse(exprs):
     :arg exprs: A list of sympy expressions: the expressions to optimize.
     :return: A dictionary of expression substitutions
     """
-    opt_subs = {}
+    opt_subs: dict[sym.Basic, sym.Basic | Unevaluated] = {}
 
     from sumpy.tools import OrderedSet
-    adds = OrderedSet()
-    muls = OrderedSet()
+    adds: OrderedSet[sym.Add] = OrderedSet()
+    muls: OrderedSet[sym.Mul] = OrderedSet()
 
-    seen_subexp = set()
+    seen_subexp: set[sym.Basic] = set()
 
     # {{{ look for optimization opportunities, clean up minus signs
 
-    def find_opts(expr):
-        if not isinstance(expr, Basic):
+    from sumpy.symbolic import _coeff_isneg
+
+    def find_opts(expr: sym.Basic) -> None:
+        if not isinstance(expr, sym.Basic):
             return
 
         if expr.is_Atom:
@@ -393,10 +413,11 @@ def opt_cse(exprs):
         if iterable(expr):
             for item in expr:
                 find_opts(item)
+
             return
 
         if expr in seen_subexp:
-            return expr
+            return
 
         seen_subexp.add(expr)
 
@@ -404,31 +425,31 @@ def opt_cse(exprs):
             find_opts(arg)
 
         if _coeff_isneg(expr):
-            neg_expr = -expr
+            neg_expr = cast("sym.Expr", -expr)
             if not neg_expr.is_Atom:
-                opt_subs[expr] = Unevaluated(Mul, (-1, neg_expr))
+                opt_subs[expr] = Unevaluated(sym.Mul, (-1, neg_expr))
                 seen_subexp.add(neg_expr)
                 expr = neg_expr
 
-        if isinstance(expr, Mul):
+        if isinstance(expr, sym.Mul):
             muls.add(expr)
 
-        elif isinstance(expr, Add):
+        elif isinstance(expr, sym.Add):
             adds.add(expr)
 
-        elif isinstance(expr, Pow):
+        elif isinstance(expr, sym.Pow):
             base, exp = expr.args
             if _coeff_isneg(exp):
-                opt_subs[expr] = Unevaluated(Pow, (Pow(base, -exp), -1))
+                opt_subs[expr] = Unevaluated(sym.Pow, (sym.Pow(base, -exp), -1))
 
     # }}}
 
     for e in exprs:
-        if isinstance(e, Basic):
+        if isinstance(e, sym.Basic):
             find_opts(e)
 
-    match_common_args(Add, list(adds), opt_subs)
-    match_common_args(Mul, list(muls), opt_subs)
+    match_common_args(sym.Add, list(adds), opt_subs)
+    match_common_args(sym.Mul, list(muls), opt_subs)
 
     return opt_subs
 
@@ -437,7 +458,11 @@ def opt_cse(exprs):
 
 # {{{ tree cse
 
-def tree_cse(exprs, symbols, opt_subs=None):
+def tree_cse(exprs: Sequence[sym.Basic],
+             symbols: Iterator[sym.Symbol],
+             opt_subs: dict[sym.Basic, sym.Basic | Unevaluated] | None = None,
+             ) -> tuple[Sequence[tuple[sym.Symbol, sym.Basic]],
+                        Sequence[sym.Basic]]:
     """
     Perform raw CSE on an expression tree, taking opt_subs into account.
 
@@ -454,23 +479,21 @@ def tree_cse(exprs, symbols, opt_subs=None):
 
     # {{{ find repeated sub-expressions and used symbols
 
-    to_eliminate = set()
+    to_eliminate: set[sym.Basic | Unevaluated] = set()
+    seen_subexp: set[sym.Basic | Unevaluated] = set()
+    excluded_symbols: set[sym.Symbol] = set()
 
-    seen_subexp = set()
-    excluded_symbols = set()
-
-    def find_repeated(expr):
-        if not isinstance(expr, Basic | Unevaluated):
+    def find_repeated(expr: sym.Basic | Unevaluated) -> None:
+        if not isinstance(expr, sym.Basic | Unevaluated):
             return
 
-        if isinstance(expr, Basic) and expr.is_Atom:
-            if expr.is_Symbol:
+        if isinstance(expr, sym.Basic) and expr.is_Atom:
+            if isinstance(expr, sym.Symbol):
                 excluded_symbols.add(expr)
             return
 
         if iterable(expr):
             args = expr
-
         else:
             if expr in seen_subexp:
                 to_eliminate.add(expr)
@@ -479,6 +502,7 @@ def tree_cse(exprs, symbols, opt_subs=None):
             seen_subexp.add(expr)
 
             if expr in opt_subs:
+                assert isinstance(expr, sym.Basic)
                 expr = opt_subs[expr]
 
             if isinstance(expr, CSE_NO_DESCEND_CLASSES):  # noqa: SIM108
@@ -492,7 +516,7 @@ def tree_cse(exprs, symbols, opt_subs=None):
     # }}}
 
     for e in exprs:
-        if isinstance(e, Basic):
+        if isinstance(e, sym.Basic):
             find_repeated(e)
 
     # {{{ rebuild tree
@@ -500,12 +524,11 @@ def tree_cse(exprs, symbols, opt_subs=None):
     # Remove symbols from the generator that conflict with names in the expressions.
     symbols = (symbol for symbol in symbols if symbol not in excluded_symbols)
 
-    replacements = []
+    replacements: list[tuple[sym.Symbol, sym.Basic]] = []
+    subs: dict[sym.Basic | Unevaluated, sym.Symbol] = {}
 
-    subs = {}
-
-    def rebuild(expr):
-        if not isinstance(expr, Basic | Unevaluated):
+    def rebuild(expr: sym.Basic | Unevaluated) -> sym.Basic | Unevaluated:
+        if not isinstance(expr, sym.Basic | Unevaluated):
             return expr
 
         if not expr.args:
@@ -520,6 +543,7 @@ def tree_cse(exprs, symbols, opt_subs=None):
 
         orig_expr = expr
         if expr in opt_subs:
+            assert isinstance(expr, sym.Basic)
             expr = opt_subs[expr]
 
         new_expr = expr
@@ -530,21 +554,21 @@ def tree_cse(exprs, symbols, opt_subs=None):
 
         if orig_expr in to_eliminate:
             try:
-                sym = next(symbols)
+                symb = next(symbols)
             except StopIteration:
                 raise ValueError("Symbols iterator ran out of symbols.") from None
 
-            subs[orig_expr] = sym
-            replacements.append((sym, new_expr))
-            return sym
+            subs[orig_expr] = symb
+            replacements.append((symb, new_expr))
+            return symb
 
         return new_expr
 
     # }}}
 
-    reduced_exprs = []
+    reduced_exprs: list[sym.Basic] = []
     for e in exprs:
-        if isinstance(e, Basic):  # noqa: SIM108
+        if isinstance(e, sym.Basic):  # noqa: SIM108
             reduced_e = rebuild(e)
         else:
             reduced_e = e
@@ -555,7 +579,11 @@ def tree_cse(exprs, symbols, opt_subs=None):
 # }}}
 
 
-def cse(exprs, symbols=None, optimizations=None):
+def cse(exprs: sym.Basic | Sequence[sym.Basic],
+        symbols: Iterator[sym.Symbol] | None = None,
+        optimizations: Sequence[OptimizationPair] | None = None,
+    ) -> tuple[Sequence[tuple[sym.Symbol, sym.Basic]],
+               Sequence[sym.Basic]]:
     """
     Perform common subexpression elimination on an expression.
 
@@ -575,9 +603,8 @@ def cse(exprs, symbols=None, optimizations=None):
         * ``reduced_exprs`` is a list of sympy expressions. This contains the
           reduced expressions with all of the replacements above.
     """
-    if isinstance(exprs, Basic):
+    if isinstance(exprs, sym.Basic):
         exprs = [exprs]
-
     exprs = list(exprs)
 
     if optimizations is None:
@@ -586,8 +613,9 @@ def cse(exprs, symbols=None, optimizations=None):
     # Preprocess the expressions to give us better optimization opportunities.
     reduced_exprs = [preprocess_for_cse(e, optimizations) for e in exprs]
 
-    if symbols is None:  # noqa: SIM108
-        symbols = numbered_symbols(cls=Symbol)
+    if symbols is None:
+        from sympy.utilities.iterables import numbered_symbols
+        symbols = numbered_symbols(cls=sym.Symbol)
     else:
         # In case we get passed an iterable with an __iter__ method instead of
         # an actual iterator.
@@ -598,11 +626,12 @@ def cse(exprs, symbols=None, optimizations=None):
 
     # Main CSE algorithm.
     replacements, reduced_exprs = tree_cse(reduced_exprs, symbols, opt_subs)
+    replacements = list(replacements)
 
     # Postprocess the expressions to return the expressions to canonical form.
-    for i, (sym, subtree) in enumerate(replacements):
+    for i, (symb, subtree) in enumerate(replacements):
         subtree = postprocess_for_cse(subtree, optimizations)
-        replacements[i] = (sym, subtree)
+        replacements[i] = (symb, subtree)
     reduced_exprs = [postprocess_for_cse(e, optimizations) for e in reduced_exprs]
 
     return replacements, reduced_exprs
