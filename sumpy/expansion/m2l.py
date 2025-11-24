@@ -571,7 +571,6 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
     def loopy_preprocess_multipole(self,
                 tgt_expansion: LocalExpansionBase,
                 src_expansion: MultipoleExpansionBase,
-                # FIXME: why is result_dtype unused here?
                 result_dtype: DTypeLike,
             ) -> tuple[lp.TranslationUnit, Sequence[OptimizationCallable]]:
         assert isinstance(tgt_expansion, VolumeTaylorLocalExpansionBase)
@@ -659,7 +658,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         knl = lp.make_function(domains, insns,
             kernel_data=[
                 lp.ValueArg("src_rscale", None),
-                lp.GlobalArg("output_coeffs", None, shape=ncoeff_preprocessed,
+                lp.GlobalArg("output_coeffs", result_dtype, shape=ncoeff_preprocessed,
                     is_input=False, is_output=True),
                 lp.GlobalArg("input_coeffs", None, shape=ncoeff_src),
                 ...],
@@ -805,7 +804,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
             kernel_data=[
                 lp.ValueArg("src_rscale", None),
                 lp.ValueArg("tgt_rscale", None),
-                lp.GlobalArg("output_coeffs", None,
+                lp.GlobalArg("output_coeffs", result_dtype,
                     shape=ncoeff_tgt, is_input=False,
                     is_output=True),
                 lp.GlobalArg("input_coeffs", None,
