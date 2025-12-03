@@ -526,7 +526,8 @@ class P2PFromCSR(P2PBase):
                 "{[istrength]: 0 <= istrength < nstrengths}",
                 "{[inner]: 0 <= inner < work_items_per_group}",
                 "{[itgt_offset_outer]: 0 <= itgt_offset_outer <= tgt_outer_limit}",
-                "{[isrc_prefetch]: 0 <= isrc_prefetch < max_nsources_in_one_box}",
+                "{[isrc_prefetch]: 0 <= isrc_prefetch < max_nsources_in_one_box "
+                " and isrc_prefetch < isrc_end - isrc_start}",
                 "{[isrc_offset]: 0 <= isrc_offset < max_nsources_in_one_box"
                 " and isrc_offset < isrc_end - isrc_start}",
             ]
@@ -565,14 +566,10 @@ class P2PFromCSR(P2PBase):
                     <> isrc_end = isrc_start + box_source_counts_nonchild[src_ibox] \
                         {id=src_box_insn_2}
                     for isrc_prefetch
-                      <> cond_isrc_prefetch = isrc_prefetch < isrc_end - isrc_start \
-                              {id=cond_isrc_prefetch}
-                      if cond_isrc_prefetch
-                        local_isrc[idim, isrc_prefetch] = sources[idim,
-                          isrc_prefetch + isrc_start]  {id=prefetch_src, dup=idim}
-                        local_isrc_strength[istrength, isrc_prefetch] = strength[
-                          istrength, isrc_prefetch + isrc_start] {id=prefetch_charge}
-                      end
+                      local_isrc[idim, isrc_prefetch] = sources[idim,
+                        isrc_prefetch + isrc_start]  {id=prefetch_src, dup=idim}
+                      local_isrc_strength[istrength, isrc_prefetch] = strength[
+                        istrength, isrc_prefetch + isrc_start] {id=prefetch_charge}
                     end
                     for inner
                       if cond_itgt
