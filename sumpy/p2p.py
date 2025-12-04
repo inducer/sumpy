@@ -36,7 +36,6 @@ import loopy as lp
 import pytools.obj_array as obj_array
 
 from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
-from sumpy.codegen import register_optimization_preambles
 from sumpy.tools import KernelCacheMixin, KernelComputation, is_obj_array_like
 
 
@@ -277,9 +276,6 @@ class P2P(P2PBase):
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
 
-        from sumpy.codegen import register_optimization_preambles
-        knl = register_optimization_preambles(knl, actx.queue.device)
-
         result = actx.call_loopy(
             knl,
             sources=sources,
@@ -352,9 +348,6 @@ class P2PMatrixGenerator(P2PBase):
         knl = self.get_cached_kernel_executor(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
-
-        from sumpy.codegen import register_optimization_preambles
-        knl = register_optimization_preambles(knl, actx.queue.device)
 
         result = actx.call_loopy(knl, sources=sources, targets=targets, **kwargs)
         return obj_array.new_1d([result[f"result_{i}"] for i in range(self.nresults)])
@@ -477,9 +470,6 @@ class P2PMatrixSubsetGenerator(P2PBase):
         knl = self.get_cached_kernel_executor(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
-
-        from sumpy.codegen import register_optimization_preambles
-        knl = register_optimization_preambles(knl, actx.queue.device)
 
         result = actx.call_loopy(
             knl,
@@ -842,9 +832,6 @@ class P2PFromCSR(P2PBase):
                 source_dtype=source_dtype,
                 strength_dtype=strength_dtype,
             )
-
-        from sumpy.codegen import register_optimization_preambles
-        knl = register_optimization_preambles(knl, actx.queue.device)
 
         result = actx.call_loopy(knl, targets=targets, sources=sources, **kwargs)
         return obj_array.new_1d([result[f"result_s{i}"] for i in range(self.nresults)])

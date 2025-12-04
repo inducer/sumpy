@@ -26,7 +26,9 @@ THE SOFTWARE.
 from typing import TYPE_CHECKING, Any
 
 from boxtree.array_context import PyOpenCLArrayContext as PyOpenCLArrayContextBase
+from typing_extensions import override
 
+import loopy as lp
 from arraycontext.pytest import (
     _PytestPyOpenCLArrayContextFactoryWithClass,
     register_pytest_array_context_factory,
@@ -34,8 +36,12 @@ from arraycontext.pytest import (
 
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from numpy.typing import DTypeLike
 
+    from loopy import TranslationUnit
+    from loopy.codegen import PreambleInfo
     from pytools.tag import ToTagSetConvertible
 
 
@@ -86,8 +92,23 @@ def make_loopy_program(
             tags=tags)
 
 
+def _fp_contract_fast_preamble(
+        preamble_info: PreambleInfo
+    ) -> Iterator[tuple[str, str]]:
+    yield ("fp_contract_fast_pocl", "#pragma clang fp contract(fast)")
+
+
 class PyOpenCLArrayContext(PyOpenCLArrayContextBase):
-    def transform_loopy_program(self, t_unit):
+    @override
+    def transform_loopy_program(self, t_unit: TranslationUnit):
+        import pyopencl as cl
+        device = self.queue.device
+        if (device.platform.name == "Portable Computing Language"
+                and (device.type & cl.device_type.GPU)):
+            t_unit = lp.register_preamble_generators(
+                t_unit,
+                [_fp_contract_fast_preamble])
+
         return t_unit
 
 
