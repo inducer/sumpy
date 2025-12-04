@@ -454,7 +454,7 @@ class KernelCacheMixin(ABC):
         ...
 
     @memoize_method
-    def get_cached_kernel_executor(self, **kwargs) -> lp.ExecutorBase:
+    def get_cached_kernel(self, **kwargs) -> lp.TranslationUnit:
         from sumpy import CACHING_ENABLED, NO_CACHE_KERNELS, OPT_ENABLED, code_cache
 
         if CACHING_ENABLED and not (
@@ -472,7 +472,7 @@ class KernelCacheMixin(ABC):
             try:
                 result = code_cache[cache_key]
                 logger.debug("%s: kernel cache hit [key=%s]", self.name, cache_key)
-                return result.executor(self.context)
+                return result
             except KeyError:
                 pass
 
@@ -493,7 +493,7 @@ class KernelCacheMixin(ABC):
                 NO_CACHE_KERNELS and self.name in NO_CACHE_KERNELS):
             code_cache.store_if_not_present(cache_key, knl)
 
-        return knl.executor(self.context)
+        return knl
 
     @staticmethod
     def _allow_redundant_execution_of_knl_scaling(

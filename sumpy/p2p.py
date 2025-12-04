@@ -272,7 +272,7 @@ class P2P(P2PBase):
             strength: Sequence[Array],
             **kwargs: Any,
         ) -> tuple[cl.Event, Sequence[Array]]:
-        knl = self.get_cached_kernel_executor(
+        knl = self.get_cached_kernel(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
 
@@ -345,7 +345,7 @@ class P2PMatrixGenerator(P2PBase):
             sources: ObjectArray1D[Array] | Array,
             **kwargs: Any,
         ) -> Sequence[Array]:
-        knl = self.get_cached_kernel_executor(
+        knl = self.get_cached_kernel(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
 
@@ -439,7 +439,6 @@ class P2PMatrixSubsetGenerator(P2PBase):
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
-        knl = register_optimization_preambles(knl, self.device)
 
         return knl
 
@@ -467,7 +466,7 @@ class P2PMatrixSubsetGenerator(P2PBase):
         :returns: a one-dimensional array of interactions, for each index pair
             in (*srcindices*, *tgtindices*)
         """
-        knl = self.get_cached_kernel_executor(
+        knl = self.get_cached_kernel(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
 
@@ -824,7 +823,7 @@ class P2PFromCSR(P2PBase):
             source_dtype = None
             strength_dtype = None
 
-        knl = self.get_cached_kernel_executor(
+        knl = self.get_cached_kernel(
                 max_nsources_in_one_box=max_nsources_in_one_box,
                 max_ntargets_in_one_box=max_ntargets_in_one_box,
                 local_mem_size=actx.queue.device.local_mem_size,
