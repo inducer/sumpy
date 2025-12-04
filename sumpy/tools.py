@@ -53,7 +53,6 @@ if TYPE_CHECKING:
     from optype.numpy import Array2D
 
     import pyopencl
-    import pyopencl as cl
     from pymbolic.primitives import Variable
     from pymbolic.typing import Expression
 
