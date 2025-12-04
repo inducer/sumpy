@@ -28,8 +28,8 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 import loopy as lp
+import pytools.obj_array as obj_array
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION  # noqa: F401
-from pytools.obj_array import make_obj_array
 
 from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
 from sumpy.tools import KernelCacheMixin, gather_loopy_arguments
@@ -223,7 +223,7 @@ class E2PFromSingleBox(E2PBase):
             knl,
             centers=centers, rscale=rscale, **kwargs)
 
-        return make_obj_array([result[f"result_s{i}"] for i in range(self.nresults)])
+        return obj_array.new_1d([result[f"result_s{i}"] for i in range(self.nresults)])
 
 # }}}
 
@@ -344,7 +344,7 @@ class E2PFromCSR(E2PBase):
             rscale=rscale,
             **kwargs)
 
-        return make_obj_array([result[f"result_s{i}"] for i in range(self.nresults)])
+        return obj_array.new_1d([result[f"result_s{i}"] for i in range(self.nresults)])
 
 # }}}
 
