@@ -98,7 +98,7 @@ def test_fft(actx_factory: ArrayContextFactory, size: int):
                 n_batch_dims=len(inp.shape) - 1,
                 inverse=False,
                 complex_dtype=inp.dtype.type)
-    _evt, (out_dev,) = fft_func(actx.queue, y=inp_dev)
+    out_dev = actx.call_loopy(fft_func, y=inp_dev)["x"]
 
     assert np.allclose(actx.to_numpy(out_dev), out)
 

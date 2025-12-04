@@ -67,7 +67,7 @@ def test_direct_qbx_vs_eigval(
 
     from sumpy.qbx import LayerPotential
 
-    lpot = LayerPotential(actx.context,
+    lpot = LayerPotential(
             expansion=expn_class(lknl, order),
             target_kernels=(lknl,),
             source_kernels=(lknl,))
@@ -98,13 +98,14 @@ def test_direct_qbx_vs_eigval(
         expansion_radii = actx.from_numpy(radius * np.ones(n))
         strengths = (actx.from_numpy(sigma * h),)
 
-        _evt, (result_qbx,) = lpot(
-                actx.queue,
+        result_qbx, = lpot(
+                actx,
                 targets, sources, centers, strengths,
                 expansion_radii=expansion_radii)
         result_qbx = actx.to_numpy(result_qbx)
 
-        eocrec.add_data_point(h, np.max(np.abs(result_ref - result_qbx)))
+        error = np.linalg.norm(result_ref - result_qbx, np.inf)
+        eocrec.add_data_point(h, error)
 
     logger.info("eoc:\n%s", eocrec)
 
@@ -137,10 +138,14 @@ def test_direct_qbx_vs_eigval_with_tgt_deriv(
 
     from sumpy.qbx import LayerPotential
 
-    lpot_dx = LayerPotential(actx.context, expansion=expn_class(lknl, order),
-            target_kernels=(AxisTargetDerivative(0, lknl),), source_kernels=(lknl,))
-    lpot_dy = LayerPotential(actx.context, expansion=expn_class(lknl, order),
-            target_kernels=(AxisTargetDerivative(1, lknl),), source_kernels=(lknl,))
+    lpot_dx = LayerPotential(
+        expansion=expn_class(lknl, order),
+        target_kernels=(AxisTargetDerivative(0, lknl),),
+        source_kernels=(lknl,))
+    lpot_dy = LayerPotential(
+        expansion=expn_class(lknl, order),
+        target_kernels=(AxisTargetDerivative(1, lknl),),
+        source_kernels=(lknl,))
 
     mode_nr = 15
 
@@ -169,12 +174,12 @@ def test_direct_qbx_vs_eigval_with_tgt_deriv(
         expansion_radii = actx.from_numpy(radius * np.ones(n))
         strengths = (actx.from_numpy(sigma * h),)
 
-        _evt, (result_qbx_dx,) = lpot_dx(
-                actx.queue,
+        result_qbx_dx, = lpot_dx(
+                actx,
                 targets, sources, centers, strengths,
                 expansion_radii=expansion_radii)
-        _evt, (result_qbx_dy,) = lpot_dy(
-                actx.queue,
+        result_qbx_dy, = lpot_dy(
+                actx,
                 targets, sources, centers, strengths,
                 expansion_radii=expansion_radii)
 
@@ -184,7 +189,8 @@ def test_direct_qbx_vs_eigval_with_tgt_deriv(
         normals = unit_circle
         result_qbx = normals[0] * result_qbx_dx + normals[1] * result_qbx_dy
 
-        eocrec.add_data_point(h, np.max(np.abs(result_ref - result_qbx)))
+        error = np.linalg.norm(result_ref - result_qbx, np.inf)
+        eocrec.add_data_point(h, error)
 
     if expn_class is not LineTaylorLocalExpansion:
         logger.info("eoc:\n%s", eocrec)

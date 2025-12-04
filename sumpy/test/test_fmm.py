@@ -151,12 +151,12 @@ def _test_sumpy_fmm(
     dtype = np.float64
 
     from boxtree.tools import make_normal_particle_array as p_normal
-    sources = p_normal(actx.queue, nsources, knl.dim, dtype, seed=15)
+    sources = p_normal(actx, nsources, knl.dim, dtype, seed=15)
 
     if 1:
         offset = np.zeros(knl.dim)
         offset[0] = 0.1
-        targets = offset + p_normal(actx.queue, ntargets, knl.dim, dtype, seed=18)
+        targets = offset + p_normal(actx, ntargets, knl.dim, dtype, seed=18)
 
         del offset
     else:
@@ -166,20 +166,19 @@ def _test_sumpy_fmm(
         targets = obj_array.new_1d([fp.points[i] for i in range(knl.dim)])
 
     from boxtree import TreeBuilder
-    tb = TreeBuilder(actx.context)
-
-    tree, _ = tb(actx.queue, sources, targets=targets,
+    tb = TreeBuilder(actx)
+    tree, _ = tb(actx, sources, targets=targets,
             max_particles_in_box=30, debug=True)
 
     from boxtree.traversal import FMMTraversalBuilder
-    tbuild = FMMTraversalBuilder(actx.context)
-    trav, _ = tbuild(actx.queue, tree, debug=True)
+    tbuild = FMMTraversalBuilder(actx)
+    trav, _ = tbuild(actx, tree, debug=True)
 
     # {{{ plot tree
 
     if 0:
-        host_tree = tree.get(actx.queue)
-        host_trav = trav.get(actx.queue)
+        host_tree = actx.to_numpy(tree)
+        host_trav = actx.to_numpy(trav)
 
         if 0:
             logger.info("src_box: %s", host_tree.find_box_nr_for_source(403))
@@ -247,7 +246,7 @@ def _test_sumpy_fmm(
             local_expansion_factory = partial(local_expn_class, knl)
 
         tree_indep = SumpyTreeIndependentDataForWrangler(
-                actx.context,
+                actx,
                 partial(mpole_expn_class, knl),
                 local_expansion_factory,
                 target_kernels)
@@ -266,12 +265,11 @@ def _test_sumpy_fmm(
 
         from boxtree.fmm import drive_fmm
 
-        pot, = drive_fmm(wrangler, (weights,))
+        pot, = drive_fmm(actx, wrangler, (weights,))
 
         from sumpy import P2P
-        p2p = P2P(actx.context, target_kernels, exclude_self=False)
-        _evt, (ref_pot,) = p2p(actx.queue, targets, sources, (weights,),
-                **extra_kwargs)
+        p2p = P2P(target_kernels, exclude_self=False)
+        ref_pot, = p2p(actx, targets, sources, (weights,), **extra_kwargs)
 
         pot = actx.to_numpy(pot)
         ref_pot = actx.to_numpy(ref_pot)
@@ -305,21 +303,19 @@ def test_coeff_magnitude_rscale(actx_factory: ArrayContextFactory, knl):
 
     from boxtree.tools import make_normal_particle_array as p_normal
 
-    sources = p_normal(actx.queue, nsources, knl.dim, dtype, seed=15)
+    sources = p_normal(actx, nsources, knl.dim, dtype, seed=15)
     offset = np.zeros(knl.dim)
     offset[0] = 0.1
 
-    targets = offset + p_normal(actx.queue, ntargets, knl.dim, dtype, seed=18)
+    targets = offset + p_normal(actx, ntargets, knl.dim, dtype, seed=18)
 
     from boxtree import TreeBuilder
-    tb = TreeBuilder(actx.context)
-
-    tree, _ = tb(actx.queue, sources, targets=targets,
-            max_particles_in_box=30, debug=True)
+    tb = TreeBuilder(actx)
+    tree, _ = tb(actx, sources, targets=targets, max_particles_in_box=30, debug=True)
 
     from boxtree.traversal import FMMTraversalBuilder
-    tbuild = FMMTraversalBuilder(actx.context)
-    trav, _ = tbuild(actx.queue, tree, debug=True)
+    tbuild = FMMTraversalBuilder(actx)
+    trav, _ = tbuild(actx, tree, debug=True)
 
     rng = np.random.default_rng(31)
     weights = actx.from_numpy(rng.random(nsources, dtype=np.float64))
@@ -338,7 +334,7 @@ def test_coeff_magnitude_rscale(actx_factory: ArrayContextFactory, knl):
     target_kernels = [knl]
 
     tree_indep = SumpyTreeIndependentDataForWrangler(
-        actx.context,
+        actx,
         partial(mpole_expn_class, knl),
         partial(local_expn_class, knl),
         target_kernels)
@@ -351,9 +347,10 @@ def test_coeff_magnitude_rscale(actx_factory: ArrayContextFactory, knl):
         kernel_extra_kwargs=extra_kwargs)
 
     weights = wrangler.reorder_sources(weights)
-    (weights,) = wrangler.distribute_source_weights((weights,), None)
+    (weights,) = wrangler.distribute_source_weights(actx, (weights,), None)
 
-    local_result, _ = wrangler.form_locals(
+    local_result = wrangler.form_locals(
+        actx,
         trav.level_start_target_or_target_parent_box_nrs,
         trav.target_or_target_parent_boxes,
         trav.from_sep_bigger_starts,
@@ -393,22 +390,20 @@ def test_unified_single_and_double(actx_factory: ArrayContextFactory, visualize=
 
     from boxtree.tools import make_normal_particle_array as p_normal
 
-    sources = p_normal(actx.queue, nsources, knl.dim, dtype, seed=15)
+    sources = p_normal(actx, nsources, knl.dim, dtype, seed=15)
     offset = np.zeros(knl.dim)
     offset[0] = 0.1
 
-    targets = offset + p_normal(actx.queue, ntargets, knl.dim, dtype, seed=18)
+    targets = offset + p_normal(actx, ntargets, knl.dim, dtype, seed=18)
     del offset
 
     from boxtree import TreeBuilder
-    tb = TreeBuilder(actx.context)
-
-    tree, _ = tb(actx.queue, sources, targets=targets,
-            max_particles_in_box=30, debug=True)
+    tb = TreeBuilder(actx)
+    tree, _ = tb(actx, sources, targets=targets, max_particles_in_box=30, debug=True)
 
     from boxtree.traversal import FMMTraversalBuilder
-    tbuild = FMMTraversalBuilder(actx.context)
-    trav, _ = tbuild(actx.queue, tree, debug=True)
+    tbuild = FMMTraversalBuilder(actx)
+    trav, _ = tbuild(actx, tree, debug=True)
 
     rng = np.random.default_rng(44)
     weights = (
@@ -437,9 +432,9 @@ def test_unified_single_and_double(actx_factory: ArrayContextFactory, visualize=
             source_kernel_vecs, strength_usages, strict=True):
         source_extra_kwargs = {}
         if deriv_knl in source_kernels:
-            source_extra_kwargs["dir_vec"] = dir_vec
+            source_extra_kwargs["dir_vec"] = actx.from_numpy(dir_vec)
         tree_indep = SumpyTreeIndependentDataForWrangler(
-                actx.context,
+                actx,
                 partial(mpole_expn_class, knl),
                 partial(local_expn_class, knl),
                 target_kernels=target_kernels, source_kernels=source_kernels,
@@ -450,7 +445,7 @@ def test_unified_single_and_double(actx_factory: ArrayContextFactory, visualize=
 
         from boxtree.fmm import drive_fmm
 
-        pot = drive_fmm(wrangler, weights)
+        pot = drive_fmm(actx, wrangler, weights)
         results.append(np.array([actx.to_numpy(pot[0]), actx.to_numpy(pot[1])]))
 
     ref_pot = results[0] + results[1]
@@ -488,16 +483,15 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory, use_fft, visualize=False)
     mpole_expn_class = VolumeTaylorMultipoleExpansion
     order = 1
 
-    sources = p_normal(actx.queue, nsources, knl.dim, dtype, seed=15)
+    sources = p_normal(actx, nsources, knl.dim, dtype, seed=15)
 
     from boxtree import TreeBuilder
-    tb = TreeBuilder(actx.context)
-
-    tree, _ = tb(actx.queue, sources, max_particles_in_box=30, debug=True)
+    tb = TreeBuilder(actx)
+    tree, _ = tb(actx, sources, max_particles_in_box=30, debug=True)
 
     from boxtree.traversal import FMMTraversalBuilder
-    tbuild = FMMTraversalBuilder(actx.context)
-    trav, _ = tbuild(actx.queue, tree, debug=True)
+    tbuild = FMMTraversalBuilder(actx)
+    trav, _ = tbuild(actx, tree, debug=True)
 
     rng = np.random.default_rng(44)
     weights = actx.from_numpy(rng.random(nsources, dtype=np.float64))
@@ -515,7 +509,7 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory, use_fft, visualize=False)
                 knl, local_expn_class)()
 
     tree_indep = SumpyTreeIndependentDataForWrangler(
-            actx.context,
+            actx,
             partial(mpole_expn_class, knl),
             partial(local_expn_class, knl, m2l_translation_override=m2l_translation),
             target_kernels)
@@ -524,11 +518,7 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory, use_fft, visualize=False)
             fmm_level_to_order=lambda kernel, kernel_args, tree, lev: order)
     from boxtree.fmm import drive_fmm
 
-    timing_data = {}
-    _pot, = drive_fmm(wrangler, (weights,), timing_data=timing_data)
-    logger.info("timing_data:\n%s", timing_data)
-
-    assert timing_data
+    _pot, = drive_fmm(actx, wrangler, (weights,))
 
 
 def test_sumpy_fmm_exclude_self(actx_factory: ArrayContextFactory, visualize=False):
@@ -547,16 +537,16 @@ def test_sumpy_fmm_exclude_self(actx_factory: ArrayContextFactory, visualize=Fal
     mpole_expn_class = VolumeTaylorMultipoleExpansion
     order = 10
 
-    sources = p_normal(actx.queue, nsources, knl.dim, dtype, seed=15)
+    sources = p_normal(actx, nsources, knl.dim, dtype, seed=15)
 
     from boxtree import TreeBuilder
-    tb = TreeBuilder(actx.context)
+    tb = TreeBuilder(actx)
 
-    tree, _ = tb(actx.queue, sources, max_particles_in_box=30, debug=True)
+    tree, _ = tb(actx, sources, max_particles_in_box=30, debug=True)
 
     from boxtree.traversal import FMMTraversalBuilder
-    tbuild = FMMTraversalBuilder(actx.context)
-    trav, _ = tbuild(actx.queue, tree, debug=True)
+    tbuild = FMMTraversalBuilder(actx)
+    trav, _ = tbuild(actx, tree, debug=True)
 
     rng = np.random.default_rng(44)
     weights = actx.from_numpy(rng.random(nsources, dtype=np.float64))
@@ -567,7 +557,7 @@ def test_sumpy_fmm_exclude_self(actx_factory: ArrayContextFactory, visualize=Fal
     target_kernels = [knl]
 
     tree_indep = SumpyTreeIndependentDataForWrangler(
-            actx.context,
+            actx,
             partial(mpole_expn_class, knl),
             partial(local_expn_class, knl),
             target_kernels,
@@ -579,12 +569,11 @@ def test_sumpy_fmm_exclude_self(actx_factory: ArrayContextFactory, visualize=Fal
 
     from boxtree.fmm import drive_fmm
 
-    pot, = drive_fmm(wrangler, (weights,))
+    pot, = drive_fmm(actx, wrangler, (weights,))
 
     from sumpy import P2P
-    p2p = P2P(actx.context, target_kernels, exclude_self=True)
-    _evt, (ref_pot,) = p2p(actx.queue, sources, sources, (weights,),
-            **self_extra_kwargs)
+    p2p = P2P(target_kernels, exclude_self=True)
+    ref_pot, = p2p(actx, sources, sources, (weights,), **self_extra_kwargs)
 
     pot = actx.to_numpy(pot)
     ref_pot = actx.to_numpy(ref_pot)
@@ -617,17 +606,15 @@ def test_sumpy_axis_source_derivative(
     mpole_expn_class = VolumeTaylorMultipoleExpansion
     order = 10
 
-    sources = p_normal(actx.queue, nsources, knl.dim, dtype, seed=15)
+    sources = p_normal(actx, nsources, knl.dim, dtype, seed=15)
 
     from boxtree import TreeBuilder
-    tb = TreeBuilder(actx.context)
-
-    tree, _ = tb(actx.queue, sources,
-            max_particles_in_box=30, debug=True)
+    tb = TreeBuilder(actx)
+    tree, _ = tb(actx, sources, max_particles_in_box=30, debug=True)
 
     from boxtree.traversal import FMMTraversalBuilder
-    tbuild = FMMTraversalBuilder(actx.context)
-    trav, _ = tbuild(actx.queue, tree, debug=True)
+    tbuild = FMMTraversalBuilder(actx)
+    trav, _ = tbuild(actx, tree, debug=True)
 
     rng = np.random.default_rng(12)
     weights = actx.from_numpy(rng.random(nsources, dtype=np.float64))
@@ -642,7 +629,7 @@ def test_sumpy_axis_source_derivative(
             (AxisTargetDerivative(0, knl), knl),
             (knl, AxisSourceDerivative(0, knl))]:
         tree_indep = SumpyTreeIndependentDataForWrangler(
-                actx.context,
+                actx,
                 partial(mpole_expn_class, knl),
                 partial(local_expn_class, knl),
                 target_kernels=[tgt_knl],
@@ -655,7 +642,7 @@ def test_sumpy_axis_source_derivative(
 
         from boxtree.fmm import drive_fmm
 
-        pot, = drive_fmm(wrangler, (weights,))
+        pot, = drive_fmm(actx, wrangler, (weights,))
         pots.append(actx.to_numpy(pot))
 
     rel_err = la.norm(pots[0] + pots[1]) / la.norm(pots[0])
@@ -688,17 +675,17 @@ def test_sumpy_target_point_multiplier(
     mpole_expn_class = VolumeTaylorMultipoleExpansion
     order = 5
 
-    sources = p_normal(actx.queue, nsources, knl.dim, dtype, seed=15)
+    sources = p_normal(actx, nsources, knl.dim, dtype, seed=15)
 
     from boxtree import TreeBuilder
-    tb = TreeBuilder(actx.context)
+    tb = TreeBuilder(actx)
 
-    tree, _ = tb(actx.queue, sources,
+    tree, _ = tb(actx, sources,
             max_particles_in_box=30, debug=True)
 
     from boxtree.traversal import FMMTraversalBuilder
-    tbuild = FMMTraversalBuilder(actx.context)
-    trav, _ = tbuild(actx.queue, tree, debug=True)
+    tbuild = FMMTraversalBuilder(actx)
+    trav, _ = tbuild(actx, tree, debug=True)
 
     rng = np.random.default_rng(12)
     weights = actx.from_numpy(rng.random(nsources, dtype=np.float64))
@@ -714,7 +701,7 @@ def test_sumpy_target_point_multiplier(
         tgt_knls[1] = AxisTargetDerivative(axis, tgt_knls[1])
 
     tree_indep = SumpyTreeIndependentDataForWrangler(
-            actx.context,
+            actx,
             partial(mpole_expn_class, knl),
             partial(local_expn_class, knl),
             target_kernels=tgt_knls,
@@ -727,7 +714,7 @@ def test_sumpy_target_point_multiplier(
 
     from boxtree.fmm import drive_fmm
 
-    pot0, pot1, pot2 = drive_fmm(wrangler, (weights,))
+    pot0, pot1, pot2 = drive_fmm(actx, wrangler, (weights,))
     pot0, pot1, pot2 = actx.to_numpy(pot0), actx.to_numpy(pot1), actx.to_numpy(pot2)
     if deriv_axes == (0,):
         ref_pot = pot1 * actx.to_numpy(sources[0]) + pot2

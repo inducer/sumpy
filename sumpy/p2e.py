@@ -28,9 +28,8 @@ import logging
 import numpy as np
 
 import loopy as lp
-from loopy.version import MOST_RECENT_LANGUAGE_VERSION
 
-from sumpy.codegen import register_optimization_preambles
+from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
 from sumpy.tools import KernelCacheMixin, KernelComputation
 
 
@@ -48,7 +47,7 @@ Particle-to-Expansion
 """
 
 
-# {{{ P2E base class
+# {{{ P2EBase: base class
 
 class P2EBase(KernelCacheMixin, KernelComputation):
     """Common input processing for kernel computations.
@@ -56,8 +55,7 @@ class P2EBase(KernelCacheMixin, KernelComputation):
     .. automethod:: __init__
     """
 
-    def __init__(self, ctx, expansion, kernels=None,
-            name=None, device=None, strength_usage=None):
+    def __init__(self, expansion, kernels=None, name=None, strength_usage=None):
         """
         :arg expansion: a subclass of :class:`sumpy.expansion.ExpansionBase`
         :arg kernels: if not provided, the kernel of the *expansion* is used.
@@ -83,10 +81,10 @@ class P2EBase(KernelCacheMixin, KernelComputation):
             assert txr(knl) == knl
             assert sxr(knl) == expansion.kernel
 
-        KernelComputation.__init__(self, ctx=ctx, target_kernels=[],
+        KernelComputation.__init__(self, target_kernels=[],
             source_kernels=kernels,
             strength_usage=strength_usage, value_dtypes=None,
-            name=name, device=device)
+            name=name)
 
         self.expansion = expansion
         self.dim = expansion.dim
@@ -123,28 +121,33 @@ class P2EBase(KernelCacheMixin, KernelComputation):
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
         knl = lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
-        knl = register_optimization_preambles(knl, self.device)
         return knl
 
-    def __call__(self, queue, **kwargs):
+    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
         from sumpy.tools import is_obj_array_like
         sources = kwargs.pop("sources")
         centers = kwargs.pop("centers")
-        knl = self.get_cached_kernel_executor(
-                sources_is_obj_array=is_obj_array_like(sources),
-                centers_is_obj_array=is_obj_array_like(centers))
 
         # "1" may be passed for rscale, which won't have its type
         # meaningfully inferred. Make the type of rscale explicit.
         dtype = centers[0].dtype if is_obj_array_like(centers) else centers.dtype
         rscale = dtype.type(kwargs.pop("rscale"))
 
-        return knl(queue, sources=sources, centers=centers, rscale=rscale, **kwargs)
+        knl = self.get_cached_kernel(
+                sources_is_obj_array=is_obj_array_like(sources),
+                centers_is_obj_array=is_obj_array_like(centers))
+
+        result = actx.call_loopy(
+            knl,
+            sources=sources, centers=centers, rscale=rscale,
+            **kwargs)
+
+        return result["tgt_expansions"]
 
 # }}}
 
 
-# {{{ P2E from single box (P2M, likely)
+# {{{ P2EFromSingleBox: P2E from single box (P2M, likely)
 
 class P2EFromSingleBox(P2EBase):
     """
@@ -159,7 +162,7 @@ class P2EFromSingleBox(P2EBase):
         ncoeffs = len(self.expansion)
         loopy_args = self.get_loopy_args()
 
-        loopy_knl = lp.make_kernel([
+        loopy_knl = make_loopy_program([
                 "{[isrc_box]: 0 <= isrc_box < nsrc_boxes}",
                 "{[isrc]: isrc_start <= isrc < isrc_end}",
                 "{[idim]: 0 <= idim < dim}",
@@ -216,11 +219,9 @@ class P2EFromSingleBox(P2EBase):
                 name=self.name,
                 assumptions="nsrc_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
-                default_offset=lp.auto,
                 fixed_parameters={
                     "dim": self.dim, "nstrengths": self.strength_count,
-                    "ncoeffs": ncoeffs},
-                lang_version=MOST_RECENT_LANGUAGE_VERSION)
+                    "ncoeffs": ncoeffs})
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, "istrength*:unr")
@@ -237,7 +238,7 @@ class P2EFromSingleBox(P2EBase):
         knl = lp.split_iname(knl, "isrc_box", 16, outer_tag="g.0")
         return knl
 
-    def __call__(self, queue, **kwargs):
+    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
         """
         :arg source_boxes: an array of integer indices into *box_source_starts*
             and *box_source_counts_nonchild*.
@@ -257,12 +258,12 @@ class P2EFromSingleBox(P2EBase):
 
         :returns: an array of *tgt_expansions*.
         """
-        return super().__call__(queue, **kwargs)
+        return super().__call__(actx, **kwargs)
 
 # }}}
 
 
-# {{{ P2E from CSR-like interaction list
+# {{{ P2EFromCSR: P2E from CSR-like interaction list
 
 class P2EFromCSR(P2EBase):
     """
@@ -297,7 +298,7 @@ class P2EFromCSR(P2EBase):
                     ...
                 ])
 
-        loopy_knl = lp.make_kernel(
+        loopy_knl = make_loopy_program(
                 [
                     "{[itgt_box]: 0 <= itgt_box < ntgt_boxes}",
                     "{[isrc_box]: isrc_box_start <= isrc_box < isrc_box_stop}",
@@ -345,15 +346,13 @@ class P2EFromCSR(P2EBase):
                             dep=update_result:init_coeffs}
                 end
                 """],
-                arguments,
+                kernel_data=arguments,
                 name=self.name,
                 assumptions="ntgt_boxes>=1",
                 silenced_warnings="write_race(write_expn*)",
-                default_offset=lp.auto,
                 fixed_parameters={"dim": self.dim,
                                   "nstrengths": self.strength_count,
-                                  "ncoeffs": ncoeffs},
-                lang_version=MOST_RECENT_LANGUAGE_VERSION)
+                                  "ncoeffs": ncoeffs})
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, "istrength*:unr")
@@ -370,7 +369,7 @@ class P2EFromCSR(P2EBase):
         knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
         return knl
 
-    def __call__(self, queue, **kwargs):
+    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
         """
         :arg target_boxes: array of integer indices into *source_box_starts*
             and *centers*.
@@ -389,7 +388,7 @@ class P2EFromCSR(P2EBase):
         :arg tgt_base_ibox: see :meth:`P2EFromSingleBox.__call__`.
         :arg tgt_expansion: see :meth:`P2EFromSingleBox.__call__`.
         """
-        return super().__call__(queue, **kwargs)
+        return super().__call__(actx, **kwargs)
 
 # }}}
 

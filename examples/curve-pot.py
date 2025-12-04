@@ -91,7 +91,7 @@ def draw_pot_figure(aspect_ratio,
         knl_kwargs = {}
 
     vol_source_knl, vol_target_knl = process_kernel(knl, what_operator)
-    p2p = P2P(actx.context,
+    p2p = P2P(
             source_kernels=(vol_source_knl,),
             target_kernels=(vol_target_knl,),
             exclude_self=False,
@@ -100,7 +100,7 @@ def draw_pot_figure(aspect_ratio,
     lpot_source_knl, lpot_target_knl = process_kernel(knl, what_operator_lpot)
 
     from sumpy.qbx import LayerPotential
-    lpot = LayerPotential(actx.context,
+    lpot = LayerPotential(
             expansion=expn_class(knl, order=order),
             source_kernels=(lpot_source_knl,),
             target_kernels=(lpot_target_knl,),
@@ -184,7 +184,8 @@ def draw_pot_figure(aspect_ratio,
 
         def apply_lpot(x: NDArray[np.inexact]) -> NDArray[np.inexact]:
             xovsmp = fim @ x
-            _evt, (y,) = lpot(actx.queue,
+            y, = lpot(
+                    actx,
                     sources,
                     ovsmp_sources,
                     actx.from_numpy(centers),
@@ -209,7 +210,8 @@ def draw_pot_figure(aspect_ratio,
     density = np.cos(mode_nr*2*np.pi*native_t).astype(np.complex128)
     strength = actx.from_numpy(native_curve.speed * native_weights * density)
 
-    _evt, (vol_pot,) = p2p(actx.queue,
+    vol_pot, = p2p(
+            actx,
             targets,
             sources,
             [strength], **volpot_kwargs)
@@ -219,7 +221,8 @@ def draw_pot_figure(aspect_ratio,
     ovsmp_strength = actx.from_numpy(
         ovsmp_curve.speed * ovsmp_weights * ovsmp_density)
 
-    _evt, (curve_pot,) = lpot(actx.queue,
+    curve_pot, = lpot(
+            actx,
             sources,
             ovsmp_sources,
             actx.from_numpy(centers),

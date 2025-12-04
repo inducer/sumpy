@@ -23,66 +23,78 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from boxtree.distributed.calculation import DistributedExpansionWrangler
+from typing import TYPE_CHECKING
 
-import pyopencl.array as cl_array
+from boxtree.distributed.calculation import DistributedExpansionWranglerMixin
+
 import pytools.obj_array as obj_array
 
 from sumpy.fmm import SumpyExpansionWrangler
 
 
-class DistributedSumpyExpansionWrangler(
-        DistributedExpansionWrangler, SumpyExpansionWrangler):
-    def __init__(
-            self, context, comm, tree_indep, local_traversal, global_traversal,
-            dtype, fmm_level_to_order, communicate_mpoles_via_allreduce=False,
-            **kwarg):
-        DistributedExpansionWrangler.__init__(
-            self, context, comm, global_traversal, True,
-            communicate_mpoles_via_allreduce=communicate_mpoles_via_allreduce)
-        SumpyExpansionWrangler.__init__(
-            self, tree_indep, local_traversal, dtype, fmm_level_to_order, **kwarg)
+if TYPE_CHECKING:
+    from sumpy.array_context import PyOpenCLArrayContext
 
-    def distribute_source_weights(self, src_weight_vecs, src_idx_all_ranks):
-        src_weight_vecs_host = [src_weight.get() for src_weight in src_weight_vecs]
+
+class DistributedSumpyExpansionWrangler(
+        DistributedExpansionWranglerMixin, SumpyExpansionWrangler):
+    def __init__(
+            self, actx: PyOpenCLArrayContext,
+            comm, tree_indep, local_traversal, global_traversal,
+            dtype, fmm_level_to_order, communicate_mpoles_via_allreduce=False,
+            **kwargs):
+        SumpyExpansionWrangler.__init__(
+            self, tree_indep, local_traversal, dtype, fmm_level_to_order,
+            **kwargs)
+
+        self.comm = comm
+        self.traversal_in_device_memory = True
+        self.global_traversal = global_traversal
+        self.communicate_mpoles_via_allreduce = communicate_mpoles_via_allreduce
+
+    def distribute_source_weights(self,
+            actx: PyOpenCLArrayContext, src_weight_vecs, src_idx_all_ranks):
+        src_weight_vecs_host = [
+            actx.to_numpy(src_weight) for src_weight in src_weight_vecs
+            ]
 
         local_src_weight_vecs_host = super().distribute_source_weights(
-            src_weight_vecs_host, src_idx_all_ranks)
+            actx, src_weight_vecs_host, src_idx_all_ranks)
 
         local_src_weight_vecs_device = [
-            cl_array.to_device(src_weight.queue, local_src_weight)
-            for local_src_weight, src_weight in
-            zip(local_src_weight_vecs_host, src_weight_vecs, strict=True)]
+            actx.from_numpy(local_src_weight)
+            for local_src_weight in local_src_weight_vecs_host]
 
         return local_src_weight_vecs_device
 
-    def gather_potential_results(self, potentials, tgt_idx_all_ranks):
-        mpi_rank = self.comm.Get_rank()
-
-        potentials_host_vec = [potentials_dev.get() for potentials_dev in potentials]
+    def gather_potential_results(self,
+            actx: PyOpenCLArrayContext, potentials, tgt_idx_all_ranks):
+        potentials_host_vec = [
+            actx.to_numpy(potentials_dev) for potentials_dev in potentials
+            ]
 
         gathered_potentials_host_vec = []
         for potentials_host in potentials_host_vec:
             gathered_potentials_host_vec.append(
-                super().gather_potential_results(potentials_host, tgt_idx_all_ranks))
+                super().gather_potential_results(
+                    actx, potentials_host, tgt_idx_all_ranks))
 
-        if mpi_rank == 0:
+        if self.is_mpi_root:
             return obj_array.new_1d([
-                cl_array.to_device(potentials_dev.queue, gathered_potentials_host)
-                for gathered_potentials_host, potentials_dev in
-                zip(gathered_potentials_host_vec, potentials, strict=True)])
+                actx.from_numpy(gathered_potentials_host)
+                for gathered_potentials_host in gathered_potentials_host_vec
+                ])
         else:
             return None
 
     def reorder_sources(self, source_array):
-        if self.comm.Get_rank() == 0:
-            return source_array.with_queue(source_array.queue)[
-                self.global_traversal.tree.user_source_ids]
+        if self.is_mpi_root:
+            return source_array[self.global_traversal.tree.user_source_ids]
         else:
             return source_array
 
     def reorder_potentials(self, potentials):
-        if self.comm.Get_rank() == 0:
+        if self.is_mpi_root:
             import numpy as np
 
             assert (
@@ -96,8 +108,9 @@ class DistributedSumpyExpansionWrangler(
         else:
             return None
 
-    def communicate_mpoles(self, mpole_exps, return_stats=False):
-        mpole_exps_host = mpole_exps.get()
-        stats = super().communicate_mpoles(mpole_exps_host, return_stats)
+    def communicate_mpoles(self,
+            actx: PyOpenCLArrayContext, mpole_exps, return_stats=False):
+        mpole_exps_host = actx.to_numpy(mpole_exps)
+        stats = super().communicate_mpoles(actx, mpole_exps_host, return_stats)
         mpole_exps[:] = mpole_exps_host
         return stats
