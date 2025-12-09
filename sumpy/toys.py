@@ -289,7 +289,7 @@ def _p2e(actx, psource, center, rscale, order: int, p2e, expn_class, expn_kwargs
     centers = actx.from_numpy(
         np.array(center, dtype=np.float64).reshape(toy_ctx.kernel.dim, 1))
 
-    coeffs, = p2e(
+    coeffs = p2e(
             actx,
             source_boxes=source_boxes,
             box_source_starts=box_source_starts,
@@ -379,7 +379,7 @@ def _e2e(actx: PyOpenCLArrayContext,
         **toy_ctx.extra_kernel_kwargs,
     }
 
-    to_coeffs, = e2e(**args)
+    to_coeffs = e2e(**args)
     return expn_class(
             toy_ctx, to_center, to_rscale, to_order,
             actx.to_numpy(to_coeffs[1]),
@@ -414,12 +414,12 @@ def _m2l(actx: PyOpenCLArrayContext,
 
         if toy_ctx.use_fft:
 
-            fft_app = get_opencl_fft_app(actx, (expn_size,),
+            fft_app = get_opencl_fft_app(actx, (1, expn_size,),
                 dtype=preprocessed_src_expansions.dtype, inverse=False)
-            ifft_app = get_opencl_fft_app(actx, (expn_size,),
+            ifft_app = get_opencl_fft_app(actx, (1, expn_size,),
                 dtype=preprocessed_src_expansions.dtype, inverse=True)
 
-            preprocessed_src_expansions = run_opencl_fft(actx, fft_app,
+            _evt, preprocessed_src_expansions = run_opencl_fft(actx, fft_app,
                     preprocessed_src_expansions, inverse=False)
 
         # Compute translation classes data
@@ -443,7 +443,7 @@ def _m2l(actx: PyOpenCLArrayContext,
                 **toy_ctx.extra_kernel_kwargs)
 
         if toy_ctx.use_fft:
-            m2l_translation_classes_dependent_data = run_opencl_fft(
+            _evt, m2l_translation_classes_dependent_data = run_opencl_fft(
                 actx, fft_app,
                 m2l_translation_classes_dependent_data,
                 inverse=False)
@@ -739,7 +739,7 @@ class Sum(PotentialExpressionNode):
     def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
         result = np.zeros(targets.shape[1])
         for psource in self.psources:
-            result += psource.eval(actx, targets)
+            result = result + psource.eval(actx, targets)
 
         return result
 
@@ -753,7 +753,7 @@ class Product(PotentialExpressionNode):
     def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
         result = np.ones(targets.shape[1])
         for psource in self.psources:
-            result *= psource.eval(actx, targets)
+            result = result * psource.eval(actx, targets)
 
         return result
 # }}}
