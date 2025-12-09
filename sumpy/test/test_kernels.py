@@ -902,13 +902,13 @@ def test_jump(
     dlp_knl = DirectionalSourceDerivative(kernel)
 
     from sumpy.qbx import LayerPotential
-    lpot = LayerPotential(actx.context,
+    lpot = LayerPotential(
             expansion=LineTaylorLocalExpansion(kernel, order=order),
             source_kernels=(dlp_knl,),
             target_kernels=(kernel,),
             value_dtypes=np.complex128,)
 
-    _evt, (y,) = lpot(actx.queue,
+    y, = lpot(actx,
             actx.from_numpy(targets),
             actx.from_numpy(geo.nodes),
             actx.from_numpy(centers),
