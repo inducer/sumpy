@@ -24,13 +24,18 @@ THE SOFTWARE.
 """
 
 import logging
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 import loopy as lp
 
-from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
+from sumpy.array_context import make_loopy_program
 from sumpy.tools import KernelCacheMixin, KernelComputation
+
+
+if TYPE_CHECKING:
+    from arraycontext import ArrayContext
 
 
 logger = logging.getLogger(__name__)
@@ -123,7 +128,7 @@ class P2EBase(KernelCacheMixin, KernelComputation):
                 enforce_variable_access_ordered="no_check")
         return knl
 
-    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
+    def __call__(self, actx: ArrayContext, **kwargs):
         from sumpy.tools import is_obj_array_like
         sources = kwargs.pop("sources")
         centers = kwargs.pop("centers")
@@ -238,7 +243,7 @@ class P2EFromSingleBox(P2EBase):
         knl = lp.split_iname(knl, "isrc_box", 16, outer_tag="g.0")
         return knl
 
-    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
+    def __call__(self, actx: ArrayContext, **kwargs):
         """
         :arg source_boxes: an array of integer indices into *box_source_starts*
             and *box_source_counts_nonchild*.
@@ -369,7 +374,7 @@ class P2EFromCSR(P2EBase):
         knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
         return knl
 
-    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
+    def __call__(self, actx: ArrayContext, **kwargs):
         """
         :arg target_boxes: array of integer indices into *source_box_starts*
             and *centers*.

@@ -34,16 +34,16 @@ from typing_extensions import override
 
 import loopy as lp
 import pytools.obj_array as obj_array
+from arraycontext import PyOpenCLArrayContext
 
-from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
+from sumpy.array_context import make_loopy_program
 from sumpy.tools import KernelCacheMixin, KernelComputation, is_obj_array_like
 
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    import pyopencl as cl
-    from arraycontext import Array
+    from arraycontext import Array, ArrayContext
     from pytools.obj_array import ObjectArray1D
 
 
@@ -266,12 +266,12 @@ class P2P(P2PBase):
         return loopy_knl
 
     def __call__(self,
-            actx: PyOpenCLArrayContext,
-            targets: ObjectArray1D[Array] | Array,
-            sources: ObjectArray1D[Array] | Array,
-            strength: Sequence[Array],
-            **kwargs: Any,
-        ) -> tuple[cl.Event, Sequence[Array]]:
+                actx: ArrayContext,
+                targets: ObjectArray1D[Array] | Array,
+                sources: ObjectArray1D[Array] | Array,
+                strength: Sequence[Array],
+                **kwargs: Any,
+            ) -> ObjectArray1D[Array]:
         knl = self.get_cached_kernel(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
@@ -340,7 +340,7 @@ class P2PMatrixGenerator(P2PBase):
         return loopy_knl
 
     def __call__(self,
-            actx: PyOpenCLArrayContext,
+            actx: ArrayContext,
             targets: ObjectArray1D[Array] | Array,
             sources: ObjectArray1D[Array] | Array,
             **kwargs: Any,
@@ -443,7 +443,7 @@ class P2PMatrixSubsetGenerator(P2PBase):
         return knl
 
     def __call__(self,
-            actx: PyOpenCLArrayContext,
+            actx: ArrayContext,
             targets: ObjectArray1D[Array] | Array,
             sources: ObjectArray1D[Array] | Array,
             *,
@@ -803,7 +803,7 @@ class P2PFromCSR(P2PBase):
         return knl
 
     def __call__(self,
-            actx: PyOpenCLArrayContext,
+            actx: ArrayContext,
             targets: ObjectArray1D[Array] | Array,
             sources: ObjectArray1D[Array] | Array,
             *,
@@ -823,6 +823,7 @@ class P2PFromCSR(P2PBase):
             source_dtype = None
             strength_dtype = None
 
+        assert isinstance(actx, PyOpenCLArrayContext)
         knl = self.get_cached_kernel(
                 max_nsources_in_one_box=max_nsources_in_one_box,
                 max_ntargets_in_one_box=max_ntargets_in_one_box,

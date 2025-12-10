@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 
     from numpy.typing import DTypeLike
 
+    from arraycontext import ArrayContext
     from loopy import TranslationUnit
     from loopy.codegen import PreambleInfo
     from pytools.tag import ToTagSetConvertible
@@ -112,7 +113,10 @@ class PyOpenCLArrayContext(PyOpenCLArrayContextBase):
         return t_unit
 
 
-def is_cl_cpu(actx: PyOpenCLArrayContext) -> bool:
+def is_cl_cpu(actx: ArrayContext) -> bool:
+    if not isinstance(actx, PyOpenCLArrayContext):
+        return False
+
     import pyopencl as cl
     return all(dev.type & cl.device_type.CPU for dev in actx.context.devices)
 

@@ -53,6 +53,7 @@ if TYPE_CHECKING:
     from optype.numpy import Array2D
 
     import pyopencl
+    from arraycontext import ArrayContext
     from pymbolic.primitives import Variable
     from pymbolic.typing import Expression
 
@@ -972,13 +973,14 @@ def _get_fft_backend(queue: pyopencl.CommandQueue) -> FFTBackend:
 
 
 def get_opencl_fft_app(
-        actx: PyOpenCLArrayContext,
+        actx: ArrayContext,
         shape: tuple[int, ...],
         dtype: numpy.dtype[Any],
         inverse: bool) -> Any:
     """Setup an object for out-of-place FFT on with given shape and dtype
     on given queue.
     """
+    assert isinstance(actx, PyOpenCLArrayContext)
     assert dtype.type in (np.float32, np.float64, np.complex64,
                            np.complex128)
 
@@ -1001,7 +1003,7 @@ def get_opencl_fft_app(
 
 
 def run_opencl_fft(
-        actx: PyOpenCLArrayContext,
+        actx: ArrayContext,
         fft_app: tuple[Any, FFTBackend],
         input_vec: Any,
         inverse: bool = False,
@@ -1012,6 +1014,8 @@ def run_opencl_fft(
     vector.
     Only supports in-order queues.
     """
+    assert isinstance(actx, PyOpenCLArrayContext)
+
     app, backend = fft_app
 
     if backend == FFTBackend.loopy:

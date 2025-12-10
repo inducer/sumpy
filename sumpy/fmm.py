@@ -77,9 +77,8 @@ if TYPE_CHECKING:
     from numpy.typing import DTypeLike
 
     import pyopencl
-    from arraycontext import Array
+    from arraycontext import Array, ArrayContext
 
-    from sumpy.array_context import PyOpenCLArrayContext
     from sumpy.expansion.local import LocalExpansionBase
     from sumpy.expansion.multipole import MultipoleExpansionBase
 
@@ -114,7 +113,7 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
     strength_usage: Sequence[int] | None
 
     def __init__(self,
-                 array_context: PyOpenCLArrayContext,
+                 array_context: ArrayContext,
                  multipole_expansion_factory: MultipoleExpansionFromOrderFactory,
                  local_expansion_factory: LocalExpansionFromOrderFactory,
                  target_kernels: Sequence[Kernel],
@@ -134,7 +133,7 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
         """
         super().__init__()
 
-        self._setup_actx: PyOpenCLArrayContext = array_context
+        self._setup_actx: ArrayContext = array_context
 
         self.multipole_expansion_factory = multipole_expansion_factory
         self.local_expansion_factory = local_expansion_factory
@@ -422,7 +421,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         return build_csr_level_starts(self.level_orders, order_to_size,
                 level_starts=self.m2l_translation_class_level_start_box_nrs())
 
-    def multipole_expansion_zeros(self, actx: PyOpenCLArrayContext) -> Array:
+    def multipole_expansion_zeros(self, actx: ArrayContext) -> Array:
         """Return an expansions array (which must support addition)
         capable of holding one multipole or local expansion for every
         box in the tree.
@@ -441,7 +440,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 dtype=self.dtype)
 
     def m2l_translation_classes_dependent_data_zeros(
-            self, actx: PyOpenCLArrayContext):
+            self, actx: ArrayContext):
         data_level_starts = (
             self.m2l_translation_classes_dependent_data_level_starts())
         level_start_box_nrs = (
@@ -497,7 +496,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 level_starts=self.tree_level_start_box_nrs)
 
     def m2l_preproc_mpole_expansion_zeros(
-            self, actx: PyOpenCLArrayContext, template_ary):
+            self, actx: ArrayContext, template_ary):
         level_starts = self.m2l_preproc_mpole_expansions_level_starts()
 
         result = []
@@ -522,7 +521,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     m2l_work_array_level_starts = m2l_preproc_mpole_expansions_level_starts
 
     def output_zeros(self,
-                actx: PyOpenCLArrayContext
+                actx: ArrayContext
             ) -> obj_array.ObjectArray1D[Array]:
         """Return a potentials array (which must support addition) capable of
         holding a potential value for each target in the tree. Note that
@@ -587,7 +586,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
     # }}}
 
-    def run_opencl_fft(self, actx: PyOpenCLArrayContext,
+    def run_opencl_fft(self, actx: ArrayContext,
             input_vec, inverse, wait_for):
         app = self.tree_indep.opencl_fft_app(input_vec.shape, input_vec.dtype,
             inverse)
@@ -601,7 +600,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         return result
 
     def form_multipoles(self,
-            actx: PyOpenCLArrayContext,
+            actx: ArrayContext,
             level_start_source_box_nrs, source_boxes,
             src_weight_vecs):
         mpoles = self.multipole_expansion_zeros(actx)
@@ -635,7 +634,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         return mpoles
 
     def coarsen_multipoles(self,
-            actx: PyOpenCLArrayContext,
+            actx: ArrayContext,
             level_start_source_parent_box_nrs,
             source_parent_boxes,
             mpoles):
@@ -689,7 +688,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         return mpoles
 
     def eval_direct(self,
-            actx: PyOpenCLArrayContext,
+            actx: ArrayContext,
             target_boxes, source_box_starts,
             source_box_lists, src_weight_vecs):
         pot = self.output_zeros(actx)
@@ -791,7 +790,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             self.translation_classes_data.from_sep_siblings_translation_classes
 
     def multipole_to_local(self,
-            actx: PyOpenCLArrayContext,
+            actx: ArrayContext,
             level_start_target_box_nrs,
             target_boxes, src_box_starts, src_box_lists,
             mpole_exps):
@@ -915,7 +914,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         return local_exps
 
     def eval_multipoles(self,
-            actx: PyOpenCLArrayContext,
+            actx: ArrayContext,
             target_boxes_by_source_level, source_boxes_by_level, mpole_exps):
         pot = self.output_zeros(actx)
 
@@ -956,7 +955,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         return pot
 
     def form_locals(self,
-            actx: PyOpenCLArrayContext,
+            actx: ArrayContext,
             level_start_target_or_target_parent_box_nrs,
             target_or_target_parent_boxes, starts, lists, src_weight_vecs):
         local_exps = self.local_expansion_zeros(actx)
@@ -997,7 +996,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         return local_exps
 
     def refine_locals(self,
-            actx: PyOpenCLArrayContext,
+            actx: ArrayContext,
             level_start_target_or_target_parent_box_nrs,
             target_or_target_parent_boxes,
             local_exps):
@@ -1040,7 +1039,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         return local_exps
 
     def eval_locals(self,
-            actx: PyOpenCLArrayContext,
+            actx: ArrayContext,
             level_start_target_box_nrs, target_boxes, local_exps):
         pot = self.output_zeros(actx)
         level_start_target_box_nrs = actx.to_numpy(level_start_target_box_nrs)
@@ -1077,7 +1076,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
         return pot
 
-    def finalize_potentials(self, actx: PyOpenCLArrayContext, potentials):
+    def finalize_potentials(self, actx: ArrayContext, potentials):
         return potentials
 
 # }}}

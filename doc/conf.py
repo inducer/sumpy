@@ -55,6 +55,7 @@ sphinxconfig_missing_reference_aliases = {
     "CallInstruction": "class:loopy.kernel.instruction.CallInstruction",
     # arraycontext
     "Array": "obj:arraycontext.Array",
+    "ArrayContext": "class:arraycontext.ArrayContext",
     # boxtree
     "FMMTraversalInfo": "class:boxtree.traversal.FMMTraversalInfo",
     # sumpy

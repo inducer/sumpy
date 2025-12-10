@@ -33,13 +33,13 @@ from sumpy.fmm import SumpyExpansionWrangler
 
 
 if TYPE_CHECKING:
-    from sumpy.array_context import PyOpenCLArrayContext
+    from arraycontext import ArrayContext
 
 
 class DistributedSumpyExpansionWrangler(
         DistributedExpansionWranglerMixin, SumpyExpansionWrangler):
     def __init__(
-            self, actx: PyOpenCLArrayContext,
+            self, actx: ArrayContext,
             comm, tree_indep, local_traversal, global_traversal,
             dtype, fmm_level_to_order, communicate_mpoles_via_allreduce=False,
             **kwargs):
@@ -53,7 +53,7 @@ class DistributedSumpyExpansionWrangler(
         self.communicate_mpoles_via_allreduce = communicate_mpoles_via_allreduce
 
     def distribute_source_weights(self,
-            actx: PyOpenCLArrayContext, src_weight_vecs, src_idx_all_ranks):
+            actx: ArrayContext, src_weight_vecs, src_idx_all_ranks):
         src_weight_vecs_host = [
             actx.to_numpy(src_weight) for src_weight in src_weight_vecs
             ]
@@ -68,7 +68,7 @@ class DistributedSumpyExpansionWrangler(
         return local_src_weight_vecs_device
 
     def gather_potential_results(self,
-            actx: PyOpenCLArrayContext, potentials, tgt_idx_all_ranks):
+            actx: ArrayContext, potentials, tgt_idx_all_ranks):
         potentials_host_vec = [
             actx.to_numpy(potentials_dev) for potentials_dev in potentials
             ]
@@ -109,7 +109,7 @@ class DistributedSumpyExpansionWrangler(
             return None
 
     def communicate_mpoles(self,
-            actx: PyOpenCLArrayContext, mpole_exps, return_stats=False):
+            actx: ArrayContext, mpole_exps, return_stats=False):
         mpole_exps_host = actx.to_numpy(mpole_exps)
         stats = super().communicate_mpoles(actx, mpole_exps_host, return_stats)
         mpole_exps[:] = mpole_exps_host

@@ -43,7 +43,8 @@ from sumpy.kernel import TargetTransformationRemover
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from sumpy.array_context import PyOpenCLArrayContext
+    from arraycontext import ArrayContext
+
     from sumpy.expansion import (
         ExpansionFactoryBase,
         LocalExpansionFactory,
@@ -338,7 +339,7 @@ def _e2p(actx, psource, targets, e2p):
     return actx.to_numpy(pot)
 
 
-def _e2e(actx: PyOpenCLArrayContext,
+def _e2e(actx: ArrayContext,
          psource, to_center, to_rscale, to_order: int, e2e, expn_class, expn_kwargs,
          extra_kernel_kwargs):
     toy_ctx = psource.toy_ctx
@@ -386,7 +387,7 @@ def _e2e(actx: PyOpenCLArrayContext,
             derived_from=psource, **expn_kwargs)
 
 
-def _m2l(actx: PyOpenCLArrayContext,
+def _m2l(actx: ArrayContext,
          psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
          translation_classes_kwargs):
     toy_ctx = psource.toy_ctx
@@ -517,7 +518,7 @@ class PotentialSource:
     def __init__(self, toy_ctx: ToyContext):
         self.toy_ctx = toy_ctx
 
-    def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
+    def eval(self, actx: ArrayContext, targets: np.ndarray) -> np.ndarray:
         """
         :param targets: An array of shape ``(dim, ntargets)``.
         :returns: an array of shape ``(ntargets,)``.
@@ -567,7 +568,7 @@ class ConstantPotential(PotentialSource):
         super().__init__(toy_ctx)
         self.value = np.array(value)
 
-    def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
+    def eval(self, actx: ArrayContext, targets: np.ndarray) -> np.ndarray:
         pot = np.empty(targets.shape[-1], dtype=self.value.dtype)
         pot.fill(self.value)
         return pot
@@ -588,7 +589,8 @@ class OneOnBallPotential(PotentialSource):
         self.center = np.asarray(center)
         self.radius = radius
 
-    def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
+    @override
+    def eval(self, actx: ArrayContext, targets: np.ndarray) -> np.ndarray:
         dist_vec = targets - self.center[:, np.newaxis]
         return (np.sum(dist_vec**2, axis=0) < self.radius**2).astype(np.float64)
 
@@ -607,7 +609,7 @@ class HalfspaceOnePotential(PotentialSource):
         self.axis = axis
         self.side = side
 
-    def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
+    def eval(self, actx: ArrayContext, targets: np.ndarray) -> np.ndarray:
         return (
             (self.side*(targets[self.axis] - self.center[self.axis])) >= 0
             ).astype(np.float64)
@@ -633,7 +635,8 @@ class PointSources(PotentialSource):
         self.weights = weights
         self._center = center
 
-    def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
+    @override
+    def eval(self, actx: ArrayContext, targets: np.ndarray) -> np.ndarray:
         potential, = self.toy_ctx.get_p2p()(
                 actx,
                 actx.from_numpy(targets),
@@ -692,7 +695,7 @@ class MultipoleExpansion(ExpansionPotentialSource):
     Inherits from :class:`ExpansionPotentialSource`.
     """
 
-    def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
+    def eval(self, actx: ArrayContext, targets: np.ndarray) -> np.ndarray:
         return _e2p(actx, self, targets, self.toy_ctx.get_m2p(self.order))
 
 
@@ -701,7 +704,7 @@ class LocalExpansion(ExpansionPotentialSource):
     Inherits from :class:`ExpansionPotentialSource`.
     """
 
-    def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
+    def eval(self, actx: ArrayContext, targets: np.ndarray) -> np.ndarray:
         return _e2p(actx, self, targets, self.toy_ctx.get_l2p(self.order))
 
 
@@ -736,7 +739,7 @@ class Sum(PotentialExpressionNode):
     """
 
     @override
-    def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
+    def eval(self, actx: ArrayContext, targets: np.ndarray) -> np.ndarray:
         result = np.zeros(targets.shape[1])
         for psource in self.psources:
             result = result + psource.eval(actx, targets)
@@ -750,7 +753,7 @@ class Product(PotentialExpressionNode):
     """
 
     @override
-    def eval(self, actx: PyOpenCLArrayContext, targets: np.ndarray) -> np.ndarray:
+    def eval(self, actx: ArrayContext, targets: np.ndarray) -> np.ndarray:
         result = np.ones(targets.shape[1])
         for psource in self.psources:
             result = result * psource.eval(actx, targets)
@@ -760,7 +763,7 @@ class Product(PotentialExpressionNode):
 
 
 def multipole_expand(
-        actx: PyOpenCLArrayContext,
+        actx: ArrayContext,
         psource: PotentialSource,
         center: np.ndarray, *,
         order: int | None = None,
@@ -787,7 +790,7 @@ def multipole_expand(
 
 
 def local_expand(
-        actx: PyOpenCLArrayContext,
+        actx: ArrayContext,
         psource: PotentialSource,
         center: np.ndarray, *,
         order: int | None = None,
@@ -841,7 +844,7 @@ def local_expand(
 
 
 def logplot(
-        actx: PyOpenCLArrayContext,
+        actx: ArrayContext,
         fp: FieldPlotter,
         psource: PotentialSource, **kwargs) -> None:
     fp.show_scalar_in_matplotlib(
@@ -898,7 +901,7 @@ def combine_halfspace_and_outer(
             psource_outer, radius, center)
 
 
-def l_inf(actx: PyOpenCLArrayContext, psource: PotentialSource, radius: float,
+def l_inf(actx: ArrayContext, psource: PotentialSource, radius: float,
           center: np.ndarray | None = None, npoints: int = 100,
           debug: bool = False) -> np.number:
     if center is None:

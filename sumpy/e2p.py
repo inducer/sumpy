@@ -24,6 +24,7 @@ THE SOFTWARE.
 """
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -31,8 +32,12 @@ import loopy as lp
 import pytools.obj_array as obj_array
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION  # noqa: F401
 
-from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
+from sumpy.array_context import make_loopy_program
 from sumpy.tools import KernelCacheMixin, gather_loopy_arguments
+
+
+if TYPE_CHECKING:
+    from arraycontext import ArrayContext
 
 
 __doc__ = """
@@ -203,7 +208,7 @@ class E2PFromSingleBox(E2PBase):
 
         return knl
 
-    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
+    def __call__(self, actx: ArrayContext, **kwargs):
         """
         :arg expansions:
         :arg target_boxes:
@@ -331,7 +336,7 @@ class E2PFromCSR(E2PBase):
 
         return knl
 
-    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
+    def __call__(self, actx: ArrayContext, **kwargs):
         centers = kwargs.pop("centers")
         # "1" may be passed for rscale, which won't have its type
         # meaningfully inferred. Make the type of rscale explicit.

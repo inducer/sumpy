@@ -25,6 +25,7 @@ THE SOFTWARE.
 
 import logging
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 import numpy as np
 from typing_extensions import override
@@ -34,8 +35,12 @@ from loopy.version import MOST_RECENT_LANGUAGE_VERSION  # noqa: F401
 from pytools import memoize_method
 
 import sumpy.symbolic as sym
-from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
+from sumpy.array_context import make_loopy_program
 from sumpy.tools import KernelCacheMixin, to_complex_dtype
+
+
+if TYPE_CHECKING:
+    from arraycontext import ArrayContext
 
 
 logger = logging.getLogger(__name__)
@@ -267,7 +272,7 @@ class E2EFromCSR(E2EBase):
 
         return knl
 
-    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
+    def __call__(self, actx: ArrayContext, **kwargs):
         """
         :arg src_expansions:
         :arg src_box_starts:
@@ -511,7 +516,7 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
 
         return knl
 
-    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
+    def __call__(self, actx: ArrayContext, **kwargs):
         """
         :arg src_expansions:
         :arg src_box_starts:
@@ -624,7 +629,7 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
 
         return knl
 
-    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
+    def __call__(self, actx: ArrayContext, **kwargs):
         """
         :arg src_rscale:
         :arg translation_classes_level_start:
@@ -729,7 +734,7 @@ class M2LPreprocessMultipole(E2EBase):
             knl = optimization(knl)
         return knl
 
-    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
+    def __call__(self, actx: ArrayContext, **kwargs):
         """
         :arg src_expansions
         :arg preprocessed_src_expansions
@@ -830,7 +835,7 @@ class M2LPostprocessLocal(E2EBase):
         knl = lp.add_inames_for_unused_hw_axes(knl)
         return knl
 
-    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
+    def __call__(self, actx: ArrayContext, **kwargs):
         """
         :arg tgt_expansions
         :arg tgt_expansions_before_postprocessing
@@ -943,7 +948,7 @@ class E2EFromChildren(E2EBase):
 
         return loopy_knl
 
-    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
+    def __call__(self, actx: ArrayContext, **kwargs):
         """
         :arg src_expansions:
         :arg src_box_starts:
@@ -1050,7 +1055,7 @@ class E2EFromParent(E2EBase):
 
         return loopy_knl
 
-    def __call__(self, actx: PyOpenCLArrayContext, **kwargs):
+    def __call__(self, actx: ArrayContext, **kwargs):
         """
         :arg src_expansions:
         :arg src_box_starts:

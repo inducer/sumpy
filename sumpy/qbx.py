@@ -39,11 +39,13 @@ from pymbolic import parse
 from pytools import memoize_method
 
 import sumpy.symbolic as sym
-from sumpy.array_context import PyOpenCLArrayContext, is_cl_cpu, make_loopy_program
+from sumpy.array_context import is_cl_cpu, make_loopy_program
 from sumpy.tools import KernelCacheMixin, KernelComputation, is_obj_array_like
 
 
 if TYPE_CHECKING:
+
+    from arraycontext import ArrayContext
 
     from sumpy.expansion.local import (
         LineTaylorLocalExpansion,
@@ -309,7 +311,7 @@ class LayerPotential(LayerPotentialBase):
 
         return loopy_knl
 
-    def __call__(self, actx: PyOpenCLArrayContext,
+    def __call__(self, actx: ArrayContext,
             targets, sources, centers, strengths, expansion_radii,
             **kwargs):
         """
@@ -394,7 +396,7 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
 
         return loopy_knl
 
-    def __call__(self, actx: PyOpenCLArrayContext,
+    def __call__(self, actx: ArrayContext,
             targets, sources, centers, expansion_radii, **kwargs):
         knl = self.get_cached_kernel(
                 is_cpu=is_cl_cpu(actx),
@@ -501,7 +503,7 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
         loopy_knl = self._allow_redundant_execution_of_knl_scaling(loopy_knl)
         return loopy_knl
 
-    def __call__(self, actx: PyOpenCLArrayContext,
+    def __call__(self, actx: ArrayContext,
             targets, sources, centers, expansion_radii,
             tgtindices, srcindices, **kwargs):
         """Evaluate a subset of the QBX matrix interactions.
