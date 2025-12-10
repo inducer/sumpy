@@ -432,7 +432,7 @@ def test_unified_single_and_double(actx_factory: ArrayContextFactory, visualize=
             source_kernel_vecs, strength_usages, strict=True):
         source_extra_kwargs = {}
         if deriv_knl in source_kernels:
-            source_extra_kwargs["dir_vec"] = actx.from_numpy(dir_vec)
+            source_extra_kwargs["dir_vec"] = dir_vec
         tree_indep = SumpyTreeIndependentDataForWrangler(
                 actx,
                 partial(mpole_expn_class, knl),
