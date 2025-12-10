@@ -344,7 +344,7 @@ class P2PMatrixGenerator(P2PBase):
             targets: ObjectArray1D[Array] | Array,
             sources: ObjectArray1D[Array] | Array,
             **kwargs: Any,
-        ) -> Sequence[Array]:
+        ) -> ObjectArray1D[Array]:
         knl = self.get_cached_kernel(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources))
@@ -450,7 +450,7 @@ class P2PMatrixSubsetGenerator(P2PBase):
             tgtindices: Array,
             srcindices: Array,
             **kwargs: Any,
-        ) -> tuple[cl.Event, Sequence[Array]]:
+        ) -> ObjectArray1D[Array]:
         """Evaluate a subset of the P2P matrix interactions.
 
         :arg targets: target point coordinates, which can be an object
@@ -810,7 +810,7 @@ class P2PFromCSR(P2PBase):
             max_nsources_in_one_box: int,
             max_ntargets_in_one_box: int,
             **kwargs: Any,
-        ) -> tuple[cl.Event, Sequence[Array]]:
+        ) -> ObjectArray1D[Array]:
         from sumpy.array_context import is_cl_cpu
 
         is_gpu = not is_cl_cpu(actx)
