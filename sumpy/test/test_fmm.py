@@ -34,7 +34,11 @@ import numpy.linalg as la
 import pytest
 
 import pytools.obj_array as obj_array
-from arraycontext import ArrayContextFactory, pytest_generate_tests_for_array_contexts
+from arraycontext import (
+    ArrayContextFactory,
+    PyOpenCLArrayContext,
+    pytest_generate_tests_for_array_contexts,
+)
 
 from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
 from sumpy.expansion.local import (
@@ -145,6 +149,13 @@ def _test_sumpy_fmm(
             fft_backend):
 
     actx = actx_factory()
+
+    if fft_backend == "pyvkfft":
+        from pyopencl.characterize import get_pocl_version
+        if (isinstance(actx, PyOpenCLArrayContext)
+                    and get_pocl_version(actx.queue.device.platform) >= (7,)):
+            pytest.skip("pocl 7 and pyvkfft don't get along: "
+                        "https://github.com/pocl/pocl/issues/2069")
 
     nsources = 1000
     ntargets = 300
