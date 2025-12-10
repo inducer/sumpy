@@ -69,8 +69,6 @@ Tools
 
 .. autofunction:: to_complex_dtype
 .. autofunction:: is_obj_array_like
-.. autofunction:: vector_to_device
-.. autofunction:: vector_from_device
 .. autoclass:: OrderedSet
 
 Multi-index Helpers
