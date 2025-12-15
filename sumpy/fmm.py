@@ -426,7 +426,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         capable of holding one multipole or local expansion for every
         box in the tree.
         """
-        return actx.zeros(
+        return actx.np.zeros(
                 self.multipole_expansions_level_starts()[-1],
                 dtype=self.dtype)
 
@@ -435,7 +435,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         capable of holding one multipole or local expansion for every
         box in the tree.
         """
-        return actx.zeros(
+        return actx.np.zeros(
                 self.local_expansions_level_starts()[-1],
                 dtype=self.dtype)
 
@@ -452,7 +452,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             translation_class_start, translation_class_stop = (
                 level_start_box_nrs[level:level + 2])
 
-            exprs_level = actx.zeros(
+            exprs_level = actx.np.zeros(
                 expn_stop - expn_start,
                 dtype=self.preprocessed_mpole_dtype
                 ).reshape(translation_class_stop - translation_class_start, -1)
@@ -504,7 +504,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             expn_start, expn_stop = level_starts[level:level+2]
             box_start, box_stop = self.tree_level_start_box_nrs[level:level+2]
 
-            exprs_level = actx.zeros(
+            exprs_level = actx.np.zeros(
                 expn_stop - expn_start,
                 dtype=self.preprocessed_mpole_dtype,
                 ).reshape(box_stop - box_start, -1)
@@ -530,7 +530,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         the potential, or arbitrary other per-target output data.
         """
         return obj_array.new_1d([
-                actx.zeros(self.tree.ntargets, dtype=self.dtype)
+                actx.np.zeros(self.tree.ntargets, dtype=self.dtype)
                 for k in self.tree_indep.target_kernels])
 
     def reorder_sources(self, source_array):

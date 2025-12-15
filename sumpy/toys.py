@@ -403,7 +403,7 @@ def _m2l(actx: ArrayContext,
         expn_size = translation_classes_kwargs["m2l_expn_size"]
 
         # Preprocess the mpole expansion
-        preprocessed_src_expansions = actx.zeros((1, expn_size), dtype=np.complex128)
+        preprocessed_src_expansions = actx.np.zeros((1, expn_size), dtype=np.complex128)
         preprocess_kernel(
                 actx,
                 src_expansions=coeffs,
@@ -430,7 +430,7 @@ def _m2l(actx: ArrayContext,
         dim = toy_ctx.kernel.dim
         m2l_translation_vectors = actx.from_numpy(dist.reshape(dim, 1))
         m2l_translation_classes_dependent_data = (
-            actx.zeros((1, expn_size), dtype=np.complex128))
+            actx.np.zeros((1, expn_size), dtype=np.complex128))
 
         data_kernel(
                 actx,
@@ -462,7 +462,7 @@ def _m2l(actx: ArrayContext,
 
         # Postprocess the local expansion
         local_before = actx.from_numpy(np.array([ret.coeffs]))
-        to_coeffs = actx.zeros((1, len(data_kernel.tgt_expansion)),
+        to_coeffs = actx.np.zeros((1, len(data_kernel.tgt_expansion)),
                                dtype=coeffs.dtype)
 
         if toy_ctx.use_fft:
