@@ -64,7 +64,7 @@ def make_loopy_program(
         silenced_warnings: list[str] | str | None = None,
         assumptions: str = "",
         fixed_parameters: dict[str, Any] | None = None,
-        index_dtype: DTypeLike = None,
+        index_dtype: DTypeLike | None = None,
         tags: ToTagSetConvertible = None):
     """Return a :class:`loopy.LoopKernel` suitable for use with
     :meth:`arraycontext.ArrayContext.call_loopy`.

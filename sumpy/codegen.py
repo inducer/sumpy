@@ -731,7 +731,7 @@ def to_loopy_insns(
         assignments: Iterable[tuple[str, sym.Expr]],
         vector_names: Set[str] | None = None,
         pymbolic_expr_maps: Sequence[Callable[[Expression], Expression]] = (),
-        complex_dtype: DTypeLike = None,
+        complex_dtype: DTypeLike | None = None,
         retain_names: Set[str] | None = None,
     ) -> Sequence[Assignment | CallInstruction]:
     if vector_names is None:
