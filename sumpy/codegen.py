@@ -47,8 +47,6 @@ if TYPE_CHECKING:
 
     from numpy.typing import DTypeLike
 
-    import pyopencl as cl
-    from loopy.codegen import PreambleInfo
     from loopy.target import TargetBase
     from loopy.translation_unit import CallablesInferenceContext
     from loopy.types import LoopyType
@@ -246,26 +244,6 @@ def register_bessel_callables(loopy_knl: lp.TranslationUnit) -> lp.TranslationUn
             loopy_knl,
             "hank1_01",
             Hankel1_01("hank1_01"))
-
-    return loopy_knl
-
-
-def _fp_contract_fast_preamble(
-        preamble_info: PreambleInfo
-    ) -> Iterator[tuple[str, str]]:
-    yield ("fp_contract_fast_pocl", "#pragma clang fp contract(fast)")
-
-
-def register_optimization_preambles(
-        loopy_knl: lp.TranslationUnit, device: cl.Device
-    ) -> lp.TranslationUnit:
-    if isinstance(loopy_knl.target, lp.PyOpenCLTarget):
-        import pyopencl as cl
-        if (device.platform.name == "Portable Computing Language"
-                and (device.type & cl.device_type.GPU)):
-            loopy_knl = lp.register_preamble_generators(
-                loopy_knl,
-                [_fp_contract_fast_preamble])
 
     return loopy_knl
 
@@ -753,7 +731,7 @@ def to_loopy_insns(
         assignments: Iterable[tuple[str, sym.Expr]],
         vector_names: Set[str] | None = None,
         pymbolic_expr_maps: Sequence[Callable[[Expression], Expression]] = (),
-        complex_dtype: DTypeLike = None,
+        complex_dtype: DTypeLike | None = None,
         retain_names: Set[str] | None = None,
     ) -> Sequence[Assignment | CallInstruction]:
     if vector_names is None:

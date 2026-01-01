@@ -26,6 +26,7 @@ intersphinx_mapping = {
 
 nitpick_ignore_regex = [
     ["py:class", r"symengine\.(.+)"],  # :cry:
+    ["py:class", r"ToTagSetConvertible"],  # :cry:
 ]
 
 sphinxconfig_missing_reference_aliases = {
@@ -36,6 +37,7 @@ sphinxconfig_missing_reference_aliases = {
     "np.complexfloating": "class:numpy.complexfloating",
     "np.inexact": "class:numpy.inexact",
     "np.dtype": "class:numpy.dtype",
+    "np.number": "class:numpy.number",
     # pytools
     "obj_array.ObjectArray1D": "obj:pytools.obj_array.ObjectArray1D",
     # sympy
@@ -53,6 +55,7 @@ sphinxconfig_missing_reference_aliases = {
     "CallInstruction": "class:loopy.kernel.instruction.CallInstruction",
     # arraycontext
     "Array": "obj:arraycontext.Array",
+    "ArrayContext": "class:arraycontext.ArrayContext",
     # boxtree
     "FMMTraversalInfo": "class:boxtree.traversal.FMMTraversalInfo",
     # sumpy

@@ -75,13 +75,11 @@ def test_lpot_dx_jump_relation_convergence(
     from sumpy.qbx import LayerPotential
     expansion = LineTaylorLocalExpansion(knl, qbx_order)
     lplot_dx = LayerPotential(
-        actx.context,
         expansion=expansion,
         target_kernels=(AxisTargetDerivative(0, knl),),
         source_kernels=(knl,)
     )
     lplot_dy = LayerPotential(
-        actx.context,
         expansion=expansion,
         target_kernels=(AxisTargetDerivative(1, knl),),
         source_kernels=(knl,)
@@ -96,34 +94,35 @@ def test_lpot_dx_jump_relation_convergence(
         weights_nodes = actx.from_numpy(weights_nodes_h)
 
         expansion_radii_h = 4 * target_geo.area_elements / nsources
+        expansion_radii = actx.from_numpy(expansion_radii_h)
         centers_in = actx.from_numpy(
                             targets_h - target_geo.normals * expansion_radii_h)
         centers_out = actx.from_numpy(
                             targets_h + target_geo.normals * expansion_radii_h)
 
         strengths = (weights_nodes,)
-        _, (eval_in_dx,) = lplot_dx(
-            actx.queue,
+        (eval_in_dx,) = lplot_dx(
+            actx,
             targets, sources, centers_in, strengths,
-            expansion_radii=expansion_radii_h
+            expansion_radii=expansion_radii
         )
 
-        _, (eval_in_dy,) = lplot_dy(
-            actx.queue,
+        (eval_in_dy,) = lplot_dy(
+            actx,
             targets, sources, centers_in, strengths,
-            expansion_radii=expansion_radii_h
+            expansion_radii=expansion_radii
         )
 
-        _, (eval_out_dx,) = lplot_dx(
-            actx.queue,
+        (eval_out_dx,) = lplot_dx(
+            actx,
             targets, sources, centers_out, strengths,
-            expansion_radii=expansion_radii_h
+            expansion_radii=expansion_radii
         )
 
-        _, (eval_out_dy,) = lplot_dy(
-            actx.queue,
+        (eval_out_dy,) = lplot_dy(
+            actx,
             targets, sources, centers_out, strengths,
-            expansion_radii=expansion_radii_h
+            expansion_radii=expansion_radii
         )
 
         eval_in_dx = actx.to_numpy(eval_in_dx)

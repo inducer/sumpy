@@ -66,8 +66,8 @@ __all__ = [
 ]
 
 
-code_cache: WriteOncePersistentDict[Hashable, lp.TranslationUnit] = \
-        WriteOncePersistentDict("sumpy-code-cache-v6-"+VERSION_TEXT, safe_sync=False)
+code_cache: WriteOncePersistentDict[Hashable, lp.TranslationUnit] = (
+    WriteOncePersistentDict(f"sumpy-code-cache-v8-{VERSION_TEXT}", safe_sync=False))
 
 
 # {{{ optimization control
@@ -86,8 +86,6 @@ def set_optimization_enabled(flag):
 
 
 # {{{ cache control
-
-CACHING_ENABLED = True
 
 CACHING_ENABLED = (
     "SUMPY_NO_CACHE" not in os.environ

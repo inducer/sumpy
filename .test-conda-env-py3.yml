@@ -8,7 +8,8 @@ dependencies:
 - numpy
 - scipy
 - sympy
-- pocl
+# https://github.com/pocl/pocl/issues/2069
+- pocl<7
 - pocl-cuda
 - islpy
 - pyopencl
