@@ -20,3 +20,4 @@ version: 2022.1
 doi: 10.5281/zenodo.7349787
 date-released: 2022-11-23
 url: "https://github.com/inducer/sumpy"
+license: MIT

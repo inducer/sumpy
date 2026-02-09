@@ -1,6 +1,6 @@
 numpy
 sympy
-pyrsistent
+constantdict
 pyvkfft
 
 # used in mpi-based tests

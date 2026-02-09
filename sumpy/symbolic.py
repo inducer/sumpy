@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -34,12 +37,21 @@ __doc__ = """
 """
 
 
-import numpy as np
-from pymbolic.mapper import IdentityMapper as IdentityMapperBase
-import pymbolic.primitives as prim
-import math
-
 import logging
+import math
+from typing import TYPE_CHECKING, ClassVar, cast
+
+from typing_extensions import override
+
+import pymbolic.primitives as prim
+from pymbolic.mapper import IdentityMapper as IdentityMapperBase
+
+
+if TYPE_CHECKING:
+    from pymbolic.typing import ArithmeticExpression, Expression
+    from pytools import T
+    from pytools.obj_array import ObjectArray1D
+
 logger = logging.getLogger(__name__)
 
 USE_SYMENGINE = False
@@ -74,30 +86,35 @@ def _find_symbolic_backend():
         if backend == "symengine" and not symengine_found:
             raise RuntimeError(f"could not find SymEngine: {symengine_error}")
 
-        USE_SYMENGINE = (backend == "symengine")
+        USE_SYMENGINE = (backend == "symengine")  # pyright: ignore[reportConstantRedefinition]
     else:
-        USE_SYMENGINE = symengine_found
+        USE_SYMENGINE = symengine_found  # pyright: ignore[reportConstantRedefinition]
 
 
 _find_symbolic_backend()
 
 # }}}
 
-if USE_SYMENGINE:
+if TYPE_CHECKING or not USE_SYMENGINE:
+    import sympy as sym
+
+    from pymbolic.interop.sympy import (  # type: ignore[assignment]
+        PymbolicToSympyMapper as PymbolicToSympyMapperBase,
+        SympyToPymbolicMapper as SympyToPymbolicMapperBase,
+    )
+else:
     import symengine as sym
+
     from pymbolic.interop.symengine import (
         PymbolicToSymEngineMapper as PymbolicToSympyMapperBase,
-        SymEngineToPymbolicMapper as SympyToPymbolicMapperBase)
-else:
-    import sympy as sym
-    from pymbolic.interop.sympy import (
-        PymbolicToSympyMapper as PymbolicToSympyMapperBase,
-        SympyToPymbolicMapper as SympyToPymbolicMapperBase)
+        SymEngineToPymbolicMapper as SympyToPymbolicMapperBase,
+    )
 
 # Symbolic API common to SymEngine and sympy.
 # Before adding a function here, make sure it's present in both modules.
 Add = sym.Add
 Basic = sym.Basic
+Expr = sym.Expr
 Mul = sym.Mul
 Pow = sym.Pow
 exp = sym.exp
@@ -115,73 +132,77 @@ Integer = sym.Integer
 Rational = sym.Rational
 Matrix = sym.Matrix
 Subs = sym.Subs
-I = sym.I  # noqa: E741
-pi = sym.pi
+I = cast("Expr", sym.I)  # noqa: E741
+pi = cast("Expr", sym.pi)
 functions = sym.functions
 Number = sym.Number
 Float = sym.Float
 
 
-def _coeff_isneg(a):
+def _coeff_isneg(a: Basic) -> bool:
     if a.is_Mul:
         a = a.args[0]
-    return a.is_Number and a.is_negative
+
+    return a.is_Number and bool(a.is_negative)
 
 
-if USE_SYMENGINE:
-    def UnevaluatedExpr(x):  # noqa: F811, N802
+if TYPE_CHECKING or USE_SYMENGINE:
+    def UnevaluatedExpr(x: T) -> T:  # noqa: N802
         return x
 else:
     try:
         from sympy import UnevaluatedExpr
     except ImportError:
-        def UnevaluatedExpr(x):  # noqa: F811, N802
+        def UnevaluatedExpr(x):  # noqa: N802
             return x
 
 
 if USE_SYMENGINE:
-    def doit(expr):
+    def doit(expr: Expr) -> Expr:
         return expr
 
-    def unevaluated_pow(a, b):
-        return sym.Pow(a, b)
+    def unevaluated_pow(a: Expr, b: complex | Expr) -> Expr:
+        return Pow(a, b)
 else:
-    def doit(expr):
+    def doit(expr: Expr) -> Expr:
         return expr.doit()
 
-    def unevaluated_pow(a, b):
-        return sym.Pow(a, b, evaluate=False)
+    def unevaluated_pow(a: Expr, b: complex | Expr) -> Expr:
+        return Pow(a, b, evaluate=False)
 
 
 # {{{ debugging of sympy CSE via Maxima
 
-class _DerivativeKiller(IdentityMapperBase):
-    def map_derivative(self, expr):
-        from pymbolic import var
-        return var("d_{}".format("_".join(expr.variables)))(expr.child)
+class _DerivativeKiller(IdentityMapperBase[[]]):
+    @override
+    def map_derivative(self, expr: prim.Derivative) -> Expression:
+        return prim.Variable("d_{}".format("_".join(expr.variables)))(expr.child)
 
-    def map_substitution(self, expr):
+    @override
+    def map_substitution(self, expr: prim.Substitution) -> Expression:
         return self.rec(expr.child)
 
 
-def _get_assignments_in_maxima(assignments, prefix=""):
-    my_variable_names = set(assignments.keys())
-    written_assignments = set()
+def _get_assignments_in_maxima(
+            assignments: dict[str, Basic],
+            prefix: str = "",
+        ) -> str:
+    variable_names = set(assignments.keys())
+    written_assignments: set[str] = set()
+    prefix_subst_dict = {vn: f"{prefix}{vn}" for vn in variable_names}
 
-    prefix_subst_dict = {
-            vn: prefix+vn for vn in my_variable_names}
+    from pymbolic.interop.maxima import MaximaStringifyMapper
 
-    from pymbolic.maxima import MaximaStringifyMapper
     mstr = MaximaStringifyMapper()
     s2p = SympyToPymbolicMapper()
     dkill = _DerivativeKiller()
 
-    result = []
+    result: list[str] = []
 
-    def write_assignment(name):
+    def write_assignment(name: str) -> None:
         symbols = [atm for atm in assignments[name].atoms()
-                if isinstance(atm, sym.Symbol)
-                and atm.name in my_variable_names]
+                if isinstance(atm, Symbol)
+                and atm.name in variable_names]
 
         for symb in symbols:
             if symb.name not in written_assignments:
@@ -192,7 +213,7 @@ def _get_assignments_in_maxima(assignments, prefix=""):
                 assignments[name].subs(prefix_subst_dict))))))
         written_assignments.add(name)
 
-    for name in assignments.keys():
+    for name in assignments:
         if name not in written_assignments:
             write_assignment(name)
 
@@ -209,12 +230,12 @@ def checked_cse(exprs, symbols=None):
     max_old = _get_assignments_in_maxima({
             f"old_expr{i}": expr
             for i, expr in enumerate(exprs)})
-    new_ass_dict = {
+    new_assign_dict = {
             f"new_expr{i}": expr
             for i, expr in enumerate(new_exprs)}
     for name, val in new_assignments:
-        new_ass_dict[name.name] = val
-    max_new = _get_assignments_in_maxima(new_ass_dict)
+        new_assign_dict[name.name] = val
+    max_new = _get_assignments_in_maxima(new_assign_dict)
 
     with open("check.mac", "w") as outf:
         outf.write("ratprint:false;\n")
@@ -232,133 +253,133 @@ def checked_cse(exprs, symbols=None):
 # }}}
 
 
-def sym_real_norm_2(x):
-    return sym.sqrt((x.T*x)[0, 0])
+def sym_real_norm_2(x: Matrix) -> Expr:
+    return sqrt((x.T*x)[0, 0])
 
 
-def pymbolic_real_norm_2(x):
-    from pymbolic import var
-    return var("sqrt")(np.dot(x, x))
+def pymbolic_real_norm_2(
+            x: ObjectArray1D[ArithmeticExpression]) -> ArithmeticExpression:
+    return prim.Variable("sqrt")(x @ x)
 
 
-def make_sym_vector(name, components):
-    return sym.Matrix([sym.Symbol(f"{name}{i}") for i in range(components)])
+def make_sym_vector(name: str, components: int) -> Matrix:
+    return Matrix([Symbol(f"{name}{i}") for i in range(components)])
 
 
-def vector_xreplace(expr, from_vec, to_vec):
-    substs = {}
-    assert (from_vec.rows, from_vec.cols) == (to_vec.rows, to_vec.cols)
-    for irow in range(from_vec.rows):
-        for icol in range(from_vec.cols):
-            substs[from_vec[irow, icol]] = to_vec[irow, icol]
-
-    return expr.xreplace(substs)
-
-
-def find_power_of(base, prod):
-    remdr = sym.Wild("remdr")
-    power = sym.Wild("power")
-    result = prod.match(remdr*base**power)
-    if result is None:
-        return 0
-    return result[power]
-
-
+@prim.expr_dataclass()
 class SpatialConstant(prim.Variable):
-    """A symbolic constant to represent a symbolic variable that
-    is spatially constant, like for example the wave-number :math:`k`
-    in the setting of a constant-coefficient Helmholtz problem.
-    For use in :attr:`sumpy.kernel.ExpressionKernel.expression`.
-    Any variable occurring there that is not a :class:`SpatialConstant`
+    """A symbolic constant to represent a symbolic variable that is spatially constant.
+
+    For example the wave-number :math:`k` in the setting of a constant-coefficient
+    Helmholtz problem. For use in :attr:`sumpy.kernel.ExpressionKernel.expression`.
+    Any variable occurring there that is not a :class:`~sumpy.symbolic.SpatialConstant`
     is assumed to have a spatial dependency.
+
+    .. autoattribute:: prefix
+    .. automethod:: as_sympy
+    .. automethod:: from_sympy
     """
 
-    prefix = "_spatial_constant_"
-    mapper_method = "map_spatial_constant"
+    prefix: ClassVar[str] = "_spatial_constant_"
+    """Prefix used in code generation for variables of this type."""
 
-    def as_sympy(self):
-        return sym.Symbol(f"{self.prefix}{self.name}")
+    def as_sympy(self) -> Symbol:
+        """Convert variable to a :mod:`sympy` expression."""
+        return Symbol(f"{self.prefix}{self.name}")
 
     @classmethod
-    def from_sympy(cls, expr):
+    def from_sympy(cls, expr: Symbol) -> SpatialConstant:
+        """Convert :mod:`sympy` expression to a constant."""
         return cls(expr.name[len(cls.prefix):])
 
 
 class PymbolicToSympyMapper(PymbolicToSympyMapperBase):
-    def map_spatial_constant(self, expr):
+    def map_spatial_constant(self, expr: SpatialConstant) -> Basic:
         return expr.as_sympy()
 
 
 class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
-    def map_Symbol(self, expr):  # noqa: N802
+    @override
+    def map_Symbol(self, expr: Symbol) -> Expression:
         if expr.name.startswith(SpatialConstant.prefix):
             return SpatialConstant.from_sympy(expr)
+
         return SympyToPymbolicMapperBase.map_Symbol(self, expr)
 
-    def map_Pow(self, expr):  # noqa: N802
+    @override
+    def map_Pow(self, expr: Pow) -> Expression:
         if expr.exp == -1:
-            return 1/self.rec(expr.base)
+            return 1 / self.rec_arith(expr.base)
         else:
             return SympyToPymbolicMapperBase.map_Pow(self, expr)
 
-    def map_Mul(self, expr):  # noqa: N802
-        num_args = []
-        den_args = []
+    @override
+    def map_Mul(self, expr: Mul) -> Expression:
+        num_args: list[ArithmeticExpression] = []
+        den_args: list[ArithmeticExpression] = []
         for child in expr.args:
-            if isinstance(child, Pow) and isinstance(child.exp, Integer) \
-                    and child.exp < 0:
-                den_args.append(self.rec(child.base)**(-self.rec(child.exp)))
+            if (isinstance(child, Pow)
+                    and isinstance(child.exp, Integer)
+                    and child.exp < 0):
+                den_args.append(self.rec_arith(child.base)**(-self.rec_arith(child.exp)))
             else:
-                num_args.append(self.rec(child))
+                num_args.append(self.rec_arith(child))
 
         return math.prod(num_args) / math.prod(den_args)
 
 
 class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):
-    def map_variable(self, expr):
+    @override
+    def map_variable(self, expr: prim.Variable) -> Basic:
         if expr.name == "I":
-            return sym.I
+            return I
         elif expr.name == "pi":
-            return sym.pi
+            return pi
         else:
             return PymbolicToSympyMapper.map_variable(self, expr)
 
-    def map_subscript(self, expr):
+    @override
+    def map_subscript(self, expr: prim.Subscript) -> sym.Basic:
         if isinstance(expr.aggregate, prim.Variable) and isinstance(expr.index, int):
-            return sym.Symbol(f"{expr.aggregate.name}{expr.index}")
+            return Symbol(f"{expr.aggregate.name}{expr.index}")
         else:
             self.raise_conversion_error(expr)
+            raise
 
-    def map_call(self, expr):
-        if expr.function.name == "hankel_1":
-            args = [self.rec(param) for param in expr.parameters]
-            args.append(0)
-            return Hankel1(*args)
-        elif expr.function.name == "bessel_j":
-            args = [self.rec(param) for param in expr.parameters]
-            args.append(0)
-            return BesselJ(*args)
-        else:
-            return PymbolicToSympyMapper.map_call(self, expr)
+    @override
+    def map_call(self, expr: prim.Call) -> sym.Basic:
+        function = expr.function
+        if isinstance(function, prim.Variable):
+            if function.name == "hankel_1":
+                args = [self.rec(param) for param in expr.parameters]
+                args.append(sympify(0))
+                return Hankel1(*args)
+            elif function.name == "bessel_j":
+                args = [self.rec(param) for param in expr.parameters]
+                args.append(sympify(0))
+                return BesselJ(*args)
+
+        return PymbolicToSympyMapper.map_call(self, expr)
 
 
-import sympy
+from sympy import Function as SympyFunction
 
 
-class _BesselOrHankel(sympy.Function):
+class _BesselOrHankel(SympyFunction):
     """A symbolic function for BesselJ or Hankel1 functions
     that keeps track of the derivatives taken of the function.
     Arguments are ``(order, z, nderivs)``.
     """
-    nargs = (3,)
+    nargs: ClassVar[tuple[int, ...]] = (3,)
 
-    def fdiff(self, argindex=1):
+    @override
+    def fdiff(self, argindex: int = 1) -> Basic:
         if argindex in (1, 3):
             # we are not differentiating w.r.t order or nderivs
             raise ValueError(f"invalid argindex: {argindex}")
 
         order, z, nderivs = self.args
-        return self.func(order, z, nderivs+1)
+        return self.func(order, z, nderivs + 1)
 
 
 class BesselJ(_BesselOrHankel):
@@ -372,11 +393,11 @@ class Hankel1(_BesselOrHankel):
 _SympyBesselJ = BesselJ
 _SympyHankel1 = Hankel1
 
-if USE_SYMENGINE:
-    def BesselJ(*args):   # noqa: N802  # pylint: disable=function-redefined
-        return sym.sympify(_SympyBesselJ(*args))
+if not TYPE_CHECKING and USE_SYMENGINE:
+    def BesselJ(*args):   # noqa: N802
+        return sympify(_SympyBesselJ(*args))
 
-    def Hankel1(*args):   # noqa: N802  # pylint: disable=function-redefined
-        return sym.sympify(_SympyHankel1(*args))
+    def Hankel1(*args):   # noqa: N802
+        return sympify(_SympyHankel1(*args))
 
 # vim: fdm=marker

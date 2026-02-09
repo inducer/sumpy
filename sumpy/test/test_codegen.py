@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2017 Matt Wala"
 
 __license__ = """
@@ -20,10 +23,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import pytest
+import logging
 import sys
 
-import logging
+import pytest
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -53,11 +58,11 @@ def test_symbolic_assignment_name_uniqueness():
 def test_line_taylor_coeff_growth():
     # Regression test for LineTaylorLocalExpansion.
     # See https://gitlab.tiker.net/inducer/pytential/merge_requests/12
-    from sumpy.kernel import LaplaceKernel
-    from sumpy.expansion.local import LineTaylorLocalExpansion
-    from sumpy.symbolic import make_sym_vector, SympyToPymbolicMapper
-
     import numpy as np
+
+    from sumpy.expansion.local import LineTaylorLocalExpansion
+    from sumpy.kernel import LaplaceKernel
+    from sumpy.symbolic import SympyToPymbolicMapper, make_sym_vector
 
     order = 10
     expn = LineTaylorLocalExpansion(LaplaceKernel(2), order)

@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2016 Matt Wala"
 
 __license__ = """
@@ -21,36 +24,60 @@ THE SOFTWARE.
 """
 
 __doc__ = """
+.. autoclass:: TreeLike
+    :members:
+    :undoc-members:
+
 .. autoclass:: FMMLibExpansionOrderFinder
 .. autoclass:: SimpleExpansionOrderFinder
 """
 
 import math
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Protocol, cast
 
 import numpy as np
 
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    import sumpy.symbolic as sym
+    from sumpy.kernel import Kernel
+
+
+class TreeLike(Protocol):
+    dimensions: int
+    root_extent: float
+    stick_out_factor: float
+
+
+@dataclass(frozen=True)
 class FMMLibExpansionOrderFinder:
     r"""Return expansion orders that meet the tolerance for a given level
     using routines wrapped from ``pyfmmlib``.
 
-    .. automethod:: __init__
+    .. autoattribute:: tol
+    .. autoattribute:: extra_order
+
     .. automethod:: __call__
     """
 
-    def __init__(self, tol, extra_order=0):
-        """
-        :arg tol: error tolerance
-        :arg extra_order: order increase to accommodate, say, the taking of
-            derivatives of the FMM expansions.
-        """
-        self.tol = tol
-        self.extra_order = extra_order
+    tol: float
+    """Error tolerance."""
+    extra_order: int = 0
+    """Order increase to accommodate, say, the taking of derivatives of the FMM
+    expansion.
+    """
 
-    def __call__(self, kernel, kernel_args, tree, level):
-        from pyfmmlib import (          # pylint: disable=no-name-in-module
-            l2dterms, l3dterms, h2dterms, h3dterms)
-        from sumpy.kernel import LaplaceKernel, HelmholtzKernel
+    def __call__(self,
+                 kernel: Kernel,
+                 kernel_args: dict[str, sym.Expr] | Sequence[tuple[str, sym.Expr]],
+                 tree: TreeLike,
+                 level: int) -> int:
+        from pyfmmlib import h2dterms, h3dterms, l2dterms, l3dterms
+
+        from sumpy.kernel import HelmholtzKernel, LaplaceKernel
 
         if isinstance(kernel, LaplaceKernel):
             if tree.dimensions == 2:
@@ -68,7 +95,7 @@ class FMMLibExpansionOrderFinder:
 
         elif isinstance(kernel, HelmholtzKernel):
             helmholtz_k = dict(kernel_args)[kernel.helmholtz_k_name]
-            size = tree.root_extent / 2 ** level
+            size = cast("int", tree.root_extent / 2 ** level)
 
             if tree.dimensions == 2:
                 nterms, ier = h2dterms(size, helmholtz_k, self.tol)
@@ -89,6 +116,7 @@ class FMMLibExpansionOrderFinder:
         return nterms + self.extra_order
 
 
+@dataclass(frozen=True)
 class SimpleExpansionOrderFinder:
     r"""
     This models the Laplace truncation error as:
@@ -101,42 +129,53 @@ class SimpleExpansionOrderFinder:
 
     .. math::
 
-        C_{\text{helm}} \frac 1{p!}
-        \left(C_{\text{helmscale}} \cdot \frac{hk}{2\pi}\right)^{p+1},
+        C_{\text{helm}} \frac{1}{p!}
+            \left(C_{\text{helmscale}} \cdot \frac{hk}{2\pi}\right)^{p+1},
 
     where :math:`d` is the number of dimensions, :math:`p` is the expansion order,
     :math:`h` is the box size, and :math:`k` is the wave number.
 
-    .. automethod:: __init__
+    .. autoattribute:: tol
+    .. autoattribute:: extra_order
+    .. autoattribute:: err_const_laplace
+    .. autoattribute:: err_const_helmholtz
+    .. autoattribute:: scaling_const_helmholtz
+
     .. automethod:: __call__
     """
 
-    def __init__(self, tol, err_const_laplace=0.01, err_const_helmholtz=100,
-            scaling_const_helmholtz=4,
-            extra_order=1):
-        """
-        :arg extra_order: order increase to accommodate, say, the taking of
-            derivatives of the FMM expansions.
-        """
-        self.tol = tol
+    tol: float
+    """Error tolerance."""
 
-        self.err_const_laplace = err_const_laplace
-        self.err_const_helmholtz = err_const_helmholtz
-        self.scaling_const_helmholtz = scaling_const_helmholtz
+    err_const_laplace: float = 0.01
+    """Constant :math:`C_{\text{lap}}` used in the Laplace truncation error."""
+    err_const_helmholtz: float = 100.0
+    """Constant :math:`C_{\text{helm}}` used in the Helmholtz truncation error."""
+    scaling_const_helmholtz: float = 4.0
+    """Constant :math:`C_{\text{helmscale}}` used in the Helmholtz truncation error.
+    This can be used to tweak the scaling with respect to the box size or wave
+    number.
+    """
 
-        self.extra_order = extra_order
+    extra_order: int = 1
+    """Order increase to accommodate, say, the taking of derivatives of the FMM
+    expansion.
+    """
 
-    def __call__(self, kernel, kernel_args, tree, level):
-        from sumpy.kernel import LaplaceKernel, HelmholtzKernel
+    def __call__(self,
+                 kernel: Kernel,
+                 kernel_args: dict[str, sym.Expr] | Sequence[tuple[str, sym.Expr]],
+                 tree: TreeLike,
+                 level: int) -> int:
+        from sumpy.kernel import HelmholtzKernel, LaplaceKernel
 
-        assert isinstance(kernel, (LaplaceKernel, HelmholtzKernel))
+        assert isinstance(kernel, LaplaceKernel | HelmholtzKernel)
 
-        laplace_order = int(np.ceil(
-                (np.log(self.tol) - np.log(self.err_const_laplace))
-                /  # noqa: W504
-                np.log(
-                    np.sqrt(tree.dimensions)/3
-                    ) - 1))
+        laplace_order = math.ceil(
+                (math.log(self.tol) - math.log(self.err_const_laplace))
+                /
+                math.log(math.sqrt(tree.dimensions) / 3.0)
+                - 1)
 
         if isinstance(kernel, HelmholtzKernel):
             helmholtz_k = dict(kernel_args)[kernel.helmholtz_k_name]

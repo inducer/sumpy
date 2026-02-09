@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 __copyright__ = "Copyright (C) 2012 Andreas Kloeckner"
 
 __license__ = """
@@ -20,39 +23,55 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import pytest
+import logging
 import sys
+from functools import partial
 
 import numpy as np
 import numpy.linalg as la
+import pytest
 
-from pytools.obj_array import make_obj_array
+import pytools.obj_array as obj_array
+from arraycontext import (
+    ArrayContextFactory,
+    PyOpenCLArrayContext,
+    pytest_generate_tests_for_array_contexts,
+)
 from pytools.convergence import PConvergenceVerifier
-from arraycontext import pytest_generate_tests_for_array_contexts
-from sumpy.array_context import (                                 # noqa: F401
-        PytestPyOpenCLArrayContextFactory, _acf)
 
 import sumpy.symbolic as sym
-from sumpy.expansion.multipole import (
-    VolumeTaylorMultipoleExpansion,
-    H2DMultipoleExpansion,
-    VolumeTaylorMultipoleExpansionBase,
-    LinearPDEConformingVolumeTaylorMultipoleExpansion)
+import sumpy.toys as t
+from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
 from sumpy.expansion.local import (
-    VolumeTaylorLocalExpansion,
     H2DLocalExpansion,
-    LinearPDEConformingVolumeTaylorLocalExpansion)
-from sumpy.expansion.m2l import NonFFTM2LTranslationClassFactory
+    LinearPDEConformingVolumeTaylorLocalExpansion,
+    LineTaylorLocalExpansion,
+    VolumeTaylorLocalExpansion,
+)
+from sumpy.expansion.m2l import (
+    FFTM2LTranslationClassFactory,
+    NonFFTM2LTranslationClassFactory,
+)
+from sumpy.expansion.multipole import (
+    H2DMultipoleExpansion,
+    LinearPDEConformingVolumeTaylorMultipoleExpansion,
+    VolumeTaylorMultipoleExpansion,
+    VolumeTaylorMultipoleExpansionBase,
+)
 from sumpy.kernel import (
-    LaplaceKernel,
-    HelmholtzKernel,
-    BiharmonicKernel,
-    StokesletKernel,
-    HeatKernel,
     AxisTargetDerivative,
-    DirectionalSourceDerivative)
+    BiharmonicKernel,
+    DirectionalSourceDerivative,
+    HeatKernel,
+    HelmholtzKernel,
+    Kernel,
+    LaplaceKernel,
+    StokesletKernel,
+    YukawaKernel,
+)
+from sumpy.test.geometries import make_ellipsoid, make_torus
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 pytest_generate_tests = pytest_generate_tests_for_array_contexts([
@@ -63,7 +82,7 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts([
 # {{{ test_p2p
 
 @pytest.mark.parametrize("exclude_self", (True, False))
-def test_p2p(actx_factory, exclude_self):
+def test_p2p(actx_factory: ArrayContextFactory, exclude_self):
     actx = actx_factory()
 
     dimensions = 3
@@ -71,9 +90,7 @@ def test_p2p(actx_factory, exclude_self):
 
     from sumpy.p2p import P2P
     lknl = LaplaceKernel(dimensions)
-    knl = P2P(actx.context,
-            [lknl, AxisTargetDerivative(0, lknl)],
-            exclude_self=exclude_self)
+    knl = P2P([lknl, AxisTargetDerivative(0, lknl)], exclude_self=exclude_self)
 
     rng = np.random.default_rng(42)
     targets = rng.random(size=(dimensions, n))
@@ -86,8 +103,8 @@ def test_p2p(actx_factory, exclude_self):
         extra_kwargs["target_to_source"] = (
             actx.from_numpy(np.arange(n, dtype=np.int32)))
 
-    evt, (potential, x_derivative) = knl(
-            actx.queue,
+    potential, _ = knl(
+            actx,
             actx.from_numpy(targets),
             actx.from_numpy(sources),
             [actx.from_numpy(strengths)],
@@ -124,7 +141,10 @@ def test_p2p(actx_factory, exclude_self):
     (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion),
     (LaplaceKernel(2), LinearPDEConformingVolumeTaylorMultipoleExpansion),
 ])
-def test_p2e_multiple(actx_factory, base_knl, expn_class):
+def test_p2e_multiple(
+            actx_factory: ArrayContextFactory,
+            base_knl: Kernel,
+            expn_class):
     order = 4
     actx = actx_factory()
 
@@ -181,11 +201,11 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
     rscale = 0.5  # pick something non-1
 
     # apply p2e at the same time
-    p2e = P2EFromSingleBox(actx.context, expn,
+    p2e = P2EFromSingleBox(expn,
         kernels=source_kernels,
         strength_usage=[0, 1])
 
-    evt, (mpoles,) = p2e(actx.queue,
+    mpoles = p2e(actx,
             source_boxes=source_boxes,
             box_source_starts=box_source_starts,
             box_source_counts_nonchild=box_source_counts_nonchild,
@@ -197,7 +217,6 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
             rscale=rscale,
             dir_vec=dir_vec,
             **extra_kwargs)
-
     actual_result = actx.to_numpy(mpoles)
 
     # apply p2e separately
@@ -207,10 +226,10 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
         if isinstance(source_kernel, DirectionalSourceDerivative):
             extra_source_kwargs["dir_vec"] = dir_vec
 
-        p2e = P2EFromSingleBox(actx.context, expn,
+        p2e = P2EFromSingleBox(expn,
             kernels=[source_kernel], strength_usage=[i])
 
-        evt, (mpoles,) = p2e(actx.queue,
+        mpoles = p2e(actx,
             source_boxes=source_boxes,
             box_source_starts=box_source_starts,
             box_source_counts_nonchild=box_source_counts_nonchild,
@@ -274,7 +293,12 @@ def test_p2e_multiple(actx_factory, base_knl, expn_class):
     False,
     True
     ])
-def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative):
+def test_p2e2p(
+            actx_factory: ArrayContextFactory,
+            base_knl,
+            expn_class,
+            order,
+            with_source_derivative):
     actx = actx_factory()
 
     res = 100
@@ -302,10 +326,10 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
             ]
     expn = expn_class(knl, order=order)
 
-    from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P
-    p2e = P2EFromSingleBox(actx.context, expn, kernels=[knl])
-    e2p = E2PFromSingleBox(actx.context, expn, kernels=target_kernels)
-    p2p = P2P(actx.context, target_kernels, exclude_self=False)
+    from sumpy import P2P, E2PFromSingleBox, P2EFromSingleBox
+    p2e = P2EFromSingleBox(expn, kernels=[knl])
+    e2p = E2PFromSingleBox(expn, kernels=target_kernels)
+    p2p = P2P(target_kernels, exclude_self=False)
 
     from pytools.convergence import EOCRecorder
     eoc_rec_pot = EOCRecorder()
@@ -361,13 +385,13 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
             centers = center[:, np.newaxis]
 
         centers = actx.from_numpy(centers)
-        targets = actx.from_numpy(make_obj_array(fp.points))
+        targets = actx.from_numpy(obj_array.new_1d(fp.points))
 
         rscale = 0.5  # pick something non-1
 
         # {{{ apply p2e
 
-        evt, (mpoles,) = p2e(actx.queue,
+        mpoles = p2e(actx,
                 source_boxes=source_boxes,
                 box_source_starts=box_source_starts,
                 box_source_counts_nonchild=box_source_counts_nonchild,
@@ -389,8 +413,8 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
         box_target_counts_nonchild = (
             actx.from_numpy(np.array([ntargets], dtype=np.int32)))
 
-        evt, (pot, grad_x, ) = e2p(
-                actx.queue,
+        pot, grad_x = e2p(
+                actx,
                 src_expansions=mpoles,
                 src_base_ibox=0,
                 target_boxes=source_boxes,
@@ -407,8 +431,8 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
 
         # {{{ compute (direct) reference solution
 
-        evt, (pot_direct, grad_x_direct, ) = p2p(
-                actx.queue,
+        pot_direct, grad_x_direct = p2p(
+                actx,
                 targets, sources, (strengths,),
                 **extra_source_kwargs)
         pot_direct = actx.to_numpy(pot_direct)
@@ -456,10 +480,7 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
     if issubclass(expn_class, LocalExpansionBase):
         tgt_order_grad = tgt_order - 1
         slack = 0.7
-        if isinstance(base_knl, HeatKernel):
-            grad_slack = 0.8
-        else:
-            grad_slack = 0.5
+        grad_slack = 0.8 if isinstance(base_knl, HeatKernel) else 0.5
     else:
         tgt_order_grad = tgt_order + 1
 
@@ -499,33 +520,48 @@ def test_p2e2p(actx_factory, base_knl, expn_class, order, with_source_derivative
 
 # {{{ test_translations
 
-@pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class", [
+@pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class, use_fft", [
     (HeatKernel(1), LinearPDEConformingVolumeTaylorLocalExpansion,
-      LinearPDEConformingVolumeTaylorMultipoleExpansion),
+      LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
     (HeatKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
-      LinearPDEConformingVolumeTaylorMultipoleExpansion),
+      LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (HeatKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+      LinearPDEConformingVolumeTaylorMultipoleExpansion, True),  # not in original PR
     (HeatKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
-      LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+      LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
+        False),
     (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
-     LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (LaplaceKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, True),
+    (LaplaceKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
+        False),
     (LaplaceKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
-     LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (LaplaceKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, True),
+    (HelmholtzKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
+        False),
     (HelmholtzKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
-     LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion),
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (HelmholtzKernel(3), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
+        False),
     (HelmholtzKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
-     LinearPDEConformingVolumeTaylorMultipoleExpansion),
-    (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion),
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion, False),
     (StokesletKernel(2, 0, 0), VolumeTaylorLocalExpansion,
-     VolumeTaylorMultipoleExpansion),
+     VolumeTaylorMultipoleExpansion, False),
     (StokesletKernel(2, 0, 0), LinearPDEConformingVolumeTaylorLocalExpansion,
-     LinearPDEConformingVolumeTaylorMultipoleExpansion),
+     LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
     ])
-def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
-        visualize=False):
+def test_translations(
+            actx_factory: ArrayContextFactory,
+            knl,
+            local_expn_class,
+            mpole_expn_class,
+            use_fft,
+            visualize=False):
     if visualize:
         logging.basicConfig(level=logging.INFO)
 
@@ -533,8 +569,6 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
     res = 20
     nsources = 15
-
-    target_kernels = [knl]
 
     extra_kwargs = {}
     if isinstance(knl, HelmholtzKernel):
@@ -546,12 +580,14 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
     # Just to make sure things also work away from the origin
     rng = np.random.default_rng(18)
-    origin = np.array([0, 0, 1, 2][-knl.dim:], np.float64)
-    sources = actx.from_numpy(
+    if isinstance(knl, HeatKernel):
+        origin = np.array([0, 0, 1, 2][-knl.dim:], np.float64)
+    else:
+        origin = np.array([2, 1, 0][:knl.dim], np.float64)
+    sources = (
         0.7 * (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64))
         + origin[:, np.newaxis])
-    strengths = actx.from_numpy(
-        np.ones(nsources, dtype=np.float64) * (1/nsources))
+    strengths = np.ones(nsources, dtype=np.float64) * (1/nsources)
 
     pconv_verifier_p2m2p = PConvergenceVerifier()
     pconv_verifier_p2m2m2p = PConvergenceVerifier()
@@ -562,8 +598,9 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
 
     eval_offset = np.array([0.0, 0.0, 0.0, 5.5][-knl.dim:])
     fp = FieldPlotter(eval_offset + origin, extent=0.3, npoints=res)
+    targets = fp.points
 
-    centers = actx.from_numpy((np.array(
+    centers = (np.array(
             [
                 # box 0: particles, first mpole here
                 [0, 0, 0, 0][-knl.dim:],
@@ -577,7 +614,7 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
                 # box 3: second local and eval here
                 eval_offset
                 ],
-            dtype=np.float64) + origin).T.copy())
+            dtype=np.float64) + origin).T.copy()
 
     del eval_offset
 
@@ -586,192 +623,57 @@ def test_translations(actx_factory, knl, local_expn_class, mpole_expn_class,
     else:
         orders = [3, 4, 5]
 
-    nboxes = centers.shape[-1]
-
-    def eval_at(e2p, source_box_nr, rscale):
-        e2p_target_boxes = actx.from_numpy(
-            np.array([source_box_nr], dtype=np.int32))
-
-        # These are indexed by global box numbers.
-        e2p_box_target_starts = actx.from_numpy(
-            np.array([0, 0, 0, 0], dtype=np.int32))
-        e2p_box_target_counts_nonchild = actx.from_numpy(
-            np.array([0, 0, 0, 0], dtype=np.int32))
-        e2p_box_target_counts_nonchild[source_box_nr] = fp.points.shape[-1]
-
-        evt, (pot,) = e2p(
-                actx.queue,
-
-                src_expansions=mpoles,
-                src_base_ibox=0,
-
-                target_boxes=e2p_target_boxes,
-                box_target_starts=e2p_box_target_starts,
-                box_target_counts_nonchild=e2p_box_target_counts_nonchild,
-                centers=centers,
-                targets=targets,
-
-                rscale=rscale,
-                **extra_kwargs
-                )
-        pot = actx.to_numpy(pot)
-
-        return pot
-
-    m2l_factory = NonFFTM2LTranslationClassFactory()
+    if use_fft:
+        m2l_factory = FFTM2LTranslationClassFactory()
+    else:
+        m2l_factory = NonFFTM2LTranslationClassFactory()
     m2l_translation = m2l_factory.get_m2l_translation_class(knl, local_expn_class)()
 
+    toy_ctx = t.ToyContext(
+            kernel=knl,
+            local_expn_class=partial(local_expn_class,
+                m2l_translation_override=m2l_translation),
+            mpole_expn_class=mpole_expn_class,
+            extra_kernel_kwargs=extra_kwargs,
+    )
+
+    p = t.PointSources(toy_ctx, sources, weights=strengths)
+    p2p = p.eval(actx, targets)
+
+    m1_rscale = 0.5
+    m2_rscale = 0.25
+    l1_rscale = 0.5
+    l2_rscale = 0.25
+
     for order in orders:
-        m_expn = mpole_expn_class(knl, order=order)
-        l_expn = local_expn_class(knl, order=order, m2l_translation=m2l_translation)
+        logger.info("Centers: %s", centers[:, 0].shape)
 
-        from sumpy import P2EFromSingleBox, E2PFromSingleBox, P2P, E2EFromCSR
-        p2m = P2EFromSingleBox(actx.context, m_expn)
-        m2m = E2EFromCSR(actx.context, m_expn, m_expn)
-        m2p = E2PFromSingleBox(actx.context, m_expn, target_kernels)
-        m2l = E2EFromCSR(actx.context, m_expn, l_expn)
-        l2l = E2EFromCSR(actx.context, l_expn, l_expn)
-        l2p = E2PFromSingleBox(actx.context, l_expn, target_kernels)
-        p2p = P2P(actx.context, target_kernels, exclude_self=False)
-
-        targets = actx.from_numpy(make_obj_array(fp.points))
-
-        # {{{ compute (direct) reference solution
-
-        evt, (pot_direct,) = p2p(
-                actx.queue,
-                targets, sources, (strengths,),
-                **extra_kwargs)
-        pot_direct = actx.to_numpy(pot_direct)
-
-        # }}}
-
-        m1_rscale = 0.5
-        m2_rscale = 0.25
-        l1_rscale = 0.5
-        l2_rscale = 0.25
-
-        # {{{ apply P2M
-
-        p2m_source_boxes = actx.from_numpy(np.array([0], dtype=np.int32))
-
-        # These are indexed by global box numbers.
-        p2m_box_source_starts = actx.from_numpy(
-            np.array([0, 0, 0, 0], dtype=np.int32))
-        p2m_box_source_counts_nonchild = actx.from_numpy(
-            np.array([nsources, 0, 0, 0], dtype=np.int32))
-
-        evt, (mpoles,) = p2m(actx.queue,
-                source_boxes=p2m_source_boxes,
-                box_source_starts=p2m_box_source_starts,
-                box_source_counts_nonchild=p2m_box_source_counts_nonchild,
-                centers=centers,
-                sources=sources,
-                strengths=(strengths,),
-                nboxes=nboxes,
-                rscale=m1_rscale,
-
-                tgt_base_ibox=0,
-                **extra_kwargs)
-
-        # }}}
-
-        pot = eval_at(m2p, 0, m1_rscale)
-
-        err = la.norm((pot - pot_direct) / res**2)
-        err = err / (la.norm(pot_direct) / res**2)
-
+        p2m = t.multipole_expand(actx, p, centers[:, 0],
+                                 order=order, rscale=m1_rscale)
+        p2m2p = p2m.eval(actx, targets)
+        err = la.norm((p2m2p - p2p) / res**2)
+        err = err / (la.norm(p2p) / res**2)
         pconv_verifier_p2m2p.add_data_point(order, err)
 
-        # {{{ apply M2M
-
-        m2m_target_boxes = actx.from_numpy(np.array([1], dtype=np.int32))
-        m2m_src_box_starts = actx.from_numpy(np.array([0, 1], dtype=np.int32))
-        m2m_src_box_lists = actx.from_numpy(np.array([0], dtype=np.int32))
-
-        evt, (mpoles,) = m2m(actx.queue,
-                src_expansions=mpoles,
-                src_base_ibox=0,
-                tgt_base_ibox=0,
-                ntgt_level_boxes=mpoles.shape[0],
-
-                target_boxes=m2m_target_boxes,
-
-                src_box_starts=m2m_src_box_starts,
-                src_box_lists=m2m_src_box_lists,
-                centers=centers,
-
-                src_rscale=m1_rscale,
-                tgt_rscale=m2_rscale,
-                **extra_kwargs)
-
-        # }}}
-
-        pot = eval_at(m2p, 1, m2_rscale)
-
-        err = la.norm((pot - pot_direct)/res**2)
-        err = err / (la.norm(pot_direct) / res**2)
-
+        p2m2m = t.multipole_expand(actx, p2m, centers[:, 1],
+                                   order=order, rscale=m2_rscale)
+        p2m2m2p = p2m2m.eval(actx, targets)
+        err = la.norm((p2m2m2p - p2p)/res**2)
+        err = err / (la.norm(p2p) / res**2)
         pconv_verifier_p2m2m2p.add_data_point(order, err)
 
-        # {{{ apply M2L
-
-        m2l_target_boxes = actx.from_numpy(np.array([2], dtype=np.int32))
-        m2l_src_box_starts = actx.from_numpy(np.array([0, 1], dtype=np.int32))
-        m2l_src_box_lists = actx.from_numpy(np.array([1], dtype=np.int32))
-
-        evt, (mpoles,) = m2l(actx.queue,
-                src_expansions=mpoles,
-                src_base_ibox=0,
-                tgt_base_ibox=0,
-                ntgt_level_boxes=mpoles.shape[0],
-
-                target_boxes=m2l_target_boxes,
-                src_box_starts=m2l_src_box_starts,
-                src_box_lists=m2l_src_box_lists,
-                centers=centers,
-
-                src_rscale=m2_rscale,
-                tgt_rscale=l1_rscale,
-                **extra_kwargs)
-
-        # }}}
-
-        pot = eval_at(l2p, 2, l1_rscale)
-
-        err = la.norm((pot - pot_direct)/res**2)
-        err = err / (la.norm(pot_direct) / res**2)
-
+        p2m2m2l = t.local_expand(actx, p2m2m, centers[:, 2],
+                                 order=order, rscale=l1_rscale)
+        p2m2m2l2p = p2m2m2l.eval(actx, targets)
+        err = la.norm((p2m2m2l2p - p2p)/res**2)
+        err = err / (la.norm(p2p) / res**2)
         pconv_verifier_p2m2m2l2p.add_data_point(order, err)
 
-        # {{{ apply L2L
-
-        l2l_target_boxes = actx.from_numpy(np.array([3], dtype=np.int32))
-        l2l_src_box_starts = actx.from_numpy(np.array([0, 1], dtype=np.int32))
-        l2l_src_box_lists = actx.from_numpy(np.array([2], dtype=np.int32))
-
-        evt, (mpoles,) = l2l(actx.queue,
-                src_expansions=mpoles,
-                src_base_ibox=0,
-                tgt_base_ibox=0,
-                ntgt_level_boxes=mpoles.shape[0],
-
-                target_boxes=l2l_target_boxes,
-                src_box_starts=l2l_src_box_starts,
-                src_box_lists=l2l_src_box_lists,
-                centers=centers,
-
-                src_rscale=l1_rscale,
-                tgt_rscale=l2_rscale,
-                **extra_kwargs)
-
-        # }}}
-
-        pot = eval_at(l2p, 3, l2_rscale)
-
-        err = la.norm((pot - pot_direct)/res**2)
-        err = err / (la.norm(pot_direct) / res**2)
-
+        p2m2m2l2l = t.local_expand(actx, p2m2m2l, centers[:, 3],
+                                   order=order, rscale=l2_rscale)
+        p2m2m2l2l2p = p2m2m2l2l.eval(actx, targets)
+        err = la.norm((p2m2m2l2l2p - p2p)/res**2)
+        err = err / (la.norm(p2p) / res**2)
         pconv_verifier_full.add_data_point(order, err)
 
     for name, verifier in [
@@ -831,14 +733,14 @@ def test_m2m_and_l2l_exprs_simpler(base_knl, local_expn_class, mpole_expn_class,
     slower_m2m = mpole_expn.translate_from(mpole_expn, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, _fast_version=False)
 
-    for expr1, expr2 in zip(faster_m2m, slower_m2m):
+    for expr1, expr2 in zip(faster_m2m, slower_m2m, strict=True):
         assert float(sym.doit(expr1 - expr2).expand()) == 0.0
 
     faster_l2l = local_expn.translate_from(local_expn, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale)
     slower_l2l = local_expn.translate_from(local_expn, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, _fast_version=False)
-    for expr1, expr2 in zip(faster_l2l, slower_l2l):
+    for expr1, expr2 in zip(faster_l2l, slower_l2l, strict=True):
         assert float(sym.doit(expr1 - expr2).expand()) == 0.0
 
 # }}}
@@ -871,7 +773,7 @@ def _m2l_translate_simple(tgt_expansion, src_expansion, src_coeff_exprs, src_rsc
         local_result = []
         for coeff, term in zip(
                 src_coeff_exprs,
-                src_expansion.get_coefficient_identifiers()):
+                src_expansion.get_coefficient_identifiers(), strict=True):
 
             kernel_deriv = taker.diff(add_mi(deriv, term)) / src_rscale**sum(deriv)
 
@@ -891,7 +793,8 @@ def test_m2l_toeplitz():
     m2l_factory = NonFFTM2LTranslationClassFactory()
     m2l_translation = m2l_factory.get_m2l_translation_class(knl, local_expn_class)()
 
-    local_expn = local_expn_class(knl, order=5, m2l_translation=m2l_translation)
+    local_expn = local_expn_class(knl, order=5,
+                                  m2l_translation_override=m2l_translation)
     mpole_expn = mpole_expn_class(knl, order=5)
 
     dvec = sym.make_sym_vector("d", dim)
@@ -909,7 +812,7 @@ def test_m2l_toeplitz():
         src_rscale, dvec, tgt_rscale, sac=None)
 
     replace_dict = {d: rng.random() for d in dvec}
-    for sym_a, sym_b in zip(expected_output, actual_output):
+    for sym_a, sym_b in zip(expected_output, actual_output, strict=True):
         num_a = sym_a.xreplace(replace_dict)
         num_b = sym_b.xreplace(replace_dict)
 
@@ -922,7 +825,7 @@ def test_m2l_toeplitz():
 
 @pytest.mark.parametrize("dim", [2, 3])
 @pytest.mark.parametrize("order", [2, 4, 6])
-def test_m2m_compressed_error_helmholtz(actx_factory, dim, order):
+def test_m2m_compressed_error_helmholtz(actx_factory: ArrayContextFactory, dim, order):
     from sumpy import toys
 
     actx = actx_factory()
@@ -960,9 +863,8 @@ def test_m2m_compressed_error_helmholtz(actx_factory, dim, order):
         furthest_source = np.max(np.abs(sources - mpole_center))
         m2m_vals = [0, 0]
         for i, (mpole_expn_class, local_expn_class) in \
-                enumerate(zip(mpole_expn_classes, local_expn_classes)):
+                enumerate(zip(mpole_expn_classes, local_expn_classes, strict=True)):
             tctx = toys.ToyContext(
-                actx.context,
                 knl,
                 extra_kernel_kwargs=extra_kernel_kwargs,
                 local_expn_class=local_expn_class,
@@ -974,15 +876,15 @@ def test_m2m_compressed_error_helmholtz(actx_factory, dim, order):
                 np.ones(sources.shape[-1])
             )
 
-            mexp = toys.multipole_expand(pt_src,
+            mexp = toys.multipole_expand(actx, pt_src,
                 center=mpole_center.reshape(dim),
                 order=order,
                 rscale=h)
-            mexp2 = toys.multipole_expand(mexp,
+            mexp2 = toys.multipole_expand(actx, mexp,
                 center=second_center.reshape(dim),
                 order=order,
                 rscale=h)
-            m2m_vals[i] = mexp2.eval(targets)
+            m2m_vals[i] = mexp2.eval(actx, targets)
 
         err = np.linalg.norm(m2m_vals[1] - m2m_vals[0]) \
                 / np.linalg.norm(m2m_vals[1])
@@ -992,6 +894,72 @@ def test_m2m_compressed_error_helmholtz(actx_factory, dim, order):
     assert eoc_rec.order_estimate() >= order + 1
 
 # }}}
+
+
+@pytest.mark.parametrize(("kernel_cls", "kernel_kwargs"), [
+                         (LaplaceKernel, {}),
+                         (HelmholtzKernel, {"k": 1}),
+                         (YukawaKernel, {"lam": 1})
+                     ])
+@pytest.mark.parametrize("dim", [2, 3])
+def test_jump(
+            actx_factory: ArrayContextFactory,
+            kernel_cls: type[Kernel],
+            kernel_kwargs: dict[str, float],
+            dim: int,
+            order: int = 3,
+        ):
+    # x-ref https://github.com/inducer/sumpy/pull/224
+    # fails for Yukawa on then-main
+
+    actx = actx_factory()
+    if not isinstance(actx, PyOpenCLArrayContext):
+        pytest.skip()
+
+    if dim == 2:
+        geo = make_ellipsoid(npoints=1600)
+        qbx_radius = 0.02
+        tol = 3e-7
+
+    elif dim == 3:
+        geo = make_torus()
+        qbx_radius = 0.25
+        tol = 1e-3
+
+    else:
+        raise ValueError(f"unexpected dim: {dim}")
+
+    center_dist = qbx_radius*np.ones(2)
+    center_sides = np.array([-1, 1], dtype=np.float64)
+
+    targets = geo.nodes[:, 0][:, np.newaxis] + np.zeros(2)
+    centers = (geo.nodes[:, 0][:, np.newaxis]
+            + center_sides * center_dist*geo.normals[:, 0][:, np.newaxis])
+
+    from sumpy.kernel import DirectionalSourceDerivative
+    kernel = kernel_cls(dim)
+    dlp_knl = DirectionalSourceDerivative(kernel)
+
+    from sumpy.qbx import LayerPotential
+    lpot = LayerPotential(
+            expansion=LineTaylorLocalExpansion(kernel, order=order),
+            source_kernels=(dlp_knl,),
+            target_kernels=(kernel,),
+            value_dtypes=np.complex128,)
+
+    y, = lpot(actx,
+            actx.from_numpy(targets),
+            actx.from_numpy(geo.nodes),
+            actx.from_numpy(centers),
+            [actx.from_numpy(geo.weights * geo.area_elements)],
+            expansion_radii=actx.from_numpy(center_dist),
+            src_derivative_dir=actx.from_numpy(geo.normals),
+            **kernel_kwargs,
+        )
+
+    inside, outside = actx.to_numpy(y)
+    err = abs((inside-outside) - -1)
+    assert err < tol, err
 
 
 # You can test individual routines by typing
