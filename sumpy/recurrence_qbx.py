@@ -206,7 +206,7 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
 
         return sp.lambdify(arg_list, lamb_expr_symb)
 
-    interactions_off_axis = 0
+    interactions_off_axis: np.ndarray | int = 0
     for i in range(p+1):
         lamb_expr_t_recur = gen_lamb_expr_t_recur(i, start_order)
         a1 = [*storage_taylor[(-t_recur_order):], *coord]
@@ -285,7 +285,7 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
 
     interactions_total = np.zeros(coord[0].shape)
     interactions_total[mask_on_axis] = interactions_on_axis[mask_on_axis]
-    interactions_total[mask_off_axis] = interactions_off_axis[mask_off_axis]
+    interactions_total[mask_off_axis] = interactions_off_axis[mask_off_axis]  # pyright: ignore[reportIndexIssue]
 
     exp_res = (interactions_total * strengths[None, :]).sum(axis=1)
     # exp_res_true = (interactions_true * strengths[None, :]).sum(axis=1)

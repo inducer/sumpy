@@ -77,7 +77,8 @@ if TYPE_CHECKING:
 # similar to make_sym_vector in sumpy.symbolic, but returns an object array
 # instead of a sympy.Matrix.
 def _make_sympy_vec(name: str, n: int) -> np.ndarray:
-    return obj_array.make_obj_array([sp.Symbol(f"{name}{i}") for i in range(n)])
+    return obj_array.make_obj_array(  # pyright: ignore[reportReturnType]
+        [sp.Symbol(f"{name}{i}") for i in range(n)])
 
 
 def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
@@ -116,7 +117,7 @@ def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
             expr = expr.diff(var[i], nderivs)
         return expr
 
-    ode_in_r = sum(
+    ode_in_r: Expr = sum(  # pyright: ignore[reportAssignmentType]
         # pylint: disable-next=not-callable
         coeff * apply_deriv_id(f(rval), deriv_id)
         for deriv_id, coeff in pde_eqn.items()
@@ -128,7 +129,8 @@ def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
 
     # PDE ORDER = ODE ORDER
     for i in range(ode_order+1):
-        ode_in_r = ode_in_r.subs(f_derivs[i], f_r_derivs[i])
+        ode_in_r = ode_in_r.subs(  # pyright: ignore[reportAssignmentType]
+            f_derivs[i], f_r_derivs[i])
 
     return ode_in_r, var, ode_order
 
@@ -243,7 +245,7 @@ def _auto_product_rule_single_term(p: int, m: int, var: np.ndarray) -> Expr:
     n = sp.symbols("n")
     s = sp.Function("s")
 
-    return sum(
+    return sum(  # pyright: ignore[reportReturnType]
         # pylint: disable=not-callable
         _falling_factorial(n, i)
         * math.comb(p, i) * s(n-i+m) * var[0]**(p-i)
@@ -293,7 +295,7 @@ def recurrence_from_pde(pde: LinearPDESystemOperator) -> Expr:
     return recurrence_from_coeff_array(coeffs, var)
 
 
-def reindex_recurrence_relation(r: Expr) -> tuple[int, Expr]:
+def reindex_recurrence_relation(r: sp.Basic) -> tuple[int, Expr]:
     r"""
     A function that takes in as input a recurrence and outputs a recurrence
     relation that has the nth term in terms of the n-1th, n-2th etc.
@@ -314,15 +316,16 @@ def reindex_recurrence_relation(r: Expr) -> tuple[int, Expr]:
 
     # Re-arrange the recurrence relation so we get s(n) = ____
     # in terms of s(n-1), ...
-    true_recurrence = sum(sp.cancel(-coeffs[i]/coeffs[-1]) * terms[i]
-                          for i in range(0, len(terms)-1))
+    true_recurrence: Expr = sum(  # pyright: ignore[reportAssignmentType]
+        sp.cancel(-coeffs[i]/coeffs[-1]) * terms[i]
+        for i in range(0, len(terms)-1))
     true_recurrence1 = true_recurrence.subs(n, n-shift_idx)
 
     return order, true_recurrence1
 
 
-def _extract_idx_terms_from_recurrence(r: Expr) -> tuple[np.ndarray,
-                                                         np.ndarray]:
+def _extract_idx_terms_from_recurrence(r: sp.Basic) -> tuple[np.ndarray,
+                                                              np.ndarray]:
     r"""
     Given a recurrence extracts the variables in the recurrence
     as well as the indexes, both in sorted order.
@@ -348,7 +351,7 @@ def _extract_idx_terms_from_recurrence(r: Expr) -> tuple[np.ndarray,
     return idx_l, terms
 
 
-def _check_neg_ind(r_n: Expr) -> bool:
+def _check_neg_ind(r_n: sp.Basic) -> bool:
     r"""
     Simply checks if a negative index exists in a recurrence relation.
     """
