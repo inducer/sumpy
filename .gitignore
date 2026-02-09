@@ -22,3 +22,6 @@ sumpy/_git_rev.py
 .asv
 
 *.vts
+test/hirish_plotting
+test/test_eigenvalues.ipynb
+.vscode/settings.json
