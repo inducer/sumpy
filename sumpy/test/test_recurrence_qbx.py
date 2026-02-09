@@ -32,11 +32,11 @@ THE SOFTWARE.
 import meshmode.mesh.generation as mgen  # type: ignore  # pyright: ignore[reportMissingImports]
 import numpy as np
 import sympy as sp
-from meshmode import (
-    _acf as _acf_meshmode,  # type: ignore  # pyright: ignore[reportMissingImports]
+from meshmode import (  # pyright: ignore[reportMissingImports]
+    _acf as _acf_meshmode,  # type: ignore
 )
-from meshmode.discretization import (
-    Discretization,  # type: ignore  # pyright: ignore[reportMissingImports]
+from meshmode.discretization import (  # pyright: ignore[reportMissingImports]
+    Discretization,  # type: ignore
 )
 from meshmode.discretization.poly_element import (  # type: ignore  # pyright: ignore[reportMissingImports]
     default_simplex_group_factory,
