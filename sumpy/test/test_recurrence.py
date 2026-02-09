@@ -29,15 +29,19 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-import meshmode.mesh.generation as mgen  # type: ignore
+import meshmode.mesh.generation as mgen  # type: ignore  # pyright: ignore[reportMissingImports]
 import numpy as np
 import sympy as sp
-from meshmode import _acf as _acf_meshmode  # type: ignore
-from meshmode.discretization import Discretization  # type: ignore
-from meshmode.discretization.poly_element import (  # type: ignore
+from meshmode import (
+    _acf as _acf_meshmode,  # type: ignore  # pyright: ignore[reportMissingImports]
+)
+from meshmode.discretization import (
+    Discretization,  # type: ignore  # pyright: ignore[reportMissingImports]
+)
+from meshmode.discretization.poly_element import (  # type: ignore  # pyright: ignore[reportMissingImports]
     default_simplex_group_factory,
 )
-from pytential import bind, sym  # type: ignore
+from pytential import bind, sym  # type: ignore  # pyright: ignore[reportMissingImports]
 from sympy import hankel1
 
 from sumpy.array_context import _acf
@@ -68,7 +72,7 @@ hknl3d = HelmholtzKernel(3)
 def _qbx_lp_general(knl, sources, targets, centers, radius,
                                 strengths, order, k=0):
     lpot = LayerPotential(actx.context,
-    expansion=ExpnClass(knl, order),
+    expansion=ExpnClass(knl, order),  # pyright: ignore[reportCallIssue]
     target_kernels=(knl,),
     source_kernels=(knl,))
 
@@ -81,12 +85,12 @@ def _qbx_lp_general(knl, sources, targets, centers, radius,
     strengths = (strengths,)
     if k == 0:
         _evt, (result_qbx,) = lpot(
-                actx.queue,
+                actx.queue,  # pyright: ignore[reportArgumentType]
                 targets, sources, centers, strengths,
                 expansion_radii=expansion_radii)
     else:
         _evt, (result_qbx,) = lpot(
-                actx.queue,
+                actx.queue,  # pyright: ignore[reportArgumentType]
                 targets, sources, centers, strengths,
                 expansion_radii=expansion_radii,
                 k=1)
@@ -108,10 +112,10 @@ def _create_ellipse(n_p, mode_nr=10, quad_convg_rate=100, a=2):
     radius = (h/4) * quad_convg_rate
 
     unit_circle_param = np.exp(1j * t)
-    unit_circle = np.array([a * unit_circle_param.real, unit_circle_param.imag])
+    unit_circle = np.array([a * unit_circle_param.real, unit_circle_param.imag])  # pyright: ignore[reportAttributeAccessIssue]
 
     sources = unit_circle
-    normals = np.array([unit_circle_param.real, a*unit_circle_param.imag])
+    normals = np.array([unit_circle_param.real, a*unit_circle_param.imag])  # pyright: ignore[reportAttributeAccessIssue]
     normals = normals / np.linalg.norm(normals, axis=0)
     centers = sources - normals * radius
 
@@ -132,12 +136,12 @@ def _create_sphere(refinement_rounds, exp_radius):
     sources = np.array([nodes[0][0].reshape(-1),
                         nodes[1][0].reshape(-1), nodes[2][0].reshape(-1)])
 
-    area_weight_a = bind(discr, sym.QWeight()*sym.area_element(3))(actx_m)
-    area_weight = actx_m.to_numpy(area_weight_a)[0]
+    area_weight_a = bind(discr, sym.QWeight()*sym.area_element(3))(actx_m)  # pyright: ignore[reportCallIssue]
+    area_weight = actx_m.to_numpy(area_weight_a)[0]  # pyright: ignore[reportIndexIssue]
     area_weight = area_weight.reshape(-1)
 
     normals_a = bind(discr, sym.normal(3))(actx_m).as_vector(dtype=object)
-    normals_a = actx_m.to_numpy(normals_a)
+    normals_a = actx_m.to_numpy(normals_a)  # pyright: ignore[reportCallIssue, reportArgumentType]
     normals = np.array([normals_a[0][0].reshape(-1), normals_a[1][0].reshape(-1),
                         normals_a[2][0].reshape(-1)])
 
@@ -192,7 +196,7 @@ def test_recurrence_helmholtz_3d_sphere():
 
     # start = time.time()
     out = _qbx_lp_general(hknl3d, sources, sources, centers, radius,
-                                   np.ones(area_weight.shape), 1, 1)
+                                   np.ones(area_weight.shape), 1, 1)  # pyright: ignore[reportCallIssue, reportArgumentType]
     # end = time.time()
     # length1 = end - start
 
@@ -205,7 +209,7 @@ def test_recurrence_helmholtz_3d_sphere():
     g_x_y = (1/(4*np.pi)) * sp.exp(1j * abs_dist) / abs_dist
 
     # start = time.time()
-    exp_res = recurrence_qbx_lp(sources, centers, normals, np.ones(area_weight.shape),
+    exp_res = recurrence_qbx_lp(sources, centers, normals, np.ones(area_weight.shape),  # pyright: ignore[reportCallIssue, reportArgumentType]
                                 radius, helmholtz3d, g_x_y, 3, 1)
     # end = time.time()
     # length2 = end - start

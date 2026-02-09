@@ -12,7 +12,7 @@ This process proceeds in multiple steps:
 
 - Convert from the PDE to an ODE in :math:`r`, using :func:`pde_to_ode_in_r`.
 - Convert from an ODE in :math:`r` to one in :math:`x`,
-using :func:`ode_in_r_to_x`.
+  using :func:`ode_in_r_to_x`.
 - Sort general-form ODE in :math:`x` into a coefficient array, using
   :func:`ode_in_x_to_coeff_array`.
 - Finally, get an expression for the recurrence, using
@@ -27,7 +27,9 @@ The whole process can be automated using :func:`recurrence_from_pde`.
 .. autofunction:: recurrence_from_pde
 .. autofunction:: reindex_recurrence_relation
 .. autofunction:: move_center_origin_source_arbitrary
-.. autofunction:: get_reindexed_and_center_origin_recurrence
+.. autofunction:: get_reindexed_and_center_origin_on_axis_recurrence
+.. autofunction:: get_reindexed_and_center_origin_off_axis_recurrence
+.. autofunction:: get_off_axis_expression
 """
 
 from __future__ import annotations
@@ -92,11 +94,11 @@ def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
     :arg pde: must satisfy ``pde.eqs == 1`` and have polynomial coefficients.
 
     :returns: a tuple ``(ode_in_r, var, ode_order)``, where
-    - *ode_in_r* with derivatives given as :class:`sympy.Derivative`
-    - *var* is an object array of :class:`sympy.Symbol`, with successive
-      variables
-        representing the Cartesian coordinate directions.
-    - *ode_order* the order of ODE that is returned
+
+        - *ode_in_r* with derivatives given as ``sympy.Derivative``
+        - *var* is an object array of ``sympy.Symbol``, with successive
+          variables representing the Cartesian coordinate directions.
+        - *ode_order* the order of ODE that is returned
     """
     if len(pde.eqs) != 1:
         raise ValueError("PDE must be scalar")
@@ -172,7 +174,7 @@ def ode_in_r_to_x(ode_in_r: Expr, var: np.ndarray,
     :math:`f, f_x, f_{xx}, \dots` using the chain rule.
 
     :arg ode_in_r: a linear combination of :math:`f, f_r, f_{rr}, \dots`
-    represented by the sympy variables :math:`f_{r0}, f_{r1}, f_{r2}, \dots`
+        represented by the sympy variables :math:`f_{r0}, f_{r1}, f_{r2}, \dots`
     :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
     :arg ode_order: the order of the input ODE
 
@@ -199,9 +201,9 @@ def ode_in_x_to_coeff_array(poly: sp.Poly, ode_order: int, var:
     2D array.
 
     :arg poly: a sympy polynomial in
-    :math:`\partial_{x_0}^0 f, \partial_{x_0}^1 f,\cdots` of the form
-    :math:`(b_{00} x_0^0 + b_{01} x_0^1 + \cdots) \partial_{x_0}^0 f +
-    (b_{10} x_0^0 + b_{11} x_0^1 +\cdots) \partial_x^1 f`
+        :math:`\partial_{x_0}^0 f, \partial_{x_0}^1 f,\cdots` of the form
+        :math:`(b_{00} x_0^0 + b_{01} x_0^1 + \cdots) \partial_{x_0}^0 f +
+        (b_{10} x_0^0 + b_{11} x_0^1 +\cdots) \partial_x^1 f`
 
     :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
     :arg ode_order: the order of the input ODE we return a sequence
@@ -279,7 +281,7 @@ def recurrence_from_pde(pde: LinearPDESystemOperator) -> Expr:
     A function that takes in as input a sympy PDE and outputs a recurrence
     relation.
 
-    :arg pde: a :class:`sumpy.expansion.diff_op.LinearSystemPDEOperator`
+    :arg pde: a :class:`sumpy.expansion.diff_op.LinearPDESystemOperator`
         that must satisfy ``pde.eqs == 1`` and have polynomial coefficients
         in the coordinates.
     :arg var: array of sympy variables :math:`[x_0, x_1, \dots]`
@@ -426,9 +428,10 @@ def get_reindexed_and_center_origin_on_axis_recurrence(
     :arg recurrence: a recurrence relation in :math:`s(n)`
 
     :returns: a tuple ``(n_initial, order, r_s)``, where
-    - *n_initial* is the number of initial derivatives needed
-    - *order* is the order of the recurrence r_s
-    - *r_s* is the shifted/processed recurrence
+
+        - *n_initial* is the number of initial derivatives needed
+        - *order* is the order of the recurrence r_s
+        - *r_s* is the shifted/processed recurrence
     """
     r = recurrence_from_pde(pde)
     order, r_p = reindex_recurrence_relation(r)
