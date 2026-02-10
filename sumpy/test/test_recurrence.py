@@ -1,6 +1,8 @@
 r"""
-With the functionality in this module, we test recurrence
-+ qbx code.
+Tests for the recurrence computation module :mod:`sumpy.recurrence`.
+
+Verifies that recurrence relations for Green's function derivatives
+produce results matching direct symbolic differentiation.
 """
 from __future__ import annotations
 
@@ -29,229 +31,147 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-import meshmode.mesh.generation as mgen  # type: ignore  # pyright: ignore[reportMissingImports]
 import numpy as np
 import sympy as sp
-from meshmode import (  # pyright: ignore[reportMissingImports]
-    _acf as _acf_meshmode,  # type: ignore
-)
-from meshmode.discretization import (  # pyright: ignore[reportMissingImports]
-    Discretization,  # type: ignore
-)
-from meshmode.discretization.poly_element import (  # type: ignore  # pyright: ignore[reportMissingImports]
-    default_simplex_group_factory,
-)
-from pytential import bind, sym  # type: ignore  # pyright: ignore[reportMissingImports]
 from sympy import hankel1
 
-from sumpy.array_context import _acf
 from sumpy.expansion.diff_op import (
     laplacian,
     make_identity_diff_op,
 )
-from sumpy.expansion.local import LineTaylorLocalExpansion
-from sumpy.kernel import HelmholtzKernel, LaplaceKernel
-from sumpy.qbx import LayerPotential
-from sumpy.recurrence_qbx import (
-    _compute_rotated_shifted_coordinates,
+from sumpy.recurrence import (
+    _extract_idx_terms_from_recurrence,
     _make_sympy_vec,
-    recurrence_qbx_lp,
+    get_large_x1_recurrence,
+    get_small_x1_expansion,
+    get_small_x1_recurrence,
+    recurrence_from_pde,
+    reindex_recurrence_relation,
 )
 
 
-actx_factory = _acf
-ExpnClass = LineTaylorLocalExpansion
-
-actx = actx_factory()
-lknl2d = LaplaceKernel(2)
-hknl2d = HelmholtzKernel(2)
-lknl3d = LaplaceKernel(3)
-hknl3d = HelmholtzKernel(3)
-
-
-def _qbx_lp_general(knl, sources, targets, centers, radius,
-                                strengths, order, k=0):
-    lpot = LayerPotential(actx.context,
-    expansion=ExpnClass(knl, order),  # pyright: ignore[reportCallIssue]
-    target_kernels=(knl,),
-    source_kernels=(knl,))
-
-    # print(lpot.get_kernel())
-    expansion_radii = actx.from_numpy(radius * np.ones(sources.shape[1]))
-    sources = actx.from_numpy(sources)
-    targets = actx.from_numpy(targets)
-    centers = actx.from_numpy(centers)
-
-    strengths = (strengths,)
-    if k == 0:
-        _evt, (result_qbx,) = lpot(
-                actx.queue,  # pyright: ignore[reportArgumentType]
-                targets, sources, centers, strengths,
-                expansion_radii=expansion_radii)
-    else:
-        _evt, (result_qbx,) = lpot(
-                actx.queue,  # pyright: ignore[reportArgumentType]
-                targets, sources, centers, strengths,
-                expansion_radii=expansion_radii,
-                k=1)
-
-    result_qbx = actx.to_numpy(result_qbx)
-
-    return result_qbx
-
-
-def _create_ellipse(n_p, mode_nr=10, quad_convg_rate=100, a=2):
-    t = np.linspace(0, 2 * np.pi, n_p, endpoint=False)
-
-    phi = sp.symbols("phi")
-    jacob = sp.sqrt(a**2 * sp.sin(phi)**2 + sp.cos(phi)**2)
-
-    jacobs = sp.lambdify(phi, jacob)(t)
-
-    h = ((2*np.pi)/n_p * np.min(jacobs))
-    radius = (h/4) * quad_convg_rate
-
-    unit_circle_param = np.exp(1j * t)
-    unit_circle = np.array([a * unit_circle_param.real, unit_circle_param.imag])  # pyright: ignore[reportAttributeAccessIssue]
-
-    sources = unit_circle
-    normals = np.array([unit_circle_param.real, a*unit_circle_param.imag])  # pyright: ignore[reportAttributeAccessIssue]
-    normals = normals / np.linalg.norm(normals, axis=0)
-    centers = sources - normals * radius
-
-    density = np.cos(mode_nr * t) * sp.lambdify(phi, 1/jacob)(t)
-
-    return sources, centers, normals, density, jacobs, radius
-
-
-def _create_sphere(refinement_rounds, exp_radius):
-    target_order = 4
-
-    actx_m = _acf_meshmode()
-    mesh = mgen.generate_sphere(1.0, target_order,
-                                uniform_refinement_rounds=refinement_rounds)
-    grp_factory = default_simplex_group_factory(3, target_order)
-    discr = Discretization(actx_m, mesh, grp_factory)
-    nodes = actx_m.to_numpy(discr.nodes())
-    sources = np.array([nodes[0][0].reshape(-1),
-                        nodes[1][0].reshape(-1), nodes[2][0].reshape(-1)])
-
-    area_weight_a = bind(discr, sym.QWeight()*sym.area_element(3))(actx_m)  # pyright: ignore[reportCallIssue]
-    area_weight = actx_m.to_numpy(area_weight_a)[0]  # pyright: ignore[reportIndexIssue]
-    area_weight = area_weight.reshape(-1)
-
-    normals_a = bind(discr, sym.normal(3))(actx_m).as_vector(dtype=object)
-    normals_a = actx_m.to_numpy(normals_a)  # pyright: ignore[reportCallIssue, reportArgumentType]
-    normals = np.array([normals_a[0][0].reshape(-1), normals_a[1][0].reshape(-1),
-                        normals_a[2][0].reshape(-1)])
-
-    radius = exp_radius
-    centers = sources - radius * normals
-
-    return sources, centers, normals, area_weight, radius
-
-
-def test_compute_rotated_shifted_coordinates():
+def _verify_large_x1_recurrence(pde, g_x_y, ndim, p, x_vals):
     r"""
-    Tests rotated shifted code.
+    Verifies that the large-:math:`|x_1|` recurrence produces derivatives
+    matching direct symbolic differentiation at a given evaluation point.
+
+    Computes the first *p* + 1 derivatives of *g_x_y* with respect to
+    the first coordinate at the target origin, both via direct
+    differentiation and via the recurrence, and compares.
     """
-    sources = np.array([[1], [2], [2]])
-    centers = np.array([[0], [0], [0]])
-    normals = np.array([[1], [0], [0]])
-    cts = _compute_rotated_shifted_coordinates(sources, centers, normals)
-    assert np.sqrt(cts[1]**2 + cts[2]**2) - np.sqrt(8) <= 1e-12
+    n_initial, order, recurrence = get_large_x1_recurrence(pde)
+
+    var = _make_sympy_vec("x", ndim)
+    var_t = _make_sympy_vec("t", ndim)
+    n = sp.symbols("n")
+    s = sp.Function("s")
+
+    # Compute true derivatives of G w.r.t. x_0 at t=0
+    true_derivs = []
+    for i in range(p + 1):
+        d = sp.diff(g_x_y, var[0], i)
+        for j in range(ndim):
+            d = d.subs(var_t[j], 0)
+        true_derivs.append(complex(sp.N(d.subs(x_vals), 30)))
+
+    # Compute via recurrence, seeding with true initial conditions.
+    # Negative indices are assumed to be zero (matching the zero-initialized
+    # storage in recurrence_qbx_lp).
+    recur_vals: dict[int, complex] = {}
+    for idx in range(-order, 0):
+        recur_vals[idx] = 0j
+
+    for i in range(n_initial):
+        recur_vals[i] = true_derivs[i]
+
+    for i in range(n_initial, p + 1):
+        expr = recurrence.subs(n, i)
+        for j in range(order, 0, -1):
+            # pylint: disable-next=not-callable
+            expr = expr.subs(s(i - j), recur_vals.get(i - j, 0))
+        recur_vals[i] = complex(sp.N(expr.subs(x_vals), 30))
+
+    for i in range(p + 1):
+        if abs(true_derivs[i]) > 1e-30:
+            rel_err = abs(recur_vals[i] - true_derivs[i]) / abs(true_derivs[i])
+            assert rel_err < 1e-10
 
 
-def test_recurrence_laplace_3d_sphere():
+def test_recurrence_from_pde_nonzero():
     r"""
-    Tests recurrence + qbx laplace 3d on sphere
+    Verifies that :func:`recurrence_from_pde` produces a nonzero recurrence
+    expression for the 2D Laplace equation.
     """
-    radius = 0.0001
-    sources, centers, normals, area_weight, radius = _create_sphere(1, radius)
+    w = make_identity_diff_op(2)
+    laplace2d = laplacian(w)
+    r = recurrence_from_pde(laplace2d)
+    assert r != 0
 
-    out = _qbx_lp_general(lknl3d, sources, sources, centers, radius,
-                                   area_weight, 4)
 
+def test_reindex_recurrence_relation_structure():
+    r"""
+    Verifies that :func:`reindex_recurrence_relation` produces a recurrence
+    with positive order and all :math:`s()` indices non-positive (i.e.,
+    :math:`s(n)` depends only on :math:`s(n-1), s(n-2), \dots`).
+    """
+    w = make_identity_diff_op(2)
+    laplace2d = laplacian(w)
+    r = recurrence_from_pde(laplace2d)
+    order, reindexed = reindex_recurrence_relation(r)
+
+    assert order > 0
+
+    idx_l, _ = _extract_idx_terms_from_recurrence(reindexed)
+    assert all(idx <= 0 for idx in idx_l)
+
+
+def test_large_x1_recurrence_laplace_2d():
+    r"""
+    Verifies the large-:math:`|x_1|` recurrence for the 2D Laplace Green's
+    function :math:`G = -\frac{1}{2\pi} \log|x - t|` by comparing
+    recurrence-computed derivatives against direct symbolic differentiation
+    at a test point.
+    """
+    w = make_identity_diff_op(2)
+    laplace2d = laplacian(w)
+
+    var = _make_sympy_vec("x", 2)
+    var_t = _make_sympy_vec("t", 2)
+    g_x_y = (-1/(2*np.pi)) * sp.log(sp.sqrt((var[0]-var_t[0])**2
+                                             + (var[1]-var_t[1])**2))
+
+    x_vals = [(var[0], sp.Rational(1, 2)), (var[1], sp.Rational(3, 10))]
+    _verify_large_x1_recurrence(laplace2d, g_x_y, 2, 8, x_vals)
+
+
+def test_large_x1_recurrence_laplace_3d():
+    r"""
+    Verifies the large-:math:`|x_1|` recurrence for the 3D Laplace Green's
+    function :math:`G = \frac{1}{4\pi |x - t|}` by comparing
+    recurrence-computed derivatives against direct symbolic differentiation
+    at a test point.
+    """
     w = make_identity_diff_op(3)
     laplace3d = laplacian(w)
+
     var = _make_sympy_vec("x", 3)
     var_t = _make_sympy_vec("t", 3)
     abs_dist = sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2
                        + (var[2]-var_t[2])**2)
     g_x_y = 1/(4*np.pi) * 1/abs_dist
 
-    exp_res = recurrence_qbx_lp(sources, centers, normals, area_weight,
-                                radius, laplace3d, g_x_y, 3, 4)
+    x_vals = [(var[0], sp.Rational(1, 2)), (var[1], sp.Rational(3, 10)),
+              (var[2], sp.Rational(1, 5))]
+    _verify_large_x1_recurrence(laplace3d, g_x_y, 3, 6, x_vals)
 
-    assert (np.max(exp_res-out)/np.max(abs(exp_res))) <= 1e-12
 
-
-def test_recurrence_helmholtz_3d_sphere():
+def test_large_x1_recurrence_helmholtz_2d():
     r"""
-    Tests recurrence + qbx helmholtz 3d on sphere
+    Verifies the large-:math:`|x_1|` recurrence for the 2D Helmholtz Green's
+    function :math:`G = \frac{i}{4} H_0^{(1)}(k|x - t|)` by comparing
+    recurrence-computed derivatives against direct symbolic differentiation
+    at a test point.
     """
-    # import time
-    radius = 0.0001
-    sources, centers, normals, area_weight, radius = _create_sphere(2, radius)
-
-    # start = time.time()
-    out = _qbx_lp_general(hknl3d, sources, sources, centers, radius,
-                                   np.ones(area_weight.shape), 1, 1)  # pyright: ignore[reportCallIssue, reportArgumentType]
-    # end = time.time()
-    # length1 = end - start
-
-    w = make_identity_diff_op(3)
-    helmholtz3d = laplacian(w) + w
-    var = _make_sympy_vec("x", 3)
-    var_t = _make_sympy_vec("t", 3)
-    abs_dist = sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2
-                       + (var[2]-var_t[2])**2)
-    g_x_y = (1/(4*np.pi)) * sp.exp(1j * abs_dist) / abs_dist
-
-    # start = time.time()
-    exp_res = recurrence_qbx_lp(sources, centers, normals, np.ones(area_weight.shape),  # pyright: ignore[reportCallIssue, reportArgumentType]
-                                radius, helmholtz3d, g_x_y, 3, 1)
-    # end = time.time()
-    # length2 = end - start
-    # print(sources.shape[1], length1, length2)
-
-    assert np.max(abs(out - exp_res)) <= 1e-8
-
-
-def test_recurrence_laplace_2d_ellipse():
-    r"""
-    Tests recurrence + qbx code.
-    """
-
-    # ------------- 1. Define PDE, Green's Function
-    w = make_identity_diff_op(2)
-    laplace2d = laplacian(w)
-
-    var = _make_sympy_vec("x", 2)
-    var_t = _make_sympy_vec("t", 2)
-    g_x_y = (-1/(2*np.pi)) * sp.log(sp.sqrt((var[0]-var_t[0])**2 +
-                                            (var[1]-var_t[1])**2))
-
-    p = 4
-    err = []
-    for n_p in range(200, 1001, 200):
-        sources, centers, normals, density, jacobs, radius = _create_ellipse(n_p)
-        strengths = jacobs * density * (2*np.pi/n_p)
-        exp_res = recurrence_qbx_lp(sources, centers, normals,
-                                    strengths, radius, laplace2d,
-                                    g_x_y, 2, p)
-        qbx_res = _qbx_lp_general(lknl2d, sources, sources, centers,
-                                          radius, strengths, p)
-        # qbx_res,_ = lpot_eval_circle(sources.shape[1], p)
-        err.append(np.max(np.abs(exp_res - qbx_res))/np.max(np.abs(qbx_res)))
-    assert np.max(err) <= 1e-13
-
-
-def test_recurrence_helmholtz_2d_ellipse():
-    r"""
-    Tests recurrence + qbx code.
-    """
-    # ------------- 1. Define PDE, Green's Function
     w = make_identity_diff_op(2)
     helmholtz2d = laplacian(w) + w
 
@@ -261,14 +181,37 @@ def test_recurrence_helmholtz_2d_ellipse():
     abs_dist = sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2)
     g_x_y = (1j/4) * hankel1(0, k * abs_dist)
 
-    p = 5
-    err = []
-    for n_p in range(200, 1001, 200):
-        sources, centers, normals, density, jacobs, radius = _create_ellipse(n_p)
-        strengths = jacobs * density * (2*np.pi/n_p)
-        exp_res = recurrence_qbx_lp(sources, centers, normals, strengths,
-        radius, helmholtz2d, g_x_y, 2, p)
-        qbx_res = _qbx_lp_general(hknl2d, sources, sources,
-                                  centers, radius, strengths, p, 1)
-        err.append(np.max(np.abs(exp_res - qbx_res)))
-    assert np.max(err) <= 1e-13
+    x_vals = [(var[0], sp.Rational(1, 2)), (var[1], sp.Rational(3, 10))]
+    _verify_large_x1_recurrence(helmholtz2d, g_x_y, 2, 5, x_vals)
+
+
+def test_small_x1_recurrence_valid_structure():
+    r"""
+    Verifies that the small-:math:`|x_1|` recurrence for 2D Laplace returns
+    a recurrence with positive order and non-negative start order.
+    """
+    w = make_identity_diff_op(2)
+    laplace2d = laplacian(w)
+
+    start_order, recur_order, recur = (
+        get_small_x1_recurrence(laplace2d)
+    )
+
+    assert start_order >= 0
+    assert recur_order > 0
+    assert recur != 0
+
+
+def test_small_x1_expansion_valid_structure():
+    r"""
+    Verifies that the small-:math:`|x_1|` expansion for 2D Laplace returns
+    a nonzero expression with non-negative parameters.
+    """
+    w = make_identity_diff_op(2)
+    laplace2d = laplacian(w)
+
+    exp, n_coeffs, start_order = get_small_x1_expansion(laplace2d, 4)
+
+    assert exp != 0
+    assert n_coeffs >= 0
+    assert start_order >= 0

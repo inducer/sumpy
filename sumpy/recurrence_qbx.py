@@ -1,7 +1,9 @@
 r"""
-With the functionality in this module, we compute layer potentials
-using a recurrence for one-dimensional derivatives of the corresponding
-Green's function. See recurrence.py.
+Evaluates QBX layer potentials using recurrence-based computation of
+Green's function derivatives. Sources are first rotated into a coordinate
+system aligned with the expansion center normal, and then the
+large-:math:`|x_1|` and small-:math:`|x_1|` recurrences from
+:mod:`sumpy.recurrence` are used to build the local expansion.
 
 .. autofunction:: recurrence_qbx_lp
 """
@@ -41,9 +43,9 @@ import sympy as sp
 
 from sumpy.recurrence import (
     _make_sympy_vec,
-    get_off_axis_expression,
-    get_reindexed_and_center_origin_off_axis_recurrence,
-    get_reindexed_and_center_origin_on_axis_recurrence,
+    get_large_x1_recurrence,
+    get_small_x1_expansion,
+    get_small_x1_recurrence,
 )
 
 
@@ -53,6 +55,16 @@ if TYPE_CHECKING:
 
 # ================ Transform/Rotate =================
 def _produce_orthogonal_basis(normals: np.ndarray) -> Sequence[np.ndarray]:
+    r"""
+    Produces an orthonormal basis for each center, with the first basis
+    vector equal to the given normal. The remaining basis vectors are
+    generated via Gram-Schmidt orthogonalization of random vectors.
+
+    :arg normals: a ``(ndim, ncenters)`` array of unit normal vectors.
+
+    :returns: a list of *ndim* arrays, each of shape ``(ndim, ncenters)``,
+        forming a per-center orthonormal basis.
+    """
     ndim, ncenters = normals.shape
     orth_coordsys = [normals]
     for i in range(1, ndim):
@@ -72,7 +84,19 @@ def _compute_rotated_shifted_coordinates(
             centers: np.ndarray,
             normals: np.ndarray
         ) -> np.ndarray:
-    cts = sources[:, None] - centers[:, :, None]
+    r"""
+    Computes source coordinates shifted by the center locations and rotated
+    into a coordinate system where the first axis is aligned with the
+    center normal.
+
+    :arg sources: a ``(ndim, nsources)`` array of source locations.
+    :arg centers: a ``(ndim, ncenters)`` array of expansion center locations.
+    :arg normals: a ``(ndim, ncenters)`` array of unit normals at each center.
+
+    :returns: a ``(ndim, ncenters, nsources)`` array of rotated, shifted
+        coordinates.
+    """
+    cts = centers[:, :, None] - sources[:, None]
     orth_coordsys = _produce_orthogonal_basis(normals)
     cts_rotated_shifted = np.einsum("idc,dcs->ics", orth_coordsys, cts)
 
@@ -83,19 +107,28 @@ def _compute_rotated_shifted_coordinates(
 def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
                       ndim, p, off_axis_start=0) -> np.ndarray:
     r"""
-    A function that computes a single-layer potential using a recurrence.
+    Computes a single-layer potential using recurrence-based QBX. Sources
+    are rotated into a per-center coordinate system aligned with the normal,
+    and derivatives of the Green's function are computed via the
+    large-:math:`|x_1|` and small-:math:`|x_1|` recurrences. The two
+    regimes are blended based on the relative magnitude of the coordinates.
 
-    :arg sources: a (ndim, nsources) array of source locations
-    :arg centers: a (ndim, ncenters) array of center locations
-    :arg normals: a (ndim, ncenters) array of normals
-    :arg strengths: array corresponding to quadrature weight multiplied by
-    density
-    :arg radius: expansion radius
-    :arg pde: pde that we are computing layer potential for
-    :arg g_x_y: a green's function in (x0, x1, ...) source and
-    (t0, t1, ...) target
-    :arg ndim: number of spatial variables
-    :arg p: order of expansion computed
+    :arg sources: a ``(ndim, nsources)`` array of source locations.
+    :arg centers: a ``(ndim, ncenters)`` array of expansion center locations.
+    :arg normals: a ``(ndim, ncenters)`` array of unit normals at each center.
+    :arg strengths: a ``(nsources,)`` array of quadrature weights multiplied
+        by the density.
+    :arg radius: the QBX expansion radius.
+    :arg pde: a :class:`sumpy.expansion.diff_op.LinearPDESystemOperator`
+        describing the PDE whose Green's function is used.
+    :arg g_x_y: a sympy expression for the Green's function in source
+        variables :math:`(x_0, x_1, \dots)` and target variables
+        :math:`(t_0, t_1, \dots)`.
+    :arg ndim: the number of spatial dimensions.
+    :arg p: the order of the QBX expansion.
+
+    :returns: a ``(ncenters,)`` array of layer potential values at the
+        expansion centers.
     """
 
     # ------------- 2. Compute rotated/shifted coordinates
@@ -105,10 +138,8 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
     var = _make_sympy_vec("x", ndim)
     var_t = _make_sympy_vec("t", ndim)
 
-    # ------------ 5. Compute recurrence
-    n_initial, order, recurrence = (
-        get_reindexed_and_center_origin_on_axis_recurrence(pde)
-    )
+    # ------------ 5. Compute large-|x_1| recurrence
+    n_initial, order, recurrence = get_large_x1_recurrence(pde)
 
     # ------------ 6. Set order p = 5
     n_p = sources.shape[1]
@@ -126,14 +157,12 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
             arg_list.append(var[j])
 
         if i < n_initial:
-            lamb_expr_symb_deriv = sp.diff(g_x_y, var_t[0], i)
+            lamb_expr_symb_deriv = sp.diff(g_x_y, var[0], i)
             for j in range(ndim):
                 lamb_expr_symb_deriv = lamb_expr_symb_deriv.subs(var_t[j], 0)
             lamb_expr_symb = lamb_expr_symb_deriv
         else:
             lamb_expr_symb = recurrence.subs(n, i)
-        # print("=============== ORDER = " + str(i))
-        # print(lamb_expr_symb)
         return sp.lambdify(arg_list, lamb_expr_symb)
 
     coord = [cts_r_s[j] for j in range(ndim)]
@@ -142,28 +171,14 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
         lamb_expr = generate_lamb_expr(i, n_initial)
         a = [*storage, *coord]
         s_new = lamb_expr(*a)
-
-        """
-        s_new_true = true_lamb_expr(*a)
-        arg_max = np.argmax(abs(s_new-s_new_true)/abs(s_new_true))
-        print((s_new-s_new_true).reshape(-1)[arg_max]/s_new_true.reshape(-1)[arg_max])
-        print("x:", coord[0].reshape(-1)[arg_max],
-              "y:", coord[1].reshape(-1)[arg_max],
-              "s_recur:", s_new.reshape(-1)[arg_max],
-              "s_true:", s_new_true.reshape(-1)[arg_max],
-              "order: ", i)
-        """
-
         interactions_on_axis += s_new * radius**i/math.factorial(i)
 
         storage.pop(0)
         storage.append(s_new)
 
-    # NEW CODE - COMPUTE OFF AXIS INTERACTIONS
-    start_order, t_recur_order, t_recur = (
-        get_reindexed_and_center_origin_off_axis_recurrence(pde)
-    )
-    t_exp, t_exp_order, _ = get_off_axis_expression(pde, 8)
+    # Compute small-|x_1| interactions
+    start_order, t_recur_order, t_recur = get_small_x1_recurrence(pde)
+    t_exp, t_exp_order, _ = get_small_x1_expansion(pde, 8)
     storage_taylor_order = max(t_recur_order, t_exp_order+1)
 
     start_order = max(start_order, order)
@@ -179,7 +194,7 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
             arg_list.append(var[j])
 
         if i < start_order:
-            lamb_expr_symb_deriv = sp.diff(g_x_y, var_t[0], i)
+            lamb_expr_symb_deriv = sp.diff(g_x_y, var[0], i)
             for j in range(ndim):
                 lamb_expr_symb_deriv = lamb_expr_symb_deriv.subs(var_t[j], 0)
             lamb_expr_symb = lamb_expr_symb_deriv.subs(var[0], 0)
@@ -197,7 +212,7 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
             arg_list.append(var[j])
 
         if i < start_order:
-            lamb_expr_symb_deriv = sp.diff(g_x_y, var_t[0], i)
+            lamb_expr_symb_deriv = sp.diff(g_x_y, var[0], i)
             for j in range(ndim):
                 lamb_expr_symb_deriv = lamb_expr_symb_deriv.subs(var_t[j], 0)
             lamb_expr_symb = lamb_expr_symb_deriv
@@ -219,79 +234,13 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
 
         interactions_off_axis += lamb_expr_t_exp(*a2) * radius**i/math.factorial(i)
 
-    ################
-    # Compute True Interactions
-    """
-    storage_taylor_true = [np.zeros((n_p, n_p))] * storage_taylor_order
-    def generate_true(i):
-        arg_list = []
-        for j in range(ndim):
-            arg_list.append(var[j])
-
-        lamb_expr_symb_deriv = sp.diff(g_x_y, var_t[0], i)
-        for j in range(ndim):
-            lamb_expr_symb_deriv = lamb_expr_symb_deriv.subs(var_t[j], 0)
-        lamb_expr_symb = lamb_expr_symb_deriv
-
-        # print("=============== ORDER = " + str(i))
-        # print(lamb_expr_symb)
-        return sp.lambdify(arg_list, lamb_expr_symb)
-
-    interactions_true = 0
-    for i in range(p+1):
-        lamb_expr_true = generate_true(i)
-        a4 = [*coord]
-        s_new_true = lamb_expr_true(*a4)
-        interactions_true += s_new_true * radius**i/math.factorial(i)
-    """
-    ###############
-
-    # slope of line y = mx
+    # Blend large-|x_1| and small-|x_1| regimes based on relative coordinates
     m = 100
     mask_on_axis = m*np.abs(coord[0]) >= np.abs(coord[1])
     mask_off_axis = m*np.abs(coord[0]) < np.abs(coord[1])
-
-    # print("-------------------------")
-
-    # percent_on = np.sum(mask_on_axis) / (
-    #     mask_on_axis.shape[0]*mask_on_axis.shape[1])
-    # percent_off = 1-percent_on
-
-    # relerr_on = (
-    #     np.abs(
-    #         interactions_on_axis[mask_on_axis]
-    #         - interactions_true[mask_on_axis])
-    #     / np.abs(interactions_on_axis[mask_on_axis]))
-    # print("MAX ON AXIS ERROR(", percent_on, "):", np.max(relerr_on))
-    # print(np.mean(relerr_on))
-    # print("X:", coord[0][mask_on_axis].reshape(-1)[np.argmax(relerr_on)])
-    # print("Y:", coord[1][mask_on_axis].reshape(-1)[np.argmax(relerr_on)])
-
-    # print("-------------------------")
-
-    # if np.any(mask_off_axis):
-    #     relerr_off = (
-    #         np.abs(
-    #             interactions_off_axis[mask_off_axis]
-    #             - interactions_true[mask_off_axis])
-    #         / np.abs(interactions_off_axis[mask_off_axis]))
-    #     print("MAX OFF AXIS ERROR(", percent_off, "):",
-    #           np.max(relerr_off))
-    #     print(np.mean(relerr_off))
-    #     print("X:",
-    #           coord[0][mask_off_axis].reshape(-1)[np.argmax(relerr_off)])
-    #     print("Y:",
-    #           coord[1][mask_off_axis].reshape(-1)[np.argmax(relerr_off)])
 
     interactions_total = np.zeros(coord[0].shape)
     interactions_total[mask_on_axis] = interactions_on_axis[mask_on_axis]
     interactions_total[mask_off_axis] = interactions_off_axis[mask_off_axis]  # pyright: ignore[reportIndexIssue]
 
-    exp_res = (interactions_total * strengths[None, :]).sum(axis=1)
-    # exp_res_true = (interactions_true * strengths[None, :]).sum(axis=1)
-
-    # relerr_total = np.max(
-    #     np.abs(exp_res-exp_res_true)/np.abs(exp_res_true))
-    # print("OVERALL ERROR:", relerr_total)
-
-    return exp_res
+    return (interactions_total * strengths[None, :]).sum(axis=1)

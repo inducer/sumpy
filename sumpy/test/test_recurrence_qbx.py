@@ -1,6 +1,10 @@
 r"""
-With the functionality in this module, we test recurrence
-+ qbx code.
+Tests for the recurrence-based QBX layer potential evaluation module
+:mod:`sumpy.recurrence_qbx`.
+
+Compares layer potentials computed via the recurrence method against
+sumpy's standard QBX implementation for Laplace and Helmholtz kernels
+in 2D and 3D.
 """
 from __future__ import annotations
 
@@ -76,7 +80,6 @@ def _qbx_lp_general(knl, sources, targets, centers, radius,
     target_kernels=(knl,),
     source_kernels=(knl,))
 
-    # print(lpot.get_kernel())
     expansion_radii = actx.from_numpy(radius * np.ones(sources.shape[1]))
     sources = actx.from_numpy(sources)
     targets = actx.from_numpy(targets)
@@ -153,7 +156,9 @@ def _create_sphere(refinement_rounds, exp_radius):
 
 def test_compute_rotated_shifted_coordinates():
     r"""
-    Tests rotated shifted code.
+    Verifies that :func:`_compute_rotated_shifted_coordinates` correctly
+    computes the off-axis distance for a known source-center-normal
+    configuration.
     """
     sources = np.array([[1], [2], [2]])
     centers = np.array([[0], [0], [0]])
@@ -164,7 +169,8 @@ def test_compute_rotated_shifted_coordinates():
 
 def test_recurrence_laplace_3d_sphere():
     r"""
-    Tests recurrence + qbx laplace 3d on sphere
+    Compares the recurrence-based QBX evaluation of the 3D Laplace
+    single-layer potential on a sphere against sumpy's standard QBX.
     """
     radius = 0.0001
     sources, centers, normals, area_weight, radius = _create_sphere(1, radius)
@@ -188,17 +194,14 @@ def test_recurrence_laplace_3d_sphere():
 
 def test_recurrence_helmholtz_3d_sphere():
     r"""
-    Tests recurrence + qbx helmholtz 3d on sphere
+    Compares the recurrence-based QBX evaluation of the 3D Helmholtz
+    single-layer potential on a sphere against sumpy's standard QBX.
     """
-    # import time
     radius = 0.0001
     sources, centers, normals, area_weight, radius = _create_sphere(2, radius)
 
-    # start = time.time()
     out = _qbx_lp_general(hknl3d, sources, sources, centers, radius,
                                    np.ones(area_weight.shape), 1, 1)  # pyright: ignore[reportCallIssue, reportArgumentType]
-    # end = time.time()
-    # length1 = end - start
 
     w = make_identity_diff_op(3)
     helmholtz3d = laplacian(w) + w
@@ -208,22 +211,18 @@ def test_recurrence_helmholtz_3d_sphere():
                        + (var[2]-var_t[2])**2)
     g_x_y = (1/(4*np.pi)) * sp.exp(1j * abs_dist) / abs_dist
 
-    # start = time.time()
     exp_res = recurrence_qbx_lp(sources, centers, normals, np.ones(area_weight.shape),  # pyright: ignore[reportCallIssue, reportArgumentType]
                                 radius, helmholtz3d, g_x_y, 3, 1)
-    # end = time.time()
-    # length2 = end - start
-    # print(sources.shape[1], length1, length2)
 
     assert np.max(abs(out - exp_res)) <= 1e-8
 
 
 def test_recurrence_laplace_2d_ellipse():
     r"""
-    Tests recurrence + qbx code.
+    Compares the recurrence-based QBX evaluation of the 2D Laplace
+    single-layer potential on an ellipse against sumpy's standard QBX,
+    verifying convergence across multiple panel counts.
     """
-
-    # ------------- 1. Define PDE, Green's Function
     w = make_identity_diff_op(2)
     laplace2d = laplacian(w)
 
@@ -242,16 +241,16 @@ def test_recurrence_laplace_2d_ellipse():
                                     g_x_y, 2, p)
         qbx_res = _qbx_lp_general(lknl2d, sources, sources, centers,
                                           radius, strengths, p)
-        # qbx_res,_ = lpot_eval_circle(sources.shape[1], p)
         err.append(np.max(np.abs(exp_res - qbx_res))/np.max(np.abs(qbx_res)))
     assert np.max(err) <= 1e-13
 
 
 def test_recurrence_helmholtz_2d_ellipse():
     r"""
-    Tests recurrence + qbx code.
+    Compares the recurrence-based QBX evaluation of the 2D Helmholtz
+    single-layer potential on an ellipse against sumpy's standard QBX,
+    verifying convergence across multiple panel counts.
     """
-    # ------------- 1. Define PDE, Green's Function
     w = make_identity_diff_op(2)
     helmholtz2d = laplacian(w) + w
 
