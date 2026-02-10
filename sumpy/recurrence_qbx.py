@@ -128,7 +128,8 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
     :arg p: the order of the QBX expansion.
 
     :returns: a ``(ncenters,)`` array of layer potential values at the
-        expansion centers.
+        target points (located at distance *radius* from each center
+        along the normal).
     """
 
     # ------------- 2. Compute rotated/shifted coordinates
