@@ -27,10 +27,13 @@ terms of :math:`s(n-1), s(n-2), \dots`
 Computing derivatives
 ^^^^^^^^^^^^^^^^^^^^^
 
-Given a PDE and its Green's function, we want to compute the :math:`n`-th
-derivative :math:`\partial^n G / \partial x_1^n` at a point
-:math:`(x_1, x_2, \dots)`. Here :math:`x_1` is the first coordinate
-(called ``x0`` in the 0-indexed code variables).
+Given a PDE and its Green's function
+:math:`G(\boldsymbol x, \boldsymbol t)` where
+:math:`\boldsymbol x = (x_1, x_2, \dots)`, we want to compute the
+:math:`n`-th derivative :math:`\partial^n G / \partial x_1^n` with
+respect to the first coordinate :math:`x_1` of :math:`\boldsymbol x`
+(called ``x0`` in the 0-indexed code variables), with
+:math:`\boldsymbol t` fixed.
 
 There are two regimes, selected based on the relative magnitude of
 :math:`|x_1|`:
@@ -77,8 +80,27 @@ There are two regimes, selected based on the relative magnitude of
 Example: large-:math:`|x_1|` recurrence
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+We compute
+
+.. math::
+
+    s(n) = \frac{\partial^n}{\partial x_1^n}
+           G(\boldsymbol x, \boldsymbol t)\Big|_{\boldsymbol t=0},
+    \qquad n = 0, 1, \dots, p
+
+for the 2D Laplace Green's function
+
+.. math::
+
+    G(\boldsymbol x, \boldsymbol t)
+    = -\frac{1}{2\pi}\log|\boldsymbol x - \boldsymbol t|
+
+evaluated at the point :math:`\boldsymbol x = (0.5, 0.3)` with
+the target fixed at the origin :math:`\boldsymbol t = 0`.
+
 .. code-block:: python
 
+    import numpy as np
     import sympy as sp
     from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
     from sumpy.recurrence import get_large_x1_recurrence, _make_sympy_vec
@@ -89,31 +111,29 @@ Example: large-:math:`|x_1|` recurrence
 
     # 2. Get recurrence
     n_initial, order, recurrence = get_large_x1_recurrence(pde)
-    # n_initial: number of initial derivatives to seed directly
-    # order:     recurrence order (how many prior values s(n) depends on)
-    # recurrence: sympy expression giving s(n) in terms of s(n-1), ...
 
-    # 3. Compute derivatives at point (x0, x1) = (0.5, 0.3)
-    n = sp.symbols("n")
-    s = sp.Function("s")
-    var = _make_sympy_vec("x", 2)
-    x_vals = [(var[0], sp.Rational(1, 2)), (var[1], sp.Rational(3, 10))]
-
-    # Seed initial conditions by direct differentiation of G
-    import numpy as np
-    var_t = _make_sympy_vec("t", 2)
+    # 3. Define G(x, t) and the evaluation point
+    var = _make_sympy_vec("x", 2)    # source coordinates
+    var_t = _make_sympy_vec("t", 2)  # target coordinates
     g = (-1/(2*np.pi)) * sp.log(sp.sqrt((var[0]-var_t[0])**2
                                          + (var[1]-var_t[1])**2))
+
+    n = sp.symbols("n")
+    s = sp.Function("s")
+    # Evaluate at source x = (0.5, 0.3), target t = 0
+    x_vals = [(var[0], sp.Rational(1, 2)), (var[1], sp.Rational(3, 10))]
+
+    # 4. Seed initial derivatives by direct differentiation of G(x, 0)
     derivs = {}
     for i in range(-order, 0):
         derivs[i] = 0j
     for i in range(n_initial):
         d = sp.diff(g, var[0], i)
         for j in range(2):
-            d = d.subs(var_t[j], 0)
+            d = d.subs(var_t[j], 0)  # fix target at origin
         derivs[i] = complex(d.subs(x_vals))
 
-    # Apply recurrence up to order p
+    # 5. Apply recurrence to get derivatives up to order p
     p = 8
     for i in range(n_initial, p + 1):
         expr = recurrence.subs(n, i)
@@ -123,6 +143,28 @@ Example: large-:math:`|x_1|` recurrence
 
 Example: small-:math:`|x_1|` expansion
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Continuing from the same setup above, we now compute the same derivatives
+via the small-:math:`|x_1|` path. The small-:math:`|x_1|` recurrence
+first computes the Taylor coefficients
+
+.. math::
+
+    c(n) = \frac{\partial^n}{\partial x_1^n}
+           G(\boldsymbol x, \boldsymbol t)\Big|_{\boldsymbol t=0,\; x_1=0}
+
+i.e. the derivatives evaluated at the point :math:`(0, 0.3)`.
+The expansion then recovers the derivative at the full point
+:math:`\boldsymbol x = (0.5, 0.3)` via a truncated Taylor series
+in :math:`x_1`:
+
+.. math::
+
+    s(n) = \frac{\partial^n}{\partial x_1^n}
+           G(\boldsymbol x, \boldsymbol t)\Big|_{\boldsymbol t=0}
+    \approx \sum_{k=0}^{K} \frac{c(n+k)}{k!}\, x_1^k
+
+where :math:`K` is the user-chosen truncation order.
 
 .. code-block:: python
 
@@ -135,28 +177,23 @@ Example: small-:math:`|x_1|` expansion
     taylor_order = 8
     expansion, n_coeffs, start_order = get_small_x1_expansion(
         pde, taylor_order)
-    # expansion: sympy expression in s(n), s(n-1), ..., and x0
-    # n_coeffs:  number of prior recurrence values needed
-    # start_order: minimum n at which the expansion is valid
 
-    # 3. Compute Taylor coefficients via the small-|x_1| recurrence
-    #    (these are derivatives evaluated at x_1=0)
+    # 3. Compute Taylor coefficients: derivatives of G(x, 0) at x_1=0
     coeffs = {}
     for i in range(-recur_order, 0):
         coeffs[i] = 0j
     for i in range(start_order):
-        # Seed by direct differentiation of G at x0=0
         d = sp.diff(g, var[0], i)
         for j in range(2):
-            d = d.subs(var_t[j], 0)
-        coeffs[i] = complex(d.subs(var[0], 0).subs(x_vals))
+            d = d.subs(var_t[j], 0)        # fix target at origin
+        coeffs[i] = complex(d.subs(var[0], 0).subs(x_vals))  # then set x_1=0
     for i in range(start_order, p + 1):
         expr = recur.subs(n, i)
         for j in range(recur_order, 0, -1):
             expr = expr.subs(s(i - j), coeffs[i - j])
         coeffs[i] = complex(expr.subs(x_vals))
 
-    # 4. Evaluate the expansion at a point with small x_1
+    # 4. Evaluate the expansion at x = (0.5, 0.3)
     for i in range(start_order, p + 1):
         expr = expansion.subs(n, i)
         for j in range(n_coeffs, -1, -1):
