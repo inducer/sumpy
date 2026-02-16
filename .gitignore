@@ -22,3 +22,9 @@ sumpy/_git_rev.py
 .asv
 
 *.vts
+*.ipynb
+*.pgf
+output.png
+qbxrecurrence.svg
+test/hirish_plotting
+.vscode/settings.json

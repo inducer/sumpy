@@ -27,3 +27,13 @@ Estimating Expansion Orders
 ---------------------------
 
 .. automodule:: sumpy.expansion.level_to_order
+
+Recurrences
+-----------
+
+.. automodule:: sumpy.recurrence
+
+Recurrence QBX
+--------------
+
+.. automodule:: sumpy.recurrence_qbx
