@@ -324,7 +324,7 @@ RTOL_P2E2E2P = 1e-2
 
 
 @pytest.mark.parametrize("case", P2E2E2P_TEST_CASES)
-@pytest.mark.parametrize(("kernel_cls", "extra_kernel_kwargs"), [
+@pytest.mark.parametrize(("make_kernel", "extra_kernel_kwargs"), [
             (LaplaceKernel, {}),
             (lambda dim: HeatKernel(dim - 1), {"alpha": 0.1})])
 def test_toy_p2e2e2p(
