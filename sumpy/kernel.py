@@ -773,7 +773,7 @@ class ElasticityKernel(ExpressionKernel):
                 viscosity_mu: float | str | SpatialConstant = "mu",
                 poisson_ratio: float | str | SpatialConstant = "nu",
         ) -> ElasticityKernel:
-        if poisson_ratio == 0.5:
+        if poisson_ratio == 0.5:  # noqa: RUF069
             return super().__new__(StokesletKernel)
         else:
             return super().__new__(cls)
@@ -899,7 +899,7 @@ class StokesletKernel(ElasticityKernel):
         if poisson_ratio is None:
             poisson_ratio = 0.5
 
-        if poisson_ratio != 0.5:
+        if poisson_ratio != 0.5:  # noqa: RUF069
             raise ValueError(
                 "'StokesletKernel' must have a Poisson ratio of 0.5: "
                 f"got '{poisson_ratio}'")

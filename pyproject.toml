@@ -92,15 +92,16 @@ extend-select = [
     "Q",   # flake8-quotes
     "RUF", # ruff
     "SIM", # flake8-simplify
+    "TC",  # flake8-type-checking
     "UP",  # pyupgrade
     "W",   # pycodestyle
-    "TC",
 ]
 extend-ignore = [
-    "C90",  # McCabe complexity
-    "E221", # multiple spaces before operator
-    "E226", # missing whitespace around arithmetic operator
-    "E402", # module-level import not at top of file
+    "C90",      # McCabe complexity
+    "E221",     # multiple spaces before operator
+    "E226",     # missing whitespace around arithmetic operator
+    "E402",     # module-level import not at top of file
+    "RUF067",   # non-empty-init-module
 ]
 
 [tool.ruff.lint.flake8-quotes]

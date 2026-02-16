@@ -600,7 +600,7 @@ class ComplexRewriter(CSECachingIdentityMapper[[]]):
 
         complex_dtype = self.complex_dtype
         if complex_dtype is None:
-            if complex(np.complex64(expr)) == expr:
+            if complex(np.complex64(expr)) == expr:  # noqa: RUF069
                 return np.complex64(expr)
 
             complex_dtype = np.complex128
