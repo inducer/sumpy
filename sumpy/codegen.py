@@ -36,6 +36,7 @@ import loopy as lp
 import pymbolic.primitives as prim
 from loopy.kernel.instruction import Assignment, CallInstruction, make_assignment
 from pymbolic.mapper import CSECachingMapperMixin, IdentityMapper, P
+from pymbolic.mapper.flattener import FlattenMapper
 from pymbolic.typing import ArithmeticExpression, Expression
 from pytools import memoize_method
 
@@ -753,6 +754,7 @@ def to_loopy_insns(
     sympy_conv = SympyToPymbolicMapper()
     pymbolic_assignments = [(name, sympy_conv(expr)) for name, expr in assignments]
 
+    flat = FlattenMapper()
     bdr = BesselDerivativeReplacer()
     btog = BesselTopOrderGatherer()
     vcr = VectorComponentRewriter(vector_names)
@@ -762,6 +764,7 @@ def to_loopy_insns(
     cmr = ComplexRewriter(complex_dtype)
 
     def cmb_mapper(expr: Expression, /) -> Expression:
+        expr = flat(expr)
         expr = bdr(expr)
         expr = vcr(expr)
         expr = pwr(expr)
