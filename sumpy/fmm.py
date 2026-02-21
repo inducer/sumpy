@@ -45,8 +45,7 @@ import numpy as np
 from boxtree.fmm import ExpansionWranglerInterface, TreeIndependentDataForWrangler
 from boxtree.tree import Tree
 
-import pytools.obj_array as obj_array
-from pytools import memoize_in, memoize_method
+from pytools import memoize_in, memoize_method, obj_array
 
 from sumpy import (
     E2EFromChildren,
@@ -394,6 +393,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         # NOTE: a host version of `level_start_box_nrs` is used repeatedly and
         # this simply caches it to avoid repeated transfers
         actx = self.tree_indep._setup_actx
+        assert self.tree.level_start_box_nrs is not None
         return actx.to_numpy(self.tree.level_start_box_nrs)
 
     def _expansions_level_starts(self, order_to_size: Callable[[int], int]):
@@ -496,9 +496,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
         def order_to_size(order):
             mpole_expn = self.tree_indep.multipole_expansion(order)
             local_expn = self.tree_indep.local_expansion(order)
-            res = local_expn.m2l_translation.preprocess_multipole_nexprs(
+            return local_expn.m2l_translation.preprocess_multipole_nexprs(
                 local_expn, mpole_expn)
-            return res
 
         return build_csr_level_starts(self.level_orders, order_to_size,
                 level_starts=self.tree_level_start_box_nrs)
@@ -773,8 +772,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                         inverse=False, wait_for=None))
             result.append(m2l_translation_classes_dependent_data_view)
 
-        result = [actx.freeze(arr) for arr in result]
-        return result
+        return [actx.freeze(arr) for arr in result]
 
     def _add_m2l_precompute_kwargs(self, kwargs_for_m2l,
             lev):

@@ -31,7 +31,7 @@ import enum
 import logging
 import warnings
 from abc import ABC, abstractmethod
-from collections.abc import Hashable, Sequence, Set
+from collections.abc import Hashable, Sequence, Set as AbstractSet
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
@@ -200,8 +200,8 @@ def add_to_sac(sac: SymbolicAssignmentCollection | None, expr: sym.Expr):
 
 # {{{ get variables
 
-def get_all_variables(expr: Expression) -> Set[Variable]:
-    return cast("Set[Variable]", DependencyMapper()(expr))
+def get_all_variables(expr: Expression) -> AbstractSet[Variable]:
+    return cast("AbstractSet[Variable]", DependencyMapper()(expr))
 
 # }}}
 
@@ -914,8 +914,7 @@ def loopy_fft(
         knl = lp.add_inames_for_unused_hw_axes(knl)
 
     knl = lp.preprocess_kernel(knl)
-    knl = lp.linearize(knl)
-    return knl
+    return lp.linearize(knl)
 
 
 class FFTBackend(enum.Enum):

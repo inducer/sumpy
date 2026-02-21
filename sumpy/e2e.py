@@ -135,15 +135,15 @@ class E2EBase(KernelCacheMixin, ABC):
         return (type(self).__name__, self.src_expansion, self.tgt_expansion)
 
     @abstractmethod
-    def get_kernel(self):
+    @override
+    def get_kernel(self) -> lp.TranslationUnit:
         pass
 
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
-        knl = lp.split_iname(knl, "itgt_box", 64, outer_tag="g.0", inner_tag="l.0")
+        return lp.split_iname(knl, "itgt_box", 64, outer_tag="g.0", inner_tag="l.0")
 
-        return knl
 
 # }}}
 
@@ -259,18 +259,14 @@ class E2EFromCSR(E2EBase):
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-        loopy_knl = lp.set_options(loopy_knl,
+        return lp.set_options(loopy_knl,
                 enforce_variable_access_ordered="no_check")
-
-        return loopy_knl
 
     @override
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
-        knl = lp.split_iname(knl, "itgt_box", 64, outer_tag="g.0", inner_tag="l.0")
-
-        return knl
+        return lp.split_iname(knl, "itgt_box", 64, outer_tag="g.0", inner_tag="l.0")
 
     def __call__(self, actx: ArrayContext, **kwargs):
         """
@@ -511,10 +507,8 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
 
     def get_optimized_kernel(self, result_dtype):
         knl = self.get_kernel(result_dtype)
-        knl = self.tgt_expansion.m2l_translation.optimize_loopy_kernel(
+        return self.tgt_expansion.m2l_translation.optimize_loopy_kernel(
                 knl, self.tgt_expansion, self.src_expansion)
-
-        return knl
 
     def __call__(self, actx: ArrayContext, **kwargs):
         """
@@ -612,22 +606,18 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
 
         loopy_knl = lp.merge([loopy_knl, translation_classes_data_knl])
         loopy_knl = lp.inline_callable_kernel(loopy_knl, "m2l_data")
-        loopy_knl = lp.set_options(loopy_knl,
+        return lp.set_options(loopy_knl,
                 enforce_variable_access_ordered="no_check",
                 # FIXME: Without this, Loopy spends an eternity checking
                 # scattered writes to global variables to see whether barriers
                 # need to be inserted.
                 disable_global_barriers=True)
 
-        return loopy_knl
-
     def get_optimized_kernel(self, result_dtype):
         # FIXME
         knl = self.get_kernel(result_dtype)
         knl = lp.tag_inames(knl, "idim*:unr")
-        knl = lp.tag_inames(knl, {"itr_class": "g.0"})
-
-        return knl
+        return lp.tag_inames(knl, {"itr_class": "g.0"})
 
     def __call__(self, actx: ArrayContext, **kwargs):
         """
@@ -722,9 +712,7 @@ class M2LPreprocessMultipole(E2EBase):
             loopy_knl = expn.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.merge([loopy_knl, single_box_preprocess_knl])
-        loopy_knl = lp.inline_callable_kernel(loopy_knl, "m2l_preprocess_inner")
-
-        return loopy_knl
+        return lp.inline_callable_kernel(loopy_knl, "m2l_preprocess_inner")
 
     def get_optimized_kernel(self, result_dtype):
         knl = self.get_kernel(result_dtype)
@@ -822,9 +810,8 @@ class M2LPostprocessLocal(E2EBase):
         loopy_knl = lp.merge([loopy_knl, single_box_postprocess_knl])
         loopy_knl = lp.inline_callable_kernel(loopy_knl, "m2l_postprocess_inner")
 
-        loopy_knl = lp.set_options(loopy_knl,
+        return lp.set_options(loopy_knl,
                 enforce_variable_access_ordered="no_check")
-        return loopy_knl
 
     def get_optimized_kernel(self, result_dtype):
         knl = self.get_kernel(result_dtype)
@@ -832,8 +819,7 @@ class M2LPostprocessLocal(E2EBase):
         _, optimizations = self.get_inner_knl_and_optimizations(result_dtype)
         for optimization in optimizations:
             knl = optimization(knl)
-        knl = lp.add_inames_for_unused_hw_axes(knl)
-        return knl
+        return lp.add_inames_for_unused_hw_axes(knl)
 
     def __call__(self, actx: ArrayContext, **kwargs):
         """
@@ -943,10 +929,8 @@ class E2EFromChildren(E2EBase):
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-        loopy_knl = lp.set_options(loopy_knl,
+        return lp.set_options(loopy_knl,
                 enforce_variable_access_ordered="no_check")
-
-        return loopy_knl
 
     def __call__(self, actx: ArrayContext, **kwargs):
         """
@@ -1050,10 +1034,8 @@ class E2EFromParent(E2EBase):
             loopy_knl = knl.prepare_loopy_kernel(loopy_knl)
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
-        loopy_knl = lp.set_options(loopy_knl,
+        return lp.set_options(loopy_knl,
                 enforce_variable_access_ordered="no_check")
-
-        return loopy_knl
 
     def __call__(self, actx: ArrayContext, **kwargs):
         """

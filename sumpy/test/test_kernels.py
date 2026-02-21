@@ -31,12 +31,12 @@ import numpy as np
 import numpy.linalg as la
 import pytest
 
-import pytools.obj_array as obj_array
 from arraycontext import (
     ArrayContextFactory,
     PyOpenCLArrayContext,
     pytest_generate_tests_for_array_contexts,
 )
+from pytools import obj_array
 from pytools.convergence import PConvergenceVerifier
 
 import sumpy.symbolic as sym

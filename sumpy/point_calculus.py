@@ -27,8 +27,7 @@ from typing import TYPE_CHECKING, Literal, TypeAlias
 import numpy as np
 import numpy.linalg as la
 
-import pytools.obj_array as obj_array
-from pytools import memoize_method
+from pytools import memoize_method, obj_array
 
 
 if TYPE_CHECKING:

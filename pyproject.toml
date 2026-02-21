@@ -102,6 +102,8 @@ extend-ignore = [
     "E226",     # missing whitespace around arithmetic operator
     "E402",     # module-level import not at top of file
     "RUF067",   # non-empty-init-module
+    "TRY004",
+    "TRY300",
 ]
 
 [tool.ruff.lint.flake8-quotes]
@@ -127,6 +129,8 @@ required-imports = ["from __future__ import annotations"]
 [tool.ruff.lint.per-file-ignores]
 "doc/**/*.py" = ["I002"]
 "examples/**/*.py" = ["I002"]
+"sumpy/test/test_*.py" = ["S102"]
+"doc/conf.py" = ["S102"]
 
 [tool.typos.default]
 extend-ignore-re = [

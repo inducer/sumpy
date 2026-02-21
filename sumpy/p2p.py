@@ -33,8 +33,8 @@ import numpy as np
 from typing_extensions import override
 
 import loopy as lp
-import pytools.obj_array as obj_array
 from arraycontext import PyOpenCLArrayContext
+from pytools import obj_array
 
 from sumpy.array_context import make_loopy_program
 from sumpy.tools import KernelCacheMixin, KernelComputation, is_obj_array_like
@@ -204,9 +204,8 @@ class P2PBase(KernelCacheMixin, KernelComputation):
 
         knl = lp.split_iname(knl, "itgt", 1024, outer_tag="g.0")
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
-        knl = lp.set_options(knl, enforce_variable_access_ordered="no_check")
+        return lp.set_options(knl, enforce_variable_access_ordered="no_check")
 
-        return knl
 
 # }}}
 
@@ -437,10 +436,8 @@ class P2PMatrixSubsetGenerator(P2PBase):
 
         knl = lp.split_iname(knl, "imat", 1024, outer_tag="g.0")
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
-        knl = lp.set_options(knl,
+        return lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
-
-        return knl
 
     def __call__(self,
             actx: ArrayContext,
@@ -799,8 +796,7 @@ class P2PFromCSR(P2PBase):
                     "inner", "id:init_* or id:*_scaling or id:src_box_insn_*")
             knl = lp.add_inames_to_insn(knl, "itgt_box", "id:*_scaling")
 
-        knl = lp.set_options(knl, enforce_variable_access_ordered="no_check")
-        return knl
+        return lp.set_options(knl, enforce_variable_access_ordered="no_check")
 
     def __call__(self,
             actx: ArrayContext,
