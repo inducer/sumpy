@@ -26,7 +26,7 @@ THE SOFTWARE.
 from typing import TYPE_CHECKING, final
 
 import numpy as np
-import scipy.fftpack as fftpack
+from scipy import fftpack
 
 
 if TYPE_CHECKING:

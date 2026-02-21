@@ -573,8 +573,7 @@ class StorageIndexTestKernel(ExpressionKernel):
     @override
     def get_pde_as_diff_op(self):
         w = make_identity_diff_op(self.dim)
-        pde = diff(w, tuple(self._max_mi))
-        return pde
+        return diff(w, tuple(self._max_mi))
 
 
 @pytest.mark.parametrize("order", [6])

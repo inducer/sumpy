@@ -34,9 +34,8 @@ import numpy as np
 from typing_extensions import override
 
 import loopy as lp
-import pytools.obj_array as obj_array
 from pymbolic import parse
-from pytools import memoize_method
+from pytools import memoize_method, obj_array
 
 import sumpy.symbolic as sym
 from sumpy.array_context import is_cl_cpu, make_loopy_program
@@ -116,11 +115,9 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation, ABC):
         conv = PymbolicToSympyMapper()
         strengths = [conv.to_expr(self.get_strength_or_not(isrc, idx))
                      for idx in range(len(self.source_kernels))]
-        coefficients = self.expansion.coefficients_from_source_vec(
+        return self.expansion.coefficients_from_source_vec(
             self.source_kernels, avec, bvec, rscale=rscale, weights=strengths,
             sac=sac)
-
-        return coefficients
 
     def _evaluate(self, sac, avec, bvec, rscale, expansion_nr, coefficients):
         from sumpy.expansion.local import LineTaylorLocalExpansion
@@ -242,9 +239,8 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation, ABC):
                 "non-CPU targets", stacklevel=1)
             loopy_knl = lp.split_iname(loopy_knl, itgt_name, 128, outer_tag="g.0")
 
-        loopy_knl = self._allow_redundant_execution_of_knl_scaling(loopy_knl)
+        return self._allow_redundant_execution_of_knl_scaling(loopy_knl)
 
-        return loopy_knl
 
 # }}}
 
@@ -500,8 +496,7 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
             loopy_knl = lp.tag_array_axes(loopy_knl, "center", "sep,C")
 
         loopy_knl = lp.split_iname(loopy_knl, "imat", 1024, outer_tag="g.0")
-        loopy_knl = self._allow_redundant_execution_of_knl_scaling(loopy_knl)
-        return loopy_knl
+        return self._allow_redundant_execution_of_knl_scaling(loopy_knl)
 
     def __call__(self, actx: ArrayContext,
             targets, sources, centers, expansion_radii,

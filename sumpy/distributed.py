@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 
 from boxtree.distributed.calculation import DistributedExpansionWranglerMixin
 
-import pytools.obj_array as obj_array
+from pytools import obj_array
 
 from sumpy.fmm import SumpyExpansionWrangler
 
@@ -61,11 +61,9 @@ class DistributedSumpyExpansionWrangler(
         local_src_weight_vecs_host = super().distribute_source_weights(
             actx, src_weight_vecs_host, src_idx_all_ranks)
 
-        local_src_weight_vecs_device = [
+        return [
             actx.from_numpy(local_src_weight)
             for local_src_weight in local_src_weight_vecs_host]
-
-        return local_src_weight_vecs_device
 
     def gather_potential_results(self,
             actx: ArrayContext, potentials, tgt_idx_all_ranks):
@@ -73,11 +71,10 @@ class DistributedSumpyExpansionWrangler(
             actx.to_numpy(potentials_dev) for potentials_dev in potentials
             ]
 
-        gathered_potentials_host_vec = []
-        for potentials_host in potentials_host_vec:
-            gathered_potentials_host_vec.append(
-                super().gather_potential_results(
-                    actx, potentials_host, tgt_idx_all_ranks))
+        gathered_potentials_host_vec = [
+            super().gather_potential_results(
+                    actx, potentials_host, tgt_idx_all_ranks)
+            for potentials_host in potentials_host_vec]
 
         if self.is_mpi_root:
             return obj_array.new_1d([

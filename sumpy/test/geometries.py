@@ -96,7 +96,7 @@ def make_torus(
         ])
 
     def diff2d(ary: NDArray[np.floating]):
-        import scipy.fftpack as fftpack
+        from scipy import fftpack
         return np.array([
                             fftpack.diff(ary[idx])
                             for idx in np.ndindex(ary.shape[:-1])

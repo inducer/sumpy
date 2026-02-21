@@ -344,7 +344,6 @@ class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):
             return Symbol(f"{expr.aggregate.name}{expr.index}")
         else:
             self.raise_conversion_error(expr)
-            raise
 
     @override
     def map_call(self, expr: prim.Call) -> sym.Basic:

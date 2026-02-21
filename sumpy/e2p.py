@@ -29,8 +29,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 import loopy as lp
-import pytools.obj_array as obj_array
 from loopy.version import MOST_RECENT_LANGUAGE_VERSION  # noqa: F401
+from pytools import obj_array
 
 from sumpy.array_context import make_loopy_program
 from sumpy.tools import KernelCacheMixin, gather_loopy_arguments
@@ -101,8 +101,7 @@ class E2PBase(KernelCacheMixin, ABC):
         loopy_knl = lp.remove_unused_inames(loopy_knl)
         for kernel in self.kernels:
             loopy_knl = kernel.prepare_loopy_kernel(loopy_knl)
-        loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
-        return loopy_knl
+        return lp.tag_array_axes(loopy_knl, "targets", "sep,C")
 
     def get_loopy_args(self):
         return gather_loopy_arguments((self.expansion, *tuple(self.kernels)))
@@ -194,19 +193,15 @@ class E2PFromSingleBox(E2PBase):
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, "iknl*:unr")
-        loopy_knl = self.add_loopy_eval_callable(loopy_knl)
-
-        return loopy_knl
+        return self.add_loopy_eval_callable(loopy_knl)
 
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
         knl = lp.tag_inames(knl, {"itgt_box": "g.0"})
         knl = lp.add_inames_to_insn(knl, "itgt_box", "id:kernel_scaling")
-        knl = lp.set_options(knl,
+        return lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
-
-        return knl
 
     def __call__(self, actx: ArrayContext, **kwargs):
         """
@@ -322,19 +317,15 @@ class E2PFromCSR(E2PBase):
         loopy_knl = lp.tag_inames(loopy_knl, "iknl*:unr")
         loopy_knl = lp.prioritize_loops(loopy_knl, "itgt_box,itgt,isrc_box")
         loopy_knl = self.add_loopy_eval_callable(loopy_knl)
-        loopy_knl = lp.tag_array_axes(loopy_knl, "targets", "sep,C")
-
-        return loopy_knl
+        return lp.tag_array_axes(loopy_knl, "targets", "sep,C")
 
     def get_optimized_kernel(self):
         # FIXME
         knl = self.get_kernel()
         knl = lp.tag_inames(knl, {"itgt_box": "g.0"})
         knl = lp.add_inames_to_insn(knl, "itgt_box", "id:kernel_scaling")
-        knl = lp.set_options(knl,
+        return lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
-
-        return knl
 
     def __call__(self, actx: ArrayContext, **kwargs):
         centers = kwargs.pop("centers")

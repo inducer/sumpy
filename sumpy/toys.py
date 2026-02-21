@@ -34,8 +34,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from typing_extensions import override
 
-import pytools.obj_array as obj_array
-from pytools import memoize_method
+from pytools import memoize_method, obj_array
 
 from sumpy.kernel import TargetTransformationRemover
 

@@ -333,8 +333,7 @@ class ExpansionTermsWrangler(ABC):
         axis `d`.
         """
         d = self.dim - 1
-        hyperplanes = [(d, const) for const in range(self.order + 1)]
-        return hyperplanes
+        return [(d, const) for const in range(self.order + 1)]
 
     @memoize_method
     def _split_coeffs_into_hyperplanes(
@@ -648,8 +647,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 mi = ident
             key = [sum(mi)]
 
-            for i in range(dim):
-                key.append(mi[axis_permutation[i]])
+            key.extend(mi[axis_permutation[i]] for i in range(dim))
 
             return tuple(key)
 

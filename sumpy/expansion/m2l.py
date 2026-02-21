@@ -385,10 +385,8 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         # (FIXME? Though this is just the correctness-checking
         # fallback for the FFT anyhow)
         result = matvec_toeplitz_upper_triangular(src_coeff_exprs, derivatives)
-        result = self.postprocess_local_exprs(tgt_expansion, src_expansion,
+        return self.postprocess_local_exprs(tgt_expansion, src_expansion,
             result, src_rscale, tgt_rscale, sac)
-
-        return result
 
     @override
     def translation_classes_dependent_ndata(self,
@@ -694,12 +692,10 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
 
         # Filter out the dummy rows and scale them for target
         rscale_ratio = add_to_sac(sac, tgt_rscale/src_rscale)
-        result = [
+        return [
             m2l_result[circulant_matrix_ident_to_index[term]]
             * rscale_ratio**sum(term)
             for term in tgt_expansion.get_coefficient_identifiers()]
-
-        return result
 
     @override
     def postprocess_local_nexprs(self,
@@ -859,9 +855,7 @@ class VolumeTaylorM2LWithPreprocessedMultipoles(VolumeTaylorM2LTranslation):
         # Returns a big symbolic sum of matrix entries
         # (FIXME? Though this is just the correctness-checking
         # fallback for the FFT anyhow)
-        result = matvec_toeplitz_upper_triangular(src_coeff_exprs, derivatives)
-
-        return result
+        return matvec_toeplitz_upper_triangular(src_coeff_exprs, derivatives)
 
     @override
     def loopy_translate(self,
@@ -896,7 +890,7 @@ class VolumeTaylorM2LWithPreprocessedMultipoles(VolumeTaylorM2LTranslation):
             ),
         ]
 
-        knl = lp.make_function(
+        return lp.make_function(
             domains,
             insns,
             kernel_data=[
@@ -909,8 +903,6 @@ class VolumeTaylorM2LWithPreprocessedMultipoles(VolumeTaylorM2LTranslation):
             name="e2e",
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
         )
-
-        return knl
 
 
 # }}} VolumeTaylorM2LWithPreprocessedMultipoles
@@ -938,8 +930,7 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
         derivatives = translation_classes_dependent_data
         assert len(src_coeff_exprs) == len(derivatives)
 
-        result = [a*b for a, b in zip(derivatives, src_coeff_exprs, strict=True)]
-        return result
+        return [a*b for a, b in zip(derivatives, src_coeff_exprs, strict=True)]
 
     @override
     def translation_classes_dependent_data(self,
@@ -1007,9 +998,7 @@ class VolumeTaylorM2LWithFFT(VolumeTaylorM2LWithPreprocessedMultipoles):
 
         knl = lp.split_iname(knl, "icoeff_tgt", 64, inner_iname="inner",
                              inner_tag="l.0", outer_tag="g.1")
-        knl = lp.tag_inames(knl, {"itgt_box": "g.0"})
-
-        return knl
+        return lp.tag_inames(knl, {"itgt_box": "g.0"})
 
 
 # }}} VolumeTaylorM2LWithFFT
@@ -1044,19 +1033,16 @@ class FourierBesselM2LTranslation(M2LTranslationBase):
                 sym.sympify(0))
             for j, in tgt_expansion.get_coefficient_identifiers()]
 
-        translated_coeffs = self.postprocess_local_exprs(tgt_expansion,
+        return self.postprocess_local_exprs(tgt_expansion,
                 src_expansion, translated_coeffs, src_rscale, tgt_rscale,
                 sac)
-
-        return translated_coeffs
 
     @override
     def translation_classes_dependent_ndata(self,
                 tgt_expansion: LocalExpansionBase,
                 src_expansion: MultipoleExpansionBase,
             ) -> int:
-        nexpr = 2 * tgt_expansion.order + 2 * src_expansion.order + 1
-        return nexpr
+        return 2 * tgt_expansion.order + 2 * src_expansion.order + 1
 
     @override
     def translation_classes_dependent_data(self,
@@ -1155,15 +1141,13 @@ class FourierBesselM2LWithPreprocessedMultipoles(FourierBesselM2LTranslation):
         assert translation_classes_dependent_data
         derivatives = translation_classes_dependent_data
 
-        translated_coeffs = [
+        return [
             sum((derivatives[m + j + tgt_expansion.order + src_expansion.order]
                  * src_coeff_exprs[src_expansion.get_storage_index((m,))]
                  for m, in src_expansion.get_coefficient_identifiers()),
                 sym.sympify(0))
             for j, in tgt_expansion.get_coefficient_identifiers()
         ]
-
-        return translated_coeffs
 
     @override
     def loopy_translate(self,
@@ -1194,7 +1178,7 @@ class FourierBesselM2LWithPreprocessedMultipoles(FourierBesselM2LTranslation):
                 expression=tgt_coeffs[icoeff_tgt] + expr),
         ]
 
-        knl = lp.make_function(domains, insns,
+        return lp.make_function(domains, insns,
             kernel_data=[
                 lp.GlobalArg("tgt_coeffs", shape=lp.auto, is_input=True,
                     is_output=True),
@@ -1206,7 +1190,6 @@ class FourierBesselM2LWithPreprocessedMultipoles(FourierBesselM2LTranslation):
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
         )
 
-        return knl
 
 # }}} FourierBesselM2LWithPreprocessedMultipoles
 
@@ -1370,7 +1353,7 @@ def loopy_translation_classes_dependent_data(
             )
             happens_after = frozenset([f"data_{idx}"])
 
-    knl = lp.make_function([], insns,
+    return lp.make_function([], insns,
         kernel_data=[
             lp.ValueArg("src_rscale", None),
             lp.GlobalArg("d", None, shape=tgt_expansion.dim),
@@ -1382,7 +1365,6 @@ def loopy_translation_classes_dependent_data(
         lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
     )
 
-    return knl
 
 # }}} loopy_translation_classes_dependent_data
 

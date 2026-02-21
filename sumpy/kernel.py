@@ -37,7 +37,7 @@ from typing import (
 )
 
 import numpy as np
-from typing_extensions import override
+from typing_extensions import Self, override
 
 import loopy as lp
 import pymbolic.primitives as prim
@@ -434,12 +434,10 @@ class ExpressionKernel(Kernel, ABC):
                 f"kernel dim is '{self.dim}' and dist_vec has length '{len(dist_vec)}'")
 
         from sumpy.symbolic import Symbol
-        expr = expr.xreplace({
+        return expr.xreplace({
             Symbol(f"d{i}"): dist_vec_i
             for i, dist_vec_i in enumerate(dist_vec)
             })
-
-        return expr
 
     @override
     def get_global_scaling_const(self) -> sym.Expr:
@@ -769,7 +767,7 @@ class ElasticityKernel(ExpressionKernel):
                 dim: int, icomp: int, jcomp: int,
                 viscosity_mu: float | str | SpatialConstant = "mu",
                 poisson_ratio: float | str | SpatialConstant = "nu",
-        ) -> ElasticityKernel:
+        ) -> Self:
         if poisson_ratio == 0.5:  # noqa: RUF069
             return super().__new__(StokesletKernel)
         else:
@@ -844,9 +842,9 @@ class ElasticityKernel(ExpressionKernel):
         from sumpy.tools import get_all_variables
         variables = get_all_variables(self.viscosity_mu)
 
-        args: list[KernelArgument] = []
-        for v in variables:
-            args.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
+        args: list[KernelArgument] = [
+            KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64))
+            for v in variables]
 
         return [*args, *self.get_source_args()]
 
@@ -856,9 +854,9 @@ class ElasticityKernel(ExpressionKernel):
         from sumpy.tools import get_all_variables
         variables = get_all_variables(self.poisson_ratio)
 
-        args: list[KernelArgument] = []
-        for v in variables:
-            args.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
+        args: list[KernelArgument] = [
+            KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64))
+            for v in variables]
 
         return args
 
@@ -884,7 +882,7 @@ class StokesletKernel(ElasticityKernel):
                 jcomp: int,
                 viscosity_mu: float | str | SpatialConstant = "mu",
                 poisson_ratio: float | str | SpatialConstant | None = None,
-            ) -> StokesletKernel:
+            ) -> Self:
         return object.__new__(cls)
 
     def __init__(self,
@@ -1071,9 +1069,9 @@ class LineOfCompressionKernel(ExpressionKernel):
             *get_all_variables(self.viscosity_mu),
             *get_all_variables(self.poisson_ratio)]
 
-        args: list[KernelArgument] = []
-        for v in variables:
-            args.append(KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64)))
+        args: list[KernelArgument] = [
+            KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64))
+            for v in variables]
 
         return args
 

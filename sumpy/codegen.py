@@ -44,7 +44,14 @@ import sumpy.symbolic as sym
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence, Set
+    from collections.abc import (
+        Callable,
+        Iterable,
+        Iterator,
+        Mapping,
+        Sequence,
+        Set as AbstractSet,
+    )
 
     from numpy.typing import DTypeLike
 
@@ -730,10 +737,10 @@ class MathConstantRewriter(CSECachingIdentityMapper[P]):
 
 def to_loopy_insns(
         assignments: Iterable[tuple[str, sym.Expr]],
-        vector_names: Set[str] | None = None,
+        vector_names: AbstractSet[str] | None = None,
         pymbolic_expr_maps: Sequence[Callable[[Expression], Expression]] = (),
         complex_dtype: DTypeLike | None = None,
-        retain_names: Set[str] | None = None,
+        retain_names: AbstractSet[str] | None = None,
     ) -> Sequence[Assignment | CallInstruction]:
     if vector_names is None:
         vector_names = frozenset()
@@ -771,8 +778,7 @@ def to_loopy_insns(
         expr = ssg(expr)
         expr = bik(expr)
         expr = cmr(expr)
-        expr = btog(expr)
-        return expr
+        return btog(expr)
 
     def convert_expr(name: str, expr: Expression) -> Expression:
         logger.debug("generate expression for: %s", name)

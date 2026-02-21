@@ -103,8 +103,7 @@ class P2EBase(KernelCacheMixin, KernelComputation):
         loopy_knl = lp.remove_unused_inames(loopy_knl)
         for kernel in self.source_kernels:
             loopy_knl = kernel.prepare_loopy_kernel(loopy_knl)
-        loopy_knl = lp.tag_array_axes(loopy_knl, "strengths", "sep,C")
-        return loopy_knl
+        return lp.tag_array_axes(loopy_knl, "strengths", "sep,C")
 
     def get_loopy_args(self):
         from sumpy.tools import gather_loopy_source_arguments
@@ -124,9 +123,8 @@ class P2EBase(KernelCacheMixin, KernelComputation):
             knl = lp.tag_array_axes(knl, "centers", "sep,C")
 
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
-        knl = lp.set_options(knl,
+        return lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
-        return knl
 
     def __call__(self, actx: ArrayContext, **kwargs):
         from sumpy.tools import is_obj_array_like
@@ -230,9 +228,7 @@ class P2EFromSingleBox(P2EBase):
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, "istrength*:unr")
-        loopy_knl = self.add_loopy_form_callable(loopy_knl)
-
-        return loopy_knl
+        return self.add_loopy_form_callable(loopy_knl)
 
     def get_optimized_kernel(self, sources_is_obj_array, centers_is_obj_array):
         knl = super().get_optimized_kernel(
@@ -240,8 +236,7 @@ class P2EFromSingleBox(P2EBase):
                 centers_is_obj_array=centers_is_obj_array)
 
         # FIXME
-        knl = lp.split_iname(knl, "isrc_box", 16, outer_tag="g.0")
-        return knl
+        return lp.split_iname(knl, "isrc_box", 16, outer_tag="g.0")
 
     def __call__(self, actx: ArrayContext, **kwargs):
         """
@@ -361,9 +356,7 @@ class P2EFromCSR(P2EBase):
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, "istrength*:unr")
-        loopy_knl = self.add_loopy_form_callable(loopy_knl)
-
-        return loopy_knl
+        return self.add_loopy_form_callable(loopy_knl)
 
     def get_optimized_kernel(self, sources_is_obj_array, centers_is_obj_array):
         knl = super().get_optimized_kernel(
@@ -371,8 +364,7 @@ class P2EFromCSR(P2EBase):
                 centers_is_obj_array=centers_is_obj_array)
 
         # FIXME
-        knl = lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
-        return knl
+        return lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
 
     def __call__(self, actx: ArrayContext, **kwargs):
         """

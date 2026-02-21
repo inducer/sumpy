@@ -114,7 +114,6 @@ class CacheMode:
         self.new_no_cache_kernels = new_no_cache_kernels
 
     def __enter__(self):
-        global CACHING_ENABLED, NO_CACHE_KERNELS
         self.previous_flag = CACHING_ENABLED
         self.previous_kernels = NO_CACHE_KERNELS
         set_caching_enabled(self.new_flag, self.new_no_cache_kernels)
