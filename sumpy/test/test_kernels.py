@@ -62,6 +62,7 @@ from sumpy.kernel import (
     AxisTargetDerivative,
     BiharmonicKernel,
     DirectionalSourceDerivative,
+    HeatKernel,
     HelmholtzKernel,
     Kernel,
     LaplaceKernel,
@@ -258,6 +259,15 @@ def test_p2e_multiple(
     (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion),
     (LaplaceKernel(2), LinearPDEConformingVolumeTaylorMultipoleExpansion),
 
+    (HeatKernel(1), LinearPDEConformingVolumeTaylorLocalExpansion),
+    (HeatKernel(1), LinearPDEConformingVolumeTaylorMultipoleExpansion),
+    (HeatKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion),
+    (HeatKernel(2), LinearPDEConformingVolumeTaylorMultipoleExpansion),
+    pytest.param(HeatKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
+        marks=pytest.mark.slowtest),
+    pytest.param(HeatKernel(3), LinearPDEConformingVolumeTaylorMultipoleExpansion,
+        marks=pytest.mark.slowtest),
+
     (HelmholtzKernel(2), VolumeTaylorMultipoleExpansion),
     (HelmholtzKernel(2), VolumeTaylorLocalExpansion),
     (HelmholtzKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion),
@@ -302,6 +312,8 @@ def test_p2e2p(
             extra_kwargs["k"] = 0.2
     if isinstance(base_knl, StokesletKernel):
         extra_kwargs["mu"] = 0.2
+    if isinstance(base_knl, HeatKernel):
+        extra_kwargs["alpha"] = 1.0
 
     if with_source_derivative:
         knl = DirectionalSourceDerivative(base_knl, "dir_vec")
@@ -330,12 +342,23 @@ def test_p2e2p(
         h_values = [1/2, 1/3, 1/5]
 
     rng = np.random.default_rng(19)
-    center = np.array([2, 1, 0][:knl.dim], np.float64)
-    sources = actx.from_numpy(
-        0.7 * (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64))
-        + center[:, np.newaxis])
+
+    if isinstance(base_knl, HeatKernel):
+        # Setup sources so that there are no negative time intervals
+        center = np.array([0, 0, 0, 0.5][-knl.dim:], np.float64)
+        sources = (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64)
+            + center[:, np.newaxis])
+        loc_center = np.array([0.0, 0.0, 0.0, 6.0][-knl.dim:]) + center
+        varying_axis = -1
+    else:
+        center = np.array([2, 1, 0][:knl.dim], np.float64)
+        sources = 0.7 * (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64)
+            + center[:, np.newaxis])
+        loc_center = np.array([5.5, 0.0, 0.0][:knl.dim]) + center
+        varying_axis = 0
 
     strengths = actx.from_numpy(np.ones(nsources, dtype=np.float64) / nsources)
+    sources = actx.from_numpy(sources)
 
     source_boxes = actx.from_numpy(np.array([0], dtype=np.int32))
     box_source_starts = actx.from_numpy(np.array([0], dtype=np.int32))
@@ -345,22 +368,21 @@ def test_p2e2p(
     extra_source_kwargs = extra_kwargs.copy()
     if isinstance(knl, DirectionalSourceDerivative):
         alpha = np.linspace(0, 2*np.pi, nsources, np.float64)
-        dir_vec = np.vstack([np.cos(alpha), np.sin(alpha)])
+        dir_vec = np.vstack(
+                [np.cos(alpha), np.sin(alpha), alpha, alpha**2][:knl.dim])
         extra_source_kwargs["dir_vec"] = actx.from_numpy(dir_vec)
 
     from sumpy.visualization import FieldPlotter
 
     for h in h_values:
         if issubclass(expn_class, LocalExpansionBase):
-            loc_center = np.array([5.5, 0.0, 0.0][:knl.dim]) + center
             centers = np.array(loc_center, dtype=np.float64).reshape(knl.dim, 1)
             fp = FieldPlotter(loc_center, extent=h, npoints=res)
         else:
-            eval_center = np.array([1/h, 0.0, 0.0][:knl.dim]) + center
+            eval_center = center.copy()
+            eval_center[varying_axis] = 1/h
             fp = FieldPlotter(eval_center, extent=0.1, npoints=res)
-            centers = (np.array([0.0, 0.0, 0.0][:knl.dim],
-                                dtype=np.float64).reshape(knl.dim, 1)
-                        + center[:, np.newaxis])
+            centers = center[:, np.newaxis]
 
         centers = actx.from_numpy(centers)
         targets = actx.from_numpy(obj_array.new_1d(fp.points))
@@ -458,7 +480,7 @@ def test_p2e2p(
     if issubclass(expn_class, LocalExpansionBase):
         tgt_order_grad = tgt_order - 1
         slack = 0.7
-        grad_slack = 0.5
+        grad_slack = 0.8 if isinstance(base_knl, HeatKernel) else 0.5
     else:
         tgt_order_grad = tgt_order + 1
 
@@ -468,6 +490,10 @@ def test_p2e2p(
         if order <= 2:
             slack += 1
             grad_slack += 1
+
+        if isinstance(base_knl, HeatKernel):
+            slack += 1.0
+            grad_slack += 2.5
 
     if isinstance(knl, DirectionalSourceDerivative):
         slack += 1
@@ -495,6 +521,14 @@ def test_p2e2p(
 # {{{ test_translations
 
 @pytest.mark.parametrize("knl, local_expn_class, mpole_expn_class, use_fft", [
+    (HeatKernel(1), LinearPDEConformingVolumeTaylorLocalExpansion,
+      LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (HeatKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+      LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (HeatKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+      LinearPDEConformingVolumeTaylorMultipoleExpansion, True),  # not in original PR
+    (HeatKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
+      LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
     (LaplaceKernel(2), VolumeTaylorLocalExpansion, VolumeTaylorMultipoleExpansion,
         False),
     (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
@@ -541,10 +575,15 @@ def test_translations(
         extra_kwargs["k"] = 0.05
     if isinstance(knl, StokesletKernel):
         extra_kwargs["mu"] = 0.05
+    if isinstance(knl, HeatKernel):
+        extra_kwargs["alpha"] = 0.1
 
     # Just to make sure things also work away from the origin
     rng = np.random.default_rng(18)
-    origin = np.array([2, 1, 0][:knl.dim], np.float64)
+    if isinstance(knl, HeatKernel):
+        origin = np.array([0, 0, 1, 2][-knl.dim:], np.float64)
+    else:
+        origin = np.array([2, 1, 0][:knl.dim], np.float64)
     sources = (
         0.7 * (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64))
         + origin[:, np.newaxis])
@@ -557,20 +596,20 @@ def test_translations(
 
     from sumpy.visualization import FieldPlotter
 
-    eval_offset = np.array([5.5, 0.0, 0][:knl.dim])
+    eval_offset = np.array([0.0, 0.0, 0.0, 5.5][-knl.dim:])
     fp = FieldPlotter(eval_offset + origin, extent=0.3, npoints=res)
     targets = fp.points
 
     centers = (np.array(
             [
                 # box 0: particles, first mpole here
-                [0, 0, 0][:knl.dim],
+                [0, 0, 0, 0][-knl.dim:],
 
                 # box 1: second mpole here
-                np.array([-0.2, 0.1, 0][:knl.dim], np.float64),
+                np.array([0, 0, 0.1, -0.2][-knl.dim:], np.float64),
 
                 # box 2: first local here
-                eval_offset + np.array([0.3, -0.2, 0][:knl.dim], np.float64),
+                eval_offset + np.array([0, 0, -0.2, 0.3][-knl.dim:], np.float64),
 
                 # box 3: second local and eval here
                 eval_offset
@@ -579,7 +618,7 @@ def test_translations(
 
     del eval_offset
 
-    if knl.dim == 2:  # noqa: SIM108
+    if knl.dim == 2 and not isinstance(knl, HeatKernel):
         orders = [2, 3, 4]
     else:
         orders = [3, 4, 5]

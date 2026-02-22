@@ -106,6 +106,9 @@ PDE kernels
 .. autoclass:: LineOfCompressionKernel
     :show-inheritance:
     :members: mapper_method
+.. autoclass:: HeatKernel
+    :show-inheritance:
+    :members: mapper_method
 
 Derivatives
 -----------
@@ -1082,6 +1085,76 @@ class LineOfCompressionKernel(ExpressionKernel):
         return laplacian(w)
 
 
+class HeatKernel(ExpressionKernel):
+    r"""The Green's function for the heat equation given by
+    :math:`e^{-r^2/{4 \alpha t}}/\sqrt{(4 \pi \alpha t)^d}`
+    where :math:`d` is the number of spatial dimensions.
+
+    .. note::
+
+        This kernel cannot be used in an FMM yet and can only
+        be used in expansions and evaluations that occur forward
+        in the time dimension.
+    """
+    heat_alpha_name: str
+
+    mapper_method: ClassVar[str] = "map_heat_kernel"
+
+    def __init__(self, spatial_dims: int, heat_alpha_name: str = "alpha"):
+        dim = spatial_dims + 1
+        d = make_sym_vector("d", dim)
+        t = d[-1]
+        r = pymbolic_real_norm_2(d[:-1])
+        alpha = SpatialConstant(heat_alpha_name)
+        expr = var("exp")(-r**2/(4 * alpha * t)) / var("sqrt")(t**(dim - 1))
+        scaling = 1/var("sqrt")((4*var("pi")*alpha)**(dim - 1))
+
+        super().__init__(
+                dim,
+                expression=expr,
+                global_scaling_const=scaling,
+                )
+
+        self.heat_alpha_name = heat_alpha_name
+
+    @property
+    @override
+    def is_complex_valued(self) -> bool:
+        return False
+
+    def update_persistent_hash(self, key_hash, key_builder):
+        key_hash.update(type(self).__name__.encode("utf8"))
+        key_builder.rec(key_hash, (self.dim, self.heat_alpha_name))
+
+    @override
+    def __repr__(self):
+        return f"HeatKnl{self.dim - 1}D"
+
+    @override
+    def get_args(self):
+        return [
+                KernelArgument(
+                    loopy_arg=lp.ValueArg(self.heat_alpha_name, np.float64),
+                    )]
+
+    def get_derivative_taker(self, dvec, rscale, sac):
+        """Return a :class:`sumpy.derivative_taker.ExprDerivativeTaker` instance
+        that supports taking derivatives of the base kernel with respect to dvec.
+        """
+        from sumpy.derivative_taker import ExprDerivativeTaker
+        return ExprDerivativeTaker(self.get_expression(dvec), dvec, rscale,
+                sac)
+
+    @override
+    def get_pde_as_diff_op(self):
+        from sumpy.expansion.diff_op import diff, laplacian, make_identity_diff_op
+        alpha = sym.Symbol(self.heat_alpha_name)
+        w = make_identity_diff_op(self.dim - 1, time_dependent=True)
+        time_diff = [0]*self.dim
+        time_diff[-1] = 1
+        return diff(w, tuple(time_diff)) - laplacian(w) * alpha
+
+
 # }}}
 
 
@@ -1552,6 +1625,7 @@ class KernelIdentityMapper(KernelMapper[Kernel]):
     map_elasticity_kernel = map_expression_kernel
     map_line_of_compression_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
+    map_heat_kernel = map_expression_kernel
 
     def map_axis_target_derivative(self, kernel: AxisTargetDerivative) -> Kernel:
         return type(kernel)(kernel.axis, self.rec(kernel.inner_kernel))
@@ -1624,6 +1698,7 @@ class DerivativeCounter(KernelCombineMapper[int]):
     map_yukawa_kernel = map_expression_kernel
     map_line_of_compression_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
+    map_heat_kernel = map_expression_kernel
 
     @override
     def map_axis_target_derivative(self, kernel: AxisTargetDerivative) -> int:
