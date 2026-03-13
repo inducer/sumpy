@@ -27,12 +27,16 @@ intersphinx_mapping = {
 nitpick_ignore_regex = [
     ["py:class", r"symengine\.(.+)"],  # :cry:
     ["py:class", r"ToTagSetConvertible"],  # :cry:
+    # NOTE: optype does not have Sphinx compatible documentation
+    ["py:class", r"op.*"],
+    ["py:class", r"onp.*"],
 ]
 
 sphinxconfig_missing_reference_aliases = {
     # numpy
     "Array1D": "class:numpy.ndarray",
     "Array2D": "class:numpy.ndarray",
+    "ArrayND": "class:numpy.ndarray",
     "np.floating": "class:numpy.floating",
     "np.complexfloating": "class:numpy.complexfloating",
     "np.inexact": "class:numpy.inexact",
