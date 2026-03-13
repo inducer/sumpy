@@ -22,7 +22,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-from typing import TYPE_CHECKING, Literal, TypeAlias
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypeVar, overload
 
 import numpy as np
 import numpy.linalg as la
@@ -33,13 +33,14 @@ from pytools import memoize_method, obj_array
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-    from optype.numpy import Array1D, Array2D
+    from optype.numpy import Array1D, Array2D, ArrayND
 
 
 __doc__ = """
 .. autodata:: NodesKind
     :noindex:
 
+.. autoclass:: InexactT
 .. class:: NodesKind
 
 .. autoclass:: CalculusPatch
@@ -48,6 +49,7 @@ __doc__ = """
 """
 
 
+InexactT = TypeVar("InexactT", bound=np.inexact[Any])
 NodesKind: TypeAlias = Literal["chebyshev", "equispaced", "legendre"]
 
 
@@ -55,14 +57,14 @@ class CalculusPatch:
     """Sets up a grid of points on which derivatives can be calculated. Useful
     to verify that an evaluated potential actually solves a PDE.
 
-    .. attribute:: dim
-
-    .. attribute:: points
-
-        shape: ``(dim, npoints_total)``
+    .. autoattribute:: dim
+    .. autoattribute:: npoints
+    .. autoattribute:: points
+    .. autoattribute:: center
 
     .. automethod:: weights
     .. automethod:: basis
+
     .. automethod:: diff
     .. automethod:: dx
     .. automethod:: dy
@@ -71,40 +73,52 @@ class CalculusPatch:
     .. automethod:: div
     .. automethod:: curl
     .. automethod:: eval_at_center
-    .. autoattribute:: x
-    .. autoattribute:: y
-    .. autoattribute:: z
+
+    .. autoproperty:: x
+    .. autoproperty:: y
+    .. autoproperty:: z
+
     .. automethod:: norm
     .. automethod:: plot_nodes
     .. automethod:: plot
     """
+
     dim: int
-    center: Array1D[np.floating]
-    points: Array2D[np.floating]
     npoints: int
+    points: Array2D[np.floating[Any]]
+    """Shape: ``(dim, npoints)``."""
+    center: Array1D[np.floating[Any]]
+
+    h: float
+    _points_1d: Array1D[np.floating[Any]]
+    _weights_1d: Array1D[np.floating[Any]] | None
+    _points_shaped: ArrayND[np.floating[Any]]
+    """An array of shape ``(dim, nnodes, ...)``."""
+    _pshape: tuple[int, ...]
 
     def __init__(self,
-            center: Array1D[np.floating],
+            center: Array1D[np.floating[Any]],
             h: float = 1e-1,
             order: int = 4,
-            nodes: NodesKind = "chebyshev"):
+            nodes: NodesKind = "chebyshev") -> None:
         self.center = center
+        dtype = center.dtype
 
         npoints = order + 1
         if nodes == "equispaced":
-            points_1d = np.linspace(-h/2, h/2, npoints)
+            points_1d = np.linspace(-h/2, h/2, npoints, dtype=dtype)
             weights_1d = None
 
         elif nodes == "chebyshev":
-            a = np.arange(npoints, dtype=np.float64)
+            a = np.arange(npoints, dtype=dtype)
             points_1d = (h/2)*np.cos((2*(a+1)-1)/(2*npoints)*np.pi)
             weights_1d = None
 
         elif nodes == "legendre":
             from scipy.special import legendre
             points_1d, weights_1d, _ = legendre(npoints).weights.T
-            points_1d = points_1d * (h/2)
-            weights_1d = weights_1d * (h/2)
+            points_1d = (points_1d * (h/2)).astype(dtype)
+            weights_1d = (weights_1d * (h/2)).astype(dtype)
 
         else:
             raise ValueError(f"invalid node set: {nodes}")
@@ -127,7 +141,7 @@ class CalculusPatch:
         self._pshape = points_shaped.shape[1:]
 
     @memoize_method
-    def _vandermonde_1d(self):
+    def _vandermonde_1d(self) -> Array2D[np.floating[Any]]:
         points_1d = self._points_1d
 
         npoints = len(self._points_1d)
@@ -138,11 +152,13 @@ class CalculusPatch:
         return vandermonde
 
     @memoize_method
-    def _zero_eval_vec_1d(self):
+    def _zero_eval_vec_1d(self) -> Array1D[np.floating[Any]]:
         # The zeroth coefficient--all others involve x=0.
         return self._vandermonde_1d()[0]
 
-    def basis(self) -> Sequence[Callable[[Array2D[np.floating]], Array1D[np.floating]]]:
+    def basis(self) -> Sequence[
+            Callable[[Array2D[np.floating[Any]]], Array1D[np.floating[Any]]]
+        ]:
         """
         :returns: a :class:`list` containing functions that realize
             a high-order interpolation basis on the :py:attr:`points`.
@@ -152,11 +168,15 @@ class CalculusPatch:
 
         from pytools import indices_in_shape
 
-        def eval_basis(ind: tuple[int, ...], x: Array2D[np.floating]):
-            result = 1
+        def eval_basis(
+                ind: tuple[int, ...],
+                x: Array2D[np.floating[Any]]
+            ) -> Array1D[np.floating[Any]]:
+            result = np.ones(x[0].shape, dtype=x.dtype)
             for i in range(self.dim):
                 coord = (x[i] - self.center[i])/(self.h/2)
                 result *= eval_chebyt(ind[i], coord)
+
             return result
 
         from functools import partial
@@ -165,8 +185,8 @@ class CalculusPatch:
                 for ind in indices_in_shape((self.npoints,)*self.dim)]
 
     @memoize_method
-    def weights(self):
-        """"
+    def weights(self) -> ArrayND[np.floating[Any]]:
+        """
         :returns: a vector of high-order quadrature weights on the :attr:`points`
         """
 
@@ -182,7 +202,7 @@ class CalculusPatch:
         return result.reshape(-1)
 
     @memoize_method
-    def _diff_mat_1d(self, nderivs):
+    def _diff_mat_1d(self, nderivs: int) -> Array2D[np.floating[Any]]:
         npoints = len(self._points_1d)
 
         vandermonde = self._vandermonde_1d()
@@ -193,26 +213,33 @@ class CalculusPatch:
             n_diff_mat = n_diff_mat.dot(coeff_diff_mat)
 
         deriv_coeffs_mat = la.solve(vandermonde.T, n_diff_mat.T).T
-        return vandermonde.dot(deriv_coeffs_mat)
+        return vandermonde @ deriv_coeffs_mat
+
+    @overload
+    def diff(self, axis: int, f_values: np.number[Any] | complex,
+             nderivs: int = 1) -> Literal[0]: ...
+
+    @overload
+    def diff(self, axis: int, f_values: Array1D[InexactT],
+             nderivs: int = 1) -> Array1D[InexactT]: ...
 
     def diff(self,
                 axis: int,
-                f_values: Array1D[np.inexact],
+                f_values: np.number[Any] | complex | Array1D[InexactT],
                 nderivs: int = 1
-            ) -> Array1D[np.inexact] | Literal[0]:
+            ) -> Array1D[InexactT] | Literal[0]:
         """Return the derivative along *axis* of *f_values*.
 
-        :arg f_values: an array of shape ``(npoints_total,)``
-        :returns: an array of shape ``(npoints_total,)``
+        :arg f_values: an array of shape ``(npoints,)``
+        :returns: an array of shape ``(npoints,)``
         """
 
         from numbers import Number
-        if isinstance(f_values, np.number | Number):
+        if isinstance(f_values, (int, float, complex, np.number, Number)):
             # constants differentiate to 0
             return 0
 
         dim = len(self.center)
-
         assert axis < dim
 
         axes = "klmno"
@@ -224,45 +251,49 @@ class CalculusPatch:
                 self._diff_mat_1d(nderivs),
                 f_values.reshape(*self._pshape)).reshape(-1)
 
-    def dx(self, f_values: Array1D[np.inexact]):
+    def dx(self, f_values: Array1D[InexactT]) -> Array1D[InexactT]:
         return self.diff(0, f_values)
 
-    def dy(self, f_values: Array1D[np.inexact]):
+    def dy(self, f_values: Array1D[InexactT]) -> Array1D[InexactT]:
         return self.diff(1, f_values)
 
-    def dz(self, f_values: Array1D[np.inexact]):
+    def dz(self, f_values: Array1D[InexactT]) -> Array1D[InexactT]:
         return self.diff(2, f_values)
 
-    def laplace(self, f_values: Array1D[np.inexact]):
+    def laplace(self, f_values: Array1D[InexactT]) -> Array1D[InexactT]:
         """Return the Laplacian of *f_values*.
 
-        :arg f_values: an array of shape ``(npoints_total,)``
-        :returns: an array of shape ``(npoints_total,)``
+        :arg f_values: an array of shape ``(npoints,)``
+        :returns: an array of shape ``(npoints,)`` representing the application
+            of the Laplacian to *f_values*.
         """
 
         return sum(self.diff(iaxis, f_values, 2) for iaxis in range(self.dim))
 
     def div(self,
-                arg: obj_array.ObjectArray1D[Array1D[np.inexact]]
-            ) -> Array1D[np.inexact] | int:
+                arg: obj_array.ObjectArray1D[Array1D[InexactT]]
+            ) -> Array1D[InexactT]:
         r"""
         :arg arg: an object array containing
-            :class:`numpy.ndarray`\ s with shape ``(npoints_total,)``.
+            :class:`numpy.ndarray`\ s with shape ``(npoints,)``.
         """
-        result: Array1D[np.inexact] | int = 0
+        result: Array1D[InexactT] | int = 0
         for i, arg_i in enumerate(arg):
             result = result + self.diff(i, arg_i)
 
         return result
 
     def curl(self,
-                arg: obj_array.ObjectArray1D[Array1D[np.inexact]]
-            ) -> obj_array.ObjectArray1D[Array1D[np.inexact]]:
+                arg: obj_array.ObjectArray1D[Array1D[InexactT]]
+            ) -> obj_array.ObjectArray1D[Array1D[InexactT]]:
         r"""Take the curl of the vector quantity *arg*.
 
         :arg arg: an object array of shape ``(3,)`` containing
-            :class:`numpy.ndarray`\ s with shape ``(npoints_total,)``.
+            :class:`numpy.ndarray`\ s with shape ``(npoints,)``.
         """
+        if arg.size != 3:
+            raise ValueError(f"can only take the curl of a 3d vector: {arg.shape}")
+
         from pytools import levi_civita
         return obj_array.new_1d([
             sum(
@@ -270,10 +301,12 @@ class CalculusPatch:
                 for m in range(3) for n in range(3))
             for k in range(3)])
 
-    def eval_at_center(self, f_values):
+    def eval_at_center(
+            self, f_values: Array1D[InexactT]
+        ) -> InexactT:
         """Interpolate *f_values* to the center point.
 
-        :arg f_values: an array of shape ``(npoints_total,)``
+        :arg f_values: an array of shape ``(npoints,)``
         :returns: a scalar.
         """
         f_values = f_values.reshape(*self._pshape)
@@ -282,21 +315,26 @@ class CalculusPatch:
         for _ in range(self.dim):
             f_values = zero_eval_vec_1d @ f_values
 
+        assert f_values.ndim == 0
         return f_values
 
     @property
-    def x(self) -> Array1D[np.floating]:
+    def x(self) -> Array1D[np.floating[Any]]:
         return self.points[0]
 
     @property
-    def y(self) -> Array1D[np.floating]:
+    def y(self) -> Array1D[np.floating[Any]]:
         return self.points[1]
 
     @property
-    def z(self) -> Array1D[np.floating]:
+    def z(self) -> Array1D[np.floating[Any]]:
         return self.points[2]
 
-    def norm(self, arg, p):
+    def norm(self,
+             arg: (
+                obj_array.ObjectArray1D[ArrayND[InexactT]]
+                | ArrayND[InexactT]),
+             p: float) -> np.floating[Any]:
         if p == np.inf:
             if arg.dtype == object:
                 return max(
@@ -307,7 +345,10 @@ class CalculusPatch:
         else:
             raise ValueError("unsupported norm")
 
-    def plot_nodes(self):
+    def plot_nodes(self) -> None:
+        if self.dim != 2:
+            raise ValueError(f"cannot plot {self.dim}d fields")
+
         import matplotlib.pyplot as plt
         plt.gca().set_aspect("equal")
         plt.plot(
@@ -315,7 +356,10 @@ class CalculusPatch:
             self._points_shaped[1].reshape(-1),
             "o")
 
-    def plot(self, f: Array1D[np.floating]):
+    def plot(self, f: Array1D[np.floating[Any]]) -> None:
+        if self.dim != 2:
+            raise ValueError(f"cannot plot {self.dim}d fields")
+
         f = f.reshape(*self._pshape)
 
         import matplotlib.pyplot as plt
@@ -324,14 +368,17 @@ class CalculusPatch:
 
 
 def frequency_domain_maxwell(
-            cpatch: CalculusPatch,
-            e: obj_array.ObjectArray1D[Array1D[np.complexfloating]],
-            h: obj_array.ObjectArray1D[Array1D[np.complexfloating]],
-            k: complex
-        ):
+        cpatch: CalculusPatch,
+        e: obj_array.ObjectArray1D[Array1D[np.complexfloating[Any]]],
+        h: obj_array.ObjectArray1D[Array1D[np.complexfloating[Any]]],
+        k: complex
+    ) -> tuple[obj_array.ObjectArray1D[Array1D[np.complexfloating[Any]]],
+               obj_array.ObjectArray1D[Array1D[np.complexfloating[Any]]],
+               Array1D[np.complexfloating[Any]],
+               Array1D[np.complexfloating[Any]]]:
     mu = 1
     epsilon = 1
-    c = 1/np.sqrt(mu*epsilon)
+    c = np.float64(1/np.sqrt(mu*epsilon))
     omega = k*c
 
     b = mu*h
