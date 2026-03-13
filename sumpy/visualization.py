@@ -96,6 +96,10 @@ def make_field_plotter_from_bbox(
 
 class FieldPlotter:
     """
+    .. autoattribute:: dimensions
+    .. autoattribute:: npoints
+    .. autoattribute:: points
+
     .. automethod:: set_matplotlib_limits
     .. automethod:: show_scalar_in_matplotlib
     .. automethod:: show_scalar_in_mayavi
@@ -103,17 +107,18 @@ class FieldPlotter:
     """
 
     dimensions: int
+    npoints: int
+    points: onp.Array2D[np.floating[Any]]
+
     a: onp.Array1D[np.floating[Any]]
     b: onp.Array1D[np.floating[Any]]
-
-    nd_points: onp.Array2D[np.floating[Any]]
-    points: onp.Array2D[np.floating[Any]]
-    npoints: int
+    nd_points: onp.ArrayND[np.floating[Any]]
 
     def __init__(self,
                  center: onp.ToArray1D[np.floating[Any]],
                  extent: float | onp.Array1D[np.floating[Any]] = 1,
-                 npoints: int | tuple[int, ...] = 1000) -> None:
+                 npoints: int | tuple[int, ...] = 1000,
+                 points: onp.ArrayND[np.floating[Any]] | None = None) -> None:
         center = np.asarray(center)
         dim, = cast("tuple[int]", center.shape)
 
@@ -121,25 +126,27 @@ class FieldPlotter:
         self.a = a = center - 0.5 * extent
         self.b = b = center + 0.5 * extent
 
-        from numbers import Number
-        if isinstance(npoints, (int, Number)):
-            npoints = dim*(npoints,)
+        if points is None:
+            from numbers import Number
+            if isinstance(npoints, (int, Number)):
+                npoints = dim*(npoints,)
+            else:
+                if len(npoints) != dim:
+                    raise ValueError("length of npoints must match dimension")
+
+            for i in range(dim):
+                if npoints[i] == 1:
+                    a[i] = center[i]
+
+            mgrid_index = tuple(
+                    slice(a[i], b[i], 1j*npoints[i])
+                    for i in range(dim))
+            mgrid = np.mgrid[mgrid_index]
         else:
-            if len(npoints) != dim:
-                raise ValueError("length of npoints must match dimension")
-
-        for i in range(dim):
-            if npoints[i] == 1:
-                a[i] = center[i]
-
-        mgrid_index = tuple(
-                slice(a[i], b[i], 1j*npoints[i])
-                for i in range(dim))
-        mgrid = np.mgrid[mgrid_index]
+            mgrid = points
 
         # (axis, point x idx, point y idx, ...)
         self.nd_points = mgrid
-
         self.points = self.nd_points.reshape(dim, -1).copy()
         self.npoints = int(np.prod(mgrid.shape[1:]))
 
