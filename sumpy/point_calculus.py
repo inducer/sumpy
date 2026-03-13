@@ -29,6 +29,8 @@ import numpy.linalg as la
 
 from pytools import memoize_method, obj_array
 
+from sumpy.visualization import FieldPlotter
+
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -345,6 +347,9 @@ class CalculusPatch:
         else:
             raise ValueError("unsupported norm")
 
+    def make_field_plotter(self) -> FieldPlotter:
+        return FieldPlotter(self.center, self.h, points=self._points_shaped)
+
     def plot_nodes(self) -> None:
         if self.dim != 2:
             raise ValueError(f"cannot plot {self.dim}d fields")
@@ -357,6 +362,11 @@ class CalculusPatch:
             "o")
 
     def plot(self, f: Array1D[np.floating[Any]]) -> None:
+        from warnings import warn
+        warn(f"Calling '{type(self).__name__}.plot' is deprecated. Use "
+             f"'{type(self).__name__}.make_field_plotter' instead, which also "
+             "supports 3d fields.", DeprecationWarning, stacklevel=2)
+
         if self.dim != 2:
             raise ValueError(f"cannot plot {self.dim}d fields")
 
