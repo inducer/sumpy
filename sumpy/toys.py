@@ -540,7 +540,7 @@ class PotentialSource:
     def __sub__(self, other: Number_ish | PotentialSource) -> PotentialSource:
         return self.__add__(-other)
 
-    def __rsub__(self,  # type:ignore[misc]
+    def __rsub__(self,
                  other: Number_ish | PotentialSource
              ) -> PotentialSource:
         return (-self).__add__(other)
@@ -725,7 +725,7 @@ class PotentialExpressionNode(PotentialSource):
     def center(self) -> np.ndarray:
         for psource in self.psources:
             try:
-                return psource.center  # type: ignore[attr-defined]
+                return psource.center
             except AttributeError:
                 pass
 

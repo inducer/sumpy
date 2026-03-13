@@ -98,7 +98,7 @@ _find_symbolic_backend()
 if TYPE_CHECKING or not USE_SYMENGINE:
     import sympy as sym
 
-    from pymbolic.interop.sympy import (  # type: ignore[assignment]
+    from pymbolic.interop.sympy import (
         PymbolicToSympyMapper as PymbolicToSympyMapperBase,
         SympyToPymbolicMapper as SympyToPymbolicMapperBase,
     )
