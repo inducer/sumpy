@@ -466,6 +466,10 @@ class OneKernel(ExpressionKernel):
             global_scaling_const=1,
         )
 
+    @override
+    def __reduce__(self) -> tuple[object, ...]:
+        return (self.__class__, (self.dim,))
+
     @property
     @override
     def is_complex_valued(self) -> bool:
@@ -495,6 +499,10 @@ class LaplaceKernel(ExpressionKernel):
             raise NotImplementedError(f"unsupported dimension: '{dim}'")
 
         super().__init__(dim, expression=expr, global_scaling_const=scaling)
+
+    @override
+    def __reduce__(self) -> tuple[object, ...]:
+        return (self.__class__, (self.dim,))
 
     @property
     @override
@@ -544,6 +552,10 @@ class BiharmonicKernel(ExpressionKernel):
             raise NotImplementedError(f"unsupported dimension: '{dim}'")
 
         super().__init__(dim, expression=expr, global_scaling_const=scaling)
+
+    @override
+    def __reduce__(self) -> tuple[object, ...]:
+        return (self.__class__, (self.dim,))
 
     @property
     @override
@@ -610,6 +622,13 @@ class HelmholtzKernel(ExpressionKernel):
 
         object.__setattr__(self, "helmholtz_k_name", helmholtz_k_name)
         object.__setattr__(self, "allow_evanescent", allow_evanescent)
+
+    @override
+    def __reduce__(self) -> tuple[object, ...]:
+        return (
+            self.__class__,
+            (self.dim, self.helmholtz_k_name, self.allow_evanescent),
+        )
 
     @property
     @override
@@ -697,6 +716,10 @@ class YukawaKernel(ExpressionKernel):
 
         super().__init__(dim, expression=expr, global_scaling_const=scaling)
         object.__setattr__(self, "yukawa_lambda_name", yukawa_lambda_name)
+
+    @override
+    def __reduce__(self) -> tuple[object, ...]:
+        return (self.__class__, (self.dim, self.yukawa_lambda_name))
 
     @property
     @override
@@ -964,6 +987,13 @@ class StressletKernel(ExpressionKernel):
         object.__setattr__(self, "kcomp", kcomp)
         object.__setattr__(self, "viscosity_mu", mu)
 
+    @override
+    def __reduce__(self) -> tuple[object, ...]:
+        return (
+            self.__class__,
+            (self.dim, self.icomp, self.jcomp, self.kcomp, self.viscosity_mu),
+        )
+
     @property
     @override
     def is_complex_valued(self) -> bool:
@@ -1051,6 +1081,13 @@ class LineOfCompressionKernel(ExpressionKernel):
         object.__setattr__(self, "axis", axis)
         object.__setattr__(self, "viscosity_mu", mu)
         object.__setattr__(self, "poisson_ratio", nu)
+
+    @override
+    def __reduce__(self) -> tuple[object, ...]:
+        return (
+            self.__class__,
+            (self.dim, self.axis, self.viscosity_mu, self.poisson_ratio),
+        )
 
     @property
     @override
