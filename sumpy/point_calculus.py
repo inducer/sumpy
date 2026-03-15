@@ -35,7 +35,7 @@ from sumpy.visualization import FieldPlotter
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-    from optype.numpy import Array1D, Array2D, ArrayND
+    from optype.numpy import Array1D, Array2D, ArrayND, ToArray1D
 
 
 __doc__ = """
@@ -99,28 +99,28 @@ class CalculusPatch:
     _pshape: tuple[int, ...]
 
     def __init__(self,
-            center: Array1D[np.floating[Any]],
+            center: ToArray1D[np.floating[Any]],
             h: float = 1e-1,
             order: int = 4,
             nodes: NodesKind = "chebyshev") -> None:
-        self.center = center
-        dtype = center.dtype
+        center = np.asarray(center)
+        assert center.ndim == 1
 
         npoints = order + 1
         if nodes == "equispaced":
-            points_1d = np.linspace(-h/2, h/2, npoints, dtype=dtype)
+            points_1d = np.linspace(-h/2, h/2, npoints)
             weights_1d = None
 
         elif nodes == "chebyshev":
-            a = np.arange(npoints, dtype=dtype)
+            a = np.arange(npoints)
             points_1d = (h/2)*np.cos((2*(a+1)-1)/(2*npoints)*np.pi)
             weights_1d = None
 
         elif nodes == "legendre":
             from scipy.special import legendre
             points_1d, weights_1d, _ = legendre(npoints).weights.T
-            points_1d = (points_1d * (h/2)).astype(dtype)
-            weights_1d = (weights_1d * (h/2)).astype(dtype)
+            points_1d = points_1d * (h/2)
+            weights_1d = weights_1d * (h/2)
 
         else:
             raise ValueError(f"invalid node set: {nodes}")
@@ -130,8 +130,8 @@ class CalculusPatch:
         self._points_1d = points_1d
         self._weights_1d = weights_1d
 
-        self.dim = dim = len(self.center)
         self.center = center
+        self.dim = dim = len(self.center)
 
         points_shaped = np.array(np.meshgrid(
                 *[center[i] + points_1d for i in range(dim)],
