@@ -13688,22 +13688,6 @@
                 }
             },
             {
-                "code": "reportUnknownMemberType",
-                "range": {
-                    "startColumn": 24,
-                    "endColumn": 50,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownMemberType",
-                "range": {
-                    "startColumn": 25,
-                    "endColumn": 52,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportUnknownArgumentType",
                 "range": {
                     "startColumn": 33,

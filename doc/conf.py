@@ -37,6 +37,7 @@ sphinxconfig_missing_reference_aliases = {
     "Array1D": "class:numpy.ndarray",
     "Array2D": "class:numpy.ndarray",
     "ArrayND": "class:numpy.ndarray",
+    "ToArray1D": "class:numpy.ndarray",
     "np.floating": "class:numpy.floating",
     "np.complexfloating": "class:numpy.complexfloating",
     "np.inexact": "class:numpy.inexact",
