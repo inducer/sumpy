@@ -26,6 +26,7 @@ THE SOFTWARE.
 import logging
 import sys
 from functools import partial
+from typing import TYPE_CHECKING
 
 import numpy as np
 import numpy.linalg as la
@@ -36,7 +37,7 @@ from arraycontext import (
     PyOpenCLArrayContext,
     pytest_generate_tests_for_array_contexts,
 )
-from pytools import obj_array
+from pytools import memoize_on_first_arg, obj_array
 from pytools.convergence import PConvergenceVerifier
 
 import sumpy.symbolic as sym
@@ -62,14 +63,21 @@ from sumpy.kernel import (
     AxisTargetDerivative,
     BiharmonicKernel,
     DirectionalSourceDerivative,
+    ElasticityKernel,
     HelmholtzKernel,
     Kernel,
     LaplaceKernel,
+    LineOfCompressionKernel,
+    OneKernel,
     StokesletKernel,
+    StressletKernel,
     YukawaKernel,
 )
 from sumpy.test.geometries import make_ellipsoid, make_torus
 
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -857,6 +865,8 @@ def test_m2m_compressed_error_helmholtz(actx_factory: ArrayContextFactory, dim, 
 # }}}
 
 
+# {{{ test_jump
+
 @pytest.mark.parametrize(("kernel_cls", "kernel_kwargs"), [
                          (LaplaceKernel, {}),
                          (HelmholtzKernel, {"k": 1}),
@@ -921,6 +931,39 @@ def test_jump(
     inside, outside = actx.to_numpy(y)
     err = abs((inside-outside) - -1)
     assert err < tol, err
+
+# }}}
+
+
+# {{{ test_pickle
+
+@memoize_on_first_arg
+def get_kernel_name_for_test(knl: Kernel) -> Callable[[str], str]:
+    return lambda prefix: f"{prefix}: {type(knl).__name__}"
+
+
+@pytest.mark.parametrize("knl", [
+    BiharmonicKernel(2),
+    ElasticityKernel(2, 0, 0),
+    HelmholtzKernel(3, helmholtz_k_name="kay"),
+    LaplaceKernel(3),
+    LineOfCompressionKernel(),
+    OneKernel(2),
+    StokesletKernel(2, 0, 0),
+    StressletKernel(2, 0, 0, 0),
+    YukawaKernel(2, yukawa_lambda_name="lambda"),
+])
+def test_pickle(knl: Kernel) -> None:
+    import pickle
+
+    result = pickle.dumps(knl)
+    assert pickle.loads(result) == knl
+
+    _ = get_kernel_name_for_test(knl)
+    result = pickle.dumps(knl)
+    assert pickle.loads(result) == knl
+
+# }}}
 
 
 # You can test individual routines by typing
