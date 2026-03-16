@@ -1447,6 +1447,7 @@ class DirectionalSourceDerivative(DirectionalDerivative):
         return lp.tag_array_axes(loopy_knl, self.dir_vec_name, "sep,C")
 
 
+@dataclass(frozen=True)
 class TargetPointMultiplier(KernelWrapper):
     """Bases: :class:`Kernel`
 
@@ -1463,8 +1464,8 @@ class TargetPointMultiplier(KernelWrapper):
     """Coordinate axis with which to multiply the kernel."""
 
     def __init__(self, axis: int, inner_kernel: Kernel) -> None:
-        KernelWrapper.__init__(self, inner_kernel)
-        self.axis = axis
+        super().__init__(inner_kernel)
+        object.__setattr__(self, "axis", axis)
 
     @override
     def __str__(self) -> str:
