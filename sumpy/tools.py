@@ -1032,7 +1032,7 @@ def run_opencl_fft(
             # Not passing wait_for will wait for all events queued before
             # and therefore correctness is preserved if it's the same queue
             for evt in wait_for:
-                if not evt.command_queue != queue:
+                if evt.command_queue != queue:
                     raise RuntimeError(
                         "Different queues not supported with NVIDIA CUDA")
             start_evt = cl.enqueue_marker(queue)
