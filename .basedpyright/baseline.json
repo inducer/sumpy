@@ -18,6 +18,14 @@
                 }
             },
             {
+                "code": "reportEmptyAbstractUsage",
+                "range": {
+                    "startColumn": 22,
+                    "endColumn": 50,
+                    "lineCount": 1
+                }
+            },
+            {
                 "code": "reportCallIssue",
                 "range": {
                     "startColumn": 13,
@@ -16586,6 +16594,14 @@
                 }
             },
             {
+                "code": "reportEmptyAbstractUsage",
+                "range": {
+                    "startColumn": 11,
+                    "endColumn": 60,
+                    "lineCount": 1
+                }
+            },
+            {
                 "code": "reportArgumentType",
                 "range": {
                     "startColumn": 75,
@@ -21850,6 +21866,14 @@
                 }
             },
             {
+                "code": "reportEmptyAbstractUsage",
+                "range": {
+                    "startColumn": 22,
+                    "endColumn": 67,
+                    "lineCount": 1
+                }
+            },
+            {
                 "code": "reportAny",
                 "range": {
                     "startColumn": 4,
@@ -22288,6 +22312,14 @@
                 "range": {
                     "startColumn": 12,
                     "endColumn": 21,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportEmptyAbstractUsage",
+                "range": {
+                    "startColumn": 11,
+                    "endColumn": 47,
                     "lineCount": 1
                 }
             },
@@ -24185,6 +24217,14 @@
             }
         ],
         "./sumpy/test/test_target_deriv.py": [
+            {
+                "code": "reportEmptyAbstractUsage",
+                "range": {
+                    "startColumn": 16,
+                    "endColumn": 56,
+                    "lineCount": 1
+                }
+            },
             {
                 "code": "reportAny",
                 "range": {
