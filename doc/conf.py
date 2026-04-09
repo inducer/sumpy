@@ -13,6 +13,7 @@ version = ".".join(release.split(".")[:2])
 intersphinx_mapping = {
     "arraycontext": ("https://documen.tician.de/arraycontext/", None),
     "boxtree": ("https://documen.tician.de/boxtree/", None),
+    "islpy": ("https://documen.tician.de/islpy", None),
     "loopy": ("https://documen.tician.de/loopy/", None),
     "matplotlib": ("https://matplotlib.org/stable/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
@@ -47,6 +48,7 @@ sphinxconfig_missing_reference_aliases = {
     "obj_array.ObjectArray1D": "obj:pytools.obj_array.ObjectArray1D",
     # sympy
     "sp.Matrix": "class:sympy.matrices.dense.DenseMatrix",
+    "sym.Basic": "class:sympy.core.basic.Basic",
     "sym.Expr": "class:sympy.core.expr.Expr",
     "sym.Symbol": "class:sympy.core.symbol.Symbol",
     "sym.Matrix": "class:sympy.matrices.dense.DenseMatrix",
@@ -58,6 +60,7 @@ sphinxconfig_missing_reference_aliases = {
     # loopy
     "Assignment": "class:loopy.kernel.instruction.Assignment",
     "CallInstruction": "class:loopy.kernel.instruction.CallInstruction",
+    "InstructionBase": "class:loopy.kernel.instruction.InstructionBase",
     # arraycontext
     "Array": "obj:arraycontext.Array",
     "ArrayContext": "class:arraycontext.ArrayContext",
@@ -65,6 +68,7 @@ sphinxconfig_missing_reference_aliases = {
     "FMMTraversalInfo": "class:boxtree.traversal.FMMTraversalInfo",
     # sumpy
     "ArithmeticExpr": "obj:sumpy.kernel.ArithmeticExpr",
+    "OptimizationPair": "obj:sumpy.cse.OptimizationPair",
 }
 
 

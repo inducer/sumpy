@@ -88,8 +88,9 @@ __doc__ = """
 Common subexpression elimination
 --------------------------------
 
+.. autoclass:: OptimizationCallable
+.. autoclass:: OptimizationPair
 .. autofunction:: cse
-
 """
 
 
