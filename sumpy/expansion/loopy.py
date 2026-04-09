@@ -90,7 +90,7 @@ def make_e2p_loopy_kernel(
         for i, knl in enumerate(kernels)
     }
 
-    sac.run_global_cse()
+    sac = sac.run_global_cse()
 
     code_transformers = (
             [expansion.get_code_transformer()]
@@ -194,7 +194,7 @@ def make_p2e_loopy_kernel(
         sac.add_assignment(f"coeffs{i}", coeff) for i, coeff in enumerate(coeffs)
     }
 
-    sac.run_global_cse()
+    sac = sac.run_global_cse()
 
     code_transformers = (
         [expansion.get_code_transformer()]

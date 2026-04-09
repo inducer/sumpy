@@ -1324,7 +1324,7 @@ def loopy_translation_classes_dependent_data(
     tgt_coeff_names = [
             sac.assign_unique(f"m2l_translation_classes_dependent_data{i}", coeff_i)
             for i, coeff_i in enumerate(derivatives)]
-    sac.run_global_cse()
+    sac = sac.run_global_cse()
 
     from sumpy.codegen import to_loopy_insns
     from sumpy.tools import to_complex_dtype

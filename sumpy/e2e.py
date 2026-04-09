@@ -121,7 +121,7 @@ class E2EBase(KernelCacheMixin, ABC):
                         self.src_expansion, src_coeff_exprs, src_rscale,
                         dvec=dvec, tgt_rscale=tgt_rscale, sac=sac))]
 
-        sac.run_global_cse()
+        sac = sac.run_global_cse()
 
         from sumpy.codegen import to_loopy_insns
         return to_loopy_insns(
@@ -177,7 +177,7 @@ class E2EFromCSR(E2EBase):
                         self.src_expansion, src_coeff_exprs, src_rscale,
                         dvec, tgt_rscale, sac))]
 
-        sac.run_global_cse()
+        sac = sac.run_global_cse()
 
         from sumpy.codegen import to_loopy_insns
         return to_loopy_insns(
@@ -335,7 +335,7 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                         m2l_translation_classes_dependent_data=(
                             m2l_translation_classes_dependent_data)))]
 
-        sac.run_global_cse()
+        sac = sac.run_global_cse()
 
         from sumpy.codegen import to_loopy_insns
         return to_loopy_insns(

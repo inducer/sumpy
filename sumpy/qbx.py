@@ -161,7 +161,7 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation, ABC):
 
         logger.info("compute expansion expressions: done")
 
-        sac.run_global_cse()
+        sac = sac.run_global_cse()
 
         pymbolic_expr_maps = [knl.get_code_transformer() for knl in [
             *self.target_kernels, *self.source_kernels]]
