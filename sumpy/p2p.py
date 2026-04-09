@@ -147,7 +147,7 @@ class P2PBase(KernelCacheMixin, KernelComputation):
             for i, expr in enumerate(exprs)
         ]
 
-        sac.run_global_cse()
+        sac = sac.run_global_cse()
 
         from sumpy.codegen import to_loopy_insns
         loopy_insns = to_loopy_insns(sac.assignments.items(),

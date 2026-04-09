@@ -25,9 +25,9 @@ THE SOFTWARE.
 
 import logging
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, overload
 
-from typing_extensions import override
+from typing_extensions import Self, override
 
 import sumpy.symbolic as sym
 
@@ -196,10 +196,18 @@ class SymbolicAssignmentCollection:
         new_name = self.symbol_generator(name_base).name
         return self.add_assignment(new_name, expr, retain_name=False)
 
-    def run_global_cse(
-            self,
-            extra_exprs: Sequence[sym.Expr] | None = None
-        ) -> Sequence[sym.Basic]:
+    @overload
+    def run_global_cse(self, extra_exprs: None = None) -> Self: ...
+
+    @overload
+    def run_global_cse(self,
+                extra_exprs: Sequence[sym.Expr]
+            ) -> tuple[Self, Sequence[sym.Basic]]: ...
+
+    def run_global_cse(self,
+                extra_exprs: Sequence[sym.Expr] | None = None
+            ) -> tuple[Self, Sequence[sym.Basic]] | Self:
+        orig_extra_exprs = extra_exprs
         if extra_exprs is None:
             extra_exprs = []
 
@@ -219,33 +227,32 @@ class SymbolicAssignmentCollection:
         # from sumpy.symbolic import checked_cse
 
         from sumpy.cse import cse
-        new_assignments, new_exprs = cse(
+        new_cse_assignments, new_exprs = cse(
                 [*assign_exprs, *extra_exprs],
                 symbols=self.symbol_generator)
 
         new_assign_exprs = new_exprs[:len(assign_exprs)]
         new_extra_exprs = new_exprs[len(assign_exprs):]
 
-        for name, new_expr in zip(assign_names, new_assign_exprs, strict=True):
-            self.assignments[name] = new_expr
+        result_assignments: dict[str, sym.Basic] = {}
 
-        for name, value in new_assignments:
+        for name, value in new_cse_assignments:
             assert isinstance(name, sym.Symbol)
-            self.add_assignment(name.name, value)
+            result_assignments[name.name] = value
 
-        for name, new_expr in zip(assign_names, new_assign_exprs, strict=True):
-            # We want the assignment collection to be ordered correctly
-            # to make it easier for loopy to schedule.
-            # Deleting the original assignments and adding them again
-            # makes them occur after the CSE'd expression preserving
-            # the order of operations.
-            del self.assignments[name]
-            self.assignments[name] = new_expr
+        result_assignments = {
+            **result_assignments,
+            **dict(zip(assign_names, new_assign_exprs, strict=True)),
+        }
 
         logger.info("common subexpression elimination: done after %.2f s",
                     time.time() - start_time)
 
-        return new_extra_exprs
+        result = type(self)(result_assignments)
+        if orig_extra_exprs is None:
+            return result
+        else:
+            return result, new_extra_exprs
 
 # }}}
 

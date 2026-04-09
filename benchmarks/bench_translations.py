@@ -82,7 +82,7 @@ class TranslationBenchmarkSuite:
                                        dvec, tgt_rscale)
         for i, expr in enumerate(result):
             sac.assign_unique(f"coeff{i}", expr)
-        sac.run_global_cse()
+        sac = sac.run_global_cse()
         insns = to_loopy_insns(sac.assignments.items())
         counter = pymbolic.mapper.flop_counter.CSEAwareFlopCounter()
 
