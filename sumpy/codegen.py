@@ -736,7 +736,7 @@ class MathConstantRewriter(CSECachingIdentityMapper[P]):
 # {{{ to-loopy conversion
 
 def to_loopy_insns(
-        assignments: Iterable[tuple[str, sym.Expr]],
+        assignments: Iterable[tuple[str, sym.Basic]],
         vector_names: AbstractSet[str] | None = None,
         pymbolic_expr_maps: Sequence[Callable[[Expression], Expression]] = (),
         complex_dtype: DTypeLike | None = None,
