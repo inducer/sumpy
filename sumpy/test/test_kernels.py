@@ -37,7 +37,7 @@ from arraycontext import (
     PyOpenCLArrayContext,
     pytest_generate_tests_for_array_contexts,
 )
-from pytools import memoize_on_first_arg, obj_array
+from pytools import memoize_on_first_arg
 from pytools.convergence import PConvergenceVerifier
 
 import sumpy.symbolic as sym
@@ -318,17 +318,6 @@ def test_p2e2p(
     else:
         knl = base_knl
 
-    target_kernels = [
-            knl,
-            AxisTargetDerivative(0, knl),
-            ]
-    expn = expn_class(knl, order=order)
-
-    from sumpy import P2P, E2PFromSingleBox, P2EFromSingleBox
-    p2e = P2EFromSingleBox(expn, kernels=[knl])
-    e2p = E2PFromSingleBox(expn, kernels=target_kernels)
-    p2p = P2P(target_kernels, exclude_self=False)
-
     from pytools.convergence import EOCRecorder
     eoc_rec_pot = EOCRecorder()
     eoc_rec_grad_x = EOCRecorder()
@@ -341,16 +330,11 @@ def test_p2e2p(
 
     rng = np.random.default_rng(19)
     center = np.array([2, 1, 0][:knl.dim], np.float64)
-    sources = actx.from_numpy(
+    sources = (
         0.7 * (-0.5 + rng.random((knl.dim, nsources), dtype=np.float64))
         + center[:, np.newaxis])
 
-    strengths = actx.from_numpy(np.ones(nsources, dtype=np.float64) / nsources)
-
-    source_boxes = actx.from_numpy(np.array([0], dtype=np.int32))
-    box_source_starts = actx.from_numpy(np.array([0], dtype=np.int32))
-    box_source_counts_nonchild = (
-        actx.from_numpy(np.array([nsources], dtype=np.int32)))
+    strengths = np.ones(nsources, dtype=np.float64) / nsources
 
     extra_source_kwargs = extra_kwargs.copy()
     if isinstance(knl, DirectionalSourceDerivative):
@@ -358,103 +342,71 @@ def test_p2e2p(
         dir_vec = np.vstack([np.cos(alpha), np.sin(alpha)])
         extra_source_kwargs["dir_vec"] = actx.from_numpy(dir_vec)
 
+    if issubclass(expn_class, LocalExpansionBase):
+        toy_ctx = t.ToyContext(
+            knl,
+            local_expn_class=expn_class,
+            extra_source_kwargs=extra_source_kwargs,
+            extra_kernel_kwargs=extra_kwargs,
+        )
+        toy_ctx_grad_x = t.ToyContext(
+            AxisTargetDerivative(0, knl),
+            local_expn_class=expn_class,
+            extra_source_kwargs=extra_source_kwargs,
+            extra_kernel_kwargs=extra_kwargs,
+        )
+    else:
+        toy_ctx = t.ToyContext(
+            knl,
+            mpole_expn_class=expn_class,
+            extra_source_kwargs=extra_source_kwargs,
+            extra_kernel_kwargs=extra_kwargs,
+        )
+        toy_ctx_grad_x = t.ToyContext(
+            AxisTargetDerivative(0, knl),
+            mpole_expn_class=expn_class,
+            extra_source_kwargs=extra_source_kwargs,
+            extra_kernel_kwargs=extra_kwargs,
+        )
+
+    point_sources = t.PointSources(toy_ctx, sources, strengths)
+    point_sources_grad_x = t.PointSources(toy_ctx_grad_x, sources, strengths)
+
     from sumpy.visualization import FieldPlotter
 
     for h in h_values:
         if issubclass(expn_class, LocalExpansionBase):
             loc_center = np.array([5.5, 0.0, 0.0][:knl.dim]) + center
-            centers = np.array(loc_center, dtype=np.float64).reshape(knl.dim, 1)
             fp = FieldPlotter(loc_center, extent=h, npoints=res)
         else:
             eval_center = np.array([1/h, 0.0, 0.0][:knl.dim]) + center
             fp = FieldPlotter(eval_center, extent=0.1, npoints=res)
-            centers = (np.array([0.0, 0.0, 0.0][:knl.dim],
-                                dtype=np.float64).reshape(knl.dim, 1)
-                        + center[:, np.newaxis])
 
-        centers = actx.from_numpy(centers)
-        targets = actx.from_numpy(obj_array.new_1d(fp.points))
+        targets = fp.points
 
         rscale = 0.5  # pick something non-1
 
-        # {{{ apply p2e
+        if issubclass(expn_class, LocalExpansionBase):
+            expn = t.local_expand(actx, point_sources, loc_center,
+                                  order=order, rscale=rscale)
+            expn_grad_x = t.local_expand(actx, point_sources_grad_x, loc_center,
+                                         order=order, rscale=rscale)
+        else:
+            expn = t.multipole_expand(actx, point_sources, center,
+                                      order=order, rscale=rscale)
+            expn_grad_x = t.multipole_expand(actx, point_sources_grad_x, center,
+                                             order=order, rscale=rscale)
 
-        mpoles = p2e(actx,
-                source_boxes=source_boxes,
-                box_source_starts=box_source_starts,
-                box_source_counts_nonchild=box_source_counts_nonchild,
-                centers=centers,
-                sources=sources,
-                strengths=(strengths,),
-                nboxes=1,
-                tgt_base_ibox=0,
-                rscale=rscale,
-                **extra_source_kwargs)
+        pot = expn.eval(actx, targets)
+        pot_direct = point_sources.eval(actx, targets)
+        grad_x = expn_grad_x.eval(actx, targets)
+        grad_x_direct = point_sources_grad_x.eval(actx, targets)
 
-        # }}}
-
-        # {{{ apply e2p
-
-        ntargets = fp.points.shape[-1]
-
-        box_target_starts = actx.from_numpy(np.array([0], dtype=np.int32))
-        box_target_counts_nonchild = (
-            actx.from_numpy(np.array([ntargets], dtype=np.int32)))
-
-        pot, grad_x = e2p(
-                actx,
-                src_expansions=mpoles,
-                src_base_ibox=0,
-                target_boxes=source_boxes,
-                box_target_starts=box_target_starts,
-                box_target_counts_nonchild=box_target_counts_nonchild,
-                centers=centers,
-                targets=targets,
-                rscale=rscale,
-                **extra_kwargs)
-        pot = actx.to_numpy(pot)
-        grad_x = actx.to_numpy(grad_x)
-
-        # }}}
-
-        # {{{ compute (direct) reference solution
-
-        pot_direct, grad_x_direct = p2p(
-                actx,
-                targets, sources, (strengths,),
-                **extra_source_kwargs)
-        pot_direct = actx.to_numpy(pot_direct)
-        grad_x_direct = actx.to_numpy(grad_x_direct)
-
-        err_pot = la.norm((pot - pot_direct)/res**2)
-        err_grad_x = la.norm((grad_x - grad_x_direct)/res**2)
-
-        if 1:
-            err_pot = err_pot / la.norm((pot_direct)/res**2)
-            err_grad_x = err_grad_x / la.norm((grad_x_direct)/res**2)
-
-        if 0:
-            import matplotlib.pyplot as pt
-            from matplotlib.colors import Normalize
-
-            pt.subplot(131)
-            im = fp.show_scalar_in_matplotlib(pot.real)
-            im.set_norm(Normalize(vmin=-0.1, vmax=0.1))
-
-            pt.subplot(132)
-            im = fp.show_scalar_in_matplotlib(pot_direct.real)
-            im.set_norm(Normalize(vmin=-0.1, vmax=0.1))
-            pt.colorbar()
-
-            pt.subplot(133)
-            im = fp.show_scalar_in_matplotlib(np.log10(1e-15+np.abs(pot-pot_direct)))
-            im.set_norm(Normalize(vmin=-6, vmax=1))
-
-            pt.colorbar()
-            pt.show()
-
-        # }}}
-
+        # In the multipole expansion testing, ||pot_direct|| and
+        # ||grad_x_direct|| vary with h, so absolute error measure
+        # is more accurate for estimating convergence order.
+        err_pot = la.norm(pot - pot_direct)
+        err_grad_x = la.norm(grad_x - grad_x_direct)
         eoc_rec_pot.add_data_point(h, err_pot)
         eoc_rec_grad_x.add_data_point(h, err_grad_x)
 
@@ -467,25 +419,25 @@ def test_p2e2p(
     tgt_order = order + 1
     if issubclass(expn_class, LocalExpansionBase):
         tgt_order_grad = tgt_order - 1
-        slack = 0.7
-        grad_slack = 0.5
+        slack = 0.5
+        grad_slack = 0.6
     else:
         tgt_order_grad = tgt_order + 1
-
         slack = 0.5
-        grad_slack = 1
+        grad_slack = 0.6
 
-        if order <= 2:
-            slack += 1
-            grad_slack += 1
-
-    if isinstance(knl, DirectionalSourceDerivative):
-        slack += 1
-        grad_slack += 2
-
-    if isinstance(base_knl, DirectionalSourceDerivative):
-        slack += 1
-        grad_slack += 2
+    # For the 2D biharmonic kernel K(r) = r^2 log(r),
+    # the expected convergence order for multipole expansions is p-1.
+    # Adding source derivatives does not change the convergence order,
+    # since the differentiation is applied to the truncated Taylor expansion
+    # of the kernel.
+    if (isinstance(base_knl, DirectionalSourceDerivative)
+            and isinstance(base_knl.inner_kernel, BiharmonicKernel)):
+        if not issubclass(expn_class, LocalExpansionBase):
+            tgt_order = order - 1
+            tgt_order_grad = tgt_order + 1
+        slack = 0.7
+        grad_slack = 0.7
 
     if isinstance(base_knl, HelmholtzKernel):
         if base_knl.allow_evanescent:
