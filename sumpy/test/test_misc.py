@@ -59,6 +59,7 @@ from sumpy.kernel import (
     BiharmonicKernel,
     ElasticityKernel,
     ExpressionKernel,
+    HeatKernel,
     HelmholtzKernel,
     Kernel,
     LaplaceKernel,
@@ -83,7 +84,9 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts([
 # {{{ pde check for kernels
 
 class KernelInfo:
-    def __init__(self, kernel, **kwargs):
+    kernel: Kernel
+
+    def __init__(self, kernel: Kernel, **kwargs):
         self.kernel = kernel
         self.extra_kwargs = kwargs
         diff_op = self.kernel.get_pde_as_diff_op()
@@ -130,8 +133,14 @@ class KernelInfo:
     KernelInfo(ElasticityKernel(3, 0, 0), mu=5, nu=0.2),
     KernelInfo(LineOfCompressionKernel(3, 0), mu=5, nu=0.2),
     KernelInfo(LineOfCompressionKernel(3, 1), mu=5, nu=0.2),
+    KernelInfo(HeatKernel(1), alpha=0.1),
+    KernelInfo(HeatKernel(2), alpha=0.1),
+    KernelInfo(HeatKernel(3), alpha=0.1),
     ])
-def test_pde_check_kernels(actx_factory: ArrayContextFactory, knl_info, order=5):
+def test_pde_check_kernels(
+            actx_factory: ArrayContextFactory,
+            knl_info: KernelInfo,
+            order: int = 5):
     actx = actx_factory()
 
     dim = knl_info.kernel.dim
@@ -150,7 +159,10 @@ def test_pde_check_kernels(actx_factory: ArrayContextFactory, knl_info, order=5)
     eoc_rec = EOCRecorder()
 
     for h in [0.1, 0.05, 0.025]:
-        cp = CalculusPatch(np.array([1, 0, 0])[:dim], h=h, order=order)
+        if isinstance(knl_info.kernel, HeatKernel):
+            cp = CalculusPatch(np.array([0, 0, 0, 1])[-dim:], h=h, order=order)
+        else:
+            cp = CalculusPatch(np.array([1, 0, 0])[:dim], h=h, order=order)
         pot = pt_src.eval(actx, cp.points)
 
         pde = knl_info.pde_func(cp, pot)
@@ -312,7 +324,14 @@ RTOL_P2E2E2P = 1e-2
 
 
 @pytest.mark.parametrize("case", P2E2E2P_TEST_CASES)
-def test_toy_p2e2e2p(actx_factory: ArrayContextFactory, case):
+@pytest.mark.parametrize(("make_kernel", "extra_kernel_kwargs"), [
+            (LaplaceKernel, {}),
+            (lambda dim: HeatKernel(dim - 1), {"alpha": 0.1})])
+def test_toy_p2e2e2p(
+            actx_factory: ArrayContextFactory,
+            case,
+            make_kernel: Callable[[int], Kernel],
+            extra_kernel_kwargs: dict[str, object]):
     dim = case.dim
 
     src = case.source.reshape(dim, -1)
@@ -331,13 +350,14 @@ def test_toy_p2e2e2p(actx_factory: ArrayContextFactory, case):
         raise ValueError(
             f"convergence factor not in valid range: {case_conv_factor}")
 
-    from sumpy.expansion import VolumeTaylorExpansionFactory
+    from sumpy.expansion import DefaultExpansionFactory
 
     actx = actx_factory()
     ctx = t.ToyContext(
-             LaplaceKernel(dim),
-             expansion_factory=VolumeTaylorExpansionFactory(),
-             m2l_use_fft=case.m2l_use_fft)
+             make_kernel(dim),
+             expansion_factory=DefaultExpansionFactory(),
+             m2l_use_fft=case.m2l_use_fft,
+             extra_kernel_kwargs=extra_kernel_kwargs)
 
     errors = []
 
