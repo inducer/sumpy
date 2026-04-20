@@ -20,5 +20,6 @@ doc/_build
 
 sumpy/_git_rev.py
 .asv
+.venv
 
 *.vts
