@@ -186,6 +186,7 @@ exclude = [
     "benchmarks",
     "contrib",
     ".conda-root",
+    ".venv",
 ]
 
 [[tool.basedpyright.executionEnvironments]]
@@ -223,4 +224,3 @@ reportUnknownMemberType = "hint"
 reportMissingImports = "none"
 reportArgumentType = "hint"
 reportOperatorIssue = "hint"
-
