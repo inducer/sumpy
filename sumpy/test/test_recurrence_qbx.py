@@ -1,0 +1,273 @@
+r"""
+Tests for the recurrence-based QBX layer potential evaluation module
+:mod:`sumpy.recurrence_qbx`.
+
+Compares layer potentials computed via the recurrence method against
+sumpy's standard QBX implementation for Laplace and Helmholtz kernels
+in 2D and 3D.
+"""
+from __future__ import annotations
+
+
+__copyright__ = """
+Copyright (C) 2024 Hirish Chandrasekaran
+Copyright (C) 2024 Andreas Kloeckner
+"""
+
+__license__ = """
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+"""
+import meshmode.mesh.generation as mgen  # type: ignore  # pyright: ignore[reportMissingImports]
+import numpy as np
+import sympy as sp
+from meshmode import (  # pyright: ignore[reportMissingImports]
+    _acf as _acf_meshmode,  # type: ignore
+)
+from meshmode.discretization import (  # pyright: ignore[reportMissingImports]
+    Discretization,  # type: ignore
+)
+from meshmode.discretization.poly_element import (  # type: ignore  # pyright: ignore[reportMissingImports]
+    default_simplex_group_factory,
+)
+from pytential import bind, sym  # type: ignore  # pyright: ignore[reportMissingImports]
+from sympy import hankel1
+
+from sumpy.array_context import _acf
+from sumpy.expansion.diff_op import (
+    laplacian,
+    make_identity_diff_op,
+)
+from sumpy.expansion.local import LineTaylorLocalExpansion
+from sumpy.kernel import HelmholtzKernel, LaplaceKernel
+from sumpy.qbx import LayerPotential
+from sumpy.recurrence_qbx import (
+    _compute_rotated_shifted_coordinates,
+    _make_sympy_vec,
+    recurrence_qbx_lp,
+)
+
+
+actx_factory = _acf
+ExpnClass = LineTaylorLocalExpansion
+
+actx = actx_factory()
+lknl2d = LaplaceKernel(2)
+hknl2d = HelmholtzKernel(2)
+lknl3d = LaplaceKernel(3)
+hknl3d = HelmholtzKernel(3)
+
+
+def _qbx_lp_general(knl, sources, targets, centers, radius,
+                                strengths, order, k=0):
+    lpot = LayerPotential(actx.context,
+    expansion=ExpnClass(knl, order),  # pyright: ignore[reportCallIssue]
+    target_kernels=(knl,),
+    source_kernels=(knl,))
+
+    expansion_radii = actx.from_numpy(radius * np.ones(sources.shape[1]))
+    sources = actx.from_numpy(sources)
+    targets = actx.from_numpy(targets)
+    centers = actx.from_numpy(centers)
+
+    strengths = (strengths,)
+    if k == 0:
+        _evt, (result_qbx,) = lpot(
+                actx.queue,  # pyright: ignore[reportArgumentType]
+                targets, sources, centers, strengths,
+                expansion_radii=expansion_radii)
+    else:
+        _evt, (result_qbx,) = lpot(
+                actx.queue,  # pyright: ignore[reportArgumentType]
+                targets, sources, centers, strengths,
+                expansion_radii=expansion_radii,
+                k=1)
+
+    result_qbx = actx.to_numpy(result_qbx)
+
+    return result_qbx
+
+
+def _create_ellipse(n_p, mode_nr=10, quad_convg_rate=100, a=2):
+    t = np.linspace(0, 2 * np.pi, n_p, endpoint=False)
+
+    phi = sp.symbols("phi")
+    jacob = sp.sqrt(a**2 * sp.sin(phi)**2 + sp.cos(phi)**2)
+
+    jacobs = sp.lambdify(phi, jacob)(t)
+
+    h = ((2*np.pi)/n_p * np.min(jacobs))
+    radius = (h/4) * quad_convg_rate
+
+    unit_circle_param = np.exp(1j * t)
+    unit_circle = np.array([a * unit_circle_param.real, unit_circle_param.imag])  # pyright: ignore[reportAttributeAccessIssue]
+
+    sources = unit_circle
+    normals = np.array([unit_circle_param.real, a*unit_circle_param.imag])  # pyright: ignore[reportAttributeAccessIssue]
+    normals = normals / np.linalg.norm(normals, axis=0)
+    centers = sources - normals * radius
+
+    density = np.cos(mode_nr * t) * sp.lambdify(phi, 1/jacob)(t)
+
+    return sources, centers, normals, density, jacobs, radius
+
+
+def _create_sphere(refinement_rounds, exp_radius):
+    target_order = 4
+
+    actx_m = _acf_meshmode()
+    mesh = mgen.generate_sphere(1.0, target_order,
+                                uniform_refinement_rounds=refinement_rounds)
+    grp_factory = default_simplex_group_factory(3, target_order)
+    discr = Discretization(actx_m, mesh, grp_factory)
+    nodes = actx_m.to_numpy(discr.nodes())
+    sources = np.array([nodes[0][0].reshape(-1),
+                        nodes[1][0].reshape(-1), nodes[2][0].reshape(-1)])
+
+    area_weight_a = bind(discr, sym.QWeight()*sym.area_element(3))(actx_m)  # pyright: ignore[reportCallIssue]
+    area_weight = actx_m.to_numpy(area_weight_a)[0]  # pyright: ignore[reportIndexIssue]
+    area_weight = area_weight.reshape(-1)
+
+    normals_a = bind(discr, sym.normal(3))(actx_m).as_vector(dtype=object)
+    normals_a = actx_m.to_numpy(normals_a)  # pyright: ignore[reportCallIssue, reportArgumentType]
+    normals = np.array([normals_a[0][0].reshape(-1), normals_a[1][0].reshape(-1),
+                        normals_a[2][0].reshape(-1)])
+
+    radius = exp_radius
+    centers = sources - radius * normals
+
+    return sources, centers, normals, area_weight, radius
+
+
+def test_compute_rotated_shifted_coordinates():
+    r"""
+    Verifies that :func:`_compute_rotated_shifted_coordinates` correctly
+    computes the off-axis distance for a known source-center-normal
+    configuration.
+    """
+    sources = np.array([[1], [2], [2]])
+    centers = np.array([[0], [0], [0]])
+    normals = np.array([[1], [0], [0]])
+    cts = _compute_rotated_shifted_coordinates(sources, centers, normals)
+    assert np.sqrt(cts[1]**2 + cts[2]**2) - np.sqrt(8) <= 1e-12
+
+
+def test_recurrence_laplace_3d_sphere():
+    r"""
+    Compares the recurrence-based QBX evaluation of the 3D Laplace
+    single-layer potential on a sphere against sumpy's standard QBX.
+    """
+    radius = 0.0001
+    sources, centers, normals, area_weight, radius = _create_sphere(1, radius)
+
+    out = _qbx_lp_general(lknl3d, sources, sources, centers, radius,
+                                   area_weight, 4)
+
+    w = make_identity_diff_op(3)
+    laplace3d = laplacian(w)
+    var = _make_sympy_vec("x", 3)
+    var_t = _make_sympy_vec("t", 3)
+    abs_dist = sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2
+                       + (var[2]-var_t[2])**2)
+    g_x_y = 1/(4*np.pi) * 1/abs_dist
+
+    exp_res = recurrence_qbx_lp(sources, centers, normals, area_weight,
+                                radius, laplace3d, g_x_y, 3, 4)
+
+    assert (np.max(exp_res-out)/np.max(abs(exp_res))) <= 1e-12
+
+
+def test_recurrence_helmholtz_3d_sphere():
+    r"""
+    Compares the recurrence-based QBX evaluation of the 3D Helmholtz
+    single-layer potential on a sphere against sumpy's standard QBX.
+    """
+    radius = 0.0001
+    sources, centers, normals, area_weight, radius = _create_sphere(2, radius)
+
+    out = _qbx_lp_general(hknl3d, sources, sources, centers, radius,
+                                   np.ones(area_weight.shape), 1, 1)  # pyright: ignore[reportCallIssue, reportArgumentType]
+
+    w = make_identity_diff_op(3)
+    helmholtz3d = laplacian(w) + w
+    var = _make_sympy_vec("x", 3)
+    var_t = _make_sympy_vec("t", 3)
+    abs_dist = sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2
+                       + (var[2]-var_t[2])**2)
+    g_x_y = (1/(4*np.pi)) * sp.exp(1j * abs_dist) / abs_dist
+
+    exp_res = recurrence_qbx_lp(sources, centers, normals, np.ones(area_weight.shape),  # pyright: ignore[reportCallIssue, reportArgumentType]
+                                radius, helmholtz3d, g_x_y, 3, 1)
+
+    assert np.max(abs(out - exp_res)) <= 1e-8
+
+
+def test_recurrence_laplace_2d_ellipse():
+    r"""
+    Compares the recurrence-based QBX evaluation of the 2D Laplace
+    single-layer potential on an ellipse against sumpy's standard QBX,
+    verifying convergence across multiple panel counts.
+    """
+    w = make_identity_diff_op(2)
+    laplace2d = laplacian(w)
+
+    var = _make_sympy_vec("x", 2)
+    var_t = _make_sympy_vec("t", 2)
+    g_x_y = (-1/(2*np.pi)) * sp.log(sp.sqrt((var[0]-var_t[0])**2 +
+                                            (var[1]-var_t[1])**2))
+
+    p = 4
+    err = []
+    for n_p in range(200, 1001, 200):
+        sources, centers, normals, density, jacobs, radius = _create_ellipse(n_p)
+        strengths = jacobs * density * (2*np.pi/n_p)
+        exp_res = recurrence_qbx_lp(sources, centers, normals,
+                                    strengths, radius, laplace2d,
+                                    g_x_y, 2, p)
+        qbx_res = _qbx_lp_general(lknl2d, sources, sources, centers,
+                                          radius, strengths, p)
+        err.append(np.max(np.abs(exp_res - qbx_res))/np.max(np.abs(qbx_res)))
+    assert np.max(err) <= 1e-13
+
+
+def test_recurrence_helmholtz_2d_ellipse():
+    r"""
+    Compares the recurrence-based QBX evaluation of the 2D Helmholtz
+    single-layer potential on an ellipse against sumpy's standard QBX,
+    verifying convergence across multiple panel counts.
+    """
+    w = make_identity_diff_op(2)
+    helmholtz2d = laplacian(w) + w
+
+    var = _make_sympy_vec("x", 2)
+    var_t = _make_sympy_vec("t", 2)
+    k = 1
+    abs_dist = sp.sqrt((var[0]-var_t[0])**2 + (var[1]-var_t[1])**2)
+    g_x_y = (1j/4) * hankel1(0, k * abs_dist)
+
+    p = 5
+    err = []
+    for n_p in range(200, 1001, 200):
+        sources, centers, normals, density, jacobs, radius = _create_ellipse(n_p)
+        strengths = jacobs * density * (2*np.pi/n_p)
+        exp_res = recurrence_qbx_lp(sources, centers, normals, strengths,
+        radius, helmholtz2d, g_x_y, 2, p)
+        qbx_res = _qbx_lp_general(hknl2d, sources, sources,
+                                  centers, radius, strengths, p, 1)
+        err.append(np.max(np.abs(exp_res - qbx_res)))
+    assert np.max(err) <= 1e-13
