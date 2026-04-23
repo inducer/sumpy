@@ -385,8 +385,6 @@ def _e2e(actx: ArrayContext,
             actx.to_numpy(to_coeffs[1]),
             derived_from=psource, **expn_kwargs)
 
-# }}}
-
 
 def _m2l(actx: ArrayContext,
          psource, to_center, to_rscale, to_order, e2e, expn_class, expn_kwargs,
@@ -491,8 +489,8 @@ def _m2l(actx: ArrayContext,
 
     return ret
 
-# }}}
 
+# }}}
 
 # {{{ potential source classes
 
