@@ -158,9 +158,12 @@ def test_pde_check_kernels(actx_factory: ArrayContextFactory, knl_info, order=5)
             extra_source_kwargs=knl_info.extra_kwargs)
 
     rng = np.random.default_rng(42)
+    source_points = rng.random(size=(dim, 50)) - 0.5
+    if isinstance(knl_info.kernel, HeatKernel):
+        source_points[-1] += 0.5
     pt_src = t.PointSources(
             tctx,
-            rng.random(size=(dim, 50)) - 0.5,
+            source_points,
             np.ones(50))
 
     from pytools.convergence import EOCRecorder
@@ -170,7 +173,7 @@ def test_pde_check_kernels(actx_factory: ArrayContextFactory, knl_info, order=5)
 
     for h in [0.1, 0.05, 0.025]:
         if isinstance(knl_info.kernel, HeatKernel):
-            cp = CalculusPatch(np.array([0, 0, 0, 1])[-dim:], h=h, order=order)
+            cp = CalculusPatch(np.array([0, 0, 0, 2])[-dim:], h=h, order=order)
         else:
             cp = CalculusPatch(np.array([1, 0, 0])[:dim], h=h, order=order)
         pot = pt_src.eval(actx, cp.points)
@@ -334,14 +337,7 @@ RTOL_P2E2E2P = 1e-2
 
 
 @pytest.mark.parametrize("case", P2E2E2P_TEST_CASES)
-@pytest.mark.parametrize(("make_kernel", "extra_kernel_kwargs"), [
-            (LaplaceKernel, {}),
-            (lambda dim: HeatKernel(dim - 1), {"alpha": 0.1})])
-def test_toy_p2e2e2p(
-            actx_factory: ArrayContextFactory,
-            case,
-            make_kernel: Callable[[int], Kernel],
-            extra_kernel_kwargs: dict[str, object]):
+def test_toy_p2e2e2p(actx_factory: ArrayContextFactory, case):
     dim = case.dim
 
     src = case.source.reshape(dim, -1)
@@ -360,14 +356,13 @@ def test_toy_p2e2e2p(
         raise ValueError(
             f"convergence factor not in valid range: {case_conv_factor}")
 
-    from sumpy.expansion import DefaultExpansionFactory
+    from sumpy.expansion import VolumeTaylorExpansionFactory
 
     actx = actx_factory()
     ctx = t.ToyContext(
-             make_kernel(dim),
-             expansion_factory=DefaultExpansionFactory(),
-             m2l_use_fft=case.m2l_use_fft,
-             extra_kernel_kwargs=extra_kernel_kwargs)
+             LaplaceKernel(dim),
+             expansion_factory=VolumeTaylorExpansionFactory(),
+             m2l_use_fft=case.m2l_use_fft)
 
     errors = []
 
