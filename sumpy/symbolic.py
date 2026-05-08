@@ -284,13 +284,16 @@ class SpatialConstant(prim.Variable):
     """Prefix used in code generation for variables of this type."""
 
     def as_sympy(self) -> Symbol:
-        """Convert variable to a :mod:`sympy` expression."""
+        """Convert this variable to a :mod:`sympy` expression."""
         return Symbol(f"{self.prefix}{self.name}")
 
     @classmethod
     def from_sympy(cls, expr: Symbol) -> SpatialConstant:
-        """Convert :mod:`sympy` expression to a constant."""
-        return cls(expr.name[len(cls.prefix):])
+        """Convert a :mod:`sympy` expression to a constant."""
+        if isinstance(expr, Symbol) and expr.name.startswith(cls.prefix):
+            return cls(expr.name[len(cls.prefix):])
+
+        raise ValueError(f"expression is not a spatial constant: {expr!r}")
 
 
 class PymbolicToSympyMapper(PymbolicToSympyMapperBase):
@@ -301,10 +304,10 @@ class PymbolicToSympyMapper(PymbolicToSympyMapperBase):
 class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
     @override
     def map_Symbol(self, expr: Symbol) -> Expression:
-        if expr.name.startswith(SpatialConstant.prefix):
+        try:
             return SpatialConstant.from_sympy(expr)
-
-        return SympyToPymbolicMapperBase.map_Symbol(self, expr)
+        except ValueError:
+            return SympyToPymbolicMapperBase.map_Symbol(self, expr)
 
     @override
     def map_Pow(self, expr: Pow) -> Expression:
