@@ -35,9 +35,10 @@ from typing import (
     cast,
     overload,
 )
+from warnings import warn
 
 import numpy as np
-from typing_extensions import Self, override
+from typing_extensions import override
 
 import loopy as lp
 import pymbolic.primitives as prim
@@ -785,59 +786,49 @@ class ElasticityKernel(ExpressionKernel):
 
     viscosity_mu: float | SpatialConstant
     r"""The argument name to use for the dynamic viscosity :math:`\mu` when
-    generating functions to evaluate this kernel. Can also be a numeric value.
+    generating functions to evaluate this kernel.
     """
     poisson_ratio: float | SpatialConstant
     r"""The argument name to use for Poisson's ratio :math:`\nu` when generating
-    functions to evaluate this kernel. Can also be a numeric value.
+    functions to evaluate this kernel.
     """
 
-    def __new__(cls,
-                dim: int, icomp: int, jcomp: int,
-                viscosity_mu: float | str | SpatialConstant = "mu",
-                poisson_ratio: float | str | SpatialConstant = "nu",
-        ) -> Self:
-        if poisson_ratio == 0.5:  # noqa: RUF069
-            return super().__new__(StokesletKernel)
-        else:
-            return super().__new__(cls)
-
     def __init__(self,
-                 dim: int, icomp: int, jcomp: int,
+                 dim: int,
+                 icomp: int,
+                 jcomp: int,
                  viscosity_mu: float | str | SpatialConstant = "mu",
                  poisson_ratio: float | str | SpatialConstant = "nu") -> None:
         if isinstance(viscosity_mu, str):
             mu = SpatialConstant(viscosity_mu)
         else:
+            warn("Passing a non-str 'viscosity_mu' is deprecated. This will "
+                 "raise a TypeError starting with Q1 2027.",
+                 DeprecationWarning, stacklevel=2)
+
             mu = viscosity_mu
 
         if isinstance(poisson_ratio, str):
             nu = SpatialConstant(poisson_ratio)
         else:
+            warn("Passing a non-str 'poisson_ratio' is deprecated. This will "
+                 "raise a TypeError starting with Q1 2027.",
+                 DeprecationWarning, stacklevel=2)
+
             nu = poisson_ratio
 
+        d = make_sym_vector("d", dim)
+        r = pymbolic_real_norm_2(d)
+        delta_ij = 1 if icomp == jcomp else 0
+
         if dim == 2:
-            d = make_sym_vector("d", dim)
-            r = pymbolic_real_norm_2(d)
             # See (Berger and Karageorghis 2001)
-            expr = (
-                -var("log")(r)*((3 - 4 * nu) if icomp == jcomp else 0)
-                +
-                d[icomp]*d[jcomp]/r**2
-                )
+            expr = -var("log")(r)*(3 - 4 * nu)*delta_ij + d[icomp]*d[jcomp]/r**2
             scaling = -1/(8*var("pi")*(1 - nu)*mu)
-
         elif dim == 3:
-            d = make_sym_vector("d", dim)
-            r = pymbolic_real_norm_2(d)
             # Kelvin solution
-            expr = (
-                (1/r)*((3 - 4*nu) if icomp == jcomp else 0)
-                +
-                d[icomp]*d[jcomp]/r**3
-                )
+            expr = (1/r)*(3 - 4*nu)*delta_ij + d[icomp]*d[jcomp]/r**3
             scaling = -1/(16*var("pi")*(1 - nu)*mu)
-
         else:
             raise NotImplementedError(f"unsupported dimension: '{dim}'")
 
@@ -849,6 +840,12 @@ class ElasticityKernel(ExpressionKernel):
         object.__setattr__(self, "poisson_ratio", nu)
 
     @override
+    def __str__(self) -> str:
+        return (
+            f"ElasticityKnl{self.dim}D_{self.icomp}{self.jcomp}"
+            f"({self.viscosity_mu}, {self.poisson_ratio})")
+
+    @override
     def __reduce__(self):
         return (
             type(self),
@@ -858,12 +855,6 @@ class ElasticityKernel(ExpressionKernel):
     @override
     def is_complex_valued(self) -> bool:
         return False
-
-    @override
-    def __str__(self) -> str:
-        return (
-            f"ElasticityKnl{self.dim}D_{self.icomp}{self.jcomp}"
-            f"({self.viscosity_mu}, {self.poisson_ratio})")
 
     @memoize_method
     @override
@@ -898,43 +889,99 @@ class ElasticityKernel(ExpressionKernel):
 
 
 @dataclass(frozen=True, repr=False)
-class StokesletKernel(ElasticityKernel):
+class StokesletKernel(ExpressionKernel):
     """
     .. autoattribute:: icomp
     .. autoattribute:: jcomp
     .. autoattribute:: viscosity_mu
     """
 
-    def __new__(cls,
-                dim: int,
-                icomp: int,
-                jcomp: int,
-                viscosity_mu: float | str | SpatialConstant = "mu",
-                poisson_ratio: float | str | SpatialConstant | None = None,
-            ) -> Self:
-        return object.__new__(cls)
+    mapper_method: ClassVar[str] = "map_stokeslet_kernel"
+
+    icomp: int
+    """Component index for the kernel."""
+    jcomp: int
+    """Component index for the kernel."""
+
+    viscosity_mu: float | SpatialConstant
+    r"""The argument name to use for the dynamic viscosity :math:`\mu` when
+    generating functions to evaluate this kernel.
+    """
 
     def __init__(self,
-                dim: int,
-                icomp: int,
-                jcomp: int,
-                viscosity_mu: float | str | SpatialConstant = "mu",
-                poisson_ratio: float | str | SpatialConstant | None = None) -> None:
-        if poisson_ratio is None:
-            poisson_ratio = 0.5
+                 dim: int,
+                 icomp: int,
+                 jcomp: int,
+                 viscosity_mu: float | str | SpatialConstant = "mu",
+                 poisson_ratio: float | str | SpatialConstant | None = None) -> None:
+        if poisson_ratio is not None:
+            warn(f"Passing 'poisson_ratio' to {type(self)} is deprecated. This "
+                 "argument will be removed in Q1 2027.",
+                 DeprecationWarning, stacklevel=2)
 
-        if poisson_ratio != 0.5:  # noqa: RUF069
-            raise ValueError(
-                "'StokesletKernel' must have a Poisson ratio of 0.5: "
-                f"got '{poisson_ratio}'")
+        if isinstance(viscosity_mu, str):
+            mu = SpatialConstant(viscosity_mu)
+        else:
+            warn("Passing a non-str 'viscosity_mu' is deprecated. This will "
+                 "raise a TypeError starting with Q1 2027.",
+                 DeprecationWarning, stacklevel=2)
 
-        super().__init__(dim, icomp, jcomp, viscosity_mu, poisson_ratio)
+            mu = viscosity_mu
+
+        d = make_sym_vector("d", dim)
+        r = pymbolic_real_norm_2(d)
+        delta_ij = 1 if icomp == jcomp else 0
+
+        if dim == 2:
+            expr = -var("log")(r)*delta_ij + d[icomp]*d[jcomp]/r**2
+            scaling = -1/(4*var("pi")*mu)
+        elif dim == 3:
+            expr = (1/r)*delta_ij + d[icomp]*d[jcomp]/r**3
+            scaling = -1/(8*var("pi")*mu)
+        else:
+            raise NotImplementedError(f"unsupported dimension: '{dim}'")
+
+        super().__init__(dim, expression=expr, global_scaling_const=scaling)
+        object.__setattr__(self, "icomp", icomp)
+        object.__setattr__(self, "jcomp", jcomp)
+        object.__setattr__(self, "viscosity_mu", mu)
 
     @override
     def __str__(self) -> str:
         return (
             f"StokesletKnl{self.dim}D_{self.icomp}{self.jcomp}"
-            f"({self.viscosity_mu}, {self.poisson_ratio})")
+            f"({self.viscosity_mu})")
+
+    @override
+    def __reduce__(self):
+        return (
+            type(self),
+            (self.dim, self.icomp, self.jcomp, self.viscosity_mu))
+
+    @property
+    @override
+    def is_complex_valued(self) -> bool:
+        return False
+
+    @memoize_method
+    @override
+    def get_args(self) -> Sequence[KernelArgument]:
+        # TODO: remove this once we stop allowing non-str values for viscosity_mu
+        if isinstance(self.viscosity_mu, SpatialConstant):
+            return [
+                KernelArgument(
+                    loopy_arg=lp.ValueArg(self.viscosity_mu.name, np.float64),
+                )
+            ]
+        else:
+            return []
+
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
+
+        w = make_identity_diff_op(self.dim)
+        return laplacian(laplacian(w))
 
 
 @dataclass(frozen=True, repr=False)
@@ -953,36 +1000,37 @@ class StressletKernel(ExpressionKernel):
     """Component index for the kernel."""
     kcomp: int
     """Component index for the kernel."""
+
     viscosity_mu: float | SpatialConstant
     r"""The argument name to use for the dynamic viscosity :math:`\mu` when
-    generating functions to evaluate this kernel. Can also be a numeric value.
+    generating functions to evaluate this kernel.
     """
 
     def __init__(self,
-                 dim: int, icomp: int, jcomp: int, kcomp: int,
+                 dim: int,
+                 icomp: int,
+                 jcomp: int,
+                 kcomp: int,
                  viscosity_mu: float | str | SpatialConstant = "mu") -> None:
         # mu is unused but kept for consistency with the Stokeslet.
         if isinstance(viscosity_mu, str):
             mu = SpatialConstant(viscosity_mu)
         else:
+            warn("Passing a non-str 'viscosity_mu' is deprecated. This will "
+                 "raise a TypeError starting with Q1 2027.",
+                 DeprecationWarning, stacklevel=2)
+
             mu = viscosity_mu
 
+        d = make_sym_vector("d", dim)
+        r = pymbolic_real_norm_2(d)
+
         if dim == 2:
-            d = make_sym_vector("d", dim)
-            r = pymbolic_real_norm_2(d)
-            expr = (
-                d[icomp]*d[jcomp]*d[kcomp]/r**4
-                )
+            expr = d[icomp]*d[jcomp]*d[kcomp]/r**4
             scaling = 1/(var("pi"))
-
         elif dim == 3:
-            d = make_sym_vector("d", dim)
-            r = pymbolic_real_norm_2(d)
-            expr = (
-                d[icomp]*d[jcomp]*d[kcomp]/r**5
-                )
+            expr = d[icomp]*d[jcomp]*d[kcomp]/r**5
             scaling = 3/(4*var("pi"))
-
         else:
             raise NotImplementedError(f"unsupported dimension: '{dim}'")
 
@@ -1023,6 +1071,7 @@ class StressletKernel(ExpressionKernel):
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
         from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
+
         w = make_identity_diff_op(self.dim)
         return laplacian(laplacian(w))
 
