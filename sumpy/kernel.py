@@ -114,6 +114,18 @@ PDE kernels
     :show-inheritance:
     :members: mapper_method
 
+.. [Pozrikidis1992] C. Pozrikidis,
+    *Boundary Integral and Singularity Methods for Linearized Viscous Flow*,
+    Cambridge University Press, 1992.
+
+.. [Hsiao2008] G. C. Hsiao, W. L. Wendland,
+    *Boundary Integral Equations*,
+    Springer, 2008.
+
+.. [Kress2013] R. Kress,
+    *Linear Integral Equations*,
+    Springer Science & Business Media, 2013.
+
 Derivatives
 -----------
 
@@ -490,6 +502,13 @@ one_kernel_3d = OneKernel(3)
 # {{{ PDE kernels
 
 class LaplaceKernel(ExpressionKernel):
+    r"""A kernel for the Laplace equation (see e.g. Theorem 6.2 from [Kress2013]_).
+
+    .. math::
+
+        \Delta K(\mathbf{x}, \mathbf{y}) = \delta(\mathbf{x} - \mathbf{y}).
+    """
+
     mapper_method: ClassVar[str] = "map_laplace_kernel"
 
     def __init__(self, dim: int) -> None:
@@ -538,6 +557,13 @@ class LaplaceKernel(ExpressionKernel):
 
 
 class BiharmonicKernel(ExpressionKernel):
+    r"""A kernel for the biharmonic equation.
+
+    .. math::
+
+        \Delta^2 K(\mathbf{x}, \mathbf{y}) = \delta(\mathbf{x} - \mathbf{y}).
+    """
+
     mapper_method: ClassVar[str] = "map_biharmonic_kernel"
 
     def __init__(self, dim: int) -> None:
@@ -592,7 +618,13 @@ class BiharmonicKernel(ExpressionKernel):
 
 @dataclass(frozen=True, repr=False)
 class HelmholtzKernel(ExpressionKernel):
-    """
+    r"""A kernel for the Helmholtz equation (see e.g. Example 12.14 in [Kress2013]_).
+
+    .. math::
+
+        \Delta K(\mathbf{x}, \mathbf{y}) + k^2 K(\mathbf{x}, \mathbf{y})
+            = \delta(\mathbf{x} - \mathbf{y}).
+
     .. autoattribute:: helmholtz_k_name
     .. autoattribute:: allow_evanescent
     """
@@ -680,7 +712,13 @@ class HelmholtzKernel(ExpressionKernel):
 
 @dataclass(frozen=True, repr=False)
 class YukawaKernel(ExpressionKernel):
-    """
+    r"""A kernel for the Yukawa equation.
+
+    .. math::
+
+        \Delta K(\mathbf{x}, \mathbf{y}) - \lambda^2 K(\mathbf{x}, \mathbf{y})
+            = \delta(\mathbf{x} - \mathbf{y}).
+
     .. autoattribute:: yukawa_lambda_name
     """
 
@@ -771,7 +809,15 @@ class YukawaKernel(ExpressionKernel):
 
 @dataclass(frozen=True, repr=False)
 class ElasticityKernel(ExpressionKernel):
-    """
+    r"""A kernel for the linear elasticity (Navier-Cauchy) equations
+    (see e.g. Section 2.2 in [Hsiao2008]_).
+
+    .. math::
+
+        \mu \Delta K_{ij}(\mathbf{x}, \mathbf{y})
+        + \frac{\mu}{1 - 2 \nu} \nabla (\nabla \cdot K_{ij}(\mathbf{x}, \mathbf{y}))
+        = \delta_{ij} \delta(\mathbf{x} - \mathbf{y}).
+
     .. autoattribute:: icomp
     .. autoattribute:: jcomp
     .. autoattribute:: viscosity_mu
@@ -890,7 +936,21 @@ class ElasticityKernel(ExpressionKernel):
 
 @dataclass(frozen=True, repr=False)
 class StokesletKernel(ExpressionKernel):
-    """
+    r"""A kernel for the Stokes equations (see e.g. Chapter 2 in [Pozrikidis1992]_).
+
+    .. math::
+
+        \begin{cases}
+        -\mu \Delta K_{ij}(\mathbf{x}, \mathbf{y})
+            + \nabla_i P_j(\mathbf{x}, \mathbf{y})
+            = \delta_{ij} \delta(\mathbf{x} - \mathbf{y}), \\
+        \nabla_i K_{ij}(\mathbf{x}, \mathbf{y}) = 0, \\
+        \end{cases}
+
+    where pressure kernel :math:`P_j = \partial_j K` is the derivative of the
+    Laplace kernel. This kernel is often called the Stokeslet or the Oseen-Burgers
+    tensor and it represents the velocity field.
+
     .. autoattribute:: icomp
     .. autoattribute:: jcomp
     .. autoattribute:: viscosity_mu
@@ -986,7 +1046,17 @@ class StokesletKernel(ExpressionKernel):
 
 @dataclass(frozen=True, repr=False)
 class StressletKernel(ExpressionKernel):
-    """
+    r"""A kernel for the Stokes equations (see e.g. Chapter 2 in [Pozrikidis1992]_).
+
+    .. math::
+
+        K_{ijk}(\mathbf{x}, \mathbf{y}) =
+            -P_j \delta_{ik}
+            + \mu (\partial_k K_{ij} + \partial_i K_{kj})
+
+    where the two-index :math:`K_{ij}` is the :class:`~sumpy.kernel.StokesletKernel`.
+    This kernel is often called the Stresslet and it represents the stress tensor.
+
     .. autoattribute:: icomp
     .. autoattribute:: jcomp
     .. autoattribute:: kcomp
@@ -1079,9 +1149,9 @@ class StressletKernel(ExpressionKernel):
 @dataclass(frozen=True, repr=False)
 class LineOfCompressionKernel(ExpressionKernel):
     """A kernel for the line of compression or dilatation of constant strength
-    along the axis "axis" from zero to negative infinity.
+    along an axis from zero to negative infinity.
 
-    This is used for the explicit solution to half-space Elasticity problem.
+    This is used for the explicit solution to half-space linear elasticity problem.
     See [Mindlin1936]_ for details.
 
     .. [Mindlin1936] R. D. Mindlin (1936).
