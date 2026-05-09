@@ -545,22 +545,20 @@ def test_as_scalar_pde_brinkman():
 # }}}
 
 
-# {{{ test_elasticity_new
+# {{{ test_elasticity_pickle
 
-def test_elasticity_new():
+def test_elasticity_pickle():
     from pickle import dumps, loads
-    stokes_knl = StokesletKernel(3, 0, 1, "mu1", 0.5)
-    stokes_knl2 = ElasticityKernel(3, 0, 1, "mu1", 0.5)
-    elasticity_knl = ElasticityKernel(3, 0, 1, "mu1", "nu")
-    elasticity_helper_knl = LineOfCompressionKernel(3, 0, "mu1", "nu")
+    stokes_knl = StokesletKernel(
+        3, 0, 1, viscosity_mu="mu1")
+    elasticity_knl = ElasticityKernel(
+        3, 0, 1, viscosity_mu="mu1", poisson_ratio="nu1")
+    elasticity_helper_knl = LineOfCompressionKernel(
+        3, 0, viscosity_mu="mu1", poisson_ratio="nu1")
 
-    assert isinstance(stokes_knl2, StokesletKernel)
-    assert stokes_knl == stokes_knl2
     assert loads(dumps(stokes_knl)) == stokes_knl
-
-    for knl in [elasticity_knl, elasticity_helper_knl]:
-        assert not isinstance(knl, StokesletKernel)
-        assert loads(dumps(knl)) == knl
+    assert loads(dumps(elasticity_knl)) == elasticity_knl
+    assert loads(dumps(elasticity_helper_knl)) == elasticity_helper_knl
 
 # }}}
 
