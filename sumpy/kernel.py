@@ -1098,13 +1098,14 @@ class LineOfCompressionKernel(ExpressionKernel):
 
     axis: int
     """Axis number (defaulting to 2 for the z axis)."""
+
     viscosity_mu: float | SpatialConstant
     r"""The argument name to use for the dynamic viscosity :math:`\mu` when
-    generating functions to evaluate this kernel. Can also be a numeric value.
+    generating functions to evaluate this kernel.
     """
     poisson_ratio: float | SpatialConstant
     r"""The argument name to use for Poisson's ratio :math:`\nu` when
-    generating functions to evaluate this kernel. Can also be a numeric value.
+    generating functions to evaluate this kernel.
     """
 
     def __init__(self,
@@ -1116,15 +1117,25 @@ class LineOfCompressionKernel(ExpressionKernel):
         if isinstance(viscosity_mu, str):
             mu = SpatialConstant(viscosity_mu)
         else:
+            warn("Passing a non-str 'viscosity_mu' is deprecated. This will "
+                 "raise a TypeError starting with Q1 2027.",
+                 DeprecationWarning, stacklevel=2)
+
             mu = viscosity_mu
+
         if isinstance(poisson_ratio, str):
             nu = SpatialConstant(poisson_ratio)
         else:
+            warn("Passing a non-str 'poisson_ratio' is deprecated. This will "
+                 "raise a TypeError starting with Q1 2027.",
+                 DeprecationWarning, stacklevel=2)
+
             nu = poisson_ratio
 
         if dim == 3:
             d = make_sym_vector("d", dim)
             r = pymbolic_real_norm_2(d)
+
             # Kelvin solution
             expr = d[axis] * var("log")(r + d[axis]) - r
             scaling = (1 - 2*nu)/(4*var("pi")*mu)
@@ -1138,6 +1149,12 @@ class LineOfCompressionKernel(ExpressionKernel):
         object.__setattr__(self, "poisson_ratio", nu)
 
     @override
+    def __str__(self) -> str:
+        return (
+            f"LineOfCompressionKnl{self.dim}D_{self.axis}"
+            f"({self.viscosity_mu}, {self.poisson_ratio})")
+
+    @override
     def __reduce__(self) -> tuple[object, ...]:
         return (
             self.__class__,
@@ -1148,10 +1165,6 @@ class LineOfCompressionKernel(ExpressionKernel):
     @override
     def is_complex_valued(self) -> bool:
         return False
-
-    @override
-    def __str__(self) -> str:
-        return f"LineOfCompressionKnl{self.dim}D_{self.axis}"
 
     @memoize_method
     @override
@@ -1170,6 +1183,7 @@ class LineOfCompressionKernel(ExpressionKernel):
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
         from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
+
         w = make_identity_diff_op(self.dim)
         return laplacian(w)
 
