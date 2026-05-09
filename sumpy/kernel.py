@@ -2029,6 +2029,7 @@ class KernelIdentityMapper(KernelMapper[Kernel]):
     map_yukawa_kernel = map_expression_kernel
     map_elasticity_kernel = map_expression_kernel
     map_line_of_compression_kernel = map_expression_kernel
+    map_stokeslet_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
     map_brinkmanlet_kernel = map_expression_kernel
     map_brinkman_stress_kernel = map_expression_kernel
@@ -2102,7 +2103,9 @@ class DerivativeCounter(KernelCombineMapper[int]):
     map_biharmonic_kernel = map_expression_kernel
     map_helmholtz_kernel = map_expression_kernel
     map_yukawa_kernel = map_expression_kernel
+    map_elasticity_kernel = map_expression_kernel
     map_line_of_compression_kernel = map_expression_kernel
+    map_stokeslet_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
     map_brinkmanlet_kernel = map_expression_kernel
     map_brinkman_stress_kernel = map_expression_kernel
