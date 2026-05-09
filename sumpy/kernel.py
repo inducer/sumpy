@@ -861,6 +861,11 @@ class ElasticityKernel(ExpressionKernel):
                  "raise a TypeError starting with Q1 2027.",
                  DeprecationWarning, stacklevel=2)
 
+            if poisson_ratio == 0.5:  # noqa: RUF069
+                raise ValueError(
+                    f"{type(self)} cannot accept 'poisson_ratio' of 0.5 "
+                    "(use StokesletKernel instead)")
+
             nu = poisson_ratio
 
         d = make_sym_vector("d", dim)
@@ -893,9 +898,19 @@ class ElasticityKernel(ExpressionKernel):
 
     @override
     def __reduce__(self):
+        # TODO: remove this once we stop allowing non-str values for viscosity_mu
+        viscosity_mu = (
+            self.viscosity_mu.name
+            if isinstance(self.viscosity_mu, SpatialConstant)
+            else self.viscosity_mu)
+        poisson_ratio = (
+            self.poisson_ratio.name
+            if isinstance(self.poisson_ratio, SpatialConstant)
+            else self.poisson_ratio)
+
         return (
             type(self),
-            (self.dim, self.icomp, self.jcomp, self.viscosity_mu, self.poisson_ratio))
+            (self.dim, self.icomp, self.jcomp, viscosity_mu, poisson_ratio))
 
     @property
     @override
@@ -979,6 +994,9 @@ class StokesletKernel(ExpressionKernel):
                  "argument will be removed in Q1 2027.",
                  DeprecationWarning, stacklevel=2)
 
+            if poisson_ratio != 0.5:  # noqa: RUF069
+                raise ValueError("'poisson_ratio' must be 0.5 (if provided)")
+
         if isinstance(viscosity_mu, str):
             mu = SpatialConstant(viscosity_mu)
         else:
@@ -1014,9 +1032,15 @@ class StokesletKernel(ExpressionKernel):
 
     @override
     def __reduce__(self):
+        # TODO: remove this once we stop allowing non-str values for viscosity_mu
+        viscosity_mu = (
+            self.viscosity_mu.name
+            if isinstance(self.viscosity_mu, SpatialConstant)
+            else self.viscosity_mu)
+
         return (
             type(self),
-            (self.dim, self.icomp, self.jcomp, self.viscosity_mu))
+            (self.dim, self.icomp, self.jcomp, viscosity_mu))
 
     @property
     @override
@@ -1113,10 +1137,15 @@ class StressletKernel(ExpressionKernel):
 
     @override
     def __reduce__(self) -> tuple[object, ...]:
+        # TODO: remove this once we stop allowing non-str values for viscosity_mu
+        viscosity_mu = (
+            self.viscosity_mu.name
+            if isinstance(self.viscosity_mu, SpatialConstant)
+            else self.viscosity_mu)
+
         return (
             self.__class__,
-            (self.dim, self.icomp, self.jcomp, self.kcomp, self.viscosity_mu),
-        )
+            (self.dim, self.icomp, self.jcomp, self.kcomp, viscosity_mu))
 
     @property
     @override
@@ -1200,6 +1229,9 @@ class LineOfCompressionKernel(ExpressionKernel):
                  "raise a TypeError starting with Q1 2027.",
                  DeprecationWarning, stacklevel=2)
 
+            if poisson_ratio == 0.5:  # noqa: RUF069
+                raise ValueError(f"{type(self)} cannot accept 'poisson_ratio' of 0.5")
+
             nu = poisson_ratio
 
         if dim == 3:
@@ -1226,9 +1258,19 @@ class LineOfCompressionKernel(ExpressionKernel):
 
     @override
     def __reduce__(self) -> tuple[object, ...]:
+        # TODO: remove this once we stop allowing non-str values for viscosity_mu
+        viscosity_mu = (
+            self.viscosity_mu.name
+            if isinstance(self.viscosity_mu, SpatialConstant)
+            else self.viscosity_mu)
+        poisson_ratio = (
+            self.poisson_ratio.name
+            if isinstance(self.poisson_ratio, SpatialConstant)
+            else self.poisson_ratio)
+
         return (
             self.__class__,
-            (self.dim, self.axis, self.viscosity_mu, self.poisson_ratio),
+            (self.dim, self.axis, viscosity_mu, poisson_ratio),
         )
 
     @property
