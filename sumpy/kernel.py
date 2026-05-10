@@ -106,6 +106,12 @@ PDE kernels
 .. autoclass:: LineOfCompressionKernel
     :show-inheritance:
     :members: mapper_method
+.. autoclass:: BrinkmanletKernel
+    :show-inheritance:
+    :members: mapper_method
+.. autoclass:: BrinkmanStressKernel
+    :show-inheritance:
+    :members: mapper_method
 
 Derivatives
 -----------
@@ -724,7 +730,7 @@ class YukawaKernel(ExpressionKernel):
     @property
     @override
     def is_complex_valued(self) -> bool:
-        # FIXME
+        # FIXME: 2D uses Hankel functions (complex-valued); 3D uses real exp
         return True
 
     @override
@@ -1118,6 +1124,273 @@ class LineOfCompressionKernel(ExpressionKernel):
         w = make_identity_diff_op(self.dim)
         return laplacian(w)
 
+
+@dataclass(frozen=True, repr=False)
+class BrinkmanletKernel(ExpressionKernel):
+    r"""A kernel for the Brinkman equations.
+
+    .. math::
+
+        \begin{cases}
+        -\mu (\Delta K_{ij}(\mathbf{x}, \mathbf{y})
+              - k^2 K_{ij}(\mathbf{x}, \mathbf{y}))
+        + \nabla_i P_j(\mathbf{x}, \mathbf{y})
+        = \delta_{ij}(\mathbf{x} - \mathbf{y}), \\
+        \nabla_i K_{ij} = 0,
+        \end{cases}
+
+    where :math:`P_j` is the pressure kernel.
+    """
+
+    mapper_method: ClassVar[str] = "map_brinkmanlet_kernel"
+
+    icomp: int
+    """Component index for the kernel."""
+    jcomp: int
+    """Component index for the kernel."""
+
+    viscosity_mu_name: str
+    """The argument name to use for the dynamic viscosity when generating
+    functions to evaluate this kernel.
+    """
+    darcy_impermeability_name: str
+    """The argument name to use for the Darcy impermeability when generating
+    functions to evaluate this kernel.
+    """
+
+    def __init__(self,
+                 dim: int,
+                 icomp: int,
+                 jcomp: int,
+                 viscosity_mu_name: str = "mu",
+                 darcy_impermeability_name: str = "k") -> None:
+        mu = SpatialConstant(viscosity_mu_name)
+        k = SpatialConstant(darcy_impermeability_name)
+
+        d = make_sym_vector("d", dim)
+        r = pymbolic_real_norm_2(d)
+        R = k * r  # noqa: N806
+        delta_ij = 1 if icomp == jcomp else 0
+
+        # NOTE:
+        #   [1] C. Pozrikidis, A Practical Guide to Boundary Element Methods,
+        #   CRC Press, 2002.
+        #   [2] https://dlmf.nist.gov/10.27#E8
+        #   [3] https://doi.org/10.1080/00036811.2011.614604
+        #   [4] https://doi.org/10.1002/mana.200710797
+
+        if dim == 2:
+            # transforming Bessel functions to Hankel functions using [2]
+            K0 = var("pi") * var("I") / 2 * var("hankel_1")(0, var("I") * R)  # noqa: N806
+            K1 = -var("pi") / 2 * var("hankel_1")(1, var("I") * R)            # noqa: N806
+
+            # [1] Equations 7.7.5 and 7.7.6
+            # [3] Equations 5.2 and 5.3 (for the scaling we use here)
+            a = 2 * (K0 + K1 / R - 1 / R**2)
+            b = 2 * (2 / R**2 - 2 * K1 / R - K0)
+            expr = a * delta_ij + b * d[icomp] * d[jcomp] / r ** 2
+            scaling = -1 / (4 * var("pi") * mu)
+        elif dim == 3:
+            # [4] Equations 4.2 and 4.3
+            a = 2 * var("exp")(-R) * (1 + 1 / R + 1 / R**2) - 2 / R**2
+            b = 6 / R**2 - 2 * var("exp")(-R) * (1 + 3 / R + 3 / R**2)
+            expr = a * delta_ij / r + b * d[icomp] * d[jcomp] / r ** 3
+            scaling = -1 / (8 * var("pi") * mu)
+        else:
+            raise NotImplementedError(f"unsupported dimension: '{dim}'")
+
+        from pymbolic.mapper.flattener import flatten
+
+        super().__init__(dim,
+                         expression=flatten(expr),
+                         global_scaling_const=flatten(scaling))
+
+        object.__setattr__(self, "icomp", icomp)
+        object.__setattr__(self, "jcomp", jcomp)
+        object.__setattr__(self, "viscosity_mu_name", viscosity_mu_name)
+        object.__setattr__(self, "darcy_impermeability_name", darcy_impermeability_name)
+
+    @override
+    def __reduce__(self) -> tuple[object, ...]:
+        return (
+            self.__class__,
+            (self.dim, self.icomp, self.jcomp,
+             self.viscosity_mu_name, self.darcy_impermeability_name),
+        )
+
+    @property
+    @override
+    def is_complex_valued(self) -> bool:
+        # FIXME: 2D uses Hankel functions (complex-valued); 3D uses real exp
+        return self.dim == 2
+
+    @override
+    def __str__(self) -> str:
+        return (
+            f"BrinkmanletKnl{self.dim}D_{self.icomp}{self.jcomp}"
+            f"({self.viscosity_mu_name}, {self.darcy_impermeability_name})")
+
+    @override
+    def prepare_loopy_kernel(self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
+        from sumpy.codegen import register_bessel_callables
+        return register_bessel_callables(loopy_knl)
+
+    @memoize_method
+    @override
+    def get_args(self) -> Sequence[KernelArgument]:
+        return [
+            KernelArgument(loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64)),
+            KernelArgument(loopy_arg=lp.ValueArg(self.darcy_impermeability_name, np.float64)),  # noqa: E501
+        ]
+
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
+
+        w = make_identity_diff_op(self.dim)
+        k = sym.Symbol(self.darcy_impermeability_name)
+        return laplacian(laplacian(w) - k**2 * w)
+
+
+@dataclass(frozen=True, repr=False)
+class BrinkmanStressKernel(ExpressionKernel):
+    r"""A kernel for the Brinkman equations.
+
+    .. math::
+
+        K_{ijk} =
+            -p_j \delta_{ik}
+            + \mu (\partial_k K_{ij} + \partial_i K_{jk}),
+
+    where the two-index :math:`K_{ij}` is the :class:`~sumpy.kernel.BrinkmanletKernel`
+    and :math:`P_j` is the pressure kernel.
+    """
+
+    mapper_method: ClassVar[str] = "map_brinkman_stress_kernel"
+
+    icomp: int
+    """Component index for the kernel."""
+    jcomp: int
+    """Component index for the kernel."""
+    kcomp: int
+    """Component index for the kernel."""
+
+    # NOTE: we keep the viscosity_mu_name for symmetry with the BrinkmanKernel,
+    # even though it isn't actually used in the stress kernel
+    viscosity_mu_name: str
+    """The argument name to use for the dynamic viscosity when generating
+    functions to evaluate this kernel.
+    """
+    darcy_impermeability_name: str
+    """The argument name to use for the Darcy impermeability when generating
+    functions to evaluate this kernel.
+    """
+
+    def __init__(self,
+                 dim: int,
+                 icomp: int,
+                 jcomp: int,
+                 kcomp: int,
+                 viscosity_mu_name: str = "mu",
+                 darcy_impermeability_name: str = "k") -> None:
+        k = SpatialConstant(darcy_impermeability_name)
+
+        d = make_sym_vector("d", dim)
+        r = pymbolic_real_norm_2(d)
+        R = k * r  # noqa: N806
+        delta_ij = 1 if icomp == jcomp else 0
+        delta_ik = 1 if icomp == kcomp else 0
+        delta_kj = 1 if jcomp == kcomp else 0
+
+        # NOTE:
+        #   [1] C. Pozrikidis, A Practical Guide to Boundary Element Methods,
+        #   CRC Press, 2002.
+        #   [2] https://dlmf.nist.gov/10.27#E8
+        #   [3] https://doi.org/10.1080/00036811.2011.614604
+        #   [4] https://doi.org/10.1002/mana.200710797
+
+        if dim == 2:
+            # transforming Bessel functions to Hankel functions using [2]
+            K0 = var("pi") * var("I") / 2 * var("hankel_1")(0, var("I") * R)  # noqa: N806
+            K1 = -var("pi") / 2 * var("hankel_1")(1, var("I") * R)            # noqa: N806
+
+            # [1] Equations 7.7.7 and 7.7.8
+            # [3] Equations 5.4-5.6 (for the scaling we use here)
+            a = 2 * (2 / R**2 - 2 * K1 / R - K0)
+            b = 8 / R**2 - 4*K0 - 2*(R + 4 / R)*K1
+            c = b + R * K1
+            expr = (
+                2 * (a - 1) * d[jcomp] / r**2 * delta_ik
+                + b * (d[kcomp] * delta_ij + d[icomp] * delta_kj) / r**2
+                - 4 * c * d[icomp] * d[jcomp] * d[kcomp] / r**4
+            )
+            scaling = -1 / (4 * var("pi"))
+        elif dim == 3:
+            # [4] Equations 4.4-4.6
+            d1 = 2 * var("exp")(-R) * (1 + 3 / R + 3 / R**2) - 6 / R**2 + 1
+            d2 = var("exp")(-R) * (R + 3 + 6 / R + 6 / R**2) - 6 / R**2
+            d3 = var("exp")(-R) * (-2 * R - 12 - 30 / R - 30 / R**2) + 30 / R**2
+            expr = (
+                d1 * d[jcomp] / r**3 * delta_ik
+                + d2 * (d[kcomp] * delta_ij + d[icomp] * delta_kj) / r**3
+                + d3 * d[icomp] * d[jcomp] * d[kcomp] / r**5
+            )
+            scaling = 1/(4*var("pi"))
+        else:
+            raise NotImplementedError(f"unsupported dimension: '{dim}'")
+
+        from pymbolic.mapper.flattener import flatten
+
+        super().__init__(dim,
+                         expression=flatten(expr),
+                         global_scaling_const=flatten(scaling))
+
+        object.__setattr__(self, "icomp", icomp)
+        object.__setattr__(self, "jcomp", jcomp)
+        object.__setattr__(self, "kcomp", kcomp)
+        object.__setattr__(self, "viscosity_mu_name", viscosity_mu_name)
+        object.__setattr__(self, "darcy_impermeability_name", darcy_impermeability_name)
+
+    @override
+    def __reduce__(self) -> tuple[object, ...]:
+        return (
+            self.__class__,
+            (self.dim, self.icomp, self.jcomp, self.kcomp,
+             self.viscosity_mu_name, self.darcy_impermeability_name),
+        )
+
+    @property
+    @override
+    def is_complex_valued(self) -> bool:
+        # 2D uses Hankel functions (complex-valued); 3D uses real exp
+        return self.dim == 2
+
+    @override
+    def __str__(self) -> str:
+        return (
+            f"BrinkmanStressKnl{self.dim}D_{self.icomp}{self.jcomp}{self.kcomp}"
+            f"({self.viscosity_mu_name}, {self.darcy_impermeability_name})")
+
+    @override
+    def prepare_loopy_kernel(self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
+        from sumpy.codegen import register_bessel_callables
+        return register_bessel_callables(loopy_knl)
+
+    @memoize_method
+    @override
+    def get_args(self) -> Sequence[KernelArgument]:
+        return [
+            KernelArgument(loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64)),
+            KernelArgument(loopy_arg=lp.ValueArg(self.darcy_impermeability_name, np.float64)),  # noqa: E501
+        ]
+
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
+
+        w = make_identity_diff_op(self.dim)
+        k = sym.Symbol(self.darcy_impermeability_name)
+        return laplacian(laplacian(w) - k**2 * w)
 
 # }}}
 
@@ -1590,6 +1863,8 @@ class KernelIdentityMapper(KernelMapper[Kernel]):
     map_elasticity_kernel = map_expression_kernel
     map_line_of_compression_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
+    map_brinkmanlet_kernel = map_expression_kernel
+    map_brinkman_stress_kernel = map_expression_kernel
 
     def map_axis_target_derivative(self, kernel: AxisTargetDerivative) -> Kernel:
         return type(kernel)(kernel.axis, self.rec(kernel.inner_kernel))
@@ -1662,6 +1937,8 @@ class DerivativeCounter(KernelCombineMapper[int]):
     map_yukawa_kernel = map_expression_kernel
     map_line_of_compression_kernel = map_expression_kernel
     map_stresslet_kernel = map_expression_kernel
+    map_brinkmanlet_kernel = map_expression_kernel
+    map_brinkman_stress_kernel = map_expression_kernel
 
     @override
     def map_axis_target_derivative(self, kernel: AxisTargetDerivative) -> int:
