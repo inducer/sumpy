@@ -57,6 +57,8 @@ from sumpy.expansion.diff_op import (
 )
 from sumpy.kernel import (
     BiharmonicKernel,
+    BrinkmanletKernel,
+    BrinkmanStressKernel,
     ElasticityKernel,
     ExpressionKernel,
     HelmholtzKernel,
@@ -90,6 +92,9 @@ class KernelInfo:
         assert len(diff_op.eqs) == 1
         eq = diff_op.eqs[0]
         self.eq = eq
+
+    def __repr__(self) -> str:
+        return str(self.kernel)
 
     def pde_func(self, cp, pot):
         subs_dict = {sym.Symbol(k): v for k, v in self.extra_kwargs.items()}
@@ -130,7 +135,15 @@ class KernelInfo:
     KernelInfo(ElasticityKernel(3, 0, 0), mu=5, nu=0.2),
     KernelInfo(LineOfCompressionKernel(3, 0), mu=5, nu=0.2),
     KernelInfo(LineOfCompressionKernel(3, 1), mu=5, nu=0.2),
-    ])
+    KernelInfo(BrinkmanletKernel(2, 0, 1), mu=5, k=3),
+    KernelInfo(BrinkmanletKernel(2, 1, 1), mu=5, k=3),
+    KernelInfo(BrinkmanletKernel(3, 0, 1), mu=5, k=3),
+    KernelInfo(BrinkmanletKernel(3, 1, 1), mu=5, k=3),
+    KernelInfo(BrinkmanStressKernel(2, 0, 1, 0), mu=5, k=3),
+    KernelInfo(BrinkmanStressKernel(2, 0, 1, 1), mu=5, k=3),
+    KernelInfo(BrinkmanStressKernel(3, 0, 1, 0), mu=5, k=3),
+    KernelInfo(BrinkmanStressKernel(3, 0, 1, 2), mu=5, k=3),
+    ], ids=repr)
 def test_pde_check_kernels(actx_factory: ArrayContextFactory, knl_info, order=5):
     actx = actx_factory()
 

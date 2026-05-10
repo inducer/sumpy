@@ -62,6 +62,8 @@ from sumpy.expansion.multipole import (
 from sumpy.kernel import (
     AxisTargetDerivative,
     BiharmonicKernel,
+    BrinkmanletKernel,
+    BrinkmanStressKernel,
     DirectionalSourceDerivative,
     ElasticityKernel,
     HelmholtzKernel,
@@ -528,6 +530,10 @@ def test_p2e2p(
      VolumeTaylorMultipoleExpansion, False),
     (StokesletKernel(2, 0, 0), LinearPDEConformingVolumeTaylorLocalExpansion,
      LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+    (BrinkmanletKernel(2, 0, 0), VolumeTaylorLocalExpansion,
+     VolumeTaylorMultipoleExpansion, False),
+    (BrinkmanStressKernel(2, 0, 0, 0), VolumeTaylorLocalExpansion,
+     VolumeTaylorMultipoleExpansion, False),
     ])
 def test_translations(
             actx_factory: ArrayContextFactory,
@@ -547,8 +553,16 @@ def test_translations(
     extra_kwargs = {}
     if isinstance(knl, HelmholtzKernel):
         extra_kwargs["k"] = 0.05
-    if isinstance(knl, StokesletKernel):
+    elif isinstance(knl, YukawaKernel):
+        extra_kwargs["lam"] = 0.05
+    elif isinstance(knl, (StokesletKernel, StressletKernel)):
         extra_kwargs["mu"] = 0.05
+    elif isinstance(knl, ElasticityKernel):
+        extra_kwargs["mu"] = 0.05
+        extra_kwargs["nu"] = 0.1
+    elif isinstance(knl, (BrinkmanletKernel, BrinkmanStressKernel)):
+        extra_kwargs["mu"] = 0.1
+        extra_kwargs["k"] = 0.1
 
     # Just to make sure things also work away from the origin
     rng = np.random.default_rng(18)
@@ -587,8 +601,11 @@ def test_translations(
 
     del eval_offset
 
-    if knl.dim == 2:  # noqa: SIM108
-        orders = [2, 3, 4]
+    if knl.dim == 2:
+        if isinstance(knl, BrinkmanStressKernel):  # noqa: SIM108
+            orders = [3, 4, 5]
+        else:
+            orders = [2, 3, 4]
     else:
         orders = [3, 4, 5]
 
@@ -944,6 +961,14 @@ def get_kernel_name_for_test(knl: Kernel) -> Callable[[str], str]:
 
 @pytest.mark.parametrize("knl", [
     BiharmonicKernel(2),
+    BrinkmanletKernel(2, 0, 1),
+    BrinkmanletKernel(3, 0, 0,
+                      viscosity_mu_name="viscosity",
+                      darcy_impermeability_name="kappa"),
+    BrinkmanStressKernel(2, 0, 1, 0),
+    BrinkmanStressKernel(3, 0, 0, 1,
+                         viscosity_mu_name="viscosity",
+                         darcy_impermeability_name="kappa"),
     ElasticityKernel(2, 0, 0),
     HelmholtzKernel(3, helmholtz_k_name="kay"),
     LaplaceKernel(3),
