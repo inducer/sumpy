@@ -22,7 +22,6 @@ Pytest POCL:
   - export PY_EXE=python3
   - export PYOPENCL_TEST=portable:pthread
   - export EXTRA_INSTALL="pybind11 numpy mako mpi4py"
-  - export PYTEST_ADDOPTS=${PYTEST_ADDOPTS:-"-m 'not slowtest'"}
   - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project.sh
   - ". ./build-and-test-py-project.sh"
   tags:
@@ -39,7 +38,6 @@ Pytest Titan V:
   - py_version=3
   - export PYOPENCL_TEST=nvi:titan
   - EXTRA_INSTALL="pybind11 numpy mako mpi4py"
-  - export PYTEST_ADDOPTS=${PYTEST_ADDOPTS:-"-m 'not slowtest'"}
   - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project.sh
   - ". ./build-and-test-py-project.sh"
   tags:
@@ -58,7 +56,6 @@ Pytest Conda:
   - export SUMPY_NO_CACHE=1
   - export SUMPY_FORCE_SYMBOLIC_BACKEND=symengine
   - export PYOPENCL_TEST=portable:pthread
-  - export PYTEST_ADDOPTS=${PYTEST_ADDOPTS:-"-m 'not slowtest'"}
   - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project-within-miniconda.sh
   - ". ./build-and-test-py-project-within-miniconda.sh"
   tags:
@@ -75,7 +72,6 @@ Pytest POCL Titan V:
   - export SUMPY_NO_CACHE=1
   - export SUMPY_FORCE_SYMBOLIC_BACKEND=symengine
   - export PYOPENCL_TEST=portable:titan
-  - export PYTEST_ADDOPTS=${PYTEST_ADDOPTS:-"-m 'not slowtest'"}
   - curl -L -O https://gitlab.tiker.net/inducer/ci-support/raw/main/build-and-test-py-project-within-miniconda.sh
   - ". ./build-and-test-py-project-within-miniconda.sh"
   tags:

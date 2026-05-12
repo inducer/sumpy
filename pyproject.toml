@@ -154,7 +154,6 @@ extend-exclude = [
 [tool.pytest.ini_options]
 markers = [
     "mpi: tests distributed FMM",
-    "slowtest: mark a test as slow",
 ]
 
 [tool.basedpyright]
