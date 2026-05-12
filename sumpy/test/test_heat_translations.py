@@ -55,7 +55,7 @@ def test_heat_m2m(
     extra_kwargs = {"alpha": alpha}
 
     t_sep = 1.0
-    L = np.sqrt(4 * alpha * t_sep)
+    L = np.sqrt(4 * alpha * t_sep)  # noqa: N806
 
     src_center = np.array([1.0, 0.5])
     tgt_center = np.array([0.0, 2.5])
@@ -142,7 +142,7 @@ def test_heat_l2l(
     tgt_center = np.array([0.0, 2.5])
 
     t_sep = 2 * src_ht
-    L = np.sqrt(4 * alpha * t_sep)
+    L = np.sqrt(4 * alpha * t_sep)  # noqa: N806
 
     rng = np.random.default_rng(0)
     src_grid = np.linspace(-1.0, 1.0, 11)
@@ -227,7 +227,7 @@ def test_heat_m2l(
     tgt_center = np.array([0.0, 2.5])
 
     t_sep = 2 * src_ht
-    L = np.sqrt(4 * alpha * t_sep)
+    L = np.sqrt(4 * alpha * t_sep)  # noqa: N806
 
     rng = np.random.default_rng(0)
     src_grid = np.linspace(-1.0, 1.0, 11)
@@ -282,6 +282,7 @@ def test_heat_m2l(
     assert eoc_rec.order_estimate() > tgt_order - slack
 
 # }}}
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
