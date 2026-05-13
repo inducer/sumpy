@@ -38,7 +38,7 @@ from typing import (
 from warnings import warn
 
 import numpy as np
-from typing_extensions import override
+from typing_extensions import Self, override
 
 import loopy as lp
 import pymbolic.primitives as prim
@@ -2023,16 +2023,26 @@ class KernelIdentityMapper(KernelMapper[Kernel]):
     def map_expression_kernel(self, kernel: ExpressionKernel) -> Kernel:
         return kernel
 
-    map_laplace_kernel = map_expression_kernel
-    map_biharmonic_kernel = map_expression_kernel
-    map_helmholtz_kernel = map_expression_kernel
-    map_yukawa_kernel = map_expression_kernel
-    map_elasticity_kernel = map_expression_kernel
-    map_line_of_compression_kernel = map_expression_kernel
-    map_stokeslet_kernel = map_expression_kernel
-    map_stresslet_kernel = map_expression_kernel
-    map_brinkmanlet_kernel = map_expression_kernel
-    map_brinkman_stress_kernel = map_expression_kernel
+    map_laplace_kernel: \
+        Callable[[Self, LaplaceKernel], Kernel] = map_expression_kernel
+    map_biharmonic_kernel: \
+        Callable[[Self, BiharmonicKernel], Kernel] = map_expression_kernel
+    map_helmholtz_kernel: \
+        Callable[[Self, HelmholtzKernel], Kernel] = map_expression_kernel
+    map_yukawa_kernel: \
+        Callable[[Self, YukawaKernel], Kernel] = map_expression_kernel
+    map_elasticity_kernel: \
+        Callable[[Self, ElasticityKernel], Kernel] = map_expression_kernel
+    map_line_of_compression_kernel: \
+        Callable[[Self, LineOfCompressionKernel], Kernel] = map_expression_kernel
+    map_stokeslet_kernel: \
+        Callable[[Self, StokesletKernel], Kernel] = map_expression_kernel
+    map_stresslet_kernel: \
+        Callable[[Self, StressletKernel], Kernel] = map_expression_kernel
+    map_brinkmanlet_kernel: \
+        Callable[[Self, BrinkmanletKernel], Kernel] = map_expression_kernel
+    map_brinkman_stress_kernel: \
+        Callable[[Self, BrinkmanStressKernel], Kernel] = map_expression_kernel
 
     def map_axis_target_derivative(self, kernel: AxisTargetDerivative) -> Kernel:
         return type(kernel)(kernel.axis, self.rec(kernel.inner_kernel))
@@ -2099,16 +2109,26 @@ class DerivativeCounter(KernelCombineMapper[int]):
     def map_expression_kernel(self, kernel: ExpressionKernel) -> int:
         return 0
 
-    map_laplace_kernel = map_expression_kernel
-    map_biharmonic_kernel = map_expression_kernel
-    map_helmholtz_kernel = map_expression_kernel
-    map_yukawa_kernel = map_expression_kernel
-    map_elasticity_kernel = map_expression_kernel
-    map_line_of_compression_kernel = map_expression_kernel
-    map_stokeslet_kernel = map_expression_kernel
-    map_stresslet_kernel = map_expression_kernel
-    map_brinkmanlet_kernel = map_expression_kernel
-    map_brinkman_stress_kernel = map_expression_kernel
+    map_laplace_kernel: \
+        Callable[[Self, LaplaceKernel], int] = map_expression_kernel
+    map_biharmonic_kernel: \
+        Callable[[Self, BiharmonicKernel], int] = map_expression_kernel
+    map_helmholtz_kernel: \
+        Callable[[Self, HelmholtzKernel], int] = map_expression_kernel
+    map_yukawa_kernel: \
+        Callable[[Self, YukawaKernel], int] = map_expression_kernel
+    map_elasticity_kernel: \
+        Callable[[Self, ElasticityKernel], int] = map_expression_kernel
+    map_line_of_compression_kernel: \
+        Callable[[Self, LineOfCompressionKernel], int] = map_expression_kernel
+    map_stokeslet_kernel: \
+        Callable[[Self, StokesletKernel], int] = map_expression_kernel
+    map_stresslet_kernel: \
+        Callable[[Self, StressletKernel], int] = map_expression_kernel
+    map_brinkmanlet_kernel: \
+        Callable[[Self, BrinkmanletKernel], int] = map_expression_kernel
+    map_brinkman_stress_kernel: \
+        Callable[[Self, BrinkmanStressKernel], int] = map_expression_kernel
 
     @override
     def map_axis_target_derivative(self, kernel: AxisTargetDerivative) -> int:
