@@ -1199,11 +1199,7 @@ class BrinkmanletKernel(ExpressionKernel):
         else:
             raise NotImplementedError(f"unsupported dimension: '{dim}'")
 
-        from pymbolic.mapper.flattener import flatten
-
-        super().__init__(dim,
-                         expression=flatten(expr),
-                         global_scaling_const=flatten(scaling))
+        super().__init__(dim, expression=expr, global_scaling_const=scaling)
 
         object.__setattr__(self, "icomp", icomp)
         object.__setattr__(self, "jcomp", jcomp)
@@ -1339,11 +1335,7 @@ class BrinkmanStressKernel(ExpressionKernel):
         else:
             raise NotImplementedError(f"unsupported dimension: '{dim}'")
 
-        from pymbolic.mapper.flattener import flatten
-
-        super().__init__(dim,
-                         expression=flatten(expr),
-                         global_scaling_const=flatten(scaling))
+        super().__init__(dim, expression=expr, global_scaling_const=scaling)
 
         object.__setattr__(self, "icomp", icomp)
         object.__setattr__(self, "jcomp", jcomp)
