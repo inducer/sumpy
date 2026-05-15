@@ -402,8 +402,11 @@ def test_p2e2p(
         grad_x = expn_grad_x.eval(actx, targets)
         grad_x_direct = point_sources_grad_x.eval(actx, targets)
 
-        err_pot = la.norm(pot - pot_direct) / la.norm(pot_direct)
-        err_grad_x = la.norm(grad_x - grad_x_direct) / la.norm(grad_x_direct)
+        # In the multipole expansion testing, ||pot_direct|| and
+        # ||grad_x_direct|| vary with h, so absolute error measure
+        # is more accurate for estimating convergence order.
+        err_pot = la.norm(pot - pot_direct)
+        err_grad_x = la.norm(grad_x - grad_x_direct)
         eoc_rec_pot.add_data_point(h, err_pot)
         eoc_rec_grad_x.add_data_point(h, err_grad_x)
 
@@ -416,24 +419,28 @@ def test_p2e2p(
     tgt_order = order + 1
     if issubclass(expn_class, LocalExpansionBase):
         tgt_order_grad = tgt_order - 1
-        slack = 0.7
-        grad_slack = 0.5
+        slack = 0.5
+        grad_slack = 0.6
     else:
         tgt_order_grad = tgt_order + 1
         slack = 0.5
-        grad_slack = 1
-
-        if order <= 2:
-            slack += 1
-            grad_slack += 1
-
-    if isinstance(knl, DirectionalSourceDerivative):
-        slack += 1
-        grad_slack += 2
-
-    if isinstance(base_knl, DirectionalSourceDerivative):
-        slack += 1
-        grad_slack += 2
+        grad_slack = 0.6
+    
+    # For the 2D biharmonic kernel K(r) = r^2 log(r),
+    # the expected convergence order for multipole expansions is p-1.
+    # Adding source derivatives does not change the convergence order,
+    # since the differentiation is applied to the truncated Taylor expansion
+    # of the kernel.
+    if (isinstance(base_knl, DirectionalSourceDerivative)
+            and isinstance(base_knl.inner_kernel, BiharmonicKernel)):
+        if issubclass(expn_class, LocalExpansionBase):
+            tgt_order = order + 1
+            tgt_order_grad = tgt_order - 1
+        else:
+            tgt_order = order - 1
+            tgt_order_grad = tgt_order + 1
+        slack = 0.7
+        grad_slack = 0.7
 
     if isinstance(base_knl, HelmholtzKernel):
         if base_knl.allow_evanescent:
