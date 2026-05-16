@@ -425,7 +425,7 @@ def test_p2e2p(
         tgt_order_grad = tgt_order + 1
         slack = 0.5
         grad_slack = 0.6
-    
+
     # For the 2D biharmonic kernel K(r) = r^2 log(r),
     # the expected convergence order for multipole expansions is p-1.
     # Adding source derivatives does not change the convergence order,
@@ -534,20 +534,20 @@ def test_translations(
 
     from sumpy.visualization import FieldPlotter
 
-    eval_offset = np.array([0.0, 0.0, 0.0, 5.5][-knl.dim:])
+    eval_offset = np.array([5.5, 0.0, 0][:knl.dim])
     fp = FieldPlotter(eval_offset + origin, extent=0.3, npoints=res)
     targets = fp.points
 
     centers = (np.array(
             [
                 # box 0: particles, first mpole here
-                [0, 0, 0, 0][-knl.dim:],
+                [0, 0, 0][:knl.dim],
 
                 # box 1: second mpole here
-                np.array([0, 0, 0.1, -0.2][-knl.dim:], np.float64),
+                np.array([-0.2, 0.1, 0][:knl.dim], np.float64),
 
                 # box 2: first local here
-                eval_offset + np.array([0, 0, -0.2, 0.3][-knl.dim:], np.float64),
+                eval_offset + np.array([0.3, -0.2, 0][:knl.dim], np.float64),
 
                 # box 3: second local and eval here
                 eval_offset

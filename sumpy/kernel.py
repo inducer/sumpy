@@ -1440,14 +1440,6 @@ class HeatKernel(ExpressionKernel):
                     loopy_arg=lp.ValueArg(self.heat_alpha_name, np.float64),
                     )]
 
-    def get_derivative_taker(self, dvec, rscale, sac):
-        """Return a :class:`sumpy.derivative_taker.ExprDerivativeTaker` instance
-        that supports taking derivatives of the base kernel with respect to dvec.
-        """
-        from sumpy.derivative_taker import ExprDerivativeTaker
-        return ExprDerivativeTaker(self.get_expression(dvec), dvec, rscale,
-                sac)
-
     @override
     def get_pde_as_diff_op(self):
         from sumpy.expansion.diff_op import diff, laplacian, make_identity_diff_op
