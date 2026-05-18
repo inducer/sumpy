@@ -61,6 +61,7 @@ from sumpy.kernel import (
     BrinkmanStressKernel,
     ElasticityKernel,
     ExpressionKernel,
+    HeatKernel,
     HelmholtzKernel,
     Kernel,
     LaplaceKernel,
@@ -85,7 +86,9 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts([
 # {{{ pde check for kernels
 
 class KernelInfo:
-    def __init__(self, kernel, **kwargs):
+    kernel: Kernel
+
+    def __init__(self, kernel: Kernel, **kwargs):
         self.kernel = kernel
         self.extra_kwargs = kwargs
         diff_op = self.kernel.get_pde_as_diff_op()
@@ -143,6 +146,9 @@ class KernelInfo:
     KernelInfo(BrinkmanStressKernel(2, 0, 1, 1), mu=5, k=3),
     KernelInfo(BrinkmanStressKernel(3, 0, 1, 0), mu=5, k=3),
     KernelInfo(BrinkmanStressKernel(3, 0, 1, 2), mu=5, k=3),
+    KernelInfo(HeatKernel(1), alpha=0.1),
+    KernelInfo(HeatKernel(2), alpha=0.1),
+    KernelInfo(HeatKernel(3), alpha=0.1),
     ], ids=repr)
 def test_pde_check_kernels(actx_factory: ArrayContextFactory, knl_info, order=5):
     actx = actx_factory()
@@ -152,9 +158,12 @@ def test_pde_check_kernels(actx_factory: ArrayContextFactory, knl_info, order=5)
             extra_source_kwargs=knl_info.extra_kwargs)
 
     rng = np.random.default_rng(42)
+    source_points = rng.random(size=(dim, 50)) - 0.5
+    if isinstance(knl_info.kernel, HeatKernel):
+        source_points[-1] += 0.5
     pt_src = t.PointSources(
             tctx,
-            rng.random(size=(dim, 50)) - 0.5,
+            source_points,
             np.ones(50))
 
     from pytools.convergence import EOCRecorder
@@ -163,7 +172,10 @@ def test_pde_check_kernels(actx_factory: ArrayContextFactory, knl_info, order=5)
     eoc_rec = EOCRecorder()
 
     for h in [0.1, 0.05, 0.025]:
-        cp = CalculusPatch(np.array([1, 0, 0])[:dim], h=h, order=order)
+        if isinstance(knl_info.kernel, HeatKernel):
+            cp = CalculusPatch(np.array([0, 0, 0, 2])[-dim:], h=h, order=order)
+        else:
+            cp = CalculusPatch(np.array([1, 0, 0])[:dim], h=h, order=order)
         pot = pt_src.eval(actx, cp.points)
 
         pde = knl_info.pde_func(cp, pot)
