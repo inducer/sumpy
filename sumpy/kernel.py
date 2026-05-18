@@ -1388,6 +1388,7 @@ class BrinkmanStressKernel(ExpressionKernel):
         return laplacian(laplacian(w) - k**2 * w)
 
 
+@dataclass(frozen=True, repr=False)
 class HeatKernel(ExpressionKernel):
     r"""The Green's function for the heat equation given by
     :math:`e^{-r^2/{4 \alpha t}}/\sqrt{(4 \pi \alpha t)^d}`
@@ -1418,16 +1419,12 @@ class HeatKernel(ExpressionKernel):
                 global_scaling_const=scaling,
                 )
 
-        self.heat_alpha_name = heat_alpha_name
+        object.__setattr__(self, "heat_alpha_name", heat_alpha_name)
 
     @property
     @override
     def is_complex_valued(self) -> bool:
         return False
-
-    def update_persistent_hash(self, key_hash, key_builder):
-        key_hash.update(type(self).__name__.encode("utf8"))
-        key_builder.rec(key_hash, (self.dim, self.heat_alpha_name))
 
     @override
     def __repr__(self):

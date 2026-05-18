@@ -312,15 +312,20 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
         src_rscale = sym.Symbol("src_rscale")
         tgt_rscale = sym.Symbol("tgt_rscale")
 
+        from sumpy.expansion.local import LocalExpansionBase
+        from sumpy.expansion.multipole import MultipoleExpansionBase
+
+        assert isinstance(self.tgt_expansion, LocalExpansionBase)
+        assert isinstance(self.src_expansion, MultipoleExpansionBase)
+
         m2l_translation = self.tgt_expansion.m2l_translation
         m2l_translation_classes_dependent_ndata = (
             m2l_translation.translation_classes_dependent_ndata(self.tgt_expansion,
                 self.src_expansion))
-        m2l_translation_classes_dependent_data = \
-                [sym.Symbol(f"data{i}")
-            for i in range(m2l_translation_classes_dependent_ndata)]
+        m2l_translation_classes_dependent_data = tuple(
+                sym.Symbol(f"data{i}")
+                for i in range(m2l_translation_classes_dependent_ndata))
 
-        m2l_translation = self.tgt_expansion.m2l_translation
         if m2l_translation.use_preprocessing:
             ncoeff_src = m2l_translation.preprocess_multipole_nexprs(
                 self.tgt_expansion, self.src_expansion)
