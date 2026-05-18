@@ -262,17 +262,17 @@ def _make_sympy_vec(name: str, n: int) -> np.ndarray:
         [sp.Symbol(f"{name}{i}") for i in range(n)])
 
 
-def _eval_abstract_R(expr: Expr, R: Expr, rval: Expr) -> Expr:
-    # ``R`` is an AppliedUndef placeholder used inside ``f(...)`` so SymPy's
+def _eval_abstract_r_placeholder(expr: Expr, r_placeholder: Expr, rval: Expr) -> Expr:
+    # ``r_placeholder`` is an AppliedUndef placeholder used inside ``f(...)`` so SymPy's
     # chain rule never has to take a derivative w.r.t. the compound ``rval``
     # (which modern SymPy rejects). After all chain-rule expansion is done,
-    # fold ``R`` and every ``Derivative(R, ...)`` back to ``rval`` and its
-    # concrete derivatives.
+    # fold ``r_placeholder`` and every ``Derivative(r_placeholder, ...)``
+    # back to ``rval`` and its concrete derivatives.
     expr = expr.replace(  # pyright: ignore[reportAssignmentType]
-        lambda e: isinstance(e, sp.Derivative) and e.expr == R,
+        lambda e: isinstance(e, sp.Derivative) and e.expr == r_placeholder,
         lambda e: sp.diff(rval, *e.variable_count),
     )
-    return expr.subs(R, rval)  # pyright: ignore[reportReturnType]
+    return expr.subs(r_placeholder, rval)
 
 
 def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
@@ -304,8 +304,8 @@ def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
     eps = sp.symbols("epsilon")
     rval = r + eps
     f = sp.Function("f")
-    # AppliedUndef placeholder for rval inside f(...). See _eval_abstract_R.
-    R = sp.Function("R")(*var, eps)
+    # AppliedUndef placeholder for rval inside f(...). See _eval_abstract_r_placeholder.
+    r_placeholder = sp.Function("R")(*var, eps)
 
     def apply_deriv_id(expr: Expr,
                        deriv_id: DerivativeIdentifier) -> Expr:
@@ -315,36 +315,36 @@ def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
 
     ode_in_r: Expr = sum(  # pyright: ignore[reportAssignmentType]
         # pylint: disable-next=not-callable
-        coeff * apply_deriv_id(f(R), deriv_id)
+        coeff * apply_deriv_id(f(r_placeholder), deriv_id)
         for deriv_id, coeff in pde_eqn.items()
     )
 
     f_r_derivs = _make_sympy_vec("f_r", ode_order+1)
     # pylint: disable-next=not-callable
-    f_derivs = [sp.diff(f(R), eps, i) for i in range(ode_order+1)]
+    f_derivs = [sp.diff(f(r_placeholder), eps, i) for i in range(ode_order+1)]
 
-    # dR/deps = 1 (n==1) and d^nR/deps^n = 0 (n>=2). Substitute high-to-low so
-    # higher-order eps-derivatives of R are replaced before subs has a chance
-    # to rewrite them via the 1st-order pattern (which would leave behind
-    # leftover Derivative(1, eps) artifacts). doit() cleans up any constant-
-    # derivative residuals (Derivative(<constant>, _) -> 0).
-    def _eval_R_eps_derivs(expr):
+    # d(r_placeholder)/deps = 1 (n==1) and higher orders = 0. Substitute
+    # high-to-low so higher-order eps-derivatives are replaced before subs
+    # has a chance to rewrite them via the 1st-order pattern (which would
+    # leave behind leftover Derivative(1, eps) artifacts). doit() cleans up
+    # any constant-derivative residuals (Derivative(<constant>, _) -> 0).
+    def eval_r_placeholder_eps_derivs(expr):
         for n in range(ode_order + 1, 0, -1):
             val = sp.Integer(1) if n == 1 else sp.Integer(0)
-            expr = expr.subs(sp.Derivative(R, (eps, n)), val)
+            expr = expr.subs(sp.Derivative(r_placeholder, (eps, n)), val)
         return expr.doit()
 
-    ode_in_r = _eval_R_eps_derivs(ode_in_r)
-    f_derivs = [_eval_R_eps_derivs(fd) for fd in f_derivs]
+    ode_in_r = eval_r_placeholder_eps_derivs(ode_in_r)
+    f_derivs = [eval_r_placeholder_eps_derivs(fd) for fd in f_derivs]
 
-    # Replace f^{(k)}(R) -> f_rk by exact tree match. xreplace (not subs!)
+    # Replace f^{(k)}(r_placeholder) -> f_rk by exact tree match. xreplace (not subs!)
     # avoids SymPy's "smart" rewrite of higher-order derivatives in terms of
-    # lower ones, which would otherwise corrupt the Derivative(f(R), (R, k))
-    # interiors.
+    # lower ones, which would otherwise corrupt the
+    # Derivative(f(r_placeholder), (r_placeholder, k)) interiors.
     ode_in_r = ode_in_r.xreplace({
         f_derivs[i]: f_r_derivs[i] for i in range(ode_order + 1)})
 
-    ode_in_r = _eval_abstract_R(ode_in_r, R, rval)
+    ode_in_r = _eval_abstract_r_placeholder(ode_in_r, r_placeholder, rval)
 
     return ode_in_r, var, ode_order
 
@@ -366,24 +366,25 @@ def _generate_nd_derivative_relations(
     f = sp.Function("f")
     eps = sp.symbols("epsilon")
     rval = sp.sqrt(sum(var**2)) + eps
-    R = sp.Function("R")(*var, eps)
+    r_placeholder = sp.Function("R")(*var, eps)
     # pylint: disable=not-callable
-    f_derivs_x = [sp.diff(f(R), var[0], i) for i in range(ode_order+1)]
-    f_derivs = [sp.diff(f(R), eps, i) for i in range(ode_order+1)]
+    f_derivs_x = [sp.diff(f(r_placeholder), var[0], i) for i in range(ode_order+1)]
+    f_derivs = [sp.diff(f(r_placeholder), eps, i) for i in range(ode_order+1)]
     # pylint: disable=not-callable
 
-    def _eval_R_eps_derivs(expr):
+    def eval_r_placeholder_eps_derivs(expr):
         for n in range(ode_order + 1, 0, -1):
             val = sp.Integer(1) if n == 1 else sp.Integer(0)
-            expr = expr.subs(sp.Derivative(R, (eps, n)), val)
+            expr = expr.subs(sp.Derivative(r_placeholder, (eps, n)), val)
         return expr.doit()
 
-    f_derivs_x = [_eval_R_eps_derivs(e) for e in f_derivs_x]
-    f_derivs = [_eval_R_eps_derivs(e) for e in f_derivs]
-    # Replace f^{(k)}(R) -> f_rk by exact tree match (see pde_to_ode_in_r).
+    f_derivs_x = [eval_r_placeholder_eps_derivs(e) for e in f_derivs_x]
+    f_derivs = [eval_r_placeholder_eps_derivs(e) for e in f_derivs]
+    # Replace f^{(k)}(r_placeholder) -> f_rk by exact tree match (see pde_to_ode_in_r).
     sub_map = {f_derivs[j]: f_r_derivs[j] for j in range(len(f_derivs))}
     f_derivs_x = [e.xreplace(sub_map) for e in f_derivs_x]
-    f_derivs_x = [_eval_abstract_R(e, R, rval) for e in f_derivs_x]
+    f_derivs_x = [_eval_abstract_r_placeholder(e, r_placeholder, rval)
+                  for e in f_derivs_x]
     system = [f_x_derivs[i] - f_derivs_x[i] for i in range(ode_order+1)]
     return sp.solve(system, *f_r_derivs, dict=True)[0]
 
@@ -555,7 +556,7 @@ def reindex_recurrence_relation(r: sp.Basic) -> tuple[int, Expr]:
     # in terms of s(n-1), ...
     true_recurrence: Expr = sum(  # pyright: ignore[reportAssignmentType]
         sp.cancel(-coeffs[i]/coeffs[-1]) * terms[i]
-        for i in range(0, len(terms)-1))
+        for i in range(len(terms)-1))
     true_recurrence1 = true_recurrence.subs(n, n-shift_idx)
 
     return order, true_recurrence1

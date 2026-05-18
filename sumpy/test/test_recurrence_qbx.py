@@ -48,7 +48,7 @@ from meshmode.discretization.poly_element import (  # type: ignore  # pyright: i
 from pytential import bind, sym  # type: ignore  # pyright: ignore[reportMissingImports]
 from sympy import hankel1
 
-from sumpy.array_context import _acf
+from sumpy.array_context import PyOpenCLArrayContext, _acf
 from sumpy.expansion.diff_op import (
     laplacian,
     make_identity_diff_op,
@@ -66,7 +66,7 @@ from sumpy.recurrence_qbx import (
 actx_factory = _acf
 ExpnClass = LineTaylorLocalExpansion
 
-actx = actx_factory()
+actx: PyOpenCLArrayContext = actx_factory()
 lknl2d = LaplaceKernel(2)
 hknl2d = HelmholtzKernel(2)
 lknl3d = LaplaceKernel(3)
@@ -88,12 +88,12 @@ def _qbx_lp_general(knl, sources, targets, centers, radius,
     strengths = (strengths,)
     if k == 0:
         _evt, (result_qbx,) = lpot(
-                actx.queue,  # pyright: ignore[reportArgumentType]
+                actx.queue,
                 targets, sources, centers, strengths,
                 expansion_radii=expansion_radii)
     else:
         _evt, (result_qbx,) = lpot(
-                actx.queue,  # pyright: ignore[reportArgumentType]
+                actx.queue,
                 targets, sources, centers, strengths,
                 expansion_radii=expansion_radii,
                 k=1)
