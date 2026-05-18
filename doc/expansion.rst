@@ -32,8 +32,3 @@ Recurrences
 -----------
 
 .. automodule:: sumpy.recurrence
-
-Recurrence QBX
---------------
-
-.. automodule:: sumpy.recurrence_qbx

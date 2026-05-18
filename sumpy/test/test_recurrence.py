@@ -75,8 +75,7 @@ def _verify_large_x1_recurrence(pde, g_x_y, ndim, p, x_vals):
         true_derivs.append(complex(sp.N(d.subs(x_vals), 30)))
 
     # Compute via recurrence, seeding with true initial conditions.
-    # Negative indices are assumed to be zero (matching the zero-initialized
-    # storage in recurrence_qbx_lp).
+    # Negative indices are assumed to be zero.
     recur_vals: dict[int, complex] = {}
     for idx in range(-order, 0):
         recur_vals[idx] = 0j
