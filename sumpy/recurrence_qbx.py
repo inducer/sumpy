@@ -236,9 +236,9 @@ def recurrence_qbx_lp(sources, centers, normals, strengths, radius, pde, g_x_y,
         interactions_off_axis += lamb_expr_t_exp(*a2) * radius**i/math.factorial(i)
 
     # Blend large-|x_1| and small-|x_1| regimes based on relative coordinates
-    m = 100
-    mask_on_axis = m*np.abs(coord[0]) >= np.abs(coord[1])
-    mask_off_axis = m*np.abs(coord[0]) < np.abs(coord[1])
+    xi = 10
+    mask_on_axis = xi * np.abs(coord[0]) >= np.abs(coord[1])
+    mask_off_axis = xi * np.abs(coord[0]) < np.abs(coord[1])
 
     interactions_total = np.zeros(coord[0].shape)
     interactions_total[mask_on_axis] = interactions_on_axis[mask_on_axis]

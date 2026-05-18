@@ -139,7 +139,7 @@ def _create_sphere(refinement_rounds, exp_radius):
     sources = np.array([nodes[0][0].reshape(-1),
                         nodes[1][0].reshape(-1), nodes[2][0].reshape(-1)])
 
-    area_weight_a = bind(discr, sym.QWeight()*sym.area_element(3))(actx_m)  # pyright: ignore[reportCallIssue]
+    area_weight_a = bind(discr, sym.QWeight()*sym.area_element(3))(actx_m)
     area_weight = actx_m.to_numpy(area_weight_a)[0]  # pyright: ignore[reportIndexIssue]
     area_weight = area_weight.reshape(-1)
 
