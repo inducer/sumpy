@@ -433,10 +433,7 @@ def test_p2e2p(
     # of the kernel.
     if (isinstance(base_knl, DirectionalSourceDerivative)
             and isinstance(base_knl.inner_kernel, BiharmonicKernel)):
-        if issubclass(expn_class, LocalExpansionBase):
-            tgt_order = order + 1
-            tgt_order_grad = tgt_order - 1
-        else:
+        if not issubclass(expn_class, LocalExpansionBase):
             tgt_order = order - 1
             tgt_order_grad = tgt_order + 1
         slack = 0.7
