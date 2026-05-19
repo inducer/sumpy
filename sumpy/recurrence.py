@@ -247,6 +247,8 @@ from sympy import Expr, Symbol
 
 from pytools import obj_array
 
+from sumpy.symbolic import doit
+
 
 if TYPE_CHECKING:
     from sumpy.expansion.diff_op import (
@@ -336,7 +338,7 @@ def pde_to_ode_in_r(pde: LinearPDESystemOperator) -> tuple[
         for n in range(ode_order + 1, 0, -1):
             val = sp.Integer(1) if n == 1 else sp.Integer(0)
             expr = expr.subs(sp.Derivative(r_placeholder, (eps, n)), val)
-        return expr.doit()  # pyright: ignore[reportUnknownMemberType]
+        return doit(expr)
 
     ode_in_r = eval_r_placeholder_eps_derivs(ode_in_r)
     f_derivs = [
@@ -386,7 +388,7 @@ def _generate_nd_derivative_relations(
         for n in range(ode_order + 1, 0, -1):
             val = sp.Integer(1) if n == 1 else sp.Integer(0)
             expr = expr.subs(sp.Derivative(r_placeholder, (eps, n)), val)
-        return expr.doit()  # pyright: ignore[reportUnknownMemberType]
+        return doit(expr)
 
     f_derivs_x = [
         eval_r_placeholder_eps_derivs(e)  # pyright: ignore[reportUnknownArgumentType]
