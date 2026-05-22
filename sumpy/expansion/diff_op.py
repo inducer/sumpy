@@ -94,30 +94,33 @@ class DerivativeIdentifier:
 class LinearPDESystemOperator:
     r"""
     Represents a constant-coefficient linear differential operator of a
-    vector-valued function with :attr:`dim` spatial variables.
+    vector-valued function with :attr:`spatial_dim` spatial variables and
+    additional temporal variables.
 
     The operator is given by a tuple of immutable dictionaries. The dictionary
     maps a :class:`DerivativeIdentifier` to a (time- and space-independent)
-    coefficient. It optionally supports a time variable as the last element in
-    the multi-index of the :class:`DerivativeIdentifier`.
+    coefficient. In the :class:`DerivativeIdentifier`, each multi-index has
+    :attr:`spatial_dim` indices for the spatial variables and the remaining
+    ones represent temporal variables.
 
     The class also supports basic arithmetic, i.e. multiplication and addition
     with other operators and constants.
 
-    .. autoattribute:: dim
     .. autoattribute:: eqs
-
-    .. autoproperty:: is_time_dependent
-    .. autoproperty:: order
+    .. autoattribute:: spatial_dim
     .. autoproperty:: total_dims
+
+    .. autoproperty:: order
+    .. autoproperty:: nvariables
+    .. autoproperty:: is_time_dependent
+
     .. automethod:: to_sym
     """
 
-    dim: int
-    """The total number of spatial dimensions of the PDE (use :attr:`total_dims`
+    spatial_dim: int
+    """The number of spatial dimensions of the PDE (use :attr:`total_dims`
     to include time).
     """
-
     eqs: tuple[Mapping[DerivativeIdentifier, sym.Expr], ...]
     """A tuple of all the equations in the system."""
 
@@ -142,7 +145,7 @@ class LinearPDESystemOperator:
 
             eqs.append(constantdict(deriv_ident_to_coeff))
 
-        return LinearPDESystemOperator(self.dim, tuple(eqs))
+        return LinearPDESystemOperator(self.spatial_dim, tuple(eqs))
 
     def __rmul__(self, param: Number | sym.Expr) -> LinearPDESystemOperator:
         return self.__mul__(param)
@@ -151,7 +154,7 @@ class LinearPDESystemOperator:
         if not isinstance(other, LinearPDESystemOperator):
             return NotImplemented
 
-        assert self.dim == other.dim
+        assert self.spatial_dim == other.spatial_dim
         assert len(self.eqs) == len(other.eqs)
 
         eqs: list[Mapping[DerivativeIdentifier, sym.Expr]] = []
@@ -164,7 +167,7 @@ class LinearPDESystemOperator:
                     res[k] = v
             eqs.append(constantdict(res))
 
-        return LinearPDESystemOperator(self.dim, tuple(eqs))
+        return LinearPDESystemOperator(self.spatial_dim, tuple(eqs))
 
     def __radd__(self, other: LinearPDESystemOperator) -> LinearPDESystemOperator:
         return self.__add__(other)
@@ -179,17 +182,17 @@ class LinearPDESystemOperator:
 
     @override
     def __repr__(self) -> str:
-        return f"LinearPDESystemOperator({self.dim}, {self.eqs!r})"
+        return f"LinearPDESystemOperator({self.spatial_dim}, {self.eqs!r})"
 
     def __getitem__(self, idx: int | slice) -> LinearPDESystemOperator:
         item = self.eqs.__getitem__(idx)
         eqs = item if isinstance(item, tuple) else (item,)
-        return LinearPDESystemOperator(self.dim, eqs)
+        return LinearPDESystemOperator(self.spatial_dim, eqs)
 
     @property
     def is_time_dependent(self) -> bool:
         """Is *True* if the PDE operator has a time component."""
-        return self.dim != self.total_dims
+        return self.spatial_dim != self.total_dims
 
     @cached_property
     def order(self) -> int:
@@ -227,8 +230,8 @@ class LinearPDESystemOperator:
             (defaults to `["x0", "x1", ....]`)
         :arg t_var_name: the name of the temporal variables.
         """
-        x: list[sym.Expr] = list(sym.make_sym_vector(x_var_name, self.dim))
-        x.extend(sym.make_sym_vector(t_var_name, self.total_dims - self.dim))
+        x: list[sym.Expr] = list(sym.make_sym_vector(x_var_name, self.spatial_dim))
+        x.extend(sym.make_sym_vector(t_var_name, self.total_dims - self.spatial_dim))
 
         if fnames is None:
             noutputs = 0
@@ -282,8 +285,8 @@ def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> list[LinearPDESystemOp
     import sympy as sp
     from sympy.polys.orderings import grevlex
 
-    gens = [sp.Symbol(f"_x{i}") for i in range(pde.dim)]
-    gens += [sp.Symbol(f"_t{i}") for i in range(pde.total_dims - pde.dim)]
+    gens = [sp.Symbol(f"_x{i}") for i in range(pde.spatial_dim)]
+    gens += [sp.Symbol(f"_t{i}") for i in range(pde.total_dims - pde.spatial_dim)]
 
     max_vec_idx = max(deriv_ident.vec_idx for eq in pde.eqs
                       for deriv_ident in eq)
@@ -348,7 +351,8 @@ def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> list[LinearPDESystemOp
             for (mi, coeff) in zip(scalar_pde.monoms(),
                                    scalar_pde.coeffs(), strict=True)
         }
-        results.append(LinearPDESystemOperator(pde.dim, (constantdict(pde_dict),)))
+        results.append(LinearPDESystemOperator(pde.spatial_dim,
+                                               (constantdict(pde_dict),)))
 
     return results
 
@@ -464,7 +468,7 @@ def to_fourier_matrix(
 
 
 def laplacian(diff_op: LinearPDESystemOperator) -> LinearPDESystemOperator:
-    dim = diff_op.dim
+    dim = diff_op.spatial_dim
     empty: tuple[Mapping[DerivativeIdentifier, sym.Expr], ...] = (
         (constantdict(),) * len(diff_op.eqs))
 
@@ -490,17 +494,17 @@ def diff(
 
         eqs.append(constantdict(res))
 
-    return LinearPDESystemOperator(diff_op.dim, tuple(eqs))
+    return LinearPDESystemOperator(diff_op.spatial_dim, tuple(eqs))
 
 
 def divergence(diff_op: LinearPDESystemOperator) -> LinearPDESystemOperator:
-    if len(diff_op.eqs) != diff_op.dim:
+    if len(diff_op.eqs) != diff_op.spatial_dim:
         raise ValueError(
             "number of equations does not match system dimension: "
-            f"got {len(diff_op.eqs)} equations for {diff_op.dim}d system")
+            f"got {len(diff_op.eqs)} equations for {diff_op.spatial_dim}d system")
 
-    res = LinearPDESystemOperator(diff_op.dim, (constantdict(),))
-    for i in range(diff_op.dim):
+    res = LinearPDESystemOperator(diff_op.spatial_dim, (constantdict(),))
+    for i in range(diff_op.spatial_dim):
         mi = [0]*diff_op.total_dims
         mi[i] = 1
         res += diff(diff_op[i], tuple(mi))
@@ -514,7 +518,7 @@ def gradient(diff_op: LinearPDESystemOperator) -> LinearPDESystemOperator:
             f"can only take gradient of scalar system: got {len(diff_op.eqs)}d")
 
     eqs: list[Mapping[DerivativeIdentifier, sym.Expr]] = []
-    dim = diff_op.dim
+    dim = diff_op.spatial_dim
     for i in range(dim):
         mi = [0]*diff_op.total_dims
         mi[i] = 1
@@ -524,13 +528,13 @@ def gradient(diff_op: LinearPDESystemOperator) -> LinearPDESystemOperator:
 
 
 def curl(diff_op: LinearPDESystemOperator) -> LinearPDESystemOperator:
-    if len(diff_op.eqs) != diff_op.dim:
+    if len(diff_op.eqs) != diff_op.spatial_dim:
         raise ValueError(
             "number of equations does not match system dimension: "
-            f"got {len(diff_op.eqs)} equations for {diff_op.dim}d system")
+            f"got {len(diff_op.eqs)} equations for {diff_op.spatial_dim}d system")
 
-    if diff_op.dim != 3:
-        raise ValueError(f"can only take curl of 3d system: got {diff_op.dim}d")
+    if diff_op.spatial_dim != 3:
+        raise ValueError(f"can only take curl of 3d system: got {diff_op.spatial_dim}d")
 
     eqs: list[Mapping[DerivativeIdentifier, sym.Expr]] = []
     mis: list[MultiIndex] = []
@@ -545,7 +549,7 @@ def curl(diff_op: LinearPDESystemOperator) -> LinearPDESystemOperator:
             - diff(diff_op[(i+1) % 3], mis[(i+2) % 3]))
         eqs.append(new_pde.eqs[0])
 
-    return LinearPDESystemOperator(diff_op.dim, tuple(eqs))
+    return LinearPDESystemOperator(diff_op.spatial_dim, tuple(eqs))
 
 
 def concat(*ops: LinearPDESystemOperator) -> LinearPDESystemOperator:
@@ -555,8 +559,8 @@ def concat(*ops: LinearPDESystemOperator) -> LinearPDESystemOperator:
     if len(ops) == 1:
         return ops[0]
 
-    dim = ops[0].dim
-    if not all(op.dim == dim for op in ops):
+    dim = ops[0].spatial_dim
+    if not all(op.spatial_dim == dim for op in ops):
         raise ValueError(f"operators must have the same dimension (expected {dim}d)")
 
     eqs = list(ops[0].eqs)
