@@ -25,6 +25,7 @@ THE SOFTWARE.
 
 import logging
 from dataclasses import dataclass
+from functools import cached_property
 from itertools import accumulate
 from typing import TYPE_CHECKING, TypeAlias
 
@@ -92,23 +93,32 @@ class DerivativeIdentifier:
 class LinearPDESystemOperator:
     r"""
     Represents a constant-coefficient linear differential operator of a
-    vector-valued function with `dim` spatial variables.
+    vector-valued function with :attr:`dim` spatial variables.
 
-    It is represented by a tuple of immutable dictionaries. The dictionary maps a
-    :class:`DerivativeIdentifier` to the coefficient. Optionally supports a
-    time variable as the last variable in the multi-index of the
-    :class:`DerivativeIdentifier`.
+    The operator is given by a tuple of immutable dictionaries. The dictionary
+    maps a :class:`DerivativeIdentifier` to a (time- and space-independent)
+    coefficient. It optionally supports a time variable as the last element in
+    the multi-index of the :class:`DerivativeIdentifier`.
+
+    The class also supports basic arithmetic, i.e. multiplication and addition
+    with other operators and constants.
 
     .. autoattribute:: dim
     .. autoattribute:: eqs
 
+    .. autoproperty:: is_time_dependent
     .. autoproperty:: order
     .. autoproperty:: total_dims
     .. automethod:: to_sym
     """
 
     dim: int
+    """The total number of spatial dimensions of the PDE (use :attr:`total_dims`
+    to include time).
+    """
+
     eqs: tuple[Mapping[DerivativeIdentifier, sym.Expr], ...]
+    """A tuple of all the equations in the system."""
 
     if __debug__:
 
@@ -116,13 +126,7 @@ class LinearPDESystemOperator:
             # NOTE: this will raise a TypeError if it's not hashable
             _ = hash(self)
 
-    @property
-    def order(self) -> int:
-        deg = 0
-        for eq in self.eqs:
-            deg = max(deg, max(sum(ident.mi) for ident in eq))
-
-        return deg
+    # {{{ arithmetic
 
     def __mul__(self, other: Number | sym.Expr) -> LinearPDESystemOperator:
         import numbers
@@ -170,6 +174,8 @@ class LinearPDESystemOperator:
     def __neg__(self) -> LinearPDESystemOperator:
         return (-1) * self
 
+    # }}}
+
     @override
     def __repr__(self) -> str:
         return f"LinearPDESystemOperator({self.dim}, {self.eqs!r})"
@@ -180,29 +186,67 @@ class LinearPDESystemOperator:
         return LinearPDESystemOperator(self.dim, eqs)
 
     @property
+    def is_time_dependent(self) -> bool:
+        """Is *True* if the PDE operator has a time component."""
+        return self.dim != self.total_dims
+
+    @cached_property
+    def order(self) -> int:
+        """The order of the PDE operator (maximum order of all derivatives)."""
+        deg = 0
+        for eq in self.eqs:
+            deg = max(deg, max(sum(ident.mi) for ident in eq))
+
+        return deg
+
+    @cached_property
     def total_dims(self) -> int:
-        """
-        Returns the total number of dimensions including time
-        """
-        did = next(iter(self.eqs[0].keys()))
+        """The total number of dimensions (including time)."""
+        did = next(iter(self.eqs[0]))
         return len(did.mi)
 
-    def to_sym(self, fnames: Sequence[str] | None = None) -> list[sym.Expr]:
-        x: list[sym.Expr] = list(sym.make_sym_vector("x", self.dim))
-        x.extend(sym.make_sym_vector("t", self.total_dims - self.dim))
+    @cached_property
+    def nvariables(self) -> int:
+        """Number of variables in the system."""
+        max_vec_idx = max((did.vec_idx for eq in self.eqs for did in eq), default=-1)
+        return max_vec_idx + 1
+
+    def to_sym(
+            self,
+            fnames: Sequence[str] | None = None,
+            *,
+            x_var_name: str = "x",
+            t_var_name: str = "t",
+        ) -> list[sym.Expr]:
+        """Transform the system to a list of :mod:`sympy` expressions.
+
+        :arg fnames: the names of the variables in the system.
+            (defaults to `["f0", "f1", ....]`)
+        :arg x_var_name: the name of the spatial variables.
+            (defaults to `["x0", "x1", ....]`)
+        :arg t_var_name: the name of the temporal variables.
+        """
+        x: list[sym.Expr] = list(sym.make_sym_vector(x_var_name, self.dim))
+        x.extend(sym.make_sym_vector(t_var_name, self.total_dims - self.dim))
 
         if fnames is None:
             noutputs = 0
             for eq in self.eqs:
                 for deriv_ident in eq:
                     noutputs = max(noutputs, deriv_ident.vec_idx)
+
             fnames = [f"f{i}" for i in range(noutputs+1)]
 
         funcs = [sym.Function(fname)(*x) for fname in fnames]
+        if len(funcs) < self.nvariables:
+            raise ValueError(
+                f"'fnames' does not match system: {len(fnames)} names "
+                f"(for a system of {self.nvariables} variables)"
+            )
 
         res: list[sym.Expr] = []
         for eq in self.eqs:
-            sym_eq: sym.Expr = sym.sympify(0)
+            sym_eq: sym.Expr = sym.Integer(0)
             for deriv_ident, coeff in eq.items():
                 expr = funcs[deriv_ident.vec_idx]
                 for i, val in enumerate(deriv_ident.mi):
