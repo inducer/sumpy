@@ -518,6 +518,33 @@ def test_as_scalar_pde_elasticity():
 # }}}
 
 
+# {{{ test_as_scalar_pde_brinkman
+
+def test_as_scalar_pde_brinkman():
+    dim = 3
+    mu = sym.Symbol("mu")
+    k = sym.Symbol("k")
+
+    # NOTE: momentum + incompressibility equations
+    diff_op = make_identity_diff_op(dim, dim + 1)
+    u = diff_op[:3]
+    p = diff_op[3]
+    pde = concat(mu * (laplacian(u) - k**2 * u) - gradient(p), divergence(u))
+
+    # velocity components in Brinkman should satisfy Yukawa
+    for i in range(3):
+        scalar_pde = as_scalar_pde(pde, i)
+
+        logger.info("pde\n%s", scalar_pde)
+        logger.info("\n%s", laplacian(laplacian(u[i])))
+        assert scalar_pde == laplacian(laplacian(u[0]) - k**2 * u[0])
+
+    # pressure should satisfy Laplace
+    assert as_scalar_pde(pde, 3) == laplacian(u[0])
+
+# }}}
+
+
 # {{{ test_elasticity_new
 
 def test_elasticity_new():
@@ -623,6 +650,42 @@ def test_to_fourier_matrix_elasticity(dim: int) -> None:
             [-mu * k_sqr - mn * ks[0]**2, -mn * ks[0] * ks[1], -mn * ks[0] * ks[2]],
             [-mn * ks[1] * ks[0], -mu * k_sqr - mn * ks[1]**2, -mn * ks[1] * ks[2]],
             [-mn * ks[2] * ks[0], -mn * ks[2] * ks[1], -mu * k_sqr - mn * ks[2]**2],
+        ])
+    else:
+        raise ValueError(f"unsupported dimension: {dim}")
+
+    mat = to_fourier_matrix(pde, ks)
+    assert mat.expand() == expected.expand()
+
+# }}}
+
+
+# {{{ test_to_fourier_matrix_brinkman
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_to_fourier_matrix_brinkman(dim: int) -> None:
+    ks = sym.make_sym_vector("k", dim)
+    mu = sym.Symbol("mu")
+    kappa = sym.Symbol("k")
+
+    diff_op = make_identity_diff_op(dim, dim + 1)
+    u = diff_op[:dim]
+    p = diff_op[dim]
+    pde = concat(mu * (laplacian(u) - kappa**2 * u) - gradient(p), divergence(u))
+
+    k_sqr = sum(k**2 for k in ks)
+    if dim == 2:
+        expected = sym.Matrix([
+            [mu * (-k_sqr - kappa**2), 0, -sym.I*ks[0]],
+            [0, mu * (-k_sqr - kappa**2), -sym.I*ks[1]],
+            [sym.I*ks[0], sym.I*ks[1], 0],
+        ])
+    elif dim == 3:
+        expected = sym.Matrix([
+            [mu * (-k_sqr - kappa**2), 0, 0, -sym.I*ks[0]],
+            [0, mu * (-k_sqr - kappa**2), 0, -sym.I*ks[1]],
+            [0, 0, mu * (-k_sqr - kappa**2), -sym.I*ks[2]],
+            [sym.I*ks[0], sym.I*ks[1], sym.I*ks[2], 0],
         ])
     else:
         raise ValueError(f"unsupported dimension: {dim}")
