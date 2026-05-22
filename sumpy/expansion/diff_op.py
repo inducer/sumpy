@@ -63,6 +63,7 @@ Differential operator interface
 .. autoclass:: DerivativeIdentifier
 .. autofunction:: make_identity_diff_op
 .. autofunction:: as_scalar_pde
+.. autofunction:: to_fourier_matrix
 """
 
 
@@ -424,6 +425,42 @@ def as_scalar_pde(
         return pde
 
     return _get_all_scalar_pdes(pde)[comp_idx]
+
+
+def to_fourier_matrix(
+        pde: LinearPDESystemOperator,
+        ks: sym.Matrix,
+    ) -> sym.Matrix:
+    r"""Return the Fourier (symbol) matrix of a constant-coefficient PDE system.
+
+    Each spatial derivative :math:`\partial / \partial x_j` is replaced by
+    multiplication by :math:`i\,k_j`.  The result is a
+    :obj:`sympy.matrices.dense.Matrix` whose ``(row, col)`` entry is the
+    polynomial in the frequency variables contributed by equation *row* acting
+    on component *col*.
+
+    :returns: a matrix of size ``(len(pde.eqs), nvariables)``.
+    """
+    if pde.is_time_dependent:
+        raise ValueError("cannot compute Fourier symbol for time-dependent PDEs")
+
+    ncols = pde.nvariables
+
+    mat = []
+    for eq in pde.eqs:
+        row = [sym.Integer(0)] * ncols
+
+        for deriv_ident, coeff in eq.items():
+            factor: sym.Expr = sym.Integer(1)
+            for j, power in enumerate(deriv_ident.mi):
+                factor *= (sym.I * ks[j]) ** power
+
+            row[deriv_ident.vec_idx] += coeff * factor
+
+        assert len(row) == ncols
+        mat.append(row)
+
+    return sym.Matrix(mat)
 
 
 def laplacian(diff_op: LinearPDESystemOperator) -> LinearPDESystemOperator:
