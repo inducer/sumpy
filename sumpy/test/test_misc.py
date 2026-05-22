@@ -54,6 +54,7 @@ from sumpy.expansion.diff_op import (
     gradient,
     laplacian,
     make_identity_diff_op,
+    to_fourier_matrix,
 )
 from sumpy.kernel import (
     BiharmonicKernel,
@@ -475,7 +476,6 @@ def test_as_scalar_pde_maxwell():
 # {{{ test_as_scalar_pde_elasticity
 
 def test_as_scalar_pde_elasticity():
-
     # Ref: https://doi.org/10.1006/jcph.1996.0102
 
     diff_op = make_identity_diff_op(2, 5)
@@ -492,20 +492,28 @@ def test_as_scalar_pde_elasticity():
     x = (1, 0)
     y = (0, 1)
 
-    exprs = [
+    pde = concat(*[
         diff(sigma_x, x) + diff(tau, y),
         diff(tau, x) + diff(sigma_y, y),
         sigma_x - (lam + 2*mu)*diff(u, x) - lam*diff(v, y),
         sigma_y - (lam + 2*mu)*diff(v, y) - lam*diff(u, x),
         tau - mu*(diff(u, y) + diff(v, x)),
-    ]
+    ])
 
-    pde = concat(*exprs)
     assert pde.order == 1
     for i in range(5):
         scalar_pde = as_scalar_pde(pde, i)
         assert scalar_pde == laplacian(laplacian(diff_op[0]))
         assert scalar_pde.order == 4
+
+    # Wikipedia: displacement formulation
+
+    u = make_identity_diff_op(3, 3)
+    pde = mu * laplacian(u) + (mu + lam) * gradient(divergence(u))
+
+    for i in range(3):
+        scalar_pde = as_scalar_pde(pde, i)
+        assert scalar_pde == laplacian(laplacian(u[0]))
 
 # }}}
 
@@ -526,6 +534,101 @@ def test_elasticity_new():
     for knl in [elasticity_knl, elasticity_helper_knl]:
         assert not isinstance(knl, StokesletKernel)
         assert loads(dumps(knl)) == knl
+
+# }}}
+
+
+# {{{ test_to_fourier_matrix_laplace
+
+def test_to_fourier_matrix_scalar() -> None:
+    ks = sym.make_sym_vector("k", 3)
+    lam = sym.Symbol("lam")
+
+    # LaplaceKernel
+    kernel = LaplaceKernel(2)
+    mat = to_fourier_matrix(kernel.get_pde_as_diff_op(), ks)
+    assert mat == sym.Matrix([[-ks[0]**2 - ks[1]**2]])
+
+    kernel = LaplaceKernel(3)
+    mat = to_fourier_matrix(kernel.get_pde_as_diff_op(), ks)
+    assert mat == sym.Matrix([[-ks[0]**2 - ks[1]**2 - ks[2]**2]])
+
+    # YukawaKernel
+    kernel = YukawaKernel(2, yukawa_lambda_name=lam.name)
+    mat = to_fourier_matrix(kernel.get_pde_as_diff_op(), ks)
+    assert mat == sym.Matrix([[-ks[0]**2 - ks[1]**2 - lam**2]])
+
+    kernel = YukawaKernel(3, yukawa_lambda_name=lam.name)
+    mat = to_fourier_matrix(kernel.get_pde_as_diff_op(), ks)
+    assert mat == sym.Matrix([[-ks[0]**2 - ks[1]**2 - ks[2]**2 - lam**2]])
+
+# }}}
+
+
+# {{{ test_to_fourier_matrix_stokes
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_to_fourier_matrix_stokes(dim: int) -> None:
+    ks = sym.make_sym_vector("k", dim)
+    mu = sym.Symbol("mu")
+
+    diff_op = make_identity_diff_op(dim, dim + 1)
+    u = diff_op[:dim]
+    p = diff_op[dim]
+    pde = concat(mu * laplacian(u) - gradient(p), divergence(u))
+
+    k_sqr = sum(k**2 for k in ks)
+    if dim == 2:
+        expected = sym.Matrix([
+            [-mu * k_sqr, 0, -sym.I*ks[0]],
+            [0, -mu * k_sqr, -sym.I*ks[1]],
+            [sym.I*ks[0], sym.I*ks[1], 0],
+        ])
+    elif dim == 3:
+        expected = sym.Matrix([
+            [-mu * k_sqr, 0, 0, -sym.I*ks[0]],
+            [0, -mu * k_sqr, 0, -sym.I*ks[1]],
+            [0, 0, -mu * k_sqr, -sym.I*ks[2]],
+            [sym.I*ks[0], sym.I*ks[1], sym.I*ks[2], 0],
+        ])
+    else:
+        raise ValueError(f"unsupported dimension: {dim}")
+
+    mat = to_fourier_matrix(pde, ks)
+    assert mat.expand() == expected.expand()
+
+# }}}
+
+
+# {{{ test_to_fourier_matrix_elasticity
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_to_fourier_matrix_elasticity(dim: int) -> None:
+    ks = sym.make_sym_vector("k", dim)
+    mu = sym.Symbol("mu")
+    nu = sym.Symbol("nu")
+    mn = mu / (1 - 2 * nu)
+
+    u = make_identity_diff_op(dim, dim)
+    pde = mu * laplacian(u) + mn * gradient(divergence(u))
+
+    k_sqr = sum(k**2 for k in ks)
+    if dim == 2:
+        expected = sym.Matrix([
+            [-mu * k_sqr - mn * ks[0]**2, -mn * ks[0] * ks[1]],
+            [-mn * ks[1] * ks[0], -mu * k_sqr - mn * ks[1]**2],
+        ])
+    elif dim == 3:
+        expected = sym.Matrix([
+            [-mu * k_sqr - mn * ks[0]**2, -mn * ks[0] * ks[1], -mn * ks[0] * ks[2]],
+            [-mn * ks[1] * ks[0], -mu * k_sqr - mn * ks[1]**2, -mn * ks[1] * ks[2]],
+            [-mn * ks[2] * ks[0], -mn * ks[2] * ks[1], -mu * k_sqr - mn * ks[2]**2],
+        ])
+    else:
+        raise ValueError(f"unsupported dimension: {dim}")
+
+    mat = to_fourier_matrix(pde, ks)
+    assert mat.expand() == expected.expand()
 
 # }}}
 
