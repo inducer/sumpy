@@ -35,7 +35,6 @@ from typing import (
     cast,
     overload,
 )
-from warnings import warn
 
 import numpy as np
 from typing_extensions import Self, override
@@ -820,9 +819,10 @@ class ElasticityKernel(ExpressionKernel):
 
     .. autoattribute:: icomp
     .. autoattribute:: jcomp
-    .. autoattribute:: viscosity_mu
-    .. autoattribute:: poisson_ratio
+    .. autoattribute:: viscosity_mu_name
+    .. autoattribute:: poisson_ratio_name
     """
+
     mapper_method: ClassVar[str] = "map_elasticity_kernel"
 
     icomp: int
@@ -830,11 +830,11 @@ class ElasticityKernel(ExpressionKernel):
     jcomp: int
     """Component index for the kernel."""
 
-    viscosity_mu: float | SpatialConstant
+    viscosity_mu_name: str
     r"""The argument name to use for the dynamic viscosity :math:`\mu` when
     generating functions to evaluate this kernel.
     """
-    poisson_ratio: float | SpatialConstant
+    poisson_ratio_name: str
     r"""The argument name to use for Poisson's ratio :math:`\nu` when generating
     functions to evaluate this kernel.
     """
@@ -843,30 +843,20 @@ class ElasticityKernel(ExpressionKernel):
                  dim: int,
                  icomp: int,
                  jcomp: int,
-                 viscosity_mu: float | str | SpatialConstant = "mu",
-                 poisson_ratio: float | str | SpatialConstant = "nu") -> None:
-        if isinstance(viscosity_mu, str):
-            mu = SpatialConstant(viscosity_mu)
-        else:
-            warn("Passing a non-str 'viscosity_mu' is deprecated. This will "
-                 "raise a TypeError starting with Q1 2027.",
-                 DeprecationWarning, stacklevel=2)
+                 viscosity_mu_name: str = "mu",
+                 poisson_ratio_name: str = "nu") -> None:
+        if not isinstance(viscosity_mu_name, str):
+            raise TypeError(
+                f"'viscosity_mu_name' is not a str: {type(viscosity_mu_name)}"
+            )
 
-            mu = viscosity_mu
+        if not isinstance(poisson_ratio_name, str):
+            raise TypeError(
+                f"'poisson_ratio_name' is not a str: {type(poisson_ratio_name)}"
+            )
 
-        if isinstance(poisson_ratio, str):
-            nu = SpatialConstant(poisson_ratio)
-        else:
-            warn("Passing a non-str 'poisson_ratio' is deprecated. This will "
-                 "raise a TypeError starting with Q1 2027.",
-                 DeprecationWarning, stacklevel=2)
-
-            if poisson_ratio == 0.5:  # noqa: RUF069
-                raise ValueError(
-                    f"{type(self)} cannot accept 'poisson_ratio' of 0.5 "
-                    "(use StokesletKernel instead)")
-
-            nu = poisson_ratio
+        mu = SpatialConstant(viscosity_mu_name)
+        nu = SpatialConstant(poisson_ratio_name)
 
         d = make_sym_vector("d", dim)
         r = pymbolic_real_norm_2(d)
@@ -887,30 +877,22 @@ class ElasticityKernel(ExpressionKernel):
 
         object.__setattr__(self, "icomp", icomp)
         object.__setattr__(self, "jcomp", jcomp)
-        object.__setattr__(self, "viscosity_mu", mu)
-        object.__setattr__(self, "poisson_ratio", nu)
+        object.__setattr__(self, "viscosity_mu_name", viscosity_mu_name)
+        object.__setattr__(self, "poisson_ratio_name", poisson_ratio_name)
 
     @override
     def __str__(self) -> str:
         return (
             f"ElasticityKnl{self.dim}D_{self.icomp}{self.jcomp}"
-            f"({self.viscosity_mu}, {self.poisson_ratio})")
+            f"({self.viscosity_mu_name}, {self.poisson_ratio_name})")
 
     @override
     def __reduce__(self):
-        # TODO: remove this once we stop allowing non-str values for viscosity_mu
-        viscosity_mu = (
-            self.viscosity_mu.name
-            if isinstance(self.viscosity_mu, SpatialConstant)
-            else self.viscosity_mu)
-        poisson_ratio = (
-            self.poisson_ratio.name
-            if isinstance(self.poisson_ratio, SpatialConstant)
-            else self.poisson_ratio)
-
         return (
             type(self),
-            (self.dim, self.icomp, self.jcomp, viscosity_mu, poisson_ratio))
+            (self.dim, self.icomp, self.jcomp,
+             self.viscosity_mu_name,
+             self.poisson_ratio_name))
 
     @property
     @override
@@ -920,26 +902,10 @@ class ElasticityKernel(ExpressionKernel):
     @memoize_method
     @override
     def get_args(self) -> Sequence[KernelArgument]:
-        from sumpy.tools import get_all_variables
-        variables = get_all_variables(self.viscosity_mu)
-
-        args: list[KernelArgument] = [
-            KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64))
-            for v in variables]
-
-        return [*args, *self.get_source_args()]
-
-    @memoize_method
-    @override
-    def get_source_args(self) -> Sequence[KernelArgument]:
-        from sumpy.tools import get_all_variables
-        variables = get_all_variables(self.poisson_ratio)
-
-        args: list[KernelArgument] = [
-            KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64))
-            for v in variables]
-
-        return args
+        return [
+            KernelArgument(loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64)),
+            KernelArgument(loopy_arg=lp.ValueArg(self.poisson_ratio_name, np.float64)),
+        ]
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
@@ -968,7 +934,7 @@ class StokesletKernel(ExpressionKernel):
 
     .. autoattribute:: icomp
     .. autoattribute:: jcomp
-    .. autoattribute:: viscosity_mu
+    .. autoattribute:: viscosity_mu_name
     """
 
     mapper_method: ClassVar[str] = "map_stokeslet_kernel"
@@ -978,7 +944,7 @@ class StokesletKernel(ExpressionKernel):
     jcomp: int
     """Component index for the kernel."""
 
-    viscosity_mu: float | SpatialConstant
+    viscosity_mu_name: str
     r"""The argument name to use for the dynamic viscosity :math:`\mu` when
     generating functions to evaluate this kernel.
     """
@@ -987,24 +953,12 @@ class StokesletKernel(ExpressionKernel):
                  dim: int,
                  icomp: int,
                  jcomp: int,
-                 viscosity_mu: float | str | SpatialConstant = "mu",
-                 poisson_ratio: float | str | SpatialConstant | None = None) -> None:
-        if poisson_ratio is not None:
-            warn(f"Passing 'poisson_ratio' to {type(self)} is deprecated. This "
-                 "argument will be removed in Q1 2027.",
-                 DeprecationWarning, stacklevel=2)
-
-            if poisson_ratio != 0.5:  # noqa: RUF069
-                raise ValueError("'poisson_ratio' must be 0.5 (if provided)")
-
-        if isinstance(viscosity_mu, str):
-            mu = SpatialConstant(viscosity_mu)
-        else:
-            warn("Passing a non-str 'viscosity_mu' is deprecated. This will "
-                 "raise a TypeError starting with Q1 2027.",
-                 DeprecationWarning, stacklevel=2)
-
-            mu = viscosity_mu
+                 viscosity_mu_name: str = "mu") -> None:
+        if not isinstance(viscosity_mu_name, str):
+            raise TypeError(
+                f"'viscosity_mu_name' is not a str: {type(viscosity_mu_name)}"
+            )
+        mu = SpatialConstant(viscosity_mu_name)
 
         d = make_sym_vector("d", dim)
         r = pymbolic_real_norm_2(d)
@@ -1022,25 +976,19 @@ class StokesletKernel(ExpressionKernel):
         super().__init__(dim, expression=expr, global_scaling_const=scaling)
         object.__setattr__(self, "icomp", icomp)
         object.__setattr__(self, "jcomp", jcomp)
-        object.__setattr__(self, "viscosity_mu", mu)
+        object.__setattr__(self, "viscosity_mu_name", viscosity_mu_name)
 
     @override
     def __str__(self) -> str:
         return (
             f"StokesletKnl{self.dim}D_{self.icomp}{self.jcomp}"
-            f"({self.viscosity_mu})")
+            f"({self.viscosity_mu_name})")
 
     @override
     def __reduce__(self):
-        # TODO: remove this once we stop allowing non-str values for viscosity_mu
-        viscosity_mu = (
-            self.viscosity_mu.name
-            if isinstance(self.viscosity_mu, SpatialConstant)
-            else self.viscosity_mu)
-
         return (
             type(self),
-            (self.dim, self.icomp, self.jcomp, viscosity_mu))
+            (self.dim, self.icomp, self.jcomp, self.viscosity_mu_name))
 
     @property
     @override
@@ -1050,15 +998,11 @@ class StokesletKernel(ExpressionKernel):
     @memoize_method
     @override
     def get_args(self) -> Sequence[KernelArgument]:
-        # TODO: remove this once we stop allowing non-str values for viscosity_mu
-        if isinstance(self.viscosity_mu, SpatialConstant):
-            return [
-                KernelArgument(
-                    loopy_arg=lp.ValueArg(self.viscosity_mu.name, np.float64),
-                )
-            ]
-        else:
-            return []
+        return [
+            KernelArgument(
+                loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64),
+            )
+        ]
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
@@ -1084,7 +1028,7 @@ class StressletKernel(ExpressionKernel):
     .. autoattribute:: icomp
     .. autoattribute:: jcomp
     .. autoattribute:: kcomp
-    .. autoattribute:: viscosity_mu
+    .. autoattribute:: viscosity_mu_name
     """
     mapper_method: ClassVar[str] = "map_stresslet_kernel"
 
@@ -1095,7 +1039,7 @@ class StressletKernel(ExpressionKernel):
     kcomp: int
     """Component index for the kernel."""
 
-    viscosity_mu: float | SpatialConstant
+    viscosity_mu_name: str
     r"""The argument name to use for the dynamic viscosity :math:`\mu` when
     generating functions to evaluate this kernel.
     """
@@ -1105,16 +1049,12 @@ class StressletKernel(ExpressionKernel):
                  icomp: int,
                  jcomp: int,
                  kcomp: int,
-                 viscosity_mu: float | str | SpatialConstant = "mu") -> None:
+                 viscosity_mu_name: str = "mu") -> None:
         # mu is unused but kept for consistency with the Stokeslet.
-        if isinstance(viscosity_mu, str):
-            mu = SpatialConstant(viscosity_mu)
-        else:
-            warn("Passing a non-str 'viscosity_mu' is deprecated. This will "
-                 "raise a TypeError starting with Q1 2027.",
-                 DeprecationWarning, stacklevel=2)
-
-            mu = viscosity_mu
+        if not isinstance(viscosity_mu_name, str):
+            raise TypeError(
+                f"'viscosity_mu_name' is not a str: {type(viscosity_mu_name)}"
+            )
 
         d = make_sym_vector("d", dim)
         r = pymbolic_real_norm_2(d)
@@ -1133,39 +1073,33 @@ class StressletKernel(ExpressionKernel):
         object.__setattr__(self, "icomp", icomp)
         object.__setattr__(self, "jcomp", jcomp)
         object.__setattr__(self, "kcomp", kcomp)
-        object.__setattr__(self, "viscosity_mu", mu)
+        object.__setattr__(self, "viscosity_mu_name", viscosity_mu_name)
 
     @override
     def __reduce__(self) -> tuple[object, ...]:
-        # TODO: remove this once we stop allowing non-str values for viscosity_mu
-        viscosity_mu = (
-            self.viscosity_mu.name
-            if isinstance(self.viscosity_mu, SpatialConstant)
-            else self.viscosity_mu)
-
         return (
             self.__class__,
-            (self.dim, self.icomp, self.jcomp, self.kcomp, viscosity_mu))
+            (self.dim, self.icomp, self.jcomp, self.kcomp,
+             self.viscosity_mu_name))
 
     @property
     @override
     def is_complex_valued(self) -> bool:
         return False
 
+    @memoize_method
+    @override
+    def get_args(self) -> Sequence[KernelArgument]:
+        # NOTE: this is not used, but kept for symmetry with the StokesletKernel
+        return [
+            KernelArgument(loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64))
+        ]
+
     @override
     def __str__(self) -> str:
         return (
             f"StressletKnl{self.dim}D_{self.icomp}{self.jcomp}{self.kcomp}"
-            f"({self.viscosity_mu})")
-
-    @memoize_method
-    @override
-    def get_args(self) -> Sequence[KernelArgument]:
-        from sumpy.tools import get_all_variables
-        variables = get_all_variables(self.viscosity_mu)
-        return [
-                KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64))
-                for v in variables]
+            f"({self.viscosity_mu_name})")
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
@@ -1189,8 +1123,8 @@ class LineOfCompressionKernel(ExpressionKernel):
          `doi:10.1063/1.1745385 <https://doi.org/10.1063/1.1745385>`__.
 
     .. autoattribute:: axis
-    .. autoattribute:: viscosity_mu
-    .. autoattribute:: poisson_ratio
+    .. autoattribute:: viscosity_mu_name
+    .. autoattribute:: poisson_ratio_name
     """
 
     mapper_method: ClassVar[str] = "map_line_of_compression_kernel"
@@ -1198,11 +1132,11 @@ class LineOfCompressionKernel(ExpressionKernel):
     axis: int
     """Axis number (defaulting to 2 for the z axis)."""
 
-    viscosity_mu: float | SpatialConstant
+    viscosity_mu_name: str
     r"""The argument name to use for the dynamic viscosity :math:`\mu` when
     generating functions to evaluate this kernel.
     """
-    poisson_ratio: float | SpatialConstant
+    poisson_ratio_name: str
     r"""The argument name to use for Poisson's ratio :math:`\nu` when
     generating functions to evaluate this kernel.
     """
@@ -1210,29 +1144,21 @@ class LineOfCompressionKernel(ExpressionKernel):
     def __init__(self,
                  dim: int = 3,
                  axis: int = 2,
-                 viscosity_mu: float | str | SpatialConstant = "mu",
-                 poisson_ratio: float | str | SpatialConstant = "nu"
+                 viscosity_mu_name: str = "mu",
+                 poisson_ratio_name: str = "nu"
              ) -> None:
-        if isinstance(viscosity_mu, str):
-            mu = SpatialConstant(viscosity_mu)
-        else:
-            warn("Passing a non-str 'viscosity_mu' is deprecated. This will "
-                 "raise a TypeError starting with Q1 2027.",
-                 DeprecationWarning, stacklevel=2)
+        if not isinstance(viscosity_mu_name, str):
+            raise TypeError(
+                f"'viscosity_mu_name' is not a str: {type(viscosity_mu_name)}"
+            )
 
-            mu = viscosity_mu
+        if not isinstance(poisson_ratio_name, str):
+            raise TypeError(
+                f"'poisson_ratio_name' is not a str: {type(poisson_ratio_name)}"
+            )
 
-        if isinstance(poisson_ratio, str):
-            nu = SpatialConstant(poisson_ratio)
-        else:
-            warn("Passing a non-str 'poisson_ratio' is deprecated. This will "
-                 "raise a TypeError starting with Q1 2027.",
-                 DeprecationWarning, stacklevel=2)
-
-            if poisson_ratio == 0.5:  # noqa: RUF069
-                raise ValueError(f"{type(self)} cannot accept 'poisson_ratio' of 0.5")
-
-            nu = poisson_ratio
+        mu = SpatialConstant(viscosity_mu_name)
+        nu = SpatialConstant(poisson_ratio_name)
 
         if dim == 3:
             d = make_sym_vector("d", dim)
@@ -1247,31 +1173,21 @@ class LineOfCompressionKernel(ExpressionKernel):
         super().__init__(dim, expression=expr, global_scaling_const=scaling)
 
         object.__setattr__(self, "axis", axis)
-        object.__setattr__(self, "viscosity_mu", mu)
-        object.__setattr__(self, "poisson_ratio", nu)
+        object.__setattr__(self, "viscosity_mu_name", viscosity_mu_name)
+        object.__setattr__(self, "poisson_ratio_name", poisson_ratio_name)
 
     @override
     def __str__(self) -> str:
         return (
             f"LineOfCompressionKnl{self.dim}D_{self.axis}"
-            f"({self.viscosity_mu}, {self.poisson_ratio})")
+            f"({self.viscosity_mu_name}, {self.poisson_ratio_name})")
 
     @override
     def __reduce__(self) -> tuple[object, ...]:
-        # TODO: remove this once we stop allowing non-str values for viscosity_mu
-        viscosity_mu = (
-            self.viscosity_mu.name
-            if isinstance(self.viscosity_mu, SpatialConstant)
-            else self.viscosity_mu)
-        poisson_ratio = (
-            self.poisson_ratio.name
-            if isinstance(self.poisson_ratio, SpatialConstant)
-            else self.poisson_ratio)
-
         return (
             self.__class__,
-            (self.dim, self.axis, viscosity_mu, poisson_ratio),
-        )
+            (self.dim, self.axis,
+             self.viscosity_mu_name, self.poisson_ratio_name))
 
     @property
     @override
@@ -1281,16 +1197,10 @@ class LineOfCompressionKernel(ExpressionKernel):
     @memoize_method
     @override
     def get_args(self) -> Sequence[KernelArgument]:
-        from sumpy.tools import get_all_variables
-        variables = [
-            *get_all_variables(self.viscosity_mu),
-            *get_all_variables(self.poisson_ratio)]
-
-        args: list[KernelArgument] = [
-            KernelArgument(loopy_arg=lp.ValueArg(v.name, np.float64))
-            for v in variables]
-
-        return args
+        return [
+            KernelArgument(loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64)),
+            KernelArgument(loopy_arg=lp.ValueArg(self.poisson_ratio_name, np.float64)),
+        ]
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:

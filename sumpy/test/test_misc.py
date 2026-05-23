@@ -550,11 +550,11 @@ def test_as_scalar_pde_brinkman():
 def test_elasticity_pickle():
     from pickle import dumps, loads
     stokes_knl = StokesletKernel(
-        3, 0, 1, viscosity_mu="mu1")
+        3, 0, 1, viscosity_mu_name="mu1")
     elasticity_knl = ElasticityKernel(
-        3, 0, 1, viscosity_mu="mu1", poisson_ratio="nu1")
+        3, 0, 1, viscosity_mu_name="mu1", poisson_ratio_name="nu1")
     elasticity_helper_knl = LineOfCompressionKernel(
-        3, 0, viscosity_mu="mu1", poisson_ratio="nu1")
+        3, 0, viscosity_mu_name="mu1", poisson_ratio_name="nu1")
 
     assert loads(dumps(stokes_knl)) == stokes_knl
     assert loads(dumps(elasticity_knl)) == elasticity_knl
