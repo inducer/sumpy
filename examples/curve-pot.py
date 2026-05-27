@@ -171,6 +171,8 @@ def draw_pot_figure(aspect_ratio,
     targets = actx.from_numpy(fp.points)
     sources = actx.from_numpy(native_curve.pos)
     ovsmp_sources = actx.from_numpy(ovsmp_curve.pos)
+    if expn_class is LineTaylorLocalExpansion:
+        lpot_kwargs["expansion_vec"] = actx.from_numpy(native_curve.pos - centers)
 
     if 0:
         # {{{ build matrix

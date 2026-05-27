@@ -27,7 +27,7 @@ import logging
 import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 from typing_extensions import override
 
@@ -67,7 +67,6 @@ __doc__ = """
 .. autoclass:: H2DLocalExpansion
 .. autoclass:: Y2DLocalExpansion
 .. autoclass:: LineTaylorLocalExpansion
-.. autoclass:: AsymptoticDividingLineTaylorExpansion
 """
 
 
@@ -116,8 +115,6 @@ class LocalExpansionBase(ExpansionBase, ABC):
 
 @dataclass(frozen=True)
 class LineTaylorLocalExpansion(LocalExpansionBase, ABC):
-    tau: float = field(kw_only=True, default=1)
-
     @property
     @override
     def m2l_translation(self) -> M2LTranslationBase:
@@ -148,7 +145,8 @@ class LineTaylorLocalExpansion(LocalExpansionBase, ABC):
                     "formation")
 
         tau = sym.Symbol("tau")
-        avec_line = cast("sym.Matrix", avec + tau*bvec)
+        expansion_line = bvec
+        avec_line = avec + tau*expansion_line
         line_kernel = kernel.get_expression(avec_line)
 
         from sumpy.symbolic import USE_SYMENGINE
@@ -179,15 +177,25 @@ class LineTaylorLocalExpansion(LocalExpansionBase, ABC):
                  coeffs: Sequence[sym.Expr],
                  bvec: sym.Matrix,
                  rscale: sym.Expr,
-                 sac: SymbolicAssignmentCollection | None = None) -> sym.Expr:
+                 sac: SymbolicAssignmentCollection | None = None,
+                 *,
+                 expansion_vec: sym.Matrix) -> sym.Expr:
         # no point in heeding rscale here--just ignore it
 
         # NOTE: We can't meaningfully apply target derivatives here.
         # Instead, this is handled in LayerPotentialBase._evaluate.
 
+        if expansion_vec == bvec:
+            return sym.Add(*(
+                        coeffs[self.get_storage_index(i)] / math.factorial(i[0])
+                        for i in self.get_coefficient_identifiers()))
+
+        tau = ((bvec.T*expansion_vec)[0, 0]
+                / (expansion_vec.T*expansion_vec)[0, 0])
+
         return sym.Add(*(
                     coeffs[self.get_storage_index(i)] / math.factorial(i[0])
-                    * self.tau**i[0]
+                    * tau**i[0]
                     for i in self.get_coefficient_identifiers()))
 
     @override
@@ -208,89 +216,90 @@ class LineTaylorLocalExpansion(LocalExpansionBase, ABC):
 
 # {{{ Asymptotic dividing line Taylor expansion
 
-@dataclass(frozen=True)
-class AsymptoticDividingLineTaylorExpansion(LineTaylorLocalExpansion):
-    r"""
-    A target-specific modified line Taylor expansion.
-
-    The expansion line is defined as :math:`l(\tau) = \text{avec} + \tau \cdot
-    \text{bvec}` at a target point :math:`x`. The modified line Taylor expansion takes
-    the form:
-
-    .. math::
-
-        \sum_{k=0}^{\text{order}} \frac{g_k}{k!} \tau^k,
-
-    where:
-
-    .. math::
-
-        g_k := \frac{d^k}{d\tau^k} \left(
-        \frac{\text{kernel}(l(\tau))}{\text{asymptotic}(l(\tau))}
-        \right) \bigg|_{\tau=0}
-
-    .. automethod:: get_asymptotic_expression
-    """
-
-    asymptotic: Any = field(kw_only=True)
-
-    def get_asymptotic_expression(self, scaled_dist_vec: sym.Matrix) -> sym.Expr:
-        from sumpy.symbolic import PymbolicToSympyMapperWithSymbols, Symbol
-
-        expr = PymbolicToSympyMapperWithSymbols()(self.asymptotic)
-        expr = expr.xreplace({Symbol(f"d{i}"): dist_vec_i
-                             for i, dist_vec_i in enumerate(scaled_dist_vec)})
-
-        tau = sym.Symbol("tau")
-
-        b = scaled_dist_vec.applyfunc(lambda expr: expr.coeff(tau))
-        a = scaled_dist_vec - tau*b
-        expr = expr.subs({Symbol(f"a{i}"): a_i for i, a_i in enumerate(a)})
-        expr = expr.subs({Symbol(f"b{i}"): b_i for i, b_i in enumerate(b)})
-
-        return expr
-
-    @override
-    def coefficients_from_source(self,
-                kernel: Kernel,
-                avec: sym.Matrix,
-                bvec: sym.Matrix | None,
-                rscale: sym.Expr,
-                sac: SymbolicAssignmentCollection | None = None
-            ) -> Sequence[sym.Expr]:
-        # no point in heeding rscale here--just ignore it
-        if bvec is None:
-            raise RuntimeError("cannot use line-Taylor expansions in a setting "
-                    "where the center-target vector is not known at coefficient "
-                    "formation")
-
-        tau = sym.Symbol("tau")
-
-        avec_line = cast("sym.Matrix", avec + tau*bvec)
-        line_kernel = (
-            kernel.get_expression(avec_line)
-            / self.get_asymptotic_expression(avec_line))
-
-        from sumpy.symbolic import USE_SYMENGINE
-        if USE_SYMENGINE:
-            from sumpy.derivative_taker import ExprDerivativeTaker
-            deriv_taker = ExprDerivativeTaker(line_kernel, (tau,), sac=sac,
-                                              rscale=sym.sympify(1))
-
-            return [kernel.postprocess_at_source(deriv_taker.diff(i), avec)
-                    .subs(tau, 0)
-                    for i in self.get_coefficient_identifiers()]
-        else:
-            # Workaround for sympy. The automatic distribution after
-            # single-variable diff makes the expressions very large
-            # (https://github.com/sympy/sympy/issues/4596), so avoid doing
-            # single variable diff.
-            #
-            # See also https://gitlab.tiker.net/inducer/pytential/merge_requests/12
-
-            return [kernel.postprocess_at_source(line_kernel.diff(tau, i), avec)
-                    .subs(tau, 0)
-                    for i, in self.get_coefficient_identifiers()]
+# @dataclass(frozen=True)
+# class AsymptoticDividingLineTaylorExpansion(LineTaylorLocalExpansion):
+#     r"""
+#     A target-specific modified line Taylor expansion.
+#
+#     The expansion line is defined as :math:`l(\tau) = \text{avec} + \tau \cdot
+#     \text{bvec}` at a target point :math:`x`. The modified line Taylor expansion
+#     takes the form:
+#
+#     .. math::
+#
+#         \sum_{k=0}^{\text{order}} \frac{g_k}{k!} \tau^k,
+#
+#     where:
+#
+#     .. math::
+#
+#         g_k := \frac{d^k}{d\tau^k} \left(
+#         \frac{\text{kernel}(l(\tau))}{\text{asymptotic}(l(\tau))}
+#         \right) \bigg|_{\tau=0}
+#
+#     .. automethod:: get_asymptotic_expression
+#     """
+#
+#     asymptotic: Any = field(kw_only=True)
+#
+#     def get_asymptotic_expression(self, scaled_dist_vec: sym.Matrix) -> sym.Expr:
+#         from sumpy.symbolic import PymbolicToSympyMapperWithSymbols, Symbol
+#
+#         expr = PymbolicToSympyMapperWithSymbols()(self.asymptotic)
+#         expr = expr.xreplace({Symbol(f"d{i}"): dist_vec_i
+#                              for i, dist_vec_i in enumerate(scaled_dist_vec)})
+#
+#         tau = sym.Symbol("tau")
+#
+#         b = scaled_dist_vec.applyfunc(lambda expr: expr.coeff(tau))
+#         a = scaled_dist_vec - tau*b
+#         expr = expr.subs({Symbol(f"a{i}"): a_i for i, a_i in enumerate(a)})
+#         expr = expr.subs({Symbol(f"b{i}"): b_i for i, b_i in enumerate(b)})
+#
+#         return expr
+#
+#     @override
+#     def coefficients_from_source(self,
+#                 kernel: Kernel,
+#                 avec: sym.Matrix,
+#                 bvec: sym.Matrix | None,
+#                 rscale: sym.Expr,
+#                 sac: SymbolicAssignmentCollection | None = None
+#             ) -> Sequence[sym.Expr]:
+#         # no point in heeding rscale here--just ignore it
+#         if bvec is None:
+#             raise RuntimeError("cannot use line-Taylor expansions in a setting "
+#                     "where the center-target vector is not known at coefficient "
+#                     "formation")
+#
+#         tau = sym.Symbol("tau")
+#
+#         line_vec = bvec
+#         avec_line = avec + tau*line_vec
+#         line_kernel = (
+#             kernel.get_expression(avec_line)
+#             / self.get_asymptotic_expression(avec_line))
+#
+#         from sumpy.symbolic import USE_SYMENGINE
+#         if USE_SYMENGINE:
+#             from sumpy.derivative_taker import ExprDerivativeTaker
+#             deriv_taker = ExprDerivativeTaker(line_kernel, (tau,), sac=sac,
+#                                               rscale=sym.sympify(1))
+#
+#             return [kernel.postprocess_at_source(deriv_taker.diff(i), avec)
+#                     .subs(tau, 0)
+#                     for i in self.get_coefficient_identifiers()]
+#         else:
+#             # Workaround for sympy. The automatic distribution after
+#             # single-variable diff makes the expressions very large
+#             # (https://github.com/sympy/sympy/issues/4596), so avoid doing
+#             # single variable diff.
+#             #
+#             # See also https://gitlab.tiker.net/inducer/pytential/merge_requests/12
+#
+#             return [kernel.postprocess_at_source(line_kernel.diff(tau, i), avec)
+#                     .subs(tau, 0)
+#                     for i, in self.get_coefficient_identifiers()]
 
 # }}}
 
