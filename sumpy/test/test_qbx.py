@@ -97,11 +97,15 @@ def test_direct_qbx_vs_eigval(
         centers = actx.from_numpy((1 - radius) * unit_circle)
         expansion_radii = actx.from_numpy(radius * np.ones(n))
         strengths = (actx.from_numpy(sigma * h),)
+        extra_kwargs = {}
+        if expn_class is LineTaylorLocalExpansion:
+            extra_kwargs["expansion_vec"] = targets - centers
 
         result_qbx, = lpot(
                 actx,
                 targets, sources, centers, strengths,
-                expansion_radii=expansion_radii)
+                expansion_radii=expansion_radii,
+                **extra_kwargs)
         result_qbx = actx.to_numpy(result_qbx)
 
         error = np.linalg.norm(result_ref - result_qbx, np.inf)
@@ -173,15 +177,20 @@ def test_direct_qbx_vs_eigval_with_tgt_deriv(
         centers = actx.from_numpy((1 - radius) * unit_circle)
         expansion_radii = actx.from_numpy(radius * np.ones(n))
         strengths = (actx.from_numpy(sigma * h),)
+        extra_kwargs = {}
+        if expn_class is LineTaylorLocalExpansion:
+            extra_kwargs["expansion_vec"] = targets - centers
 
         result_qbx_dx, = lpot_dx(
                 actx,
                 targets, sources, centers, strengths,
-                expansion_radii=expansion_radii)
+                expansion_radii=expansion_radii,
+                **extra_kwargs)
         result_qbx_dy, = lpot_dy(
                 actx,
                 targets, sources, centers, strengths,
-                expansion_radii=expansion_radii)
+                expansion_radii=expansion_radii,
+                **extra_kwargs)
 
         result_qbx_dx = actx.to_numpy(result_qbx_dx)
         result_qbx_dy = actx.to_numpy(result_qbx_dy)
