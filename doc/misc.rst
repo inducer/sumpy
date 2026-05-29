@@ -111,7 +111,7 @@ The FAQ is maintained collaboratively on the
 Acknowledgments
 ===============
 
-Work on meshmode was supported in part by
+Work on sumpy was supported in part by
 
 * the US National Science Foundation under grant numbers DMS-1418961,
   DMS-1654756, SHF-1911019, and OAC-1931577.
