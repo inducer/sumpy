@@ -39,7 +39,7 @@ __doc__ = """
 
 import logging
 import math
-from typing import TYPE_CHECKING, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from typing_extensions import override
 
@@ -48,6 +48,8 @@ from pymbolic.mapper import IdentityMapper as IdentityMapperBase
 
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
+
     from pymbolic.typing import ArithmeticExpression, Expression
     from pytools import T
     from pytools.obj_array import ObjectArray1D
@@ -94,6 +96,9 @@ def _find_symbolic_backend():
 _find_symbolic_backend()
 
 # }}}
+
+
+# {{{ symbolic API classes
 
 if TYPE_CHECKING or not USE_SYMENGINE:
     import sympy as sym
@@ -169,6 +174,8 @@ else:
 
     def unevaluated_pow(a: Expr, b: complex | Expr) -> Expr:
         return Pow(a, b, evaluate=False)
+
+# }}}
 
 
 # {{{ debugging of sympy CSE via Maxima
@@ -253,12 +260,125 @@ def checked_cse(exprs, symbols=None):
 # }}}
 
 
+# {{{ solve_lu
+
+def forward_substitution(
+        L: Matrix,  # noqa: N803
+        b: Matrix,
+        postprocess: Callable[[Basic], Basic],
+    ) -> Matrix:
+    """Given a lower triangular matrix *L* and a column vector *b*,
+    solve the system ``Lx = b`` and apply the callable *postprocess_division*
+    on each expression at the end of division calls.
+    """
+    n = len(b)
+    x = Matrix(b)
+
+    for i in range(n):
+        for j in range(i):
+            x[i] -= L[i, j] * x[j]
+        x[i] = postprocess(x[i] / L[i, i])
+
+    return x
+
+
+def backward_substitution(
+        U: Matrix,  # noqa: N803
+        b: Matrix,
+        postprocess: Callable[[Basic], Basic],
+    ) -> Matrix:
+    """Given an upper triangular matrix *U* and a column vector *b*,
+    solve the system ``Ux = b`` and apply the callable *postprocess_division*
+    on each expression at the end of division calls.
+    """
+    n = len(b)
+    x = sym.Matrix(b)
+
+    for i in range(n - 1, -1, -1):
+        for j in range(n - 1, i, -1):
+            x[i] -= U[i, j] * x[j]
+        x[i] = postprocess(x[i] / U[i, i])
+
+    return x
+
+
+def solve_lu(
+        L: Matrix,  # noqa: N803
+        U: Matrix,  # noqa: N803
+        permutation: Sequence[tuple[int, int]],
+        b: Matrix, *,
+        postprocess: Callable[[Basic], Basic] | None = None,
+    ) -> Matrix:
+    if postprocess is None:
+        def default_postprocess(x: Basic) -> Basic:
+            return x
+
+        postprocess = default_postprocess
+
+    # Permute first
+    b = sym.Matrix(b)
+    for p, q in permutation:
+        b[p], b[q] = b[q], b[p]
+
+    return backward_substitution(
+        U,
+        forward_substitution(L, b, postprocess),
+        postprocess,
+    )
+
+# }}}
+
+
+# {{{ helpers
+
+
+if USE_SYMENGINE:
+    def evalf(expr: Expr, prec: int = 100) -> Expr:
+        """Evaluate an expression numerically using ``prec`` number of bits."""
+        return expr.n(prec=prec)
+
+    def simplify(expr: Expr) -> Expr:
+        return expr.simplify()
+else:
+    def evalf(expr: Expr, prec: int = 100) -> Expr:
+        """Evaluate an expression numerically using ``prec`` number of bits."""
+        dps = int(sym.log(2**prec, 10))
+        return expr.n(n=dps)
+
+    def simplify(expr: Expr) -> Expr:
+        return sym.simplify(expr)
+
+
+def chop(expr: Basic, tol: float = 1.0e-8) -> Basic:
+    """Replace numbers in *expr* with their closest integer.
+
+    Given a symbolic expression, this removes all occurrences of numbers
+    with absolute value less than the given tolerance and replaces floating
+    point numbers that are close to an integer up to the given relative
+    tolerance by the integer.
+    """
+    nums = expr.atoms(Number)
+    replace_dict: dict[Any, float] = {}
+    for num in nums:
+        if float(abs(num)) < tol:
+            replace_dict[num] = 0
+        else:
+            new_num = float(num)
+            if abs(new_num) < tol or abs(int(new_num) - new_num) < tol * abs(new_num):
+                new_num = int(new_num)
+
+            replace_dict[num] = new_num
+
+    return expr.xreplace(replace_dict)
+
+
 def sym_real_norm_2(x: Matrix) -> Expr:
     return sqrt((x.T*x)[0, 0])
 
 
 def pymbolic_real_norm_2(
-            x: ObjectArray1D[ArithmeticExpression]) -> ArithmeticExpression:
+        x: ObjectArray1D[ArithmeticExpression]
+    ) -> ArithmeticExpression:
     return prim.Variable("sqrt")(x @ x)
 
 
@@ -295,6 +415,10 @@ class SpatialConstant(prim.Variable):
 
         raise ValueError(f"expression is not a spatial constant: {expr!r}")
 
+# }}}
+
+
+# {{{ PymbolicToSym mappers
 
 class PymbolicToSympyMapper(PymbolicToSympyMapperBase):
     def map_spatial_constant(self, expr: SpatialConstant) -> Basic:
@@ -364,6 +488,18 @@ class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):
         return PymbolicToSympyMapper.map_call(self, expr)
 
 
+def to_sympy(expr: Expression) -> Basic:
+    return PymbolicToSympyMapperWithSymbols().to_expr(expr)
+
+
+def to_pymbolic(expr: Basic) -> Expression:
+    return SympyToPymbolicMapper()(expr)
+
+# }}}
+
+
+# {{{ Bessel and Hankel functions
+
 from sympy import Function as SympyFunction
 
 
@@ -401,5 +537,7 @@ if not TYPE_CHECKING and USE_SYMENGINE:
 
     def Hankel1(*args):   # noqa: N802
         return sympify(_SympyHankel1(*args))
+
+# }}}
 
 # vim: fdm=marker
