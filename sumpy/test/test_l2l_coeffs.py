@@ -32,7 +32,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-import scipy.special as spsp
 
 from arraycontext import (
     pytest_generate_tests_for_array_contexts,
@@ -52,7 +51,7 @@ from sumpy.kernel import (
     LaplaceKernel,
     YukawaKernel,
 )
-from sumpy.tools import build_matrix
+from sumpy.tools import add_mi, build_matrix, mi_factorial, mi_power
 
 
 if TYPE_CHECKING:
@@ -153,12 +152,12 @@ def test_l2l_coefficient_differences(
     max_abs_error = 0.0
 
     for i, nu_i in enumerate(full_identifiers):
-        i_card = sum(np.array(nu_i))
+        i_card = sum(nu_i)
 
         # Compute error by formula
         error = 0.0 + 0.0j
         for k, nu_jk in enumerate(stored_identifiers):
-            jk_card = sum(np.array(nu_jk))
+            jk_card = sum(nu_jk)
             if jk_card >= i_card:
                 continue
 
@@ -167,24 +166,24 @@ def test_l2l_coefficient_differences(
 
             for q_idx in range(start_idx, end_idx):
                 nu_q = full_identifiers[q_idx]
-                nu_sum = tuple(map(sum, zip(nu_q, nu_jk, strict=True)))
+                nu_sum = add_mi(nu_q, nu_jk)
                 if nu_sum not in full_identifiers:
                     continue
 
                 deriv_idx = full_identifiers.index(nu_sum)
                 gamma_deriv = to_scalar(p2l_full.coeffs[deriv_idx])
-                h_pow = np.prod(h ** np.array(nu_q))
-                fact_nu_q = np.prod(spsp.factorial(nu_q))
+                h_pow = float(mi_power(h, nu_q))
+                fact_nu_q = mi_factorial(nu_q)
 
                 error += -M[i, k] * gamma_deriv * h_pow / fact_nu_q
 
-        error /= np.prod(spsp.factorial(nu_i))
+        error /= mi_factorial(nu_i)
         error *= global_const
 
         # Compute direct difference
         true_i_idx = lexpn_idx.index(nu_i)
         mu_full = to_scalar(p2l2l_full.coeffs[true_i_idx])
-        direct_diff = (mu_full - mu_c[i]) / np.prod(spsp.factorial(nu_i))
+        direct_diff = (mu_full - mu_c[i]) / mi_factorial(nu_i)
         direct_diff *= global_const
 
         # Compute errors
