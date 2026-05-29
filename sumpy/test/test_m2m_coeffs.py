@@ -32,7 +32,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-import scipy.special as spsp
 
 from arraycontext import (
     pytest_generate_tests_for_array_contexts,
@@ -55,7 +54,7 @@ from sumpy.kernel import (
     LaplaceKernel,
     YukawaKernel,
 )
-from sumpy.tools import build_matrix
+from sumpy.tools import add_mi, build_matrix, mi_factorial, mi_power
 
 
 if TYPE_CHECKING:
@@ -191,7 +190,7 @@ def test_m2m_coefficient_differences(
 
         error = 0.0 + 0.0j
         for s, nu_js in enumerate(stored_identifiers):
-            nu_js_card = sum(np.array(nu_js))
+            nu_js_card = sum(nu_js)
             inner_sum = 0.0 + 0.0j
 
             if nu_js_card <= k_card:
@@ -200,14 +199,14 @@ def test_m2m_coefficient_differences(
 
                 for idx in range(start_idx, end_idx):
                     nu_l = full_identifiers[idx]
-                    nu_sum = tuple(a + b for a, b in zip(nu_l, nu_js, strict=True))
+                    nu_sum = add_mi(nu_l, nu_js)
 
                     if nu_sum not in full_identifiers:
                         continue
 
                     derivative_idx = full_identifiers.index(nu_sum)
-                    h_pow = np.prod(h ** np.array(nu_l))
-                    fact_nu_l = np.prod(spsp.factorial(nu_l))
+                    h_pow = float(mi_power(h, nu_l))
+                    fact_nu_l = mi_factorial(nu_l)
 
                     inner_sum += coeffs_full[derivative_idx] * h_pow / fact_nu_l
 
@@ -218,8 +217,8 @@ def test_m2m_coefficient_differences(
 
         if verbose:
             print(f"{k:3d} | {nu_k!s:>15s} | {k_card:6d} | "
-                  f"{error.real: .8e}{error.imag:+.8e}j | "
-                  f"{direct_diff.real: .8e}{direct_diff.imag:+.8e}j | "
+                  f"{error.real:.8e}{error.imag:+.8e}j | "
+                  f"{direct_diff.real:.8e}{direct_diff.imag:+.8e}j | "
                   f"{abs_err:9.2e}")
 
     if verbose:
