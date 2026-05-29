@@ -117,8 +117,9 @@ class CalculusPatch:
             weights_1d = None
 
         elif nodes == "legendre":
-            from scipy.special import legendre
-            points_1d, weights_1d, _ = legendre(npoints).weights.T
+            from numpy.polynomial.legendre import leggauss
+
+            points_1d, weights_1d = leggauss(npoints)
             points_1d = points_1d * (h/2)
             weights_1d = weights_1d * (h/2)
 
@@ -166,9 +167,12 @@ class CalculusPatch:
             a high-order interpolation basis on the :py:attr:`points`.
         """
 
-        from scipy.special import eval_chebyt
-
         from pytools import indices_in_shape
+
+        def eval_chebyt(n: int,
+                        x: Array1D[np.floating[Any]]) -> Array1D[np.floating[Any]]:
+            # T_n(x) = cos(n * arccos(x)), valid for x in [-1, 1]
+            return np.cos(n * np.arccos(x))
 
         def eval_basis(
                 ind: tuple[int, ...],

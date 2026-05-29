@@ -24,27 +24,27 @@ THE SOFTWARE.
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import numpy.linalg as la
 
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
+    import optype.numpy as onp
 
 
 @dataclass(frozen=True)
 class Geometry:
-    nodes: NDArray[np.floating]
-    normals: NDArray[np.floating]
-    weights: NDArray[np.floating]
-    area_elements: NDArray[np.floating]
+    nodes: onp.ArrayND[np.floating[Any]]
+    normals: onp.ArrayND[np.floating[Any]]
+    weights: onp.Array1D[np.floating[Any]]
+    area_elements: onp.Array1D[np.floating[Any]]
 
 
 def _geometry_from_curve_nodes(
-            x: NDArray[np.floating],
-            y: NDArray[np.floating]
+            x: onp.Array1D[np.floating[Any]],
+            y: onp.Array1D[np.floating[Any]]
         ):
     npts: int
     npts, = x.shape
@@ -95,12 +95,16 @@ def make_torus(
         r_minor * np.sin(v)
         ])
 
-    def diff2d(ary: NDArray[np.floating]):
-        from scipy import fftpack
-        return np.array([
-                            fftpack.diff(ary[idx])
-                            for idx in np.ndindex(ary.shape[:-1])
-                        ])
+    def fftdiff(x: onp.Array1D[np.floating[Any]], *,
+                period: float = 2.0 * np.pi) -> onp.Array1D[np.floating[Any]]:
+        n = len(x)
+        return np.fft.ifft(
+            2j * np.pi * np.fft.fftfreq(n, d=period/n) * np.fft.fft(x)
+        ).real
+
+    def diff2d(ary: onp.Array2D[np.floating[Any]]) -> onp.Array2D[np.floating[Any]]:
+        return np.array([fftdiff(ary[idx]) for idx in np.ndindex(ary.shape[:-1])])
+
     dnodes_du = np.array(
                     [diff2d(nodes[i].T).T for i in range(3)])
     dnodes_dv = np.array(
