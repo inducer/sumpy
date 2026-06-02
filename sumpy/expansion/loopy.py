@@ -42,14 +42,16 @@ if TYPE_CHECKING:
     from pymbolic.typing import ArithmeticExpression
 
     from sumpy.expansion import ExpansionBase
-    from sumpy.kernel import Kernel
+    from sumpy.kernel import ScalarKernel
 
 
 logger = logging.getLogger(__name__)
 
 
 def make_e2p_loopy_kernel(
-        expansion: ExpansionBase, kernels: Sequence[Kernel]) -> lp.TranslationUnit:
+        expansion: ExpansionBase,
+        kernels: Sequence[ScalarKernel],
+    ) -> lp.TranslationUnit:
     """
     A helper function that creates a :mod:`loopy` kernel for multipole/local evaluation.
 
@@ -152,7 +154,7 @@ def make_e2p_loopy_kernel(
 
 def make_p2e_loopy_kernel(
         expansion: ExpansionBase,
-        kernels: Sequence[Kernel],
+        kernels: Sequence[ScalarKernel],
         strength_usage: Sequence[int],
         nstrengths: int) -> lp.TranslationUnit:
     """

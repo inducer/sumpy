@@ -60,7 +60,7 @@ if TYPE_CHECKING:
 
     from sumpy.assignment_collection import SymbolicAssignmentCollection
     from sumpy.expansion import ExpansionBase
-    from sumpy.kernel import Kernel, KernelArgument
+    from sumpy.kernel import KernelArgument, ScalarKernel
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +134,7 @@ References
 """
 
 
-KernelLike: TypeAlias = "Kernel | ExpansionBase"
+KernelLike: TypeAlias = "ScalarKernel | ExpansionBase"
 
 
 # {{{ multi_index helpers
@@ -285,16 +285,16 @@ class KernelComputation(ABC):
     """
 
     def __init__(self,
-            target_kernels: list[Kernel],
-            source_kernels: list[Kernel],
+            target_kernels: list[ScalarKernel],
+            source_kernels: list[ScalarKernel],
             strength_usage: list[int] | None = None,
             value_dtypes: list[numpy.dtype[Any]] | None = None,
             name: str | None = None) -> None:
         """
-        :arg target_kernels: list of :class:`~sumpy.kernel.Kernel` instances,
+        :arg target_kernels: list of :class:`~sumpy.kernel.ScalarKernel` instances,
             with :class:`sumpy.kernel.AxisTargetDerivative` as
             the outermost kernel wrappers, if present.
-        :arg source_kernels: list of :class:`~sumpy.kernel.Kernel` instances
+        :arg source_kernels: list of :class:`~sumpy.kernel.ScalarKernel` instances
             with :class:`~sumpy.kernel.DirectionalSourceDerivative` as the
             outermost kernel wrappers, if present.
         :arg strength_usage: list of integers indicating which expression

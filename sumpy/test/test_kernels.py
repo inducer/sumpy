@@ -67,10 +67,10 @@ from sumpy.kernel import (
     DirectionalSourceDerivative,
     ElasticityKernel,
     HelmholtzKernel,
-    Kernel,
     LaplaceKernel,
     LineOfCompressionKernel,
     OneKernel,
+    ScalarKernel,
     StokesletKernel,
     StressletKernel,
     YukawaKernel,
@@ -152,7 +152,7 @@ def test_p2p(actx_factory: ArrayContextFactory, exclude_self):
 ])
 def test_p2e_multiple(
             actx_factory: ArrayContextFactory,
-            base_knl: Kernel,
+            base_knl: ScalarKernel,
             expn_class):
     order = 4
     actx = actx_factory()
@@ -844,7 +844,7 @@ def test_m2m_compressed_error_helmholtz(actx_factory: ArrayContextFactory, dim, 
 @pytest.mark.parametrize("dim", [2, 3])
 def test_jump(
             actx_factory: ArrayContextFactory,
-            kernel_cls: type[Kernel],
+            kernel_cls: type[ScalarKernel],
             kernel_kwargs: dict[str, float],
             dim: int,
             order: int = 3,
@@ -907,7 +907,7 @@ def test_jump(
 # {{{ test_pickle
 
 @memoize_on_first_arg
-def get_kernel_name_for_test(knl: Kernel) -> Callable[[str], str]:
+def get_kernel_name_for_test(knl: ScalarKernel) -> Callable[[str], str]:
     return lambda prefix: f"{prefix}: {type(knl).__name__}"
 
 
@@ -930,7 +930,7 @@ def get_kernel_name_for_test(knl: Kernel) -> Callable[[str], str]:
     StressletKernel(2, 0, 0, 0),
     YukawaKernel(2, yukawa_lambda_name="lambda"),
 ])
-def test_pickle(knl: Kernel) -> None:
+def test_pickle(knl: ScalarKernel) -> None:
     import pickle
 
     result = pickle.dumps(knl)

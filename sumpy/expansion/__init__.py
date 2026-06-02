@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from sumpy.expansion.diff_op import MultiIndex
     from sumpy.expansion.local import LocalExpansionBase
     from sumpy.expansion.multipole import MultipoleExpansionBase
-    from sumpy.kernel import Kernel, KernelArgument
+    from sumpy.kernel import KernelArgument, ScalarKernel
 
 
 logger = logging.getLogger(__name__)
@@ -99,7 +99,7 @@ class ExpansionBase(ABC):
     .. automethod:: __ne__
     """
 
-    kernel: Kernel
+    kernel: ScalarKernel
     order: int
     use_rscale: bool = field(kw_only=True, default=True)
 
@@ -152,7 +152,7 @@ class ExpansionBase(ABC):
 
     @abstractmethod
     def coefficients_from_source(self,
-                kernel: Kernel,
+                kernel: ScalarKernel,
                 avec: sym.Matrix,
                 bvec: sym.Matrix | None,
                 rscale: sym.Expr,
@@ -171,7 +171,7 @@ class ExpansionBase(ABC):
         """
 
     def coefficients_from_source_vec(self,
-                kernels: Sequence[Kernel],
+                kernels: Sequence[ScalarKernel],
                 avec: sym.Matrix,
                 bvec: sym.Matrix | None,
                 rscale: sym.Expr,
@@ -198,7 +198,7 @@ class ExpansionBase(ABC):
         return result
 
     def loopy_expansion_formation(self,
-                kernels: Sequence[Kernel],
+                kernels: Sequence[ScalarKernel],
                 strength_usage: Sequence[int],
                 nstrengths: int
             ) -> lp.TranslationUnit:
@@ -212,7 +212,7 @@ class ExpansionBase(ABC):
 
     @abstractmethod
     def evaluate(self,
-                kernel: Kernel,
+                kernel: ScalarKernel,
                 coeffs: Sequence[sym.Expr],
                 bvec: sym.Matrix,
                 rscale: sym.Expr,
@@ -224,7 +224,7 @@ class ExpansionBase(ABC):
             in *coeffs*.
         """
 
-    def loopy_evaluator(self, kernels: Sequence[Kernel]) -> lp.TranslationUnit:
+    def loopy_evaluator(self, kernels: Sequence[ScalarKernel]) -> lp.TranslationUnit:
         """
         :returns: a :mod:`loopy` kernel that returns the evaluated
             target transforms of the potential given by *kernels*.
@@ -236,7 +236,7 @@ class ExpansionBase(ABC):
 
     # {{{ copy
 
-    def with_kernel(self, kernel: Kernel) -> ExpansionBase:
+    def with_kernel(self, kernel: ScalarKernel) -> ExpansionBase:
         return replace(self, kernel=kernel)
 
     def copy(self, **kwargs: Any) -> Self:
@@ -566,7 +566,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     .. automethod:: __init__
     """
 
-    knl: Kernel
+    knl: ScalarKernel
 
     @override
     def get_coefficient_identifiers(self) -> Sequence[MultiIndex]:
@@ -973,7 +973,7 @@ class MultipoleExpansionFactory(Protocol):
     .. automethod:: __call__
     """
     def __call__(self,
-                kernel: Kernel,
+                kernel: ScalarKernel,
                 order: int,
                 *, use_rscale: bool = True
             ) -> MultipoleExpansionBase:
@@ -987,7 +987,7 @@ class LocalExpansionFactory(Protocol):
     .. automethod:: __call__
     """
     def __call__(self,
-                kernel: Kernel,
+                kernel: ScalarKernel,
                 order: int,
                 *, use_rscale: bool = True
             ) -> LocalExpansionBase:
@@ -1002,7 +1002,7 @@ class ExpansionFactoryBase(ABC):
 
     @abstractmethod
     def get_local_expansion_class(self,
-                base_kernel: Kernel, /
+                base_kernel: ScalarKernel, /
             ) -> LocalExpansionFactory:
         """
         :returns: a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
@@ -1010,7 +1010,7 @@ class ExpansionFactoryBase(ABC):
 
     @abstractmethod
     def get_multipole_expansion_class(self,
-                base_kernel: Kernel, /
+                base_kernel: ScalarKernel, /
             ) -> MultipoleExpansionFactory:
         """
         :returns: a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
@@ -1024,7 +1024,7 @@ class VolumeTaylorExpansionFactory(ExpansionFactoryBase):
 
     @override
     def get_local_expansion_class(
-                self, base_kernel: Kernel, /
+                self, base_kernel: ScalarKernel, /
             ) -> type[LocalExpansionBase]:
         """
         :returns: a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
@@ -1034,7 +1034,7 @@ class VolumeTaylorExpansionFactory(ExpansionFactoryBase):
 
     @override
     def get_multipole_expansion_class(
-                self, base_kernel: Kernel, /
+                self, base_kernel: ScalarKernel, /
             ) -> type[MultipoleExpansionBase]:
         """
         :returns: a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
@@ -1050,7 +1050,7 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
 
     @override
     def get_local_expansion_class(self,
-                base_kernel: Kernel, /,
+                base_kernel: ScalarKernel, /,
             ) -> LocalExpansionFactory:
         """
         :returns: a subclass of :class:`ExpansionBase` suitable for *base_kernel*.
@@ -1067,7 +1067,7 @@ class DefaultExpansionFactory(ExpansionFactoryBase):
 
     @override
     def get_multipole_expansion_class(self,
-                base_kernel: Kernel, /,
+                base_kernel: ScalarKernel, /,
             ) -> MultipoleExpansionFactory:
         """
         :returns: a subclass of :class:`ExpansionBase` suitable for *base_kernel*.

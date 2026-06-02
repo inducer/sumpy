@@ -50,7 +50,7 @@ if TYPE_CHECKING:
         MultipoleExpansionFactory,
     )
     from sumpy.expansion.m2l import M2LTranslationClassFactoryBase
-    from sumpy.kernel import Kernel
+    from sumpy.kernel import ScalarKernel
     from sumpy.visualization import FieldPlotter
 
 
@@ -107,8 +107,8 @@ class ToyContext:
 
     .. automethod:: __init__
     """
-    kernel: Kernel
-    no_target_deriv_kernel: Kernel
+    kernel: ScalarKernel
+    no_target_deriv_kernel: ScalarKernel
 
     mpole_expn_class: MultipoleExpansionFactory
     local_expn_class: LocalExpansionFactory
@@ -118,7 +118,7 @@ class ToyContext:
     extra_source_and_kernel_kwargs: Mapping[str, object]
 
     def __init__(self,
-                kernel: Kernel,
+                kernel: ScalarKernel,
                 mpole_expn_class: MultipoleExpansionFactory | None = None,
                 local_expn_class: LocalExpansionFactory | None = None,
                 expansion_factory: ExpansionFactoryBase | None = None,

@@ -56,7 +56,7 @@ if TYPE_CHECKING:
         HankelBased2DMultipoleExpansion,
         MultipoleExpansionBase,
     )
-    from sumpy.kernel import Kernel
+    from sumpy.kernel import ScalarKernel
 
 
 logger = logging.getLogger(__name__)
@@ -131,7 +131,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase, ABC):
 
     @override
     def coefficients_from_source(self,
-                kernel: Kernel,
+                kernel: ScalarKernel,
                 avec: sym.Matrix,
                 bvec: sym.Matrix | None,
                 rscale: sym.Expr,
@@ -171,7 +171,7 @@ class LineTaylorLocalExpansion(LocalExpansionBase, ABC):
 
     @override
     def evaluate(self,
-                 kernel: Kernel,
+                 kernel: ScalarKernel,
                  coeffs: Sequence[sym.Expr],
                  bvec: sym.Matrix,
                  rscale: sym.Expr,
@@ -224,7 +224,7 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin,
 
     @override
     def coefficients_from_source_vec(self,
-                kernels: Sequence[Kernel],
+                kernels: Sequence[ScalarKernel],
                 avec: sym.Matrix,
                 bvec: sym.Matrix | None,
                 rscale: sym.Expr,
@@ -272,7 +272,7 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin,
 
     @override
     def coefficients_from_source(self,
-                kernel: Kernel,
+                kernel: ScalarKernel,
                 avec: sym.Matrix,
                 bvec: sym.Matrix | None,
                 rscale: sym.Expr,
@@ -283,7 +283,7 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin,
 
     @override
     def evaluate(self,
-                kernel: Kernel,
+                kernel: ScalarKernel,
                 coeffs: Sequence[sym.Expr],
                 bvec: sym.Matrix,
                 rscale: sym.Expr,
@@ -556,7 +556,7 @@ class FourierBesselLocalExpansionMixin(LocalExpansionBase, ABC):
 
     @override
     def coefficients_from_source(self,
-                kernel: Kernel,
+                kernel: ScalarKernel,
                 avec: sym.Matrix,
                 bvec: sym.Matrix | None,
                 rscale: sym.Expr,
@@ -580,7 +580,7 @@ class FourierBesselLocalExpansionMixin(LocalExpansionBase, ABC):
 
     @override
     def evaluate(self,
-                kernel: Kernel,
+                kernel: ScalarKernel,
                 coeffs: Sequence[sym.Expr],
                 bvec: sym.Matrix,
                 rscale: sym.Expr,

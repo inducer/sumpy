@@ -72,9 +72,9 @@ class P2PBase(KernelCacheMixin, KernelComputation):
     def __init__(self, target_kernels, exclude_self, strength_usage=None,
             value_dtypes=None, name=None, source_kernels=None):
         """
-        :arg target_kernels: list of :class:`sumpy.kernel.Kernel` instances
+        :arg target_kernels: list of :class:`~sumpy.kernel.ScalarKernel` instances
           with only target derivatives.
-        :arg source_kernels: list of :class:`sumpy.kernel.Kernel` instances
+        :arg source_kernels: list of :class:`~sumpy.kernel.ScalarKernel` instances
           with only source derivatives.
         :arg strength_usage: A list of integers indicating which expression
           uses which source strength indicator. This implicitly specifies the

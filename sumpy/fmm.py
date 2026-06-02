@@ -61,7 +61,7 @@ from sumpy import (
     P2EFromSingleBox,
     P2PFromCSR,
 )
-from sumpy.kernel import Kernel
+from sumpy.kernel import ScalarKernel
 from sumpy.tools import (
     get_opencl_fft_app,
     run_opencl_fft,
@@ -105,8 +105,8 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
 
     multipole_expansion_factory: MultipoleExpansionFromOrderFactory
     local_expansion_factory: LocalExpansionFromOrderFactory
-    source_kernels: Sequence[Kernel] | None
-    target_kernels: Sequence[Kernel]
+    source_kernels: Sequence[ScalarKernel] | None
+    target_kernels: Sequence[ScalarKernel]
     exclude_self: bool
     use_rscale: bool | None
     strength_usage: Sequence[int] | None
@@ -115,11 +115,11 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
                  array_context: ArrayContext,
                  multipole_expansion_factory: MultipoleExpansionFromOrderFactory,
                  local_expansion_factory: LocalExpansionFromOrderFactory,
-                 target_kernels: Sequence[Kernel],
+                 target_kernels: Sequence[ScalarKernel],
                  exclude_self: bool = False,
                  use_rscale: bool | None = None,
                  strength_usage: Sequence[int] | None = None,
-                 source_kernels: Sequence[Kernel] | None = None):
+                 source_kernels: Sequence[ScalarKernel] | None = None):
         """
         :arg multipole_expansion_factory: a callable of a single argument (order)
             that returns a multipole expansion.
@@ -257,7 +257,7 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
 # {{{ expansion wrangler
 
 FMMLevelToOrder: TypeAlias = Callable[
-        [Kernel, frozenset[tuple[str, object]], Tree, int],
+        [ScalarKernel, frozenset[tuple[str, object]], Tree, int],
         int]
 
 
