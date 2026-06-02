@@ -99,30 +99,36 @@ def test_lpot_dx_jump_relation_convergence(
                             targets_h - target_geo.normals * expansion_radii_h)
         centers_out = actx.from_numpy(
                             targets_h + target_geo.normals * expansion_radii_h)
+        expansion_vec_in = targets - centers_in
+        expansion_vec_out = targets - centers_out
 
         strengths = (weights_nodes,)
         (eval_in_dx,) = lplot_dx(
             actx,
             targets, sources, centers_in, strengths,
-            expansion_radii=expansion_radii
+            expansion_radii=expansion_radii,
+            expansion_vec=expansion_vec_in
         )
 
         (eval_in_dy,) = lplot_dy(
             actx,
             targets, sources, centers_in, strengths,
-            expansion_radii=expansion_radii
+            expansion_radii=expansion_radii,
+            expansion_vec=expansion_vec_in
         )
 
         (eval_out_dx,) = lplot_dx(
             actx,
             targets, sources, centers_out, strengths,
-            expansion_radii=expansion_radii
+            expansion_radii=expansion_radii,
+            expansion_vec=expansion_vec_out
         )
 
         (eval_out_dy,) = lplot_dy(
             actx,
             targets, sources, centers_out, strengths,
-            expansion_radii=expansion_radii
+            expansion_radii=expansion_radii,
+            expansion_vec=expansion_vec_out
         )
 
         eval_in_dx = actx.to_numpy(eval_in_dx)

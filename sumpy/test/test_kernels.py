@@ -941,6 +941,7 @@ def test_jump(
             actx.from_numpy(centers),
             [actx.from_numpy(geo.weights * geo.area_elements)],
             expansion_radii=actx.from_numpy(center_dist),
+            expansion_vec=actx.from_numpy(targets - centers),
             src_derivative_dir=actx.from_numpy(geo.normals),
             **kernel_kwargs,
         )

@@ -110,19 +110,26 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation, ABC):
                 tuple(self.source_kernels), tuple(self.strength_usage),
                 tuple(self.value_dtypes))
 
-    def _expand(self, sac, avec, bvec, rscale, isrc):
+    @property
+    def _uses_expansion_vec(self) -> bool:
+        from sumpy.expansion.local import LineTaylorLocalExpansion
+        return isinstance(self.expansion, LineTaylorLocalExpansion)
+
+    def _expand(self, sac, avec, bvec, rscale, isrc, expansion_vec):
         from sumpy.symbolic import PymbolicToSympyMapper
         conv = PymbolicToSympyMapper()
         strengths = [conv.to_expr(self.get_strength_or_not(isrc, idx))
                      for idx in range(len(self.source_kernels))]
+        if self._uses_expansion_vec:
+            bvec = expansion_vec
         return self.expansion.coefficients_from_source_vec(
             self.source_kernels, avec, bvec, rscale=rscale, weights=strengths,
             sac=sac)
 
-    def _evaluate(self, sac, avec, bvec, rscale, expansion_nr, coefficients):
-        from sumpy.expansion.local import LineTaylorLocalExpansion
+    def _evaluate(self, sac, avec, bvec, rscale, expansion_nr, coefficients,
+            expansion_vec):
         tgt_knl = self.target_kernels[expansion_nr]
-        if isinstance(self.expansion, LineTaylorLocalExpansion):
+        if self._uses_expansion_vec:
             # In LineTaylorLocalExpansion.evaluate, we can't run
             # postprocess_at_target because the coefficients are assigned
             # symbols and postprocess with a derivative will make them zero.
@@ -138,6 +145,11 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation, ABC):
                 )
             for i in self.expansion.get_coefficient_identifiers()]
 
+        if self._uses_expansion_vec:
+            return sac.assign_unique(f"expn{expansion_nr}_result",
+                self.expansion.evaluate(tgt_knl, assigned_coeffs, bvec, rscale,
+                    expansion_vec=expansion_vec))
+
         return sac.assign_unique(f"expn{expansion_nr}_result",
             self.expansion.evaluate(tgt_knl, assigned_coeffs, bvec, rscale))
 
@@ -145,6 +157,9 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation, ABC):
         from sumpy.symbolic import make_sym_vector
         avec = make_sym_vector("a", self.dim)
         bvec = make_sym_vector("b", self.dim)
+        expansion_vec = (
+                make_sym_vector("e", self.dim) if self._uses_expansion_vec
+                else None)
 
         from sumpy.assignment_collection import SymbolicAssignmentCollection
         sac = SymbolicAssignmentCollection()
@@ -155,8 +170,11 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation, ABC):
         rscale = sym.Symbol("rscale")
         isrc_sym = prim.var("isrc")
 
-        coefficients = self._expand(sac, avec, bvec, rscale, isrc_sym)
-        result_names = [self._evaluate(sac, avec, bvec, rscale, i, coefficients)
+        coefficients = self._expand(
+                sac, avec, bvec, rscale, isrc_sym, expansion_vec)
+        result_names = [
+                self._evaluate(sac, avec, bvec, rscale, i, coefficients,
+                    expansion_vec)
                         for i in range(self.nresults)]
 
         logger.info("compute expansion expressions: done")
@@ -169,7 +187,8 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation, ABC):
         from sumpy.codegen import to_loopy_insns
         loopy_insns = to_loopy_insns(
                 sac.assignments.items(),
-                vector_names={"a", "b"},
+                vector_names={"a", "b"} | (
+                    {"e"} if self._uses_expansion_vec else set()),
                 pymbolic_expr_maps=pymbolic_expr_maps,
                 retain_names=result_names,
                 complex_dtype=np.complex128  # FIXME
@@ -204,6 +223,9 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation, ABC):
                     None, shape="ntargets"),
                 lp.ValueArg("nsources", None),
                 lp.ValueArg("ntargets", None),
+                *([lp.GlobalArg("expansion_vec", None,
+                    shape=(self.dim, "ntargets"), order="C")]
+                    if self._uses_expansion_vec else []),
                 *gather_loopy_source_arguments(self.source_kernels)
             ]
 
@@ -212,6 +234,7 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation, ABC):
             targets_is_obj_array: bool = False,
             sources_is_obj_array: bool = False,
             centers_is_obj_array: bool = False,
+            expansion_vec_is_obj_array: bool = False,
             # Used by pytential to override the name of the loop to be
             # parallelized. In the case of QBX, that's the loop over QBX
             # targets (not global targets).
@@ -225,6 +248,8 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation, ABC):
             loopy_knl = lp.tag_array_axes(loopy_knl, "sources", "sep,C")
         if centers_is_obj_array:
             loopy_knl = lp.tag_array_axes(loopy_knl, "center", "sep,C")
+        if expansion_vec_is_obj_array:
+            loopy_knl = lp.tag_array_axes(loopy_knl, "expansion_vec", "sep,C")
 
         if is_cpu:
             loopy_knl = lp.split_iname(loopy_knl, itgt_name, 16, outer_tag="g.0",
@@ -283,6 +308,8 @@ class LayerPotential(LayerPotentialBase):
             + ["for itgt, isrc"]
             + ["<> a[idim] = center[idim, itgt] - sources[idim, isrc]"]
             + ["<> b[idim] = targets[idim, itgt] - center[idim, itgt] {dup=idim}"]
+            + (["<> e[idim] = expansion_vec[idim, itgt] {dup=idim}"]
+                if self._uses_expansion_vec else [])
             + ["<> rscale = expansion_radii[itgt]"]
             + [f"<> strength_{i}_isrc = strength_{i}[isrc]" for i in
                     range(self.strength_count)]
@@ -309,20 +336,27 @@ class LayerPotential(LayerPotentialBase):
 
     def __call__(self, actx: ArrayContext,
             targets, sources, centers, strengths, expansion_radii,
-            **kwargs):
+            expansion_vec=None, **kwargs):
         """
         :arg strengths: are required to have area elements and quadrature weights
             already multiplied in.
         """
+        if self._uses_expansion_vec and expansion_vec is None:
+            raise ValueError(
+                "expansion_vec is required when using "
+                "LineTaylorLocalExpansion")
 
         knl = self.get_cached_kernel(
                 is_cpu=is_cl_cpu(actx),
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources),
-                centers_is_obj_array=is_obj_array_like(centers))
+                centers_is_obj_array=is_obj_array_like(centers),
+                expansion_vec_is_obj_array=is_obj_array_like(expansion_vec))
 
         for i, dens in enumerate(strengths):
             kwargs[f"strength_{i}"] = dens
+        if self._uses_expansion_vec:
+            kwargs["expansion_vec"] = expansion_vec
 
         result = actx.call_loopy(
             knl,
@@ -371,6 +405,8 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
             + ["for itgt, isrc"]
             + ["<> a[idim] = center[idim, itgt] - sources[idim, isrc]"]
             + ["<> b[idim] = targets[idim, itgt] - center[idim, itgt] {dup=idim}"]
+            + (["<> e[idim] = expansion_vec[idim, itgt] {dup=idim}"]
+                if self._uses_expansion_vec else [])
             + ["<> rscale = expansion_radii[itgt]"]
             + loopy_insns + kernel_exprs
             + [f"""
@@ -393,12 +429,22 @@ class LayerPotentialMatrixGenerator(LayerPotentialBase):
         return loopy_knl
 
     def __call__(self, actx: ArrayContext,
-            targets, sources, centers, expansion_radii, **kwargs):
+            targets, sources, centers, expansion_radii,
+            expansion_vec=None, **kwargs):
+        if self._uses_expansion_vec and expansion_vec is None:
+            raise ValueError(
+                "expansion_vec is required when using "
+                "LineTaylorLocalExpansion")
+
         knl = self.get_cached_kernel(
                 is_cpu=is_cl_cpu(actx),
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources),
-                centers_is_obj_array=is_obj_array_like(centers))
+                centers_is_obj_array=is_obj_array_like(centers),
+                expansion_vec_is_obj_array=is_obj_array_like(expansion_vec))
+
+        if self._uses_expansion_vec:
+            kwargs["expansion_vec"] = expansion_vec
 
         result = actx.call_loopy(
             knl,
@@ -458,6 +504,11 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
 
                     <> a[idim] = center[idim, itgt] - sources[idim, isrc]
                     <> b[idim] = targets[idim, itgt] - center[idim, itgt] {dup=idim}
+            """]
+            + (["""
+                    <> e[idim] = expansion_vec[idim, itgt] {dup=idim}
+            """] if self._uses_expansion_vec else [])
+            + ["""
                     <> rscale = expansion_radii[itgt]
             """]
             + loopy_insns + kernel_exprs
@@ -485,7 +536,8 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
 
     @override
     def get_optimized_kernel(self,
-            targets_is_obj_array, sources_is_obj_array, centers_is_obj_array):
+            targets_is_obj_array, sources_is_obj_array, centers_is_obj_array,
+            expansion_vec_is_obj_array=False):
         loopy_knl = self.get_kernel()
 
         if targets_is_obj_array:
@@ -494,13 +546,15 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
             loopy_knl = lp.tag_array_axes(loopy_knl, "sources", "sep,C")
         if centers_is_obj_array:
             loopy_knl = lp.tag_array_axes(loopy_knl, "center", "sep,C")
+        if expansion_vec_is_obj_array:
+            loopy_knl = lp.tag_array_axes(loopy_knl, "expansion_vec", "sep,C")
 
         loopy_knl = lp.split_iname(loopy_knl, "imat", 1024, outer_tag="g.0")
         return self._allow_redundant_execution_of_knl_scaling(loopy_knl)
 
     def __call__(self, actx: ArrayContext,
             targets, sources, centers, expansion_radii,
-            tgtindices, srcindices, **kwargs):
+            tgtindices, srcindices, expansion_vec=None, **kwargs):
         """Evaluate a subset of the QBX matrix interactions.
 
         :arg targets: target point coordinates, which can be an object
@@ -522,10 +576,19 @@ class LayerPotentialMatrixSubsetGenerator(LayerPotentialBase):
             in (*srcindices*, *tgtindices*)
         """
 
+        if self._uses_expansion_vec and expansion_vec is None:
+            raise ValueError(
+                "expansion_vec is required when using "
+                "LineTaylorLocalExpansion")
+
         knl = self.get_cached_kernel(
                 targets_is_obj_array=is_obj_array_like(targets),
                 sources_is_obj_array=is_obj_array_like(sources),
-                centers_is_obj_array=is_obj_array_like(centers))
+                centers_is_obj_array=is_obj_array_like(centers),
+                expansion_vec_is_obj_array=is_obj_array_like(expansion_vec))
+
+        if self._uses_expansion_vec:
+            kwargs["expansion_vec"] = expansion_vec
 
         result = actx.call_loopy(
             knl,

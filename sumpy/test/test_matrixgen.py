@@ -146,6 +146,7 @@ def test_qbx_direct(
         tgtindices, srcindices = (
             _build_subset_indices(actx, ntargets=n, nsources=n, factor=factor))
 
+        expansion_vec = targets - centers
         extra_kwargs = {}
         if lpot_id == 2:
             extra_kwargs["dsource_vec"] = (
@@ -157,14 +158,16 @@ def test_qbx_direct(
             sources=sources,
             centers=centers,
             expansion_radii=expansion_radii,
-            strengths=strengths, **extra_kwargs)
+            strengths=strengths,
+            expansion_vec=expansion_vec, **extra_kwargs)
         result_lpot = actx.to_numpy(result_lpot)
 
         mat, = mat_gen(actx,
             targets=targets,
             sources=sources,
             centers=centers,
-            expansion_radii=expansion_radii, **extra_kwargs)
+            expansion_radii=expansion_radii,
+            expansion_vec=expansion_vec, **extra_kwargs)
         mat = actx.to_numpy(mat)
         result_mat = mat @ actx.to_numpy(strengths[0])
 
@@ -174,7 +177,8 @@ def test_qbx_direct(
             centers=centers,
             expansion_radii=expansion_radii,
             tgtindices=tgtindices,
-            srcindices=srcindices, **extra_kwargs)
+            srcindices=srcindices,
+            expansion_vec=expansion_vec, **extra_kwargs)
         blk = actx.to_numpy(blk)
 
         tgtindices = actx.to_numpy(tgtindices)
