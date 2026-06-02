@@ -57,8 +57,8 @@ from sumpy.fmm import SumpyExpansionWrangler, SumpyTreeIndependentDataForWrangle
 from sumpy.kernel import (
     BiharmonicKernel,
     HelmholtzKernel,
-    Kernel,
     LaplaceKernel,
+    ScalarKernel,
     YukawaKernel,
 )
 
@@ -105,7 +105,7 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts([
             ])
 def test_sumpy_fmm(
             actx_factory: ArrayContextFactory,
-            knl: Kernel,
+            knl: ScalarKernel,
             local_expn_class,
             mpole_expn_class,
             order_varies_with_level,
@@ -140,7 +140,7 @@ def test_sumpy_fmm(
 
 def _test_sumpy_fmm(
             actx_factory: ArrayContextFactory,
-            knl: Kernel,
+            knl: ScalarKernel,
             local_expn_class,
             mpole_expn_class,
             order_varies_with_level,

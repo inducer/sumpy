@@ -43,7 +43,7 @@ from sumpy.array_context import (  # noqa: F401
     _acf,  # pyright: ignore[reportUnusedImport]
 )
 from sumpy.expansion.local import LineTaylorLocalExpansion
-from sumpy.kernel import AxisTargetDerivative, Kernel, LaplaceKernel
+from sumpy.kernel import AxisTargetDerivative, LaplaceKernel, ScalarKernel
 from sumpy.test.geometries import make_starfish
 
 
@@ -58,7 +58,7 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts([
 @pytest.mark.parametrize("knl", [LaplaceKernel(2)])
 def test_lpot_dx_jump_relation_convergence(
             actx_factory: ArrayContextFactory,
-            knl: Kernel):
+            knl: ScalarKernel):
     """Test convergence of jump relations for single layer potential derivatives."""
 
     actx = actx_factory()

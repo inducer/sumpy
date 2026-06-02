@@ -50,8 +50,8 @@ from sumpy.expansion.multipole import (
 from sumpy.kernel import (
     BiharmonicKernel,
     HelmholtzKernel,
-    Kernel,
     LaplaceKernel,
+    ScalarKernel,
     YukawaKernel,
 )
 from sumpy.tools import add_mi, build_matrix, mi_factorial, mi_power
@@ -76,7 +76,7 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts([
 ])
 def test_m2m_coefficient_differences(
             actx_factory: ArrayContextFactory,
-            knl: Kernel,
+            knl: ScalarKernel,
             extra_kwargs: Mapping[str, float],
             verbose: bool = True,
         ):

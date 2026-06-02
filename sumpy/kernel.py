@@ -53,7 +53,6 @@ from sumpy.derivative_taker import (
     ExprDerivativeTaker,
     diff_derivative_coeff_dict,
 )
-from sumpy.symbolic import SpatialConstant, pymbolic_real_norm_2
 
 
 if TYPE_CHECKING:
@@ -69,7 +68,7 @@ Kernel interface
 ----------------
 
 .. autoclass:: KernelArgument
-.. autoclass:: Kernel
+.. autoclass:: ScalarKernel
     :show-inheritance:
 
 Symbolic kernels
@@ -79,8 +78,12 @@ Symbolic kernels
     :show-inheritance:
     :members: mapper_method
 
-PDE kernels
------------
+.. autoclass:: OneKernel
+    :show-inheritance:
+    :members: mapper_method
+
+Scalar PDE kernels
+------------------
 
 .. autoclass:: LaplaceKernel
     :show-inheritance:
@@ -198,9 +201,23 @@ class KernelArgument:
 
 # {{{ basic kernel interface
 
-@dataclass(frozen=True)
-class Kernel(ABC):
-    """Basic kernel interface.
+
+def _diff(expr: sym.Expr, vec: sp.Matrix, mi: tuple[int, ...]) -> sym.Expr:
+    """Take the derivative of an expression."""
+    dim = len(mi)
+    assert vec.shape == (dim, 1)
+
+    for i in range(dim):
+        if mi[i] == 0:
+            continue
+        expr = expr.diff(vec[i], mi[i])
+
+    return expr
+
+
+@dataclass(frozen=True, repr=False)
+class ScalarKernel(ABC):
+    """Scalar kernel interface.
 
     .. autoattribute:: mapper_method
     .. autoattribute:: is_translation_invariant
@@ -249,13 +266,13 @@ class Kernel(ABC):
 
         return f"{type(self).__name__}({', '.join(args)})"
 
-    def get_base_kernel(self) -> Kernel:
+    def get_base_kernel(self) -> ScalarKernel:
         """
         :returns: the kernel being wrapped by this one, or else *self*.
         """
         return self
 
-    def replace_base_kernel(self, new_base_kernel: Kernel) -> Kernel:
+    def replace_base_kernel(self, new_base_kernel: ScalarKernel) -> ScalarKernel:
         """
         :returns: the base kernel being wrapped by this one, or else
             *new_base_kernel*.
@@ -290,18 +307,6 @@ class Kernel(ABC):
             :class:`sumpy.expansion.diff_op.LinearPDESystemOperator` object
             :math:`\mathcal{L}`, where :math:`\mathcal{L}(u) = 0` is the PDE.
         """
-
-    def _diff(self,
-              expr: sym.Expr,
-              vec: sp.Matrix,
-              mi: tuple[int, ...]) -> sym.Expr:
-        """Take the derivative of an expression."""
-        for i in range(self.dim):
-            if mi[i] == 0:
-                continue
-            expr = expr.diff(vec[i], mi[i])
-
-        return expr
 
     @abstractmethod
     def get_derivative_taker(
@@ -343,7 +348,7 @@ class Kernel(ABC):
 
         result = 0
         for mi, coeff in expr_dict.items():
-            result += coeff * self._diff(expr, avec, mi)
+            result += coeff * _diff(expr, avec, mi)
 
         assert isinstance(result, sym.Expr)
         return result
@@ -414,8 +419,10 @@ class Kernel(ABC):
 # }}}
 
 
+# {{{ generic expression kernel
+
 @dataclass(frozen=True, repr=False)
-class ExpressionKernel(Kernel, ABC):
+class ExpressionKernel(ScalarKernel, ABC):
     r"""
     .. autoattribute:: expression
     .. autoattribute:: global_scaling_const
@@ -446,24 +453,21 @@ class ExpressionKernel(Kernel, ABC):
 
     @override
     def get_expression(self, dist_vec: sym.Matrix) -> sym.Expr:
-        from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
-        expr = PymbolicToSympyMapperWithSymbols().to_expr(self.expression)
+        expr = sym.PymbolicToSympyMapperWithSymbols().to_expr(self.expression)
 
         if self.dim != len(dist_vec):
             raise ValueError(
                 "'dist_vec' length does not match expected dimension: "
                 f"kernel dim is '{self.dim}' and dist_vec has length '{len(dist_vec)}'")
 
-        from sumpy.symbolic import Symbol
         return expr.xreplace({
-            Symbol(f"d{i}"): dist_vec_i
+            sym.Symbol(f"d{i}"): dist_vec_i
             for i, dist_vec_i in enumerate(dist_vec)
             })
 
     @override
     def get_global_scaling_const(self) -> sym.Expr:
-        from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
-        return PymbolicToSympyMapperWithSymbols().to_expr(self.global_scaling_const)
+        return sym.PymbolicToSympyMapperWithSymbols().to_expr(self.global_scaling_const)
 
     @override
     def get_derivative_taker(
@@ -500,6 +504,8 @@ class OneKernel(ExpressionKernel):
 one_kernel_2d = OneKernel(2)
 one_kernel_3d = OneKernel(3)
 
+# }}}
+
 
 # {{{ PDE kernels
 
@@ -516,11 +522,11 @@ class LaplaceKernel(ExpressionKernel):
     def __init__(self, dim: int) -> None:
         # See (Kress LIE, Thm 6.2) for scaling
         if dim == 2:
-            r = pymbolic_real_norm_2(make_sym_vector("d", dim))
+            r = sym.pymbolic_real_norm_2(make_sym_vector("d", dim))
             expr = var("log")(r)
             scaling = 1/(-2*var("pi"))
         elif dim == 3:
-            r = pymbolic_real_norm_2(make_sym_vector("d", dim))
+            r = sym.pymbolic_real_norm_2(make_sym_vector("d", dim))
             expr = 1/r
             scaling = 1/(4*var("pi"))
         else:
@@ -569,7 +575,7 @@ class BiharmonicKernel(ExpressionKernel):
     mapper_method: ClassVar[str] = "map_biharmonic_kernel"
 
     def __init__(self, dim: int) -> None:
-        r = pymbolic_real_norm_2(make_sym_vector("d", dim))
+        r = sym.pymbolic_real_norm_2(make_sym_vector("d", dim))
         if dim == 2:
             # Ref: Farkas, Peter. Mathematical foundations for fast algorithms
             # for the biharmonic equation. Technical Report 765,
@@ -643,17 +649,17 @@ class HelmholtzKernel(ExpressionKernel):
                  dim: int,
                  helmholtz_k_name: str = "k",
                  allow_evanescent: bool = False) -> None:
-        k = SpatialConstant(helmholtz_k_name)
+        k = sym.SpatialConstant(helmholtz_k_name)
 
         # Guard against code using the old positional interface.
         assert isinstance(allow_evanescent, bool)
 
         if dim == 2:
-            r = pymbolic_real_norm_2(make_sym_vector("d", dim))
+            r = sym.pymbolic_real_norm_2(make_sym_vector("d", dim))
             expr = var("hankel_1")(0, k*r)
             scaling = var("I")/4
         elif dim == 3:
-            r = pymbolic_real_norm_2(make_sym_vector("d", dim))
+            r = sym.pymbolic_real_norm_2(make_sym_vector("d", dim))
             expr = var("exp")(var("I")*k*r)/r
             scaling = 1/(4*var("pi"))
         else:
@@ -689,9 +695,8 @@ class HelmholtzKernel(ExpressionKernel):
     def get_args(self) -> Sequence[KernelArgument]:
         k_dtype = np.complex128 if self.allow_evanescent else np.float64
         return [
-                KernelArgument(
-                    loopy_arg=lp.ValueArg(self.helmholtz_k_name, k_dtype),
-                    )]
+            KernelArgument(loopy_arg=lp.ValueArg(self.helmholtz_k_name, k_dtype)),
+        ]
 
     @override
     def get_derivative_taker(
@@ -732,7 +737,7 @@ class YukawaKernel(ExpressionKernel):
     """
 
     def __init__(self, dim: int, yukawa_lambda_name: str = "lam") -> None:
-        lam = SpatialConstant(yukawa_lambda_name)
+        lam = sym.SpatialConstant(yukawa_lambda_name)
 
         # NOTE: The Yukawa kernel is given by [1]
         #   -1/(2 pi)**(n/2) * (lam/r)**(n/2-1) * K(n/2-1, lam r)
@@ -743,7 +748,7 @@ class YukawaKernel(ExpressionKernel):
         # [3] https://dlmf.nist.gov/10.47#E2
         # [4] https://dlmf.nist.gov/10.49
 
-        r = pymbolic_real_norm_2(make_sym_vector("d", dim))
+        r = sym.pymbolic_real_norm_2(make_sym_vector("d", dim))
         if dim == 2:
             # NOTE: transform K(0, lam r) into a Hankel function using [2]
             expr = var("hankel_1")(0, var("I")*lam*r)
@@ -786,9 +791,8 @@ class YukawaKernel(ExpressionKernel):
     @override
     def get_args(self) -> Sequence[KernelArgument]:
         return [
-                KernelArgument(
-                    loopy_arg=lp.ValueArg(self.yukawa_lambda_name, np.float64),
-                    )]
+            KernelArgument(loopy_arg=lp.ValueArg(self.yukawa_lambda_name, np.float64)),
+        ]
 
     @override
     def get_derivative_taker(
@@ -858,11 +862,11 @@ class ElasticityKernel(ExpressionKernel):
                 f"'poisson_ratio_name' is not a str: {type(poisson_ratio_name)}"
             )
 
-        mu = SpatialConstant(viscosity_mu_name)
-        nu = SpatialConstant(poisson_ratio_name)
+        mu = sym.SpatialConstant(viscosity_mu_name)
+        nu = sym.SpatialConstant(poisson_ratio_name)
 
         d = make_sym_vector("d", dim)
-        r = pymbolic_real_norm_2(d)
+        r = sym.pymbolic_real_norm_2(d)
         delta_ij = 1 if icomp == jcomp else 0
 
         if dim == 2:
@@ -961,10 +965,10 @@ class StokesletKernel(ExpressionKernel):
             raise TypeError(
                 f"'viscosity_mu_name' is not a str: {type(viscosity_mu_name)}"
             )
-        mu = SpatialConstant(viscosity_mu_name)
+        mu = sym.SpatialConstant(viscosity_mu_name)
 
         d = make_sym_vector("d", dim)
-        r = pymbolic_real_norm_2(d)
+        r = sym.pymbolic_real_norm_2(d)
         delta_ij = 1 if icomp == jcomp else 0
 
         if dim == 2:
@@ -1060,7 +1064,7 @@ class StressletKernel(ExpressionKernel):
             )
 
         d = make_sym_vector("d", dim)
-        r = pymbolic_real_norm_2(d)
+        r = sym.pymbolic_real_norm_2(d)
 
         if dim == 2:
             expr = d[icomp]*d[jcomp]*d[kcomp]/r**4
@@ -1160,12 +1164,12 @@ class LineOfCompressionKernel(ExpressionKernel):
                 f"'poisson_ratio_name' is not a str: {type(poisson_ratio_name)}"
             )
 
-        mu = SpatialConstant(viscosity_mu_name)
-        nu = SpatialConstant(poisson_ratio_name)
+        mu = sym.SpatialConstant(viscosity_mu_name)
+        nu = sym.SpatialConstant(poisson_ratio_name)
 
         if dim == 3:
             d = make_sym_vector("d", dim)
-            r = pymbolic_real_norm_2(d)
+            r = sym.pymbolic_real_norm_2(d)
 
             # Kelvin solution
             expr = d[axis] * var("log")(r + d[axis]) - r
@@ -1252,11 +1256,11 @@ class BrinkmanletKernel(ExpressionKernel):
                  jcomp: int,
                  viscosity_mu_name: str = "mu",
                  darcy_impermeability_name: str = "k") -> None:
-        mu = SpatialConstant(viscosity_mu_name)
-        k = SpatialConstant(darcy_impermeability_name)
+        mu = sym.SpatialConstant(viscosity_mu_name)
+        k = sym.SpatialConstant(darcy_impermeability_name)
 
         d = make_sym_vector("d", dim)
-        r = pymbolic_real_norm_2(d)
+        r = sym.pymbolic_real_norm_2(d)
         R = k * r  # noqa: N806
         delta_ij = 1 if icomp == jcomp else 0
 
@@ -1377,10 +1381,10 @@ class BrinkmanStressKernel(ExpressionKernel):
                  kcomp: int,
                  viscosity_mu_name: str = "mu",
                  darcy_impermeability_name: str = "k") -> None:
-        k = SpatialConstant(darcy_impermeability_name)
+        k = sym.SpatialConstant(darcy_impermeability_name)
 
         d = make_sym_vector("d", dim)
-        r = pymbolic_real_norm_2(d)
+        r = sym.pymbolic_real_norm_2(d)
         R = k * r  # noqa: N806
         delta_ij = 1 if icomp == jcomp else 0
         delta_ik = 1 if icomp == kcomp else 0
@@ -1538,12 +1542,12 @@ class HeatKernel(ExpressionKernel):
 # {{{ a kernel defined as wrapping another one--e.g., derivatives
 
 @dataclass(frozen=True)
-class KernelWrapper(Kernel, ABC):
-    inner_kernel: Kernel
+class KernelWrapper(ScalarKernel, ABC):
+    inner_kernel: ScalarKernel
     """The kernel that is being wrapped (to take a derivative of, etc.)."""
 
-    def __init__(self, inner_kernel: Kernel) -> None:
-        Kernel.__init__(self, inner_kernel.dim)
+    def __init__(self, inner_kernel: ScalarKernel) -> None:
+        ScalarKernel.__init__(self, inner_kernel.dim)
         object.__setattr__(self, "inner_kernel", inner_kernel)
 
     @property
@@ -1552,7 +1556,7 @@ class KernelWrapper(Kernel, ABC):
         return self.inner_kernel.is_complex_valued
 
     @override
-    def get_base_kernel(self) -> Kernel:
+    def get_base_kernel(self) -> ScalarKernel:
         return self.inner_kernel.get_base_kernel()
 
     @override
@@ -1602,7 +1606,7 @@ class KernelWrapper(Kernel, ABC):
         return self.inner_kernel.get_source_args()
 
     @override
-    def replace_base_kernel(self, new_base_kernel: Kernel) -> Kernel:
+    def replace_base_kernel(self, new_base_kernel: ScalarKernel) -> ScalarKernel:
         raise NotImplementedError(
             f"'replace_base_kernel' is not implemented for '{type(self).__name__}'")
 
@@ -1620,7 +1624,7 @@ class KernelWrapper(Kernel, ABC):
 # {{{ derivatives
 
 class DerivativeBase(KernelWrapper, ABC):
-    """Bases: :class:`Kernel`
+    """Bases: :class:`ScalarKernel`
 
     .. autoattribute:: inner_kernel
     .. automethod:: replace_inner_kernel
@@ -1631,11 +1635,11 @@ class DerivativeBase(KernelWrapper, ABC):
         return self.inner_kernel.get_pde_as_diff_op()
 
     @abstractmethod
-    def replace_inner_kernel(self, new_inner_kernel: Kernel) -> Kernel:
+    def replace_inner_kernel(self, new_inner_kernel: ScalarKernel) -> ScalarKernel:
         """Replace the inner kernel of this wrapper.
 
-        This is essentially the same as :meth:`Kernel.replace_base_kernel`, but it does
-        not recurse.
+        This is essentially the same as :meth:`ScalarKernel.replace_base_kernel`,
+        but it does not recurse.
         """
 
 
@@ -1650,7 +1654,7 @@ class AxisSourceDerivative(DerivativeBase):
     axis: int
     """Direction axis for the source derivative."""
 
-    def __init__(self, axis: int, inner_kernel: Kernel) -> None:
+    def __init__(self, axis: int, inner_kernel: ScalarKernel) -> None:
         super().__init__(inner_kernel)
         object.__setattr__(self, "axis", axis)
 
@@ -1672,12 +1676,12 @@ class AxisSourceDerivative(DerivativeBase):
         return result
 
     @override
-    def replace_base_kernel(self, new_base_kernel: Kernel) -> Kernel:
+    def replace_base_kernel(self, new_base_kernel: ScalarKernel) -> ScalarKernel:
         return type(self)(self.axis,
             self.inner_kernel.replace_base_kernel(new_base_kernel))
 
     @override
-    def replace_inner_kernel(self, new_inner_kernel: Kernel) -> Kernel:
+    def replace_inner_kernel(self, new_inner_kernel: ScalarKernel) -> ScalarKernel:
         return type(self)(self.axis, new_inner_kernel)
 
 
@@ -1692,7 +1696,7 @@ class AxisTargetDerivative(DerivativeBase):
 
     axis: int
 
-    def __init__(self, axis: int, inner_kernel: Kernel) -> None:
+    def __init__(self, axis: int, inner_kernel: ScalarKernel) -> None:
         super().__init__(inner_kernel)
         object.__setattr__(self, "axis", axis)
 
@@ -1730,12 +1734,12 @@ class AxisTargetDerivative(DerivativeBase):
                     + inner_expr.diff(target_vec[self.axis]))
 
     @override
-    def replace_base_kernel(self, new_base_kernel: Kernel) -> Kernel:
+    def replace_base_kernel(self, new_base_kernel: ScalarKernel) -> ScalarKernel:
         return type(self)(self.axis,
             self.inner_kernel.replace_base_kernel(new_base_kernel))
 
     @override
-    def replace_inner_kernel(self, new_inner_kernel: Kernel) -> Kernel:
+    def replace_inner_kernel(self, new_inner_kernel: ScalarKernel) -> ScalarKernel:
         return type(self)(self.axis, new_inner_kernel)
 
 
@@ -1783,7 +1787,9 @@ class DirectionalDerivative(DerivativeBase):
     dir_vec_name: str
     """Name of the vector used for the direction."""
 
-    def __init__(self, inner_kernel: Kernel, dir_vec_name: str | None = None) -> None:
+    def __init__(self,
+                 inner_kernel: ScalarKernel,
+                 dir_vec_name: str | None = None) -> None:
         if dir_vec_name is None:
             dir_vec_name = f"{self.directional_kind}_derivative_dir"
 
@@ -1796,13 +1802,13 @@ class DirectionalDerivative(DerivativeBase):
         return fr"{self.dir_vec_name}·∇_{d} {self.inner_kernel}"
 
     @override
-    def replace_base_kernel(self, new_base_kernel: Kernel) -> Kernel:
+    def replace_base_kernel(self, new_base_kernel: ScalarKernel) -> ScalarKernel:
         return type(self)(
             self.inner_kernel.replace_base_kernel(new_base_kernel),
             dir_vec_name=self.dir_vec_name)
 
     @override
-    def replace_inner_kernel(self, new_inner_kernel: Kernel) -> Kernel:
+    def replace_inner_kernel(self, new_inner_kernel: ScalarKernel) -> ScalarKernel:
         return type(self)(new_inner_kernel, dir_vec_name=self.dir_vec_name)
 
 
@@ -1826,8 +1832,7 @@ class DirectionalSourceDerivative(DirectionalDerivative):
     def get_derivative_coeff_dict_at_source(
             self, expr_dict: DerivativeCoeffDict,
         ) -> DerivativeCoeffDict:
-        from sumpy.symbolic import make_sym_vector as make_sympy_vector
-        dir_vec = make_sympy_vector(self.dir_vec_name, self.dim)
+        dir_vec = sym.make_sym_vector(self.dir_vec_name, self.dim)
 
         expr_dict = self.inner_kernel.get_derivative_coeff_dict_at_source(
             expr_dict)
@@ -1862,7 +1867,7 @@ class DirectionalSourceDerivative(DirectionalDerivative):
 
 @dataclass(frozen=True)
 class TargetPointMultiplier(KernelWrapper):
-    """Bases: :class:`Kernel`
+    """Bases: :class:`ScalarKernel`
 
     Wraps a kernel :math:`G(x, y)` and outputs :math:`x_j G(x, y)`
     where :math:`x, y` are targets and sources respectively.
@@ -1876,7 +1881,7 @@ class TargetPointMultiplier(KernelWrapper):
     axis: int
     """Coordinate axis with which to multiply the kernel."""
 
-    def __init__(self, axis: int, inner_kernel: Kernel) -> None:
+    def __init__(self, axis: int, inner_kernel: ScalarKernel) -> None:
         super().__init__(inner_kernel)
         object.__setattr__(self, "axis", axis)
 
@@ -1933,11 +1938,11 @@ class TargetPointMultiplier(KernelWrapper):
         raise NotImplementedError("no PDE is known")
 
     @override
-    def replace_base_kernel(self, new_base_kernel: Kernel) -> Kernel:
+    def replace_base_kernel(self, new_base_kernel: ScalarKernel) -> ScalarKernel:
         return type(self)(self.axis,
             self.inner_kernel.replace_base_kernel(new_base_kernel))
 
-    def replace_inner_kernel(self, new_inner_kernel: Kernel) -> Kernel:
+    def replace_inner_kernel(self, new_inner_kernel: ScalarKernel) -> ScalarKernel:
         return type(self)(self.axis, new_inner_kernel)
 
 # }}}
@@ -1952,17 +1957,17 @@ class KernelMapper(Generic[ResultT]):
     """
     .. automethod:: __call__
     """
-    def rec(self, kernel: Kernel) -> ResultT:
+    def rec(self, kernel: ScalarKernel) -> ResultT:
         try:
             method = cast(
-                "Callable[[Kernel], ResultT]",
+                "Callable[[ScalarKernel], ResultT]",
                 getattr(self, kernel.mapper_method))
         except AttributeError as err:
             raise RuntimeError(f"{type(self)} cannot handle {type(kernel)}") from err
         else:
             return method(kernel)
 
-    def __call__(self, kernel: Kernel) -> ResultT:
+    def __call__(self, kernel: ScalarKernel) -> ResultT:
         return self.rec(kernel)
 
 
@@ -1992,44 +1997,33 @@ class KernelCombineMapper(KernelMapper[ResultT], ABC):
         return self.rec(kernel.inner_kernel)
 
 
-class KernelIdentityMapper(KernelMapper[Kernel]):
-    def map_expression_kernel(self, kernel: ExpressionKernel) -> Kernel:
+class KernelIdentityMapper(KernelMapper[ScalarKernel]):
+    def map_expression_kernel(self, kernel: ExpressionKernel) -> ScalarKernel:
         return kernel
 
-    map_laplace_kernel: \
-        Callable[[Self, LaplaceKernel], Kernel] = map_expression_kernel
-    map_biharmonic_kernel: \
-        Callable[[Self, BiharmonicKernel], Kernel] = map_expression_kernel
-    map_helmholtz_kernel: \
-        Callable[[Self, HelmholtzKernel], Kernel] = map_expression_kernel
-    map_yukawa_kernel: \
-        Callable[[Self, YukawaKernel], Kernel] = map_expression_kernel
-    map_elasticity_kernel: \
-        Callable[[Self, ElasticityKernel], Kernel] = map_expression_kernel
-    map_line_of_compression_kernel: \
-        Callable[[Self, LineOfCompressionKernel], Kernel] = map_expression_kernel
-    map_stokeslet_kernel: \
-        Callable[[Self, StokesletKernel], Kernel] = map_expression_kernel
-    map_stresslet_kernel: \
-        Callable[[Self, StressletKernel], Kernel] = map_expression_kernel
-    map_brinkmanlet_kernel: \
-        Callable[[Self, BrinkmanletKernel], Kernel] = map_expression_kernel
-    map_brinkman_stress_kernel: \
-        Callable[[Self, BrinkmanStressKernel], Kernel] = map_expression_kernel
-    map_heat_kernel: \
-        Callable[[Self, HeatKernel], Kernel] = map_expression_kernel
+    map_laplace_kernel: Callable[[Self, LaplaceKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
+    map_biharmonic_kernel: Callable[[Self, BiharmonicKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
+    map_helmholtz_kernel: Callable[[Self, HelmholtzKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
+    map_yukawa_kernel: Callable[[Self, YukawaKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
+    map_elasticity_kernel: Callable[[Self, ElasticityKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
+    map_line_of_compression_kernel: Callable[[Self, LineOfCompressionKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
+    map_stokeslet_kernel: Callable[[Self, StokesletKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
+    map_stresslet_kernel: Callable[[Self, StressletKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
+    map_brinkmanlet_kernel: Callable[[Self, BrinkmanletKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
+    map_brinkman_stress_kernel: Callable[[Self, BrinkmanStressKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
+    map_heat_kernel: Callable[[Self, HeatKernel], Kernel] = map_expression_kernel
 
-    def map_axis_target_derivative(self, kernel: AxisTargetDerivative) -> Kernel:
+    def map_axis_target_derivative(self, kernel: AxisTargetDerivative) -> ScalarKernel:
         return type(kernel)(kernel.axis, self.rec(kernel.inner_kernel))
 
-    def map_axis_source_derivative(self, kernel: AxisSourceDerivative) -> Kernel:
+    def map_axis_source_derivative(self, kernel: AxisSourceDerivative) -> ScalarKernel:
         return type(kernel)(kernel.axis, self.rec(kernel.inner_kernel))
 
-    def map_target_point_multiplier(self, kernel: TargetPointMultiplier) -> Kernel:
+    def map_target_point_multiplier(self, kernel: TargetPointMultiplier) -> ScalarKernel:  # noqa: E501
         return type(kernel)(kernel.axis, self.rec(kernel.inner_kernel))
 
     def map_directional_source_derivative(
-            self, kernel: DirectionalSourceDerivative) -> Kernel:
+            self, kernel: DirectionalSourceDerivative) -> ScalarKernel:
         return type(kernel)(self.rec(kernel.inner_kernel),
                             dir_vec_name=kernel.dir_vec_name)
 
@@ -2038,7 +2032,7 @@ class AxisSourceDerivativeRemover(KernelIdentityMapper):
     """Removes all axis source derivatives from the kernel."""
 
     @override
-    def map_axis_source_derivative(self, kernel: AxisSourceDerivative) -> Kernel:
+    def map_axis_source_derivative(self, kernel: AxisSourceDerivative) -> ScalarKernel:
         return self.rec(kernel.inner_kernel)
 
 
@@ -2046,7 +2040,7 @@ class AxisTargetDerivativeRemover(KernelIdentityMapper):
     """Removes all axis target derivatives from the kernel."""
 
     @override
-    def map_axis_target_derivative(self, kernel: AxisTargetDerivative) -> Kernel:
+    def map_axis_target_derivative(self, kernel: AxisTargetDerivative) -> ScalarKernel:
         return self.rec(kernel.inner_kernel)
 
 
@@ -2059,7 +2053,7 @@ class SourceDerivativeRemover(AxisSourceDerivativeRemover):
 
     @override
     def map_directional_source_derivative(
-            self, kernel: DirectionalSourceDerivative) -> Kernel:
+            self, kernel: DirectionalSourceDerivative) -> ScalarKernel:
         return self.rec(kernel.inner_kernel)
 
 
@@ -2067,7 +2061,8 @@ class TargetTransformationRemover(TargetDerivativeRemover):
     """Removes all target transformations from the kernel."""
 
     @override
-    def map_target_point_multiplier(self, kernel: TargetPointMultiplier) -> Kernel:
+    def map_target_point_multiplier(
+            self, kernel: TargetPointMultiplier) -> ScalarKernel:
         return self.rec(kernel.inner_kernel)
 
 

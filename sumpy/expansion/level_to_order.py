@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     import sumpy.symbolic as sym
-    from sumpy.kernel import Kernel
+    from sumpy.kernel import ScalarKernel
 
 
 class TreeLike(Protocol):
@@ -71,7 +71,7 @@ class FMMLibExpansionOrderFinder:
     """
 
     def __call__(self,
-                 kernel: Kernel,
+                 kernel: ScalarKernel,
                  kernel_args: dict[str, sym.Expr] | Sequence[tuple[str, sym.Expr]],
                  tree: TreeLike,
                  level: int) -> int:
@@ -163,7 +163,7 @@ class SimpleExpansionOrderFinder:
     """
 
     def __call__(self,
-                 kernel: Kernel,
+                 kernel: ScalarKernel,
                  kernel_args: dict[str, sym.Expr] | Sequence[tuple[str, sym.Expr]],
                  tree: TreeLike,
                  level: int) -> int:

@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 
     from sumpy.assignment_collection import SymbolicAssignmentCollection
     from sumpy.expansion.diff_op import MultiIndex
-    from sumpy.kernel import Kernel
+    from sumpy.kernel import ScalarKernel
 
 
 logger = logging.getLogger(__name__)
@@ -76,7 +76,7 @@ class VolumeTaylorMultipoleExpansionBase(VolumeTaylorExpansionMixin,
 
     @override
     def coefficients_from_source_vec(self,
-                kernels: Sequence[Kernel],
+                kernels: Sequence[ScalarKernel],
                 avec: sym.Matrix,
                 bvec: sym.Matrix | None,
                 rscale: sym.Expr,
@@ -116,7 +116,7 @@ class VolumeTaylorMultipoleExpansionBase(VolumeTaylorExpansionMixin,
     @override
     def coefficients_from_source(
                 self,
-                kernel: Kernel,
+                kernel: ScalarKernel,
                 avec: sym.Matrix,
                 bvec: sym.Matrix | None,
                 rscale: sym.Expr,
@@ -130,7 +130,7 @@ class VolumeTaylorMultipoleExpansionBase(VolumeTaylorExpansionMixin,
 
     @override
     def evaluate(self,
-                kernel: Kernel,
+                kernel: ScalarKernel,
                 coeffs: Sequence[sym.Expr],
                 bvec: sym.Matrix,
                 rscale: sym.Expr,
@@ -440,7 +440,7 @@ class HankelBased2DMultipoleExpansion(MultipoleExpansionBase, ABC):
     @override
     def coefficients_from_source(
                 self,
-                kernel: Kernel,
+                kernel: ScalarKernel,
                 avec: sym.Matrix,
                 bvec: sym.Matrix | None,
                 rscale: sym.Expr,
@@ -469,7 +469,7 @@ class HankelBased2DMultipoleExpansion(MultipoleExpansionBase, ABC):
 
     @override
     def evaluate(self,
-                 kernel: Kernel,
+                 kernel: ScalarKernel,
                  coeffs: Sequence[sym.Expr],
                  bvec: sym.Matrix,
                  rscale: sym.Expr,
