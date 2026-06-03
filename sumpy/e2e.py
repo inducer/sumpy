@@ -42,6 +42,8 @@ from sumpy.tools import KernelCacheMixin, to_complex_dtype
 if TYPE_CHECKING:
     from arraycontext import ArrayContext
 
+    from sumpy.expansion import ExpansionBase
+
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +63,14 @@ Expansion-to-expansion
 # {{{ E2EBase: base class
 
 class E2EBase(KernelCacheMixin, ABC):
-    def __init__(self, src_expansion, tgt_expansion, name=None):
+    src_expansion: ExpansionBase
+    tgt_expansion: ExpansionBase
+    name: str
+
+    def __init__(self,
+            src_expansion: ExpansionBase,
+            tgt_expansion: ExpansionBase,
+            name: str | None = None):
         """
         :arg expansion: a subclass of :class:`sympy.expansion.ExpansionBase`
         :arg strength_usage: A list of integers indicating which expression
@@ -93,7 +102,9 @@ class E2EBase(KernelCacheMixin, ABC):
             raise ValueError("source and target expansions must have "
                     "same dimensionality")
 
-        self.dim = src_expansion.dim
+    @property
+    def dim(self):
+        return self.tgt_expansion.dim
 
     @property
     @abstractmethod
