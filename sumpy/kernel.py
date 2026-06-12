@@ -1479,36 +1479,41 @@ class BrinkmanStressKernel(ExpressionKernel):
 
 @dataclass(frozen=True, repr=False)
 class HeatKernel(ExpressionKernel):
-    r"""The Green's function for the heat equation given by
-    :math:`e^{-r^2/{4 \alpha t}}/\sqrt{(4 \pi \alpha t)^d}`
-    where :math:`d` is the number of spatial dimensions.
+    r"""The Green's function for the heat equation.
+
+    .. math::
+
+        \frac{\partial}{\partial t} K(t, \mathbf{x}, \mathbf{y})
+            - \alpha \Delta K(t, \mathbf{x}, \mathbf{y})
+              = \delta(t) \delta(\mathbf{x} - \mathbf{y})
 
     .. note::
 
-        This kernel cannot be used in an FMM yet and can only
-        be used in expansions and evaluations that occur forward
-        in the time dimension.
+        This kernel cannot be used in an FMM yet and can only be used in
+        expansions and evaluations that occur forward in the time dimension.
     """
-    heat_alpha_name: str
 
     mapper_method: ClassVar[str] = "map_heat_kernel"
 
+    heat_alpha_name: str
+
     def __init__(self, spatial_dims: int, heat_alpha_name: str = "alpha"):
         dim = spatial_dims + 1
+        alpha = sym.SpatialConstant(heat_alpha_name)
+
         d = make_sym_vector("d", dim)
         t = d[-1]
-        r = pymbolic_real_norm_2(d[:-1])
-        alpha = SpatialConstant(heat_alpha_name)
+        r = sym.pymbolic_real_norm_2(d[:-1])
+
         expr = var("exp")(-r**2/(4 * alpha * t)) / var("sqrt")(t**(dim - 1))
         scaling = 1/var("sqrt")((4*var("pi")*alpha)**(dim - 1))
 
-        super().__init__(
-                dim,
-                expression=expr,
-                global_scaling_const=scaling,
-                )
-
+        super().__init__(dim, expression=expr, global_scaling_const=scaling)
         object.__setattr__(self, "heat_alpha_name", heat_alpha_name)
+
+    @override
+    def __reduce__(self) -> tuple[object, ...]:
+        return (self.__class__, (self.dim - 1, self.heat_alpha_name))
 
     @property
     @override
@@ -1516,24 +1521,24 @@ class HeatKernel(ExpressionKernel):
         return False
 
     @override
-    def __repr__(self):
+    def __str__(self):
         return f"HeatKnl{self.dim - 1}D"
 
     @override
     def get_args(self):
         return [
-                KernelArgument(
-                    loopy_arg=lp.ValueArg(self.heat_alpha_name, np.float64),
-                    )]
+            KernelArgument(loopy_arg=lp.ValueArg(self.heat_alpha_name, np.float64))
+        ]
 
     @override
-    def get_pde_as_diff_op(self):
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
         from sumpy.expansion.diff_op import diff, laplacian, make_identity_diff_op
+
         alpha = sym.Symbol(self.heat_alpha_name)
         w = make_identity_diff_op(self.dim - 1, time_dependent=True)
-        time_diff = [0]*self.dim
-        time_diff[-1] = 1
-        return diff(w, tuple(time_diff)) - laplacian(w) * alpha
+        t_mi = (*([0] * (self.dim - 1)), 1)
+
+        return diff(w, t_mi) - alpha * laplacian(w)
 
 
 # }}}
@@ -2011,7 +2016,7 @@ class KernelIdentityMapper(KernelMapper[ScalarKernel]):
     map_stresslet_kernel: Callable[[Self, StressletKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
     map_brinkmanlet_kernel: Callable[[Self, BrinkmanletKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
     map_brinkman_stress_kernel: Callable[[Self, BrinkmanStressKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
-    map_heat_kernel: Callable[[Self, HeatKernel], Kernel] = map_expression_kernel
+    map_heat_kernel: Callable[[Self, HeatKernel], ScalarKernel] = map_expression_kernel
 
     def map_axis_target_derivative(self, kernel: AxisTargetDerivative) -> ScalarKernel:
         return type(kernel)(kernel.axis, self.rec(kernel.inner_kernel))
