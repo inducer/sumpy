@@ -933,7 +933,7 @@ def loopy_fft(
         knl = lp.add_inames_for_unused_hw_axes(knl)
 
     knl = lp.preprocess_kernel(knl)
-    return lp.linearize(knl)
+    return lp.linearize(knl).executor()
 
 
 class FFTBackend(enum.Enum):
