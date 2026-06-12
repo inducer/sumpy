@@ -1062,7 +1062,7 @@ def run_opencl_fft(
             raise RuntimeError("inplace fft is not supported")
         else:
             # FIXME: All very imperative. FFT functionality should move into the actx?
-            output_vec = actx.np.empty_like(input_vec)  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+            output_vec = actx.np.zeros_like(input_vec)
 
         meth = app.ifft if inverse else app.fft
 
