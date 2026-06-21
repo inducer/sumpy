@@ -45,7 +45,7 @@ import pymbolic.primitives as prim
 from pymbolic import Expression, var
 from pymbolic.mapper import CSECachingMapperMixin, IdentityMapper
 from pymbolic.primitives import make_sym_vector
-from pytools import memoize_method
+from pytools import keyed_memoize_method, memoize_method, obj_array
 
 import sumpy.symbolic as sym
 from sumpy.derivative_taker import (
@@ -70,6 +70,8 @@ Kernel interface
 
 .. autoclass:: KernelArgument
 .. autoclass:: ScalarKernel
+    :show-inheritance:
+.. autoclass:: SystemKernel
     :show-inheritance:
 
 Symbolic kernels
@@ -123,6 +125,27 @@ Scalar PDE kernels
     :show-inheritance:
     :members: mapper_method
 .. autoclass:: HeatKernel
+    :show-inheritance:
+    :members: mapper_method
+
+System PDE Kernels
+------------------
+
+.. autoclass:: ElasticitySystemKernel
+    :show-inheritance:
+    :members: mapper_method
+
+.. autoclass:: StokesletSystemKernel
+    :show-inheritance:
+    :members: mapper_method
+.. autoclass:: StressletSystemKernel
+    :show-inheritance:
+    :members: mapper_method
+
+.. autoclass:: BrinkmanletSystemKernel
+    :show-inheritance:
+    :members: mapper_method
+.. autoclass:: BrinkmanStressSystemKernel
     :show-inheritance:
     :members: mapper_method
 
@@ -234,11 +257,13 @@ class ScalarKernel(ABC):
 
     .. automethod:: get_base_kernel
     .. automethod:: replace_base_kernel
+    .. automethod:: get_pde_system_kernel
     .. automethod:: prepare_loopy_kernel
     .. automethod:: get_code_transformer
     .. automethod:: get_expression
     .. automethod:: postprocess_at_source
     .. automethod:: postprocess_at_target
+
     .. automethod:: get_global_scaling_const
     .. automethod:: get_args
     .. automethod:: get_source_args
@@ -285,6 +310,14 @@ class ScalarKernel(ABC):
             *new_base_kernel*.
         """
         return new_base_kernel
+
+    def get_pde_system_kernel(self) -> tuple[SystemKernel, tuple[int, ...]]:
+        """
+        :returns: if the kernel is a component kernel of a :class:`SystemKernel`,
+            this returns the system kernel and the index of the kernel in that
+            system.
+        """
+        raise TypeError(f"kernel {type(self)} is not part of a system")
 
     def prepare_loopy_kernel(self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
         """Apply some changes (such as registering function manglers) to the kernel.
@@ -420,6 +453,81 @@ class ScalarKernel(ABC):
         """
         :returns: list of :class:`KernelArgument` instances describing extra
             arguments used by kernel in picking up contributions from point sources.
+        """
+        return []
+
+
+@dataclass(frozen=True, repr=False)
+class SystemKernel(ABC):
+    """A kernel representing a vector PDE.
+
+    .. autoattribute:: mapper_method
+
+    .. autoattribute:: dim
+    .. autoproperty:: ndim
+    .. autoproperty:: shape
+
+    .. automethod:: __getitem__
+    .. automethod:: get_expression
+    .. automethod:: get_pde_as_diff_op
+    """
+
+    mapper_method: ClassVar[str]
+    """The name of the mapper method called for the kernel."""
+
+    dim: int
+    """Dimension of the space the kernel is defined in."""
+
+    @property
+    def ndim(self) -> int:
+        """The number of indices in the kernel tensor."""
+        return len(self.shape)
+
+    @property
+    @abstractmethod
+    def shape(self) -> tuple[int, ...]:
+        """The shape of the kernel tensor."""
+
+    def __getitem__(self, index: tuple[int, ...], /) -> ScalarKernel:
+        """
+        :returns: the scalar kernel at *index*.
+        """
+        if len(index) != self.ndim:
+            raise IndexError(
+                f"incorrect index size for kernel: kernel is {self.ndim}-dimensional: "
+                f"{index} given"
+            )
+
+        if any(not 0 <= i < n for i, n in zip(index, self.shape, strict=True)):
+            raise IndexError(
+                f"index {index} is out of bounds for kernel with shape {self.shape}"
+            )
+
+        return self.get_scalar_component(*index)
+
+    @abstractmethod
+    def get_scalar_component(self, *args: int) -> ScalarKernel:
+        """
+        :returns: the scalar kernel the indices given by *args*.
+        """
+
+    def get_expression(self, dist_vec: sym.Matrix) -> obj_array.ObjectArrayND[sym.Expr]:
+        """
+        :returns: a :mod:`sympy` expression for each component the kernel.
+        """
+        from pytools import ndindex
+
+        result = np.empty(self.shape, dtype=object)
+        for i in ndindex(result.shape):
+            result[i] = self[i].get_expression(dist_vec)
+
+        return result
+
+    @abstractmethod
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        """
+        :returns: the PDE that this kernel satisfies
+            (see :meth:`ScalarKernel.get_pde_as_diff_op` as the scalar alternative).
         """
         return []
 
@@ -922,6 +1030,15 @@ class ElasticityComponentKernel(ExpressionKernel):
         ]
 
     @override
+    @memoize_method
+    def get_pde_system_kernel(self) -> tuple[SystemKernel, tuple[int, ...]]:
+        return ElasticitySystemKernel(
+            self.dim,
+            viscosity_mu_name=self.viscosity_mu_name,
+            poisson_ratio_name=self.poisson_ratio_name
+        ), (self.icomp, self.jcomp)
+
+    @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
         from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
 
@@ -1019,6 +1136,14 @@ class StokesletComponentKernel(ExpressionKernel):
         ]
 
     @override
+    @memoize_method
+    def get_pde_system_kernel(self) -> tuple[SystemKernel, tuple[int, ...]]:
+        return StokesletSystemKernel(
+            self.dim,
+            viscosity_mu_name=self.viscosity_mu_name,
+        ), (self.icomp, self.jcomp)
+
+    @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
         from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
 
@@ -1105,7 +1230,7 @@ class StressletComponentKernel(ExpressionKernel):
     @memoize_method
     @override
     def get_args(self) -> Sequence[KernelArgument]:
-        # NOTE: this is not used, but kept for symmetry with the StokesletKernel
+        # NOTE: this is not used, kept for symmetry with the StokesletComponentKernel
         return [
             KernelArgument(loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64))
         ]
@@ -1115,6 +1240,14 @@ class StressletComponentKernel(ExpressionKernel):
         return (
             f"StressletKnl{self.dim}D_{self.icomp}{self.jcomp}{self.kcomp}"
             f"({self.viscosity_mu_name})")
+
+    @override
+    @memoize_method
+    def get_pde_system_kernel(self) -> tuple[SystemKernel, tuple[int, ...]]:
+        return StressletSystemKernel(
+            self.dim,
+            viscosity_mu_name=self.viscosity_mu_name,
+        ), (self.icomp, self.jcomp, self.kcomp)
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
@@ -1340,6 +1473,15 @@ class BrinkmanletComponentKernel(ExpressionKernel):
         ]
 
     @override
+    @memoize_method
+    def get_pde_system_kernel(self) -> tuple[SystemKernel, tuple[int, ...]]:
+        return BrinkmanletSystemKernel(
+            self.dim,
+            viscosity_mu_name=self.viscosity_mu_name,
+            darcy_impermeability_name=self.darcy_impermeability_name,
+        ), (self.icomp, self.jcomp)
+
+    @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
         from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
 
@@ -1479,6 +1621,15 @@ class BrinkmanStressComponentKernel(ExpressionKernel):
         ]
 
     @override
+    @memoize_method
+    def get_pde_system_kernel(self) -> tuple[SystemKernel, tuple[int, ...]]:
+        return BrinkmanStressSystemKernel(
+            self.dim,
+            viscosity_mu_name=self.viscosity_mu_name,
+            darcy_impermeability_name=self.darcy_impermeability_name,
+        ), (self.icomp, self.jcomp, self.kcomp)
+
+    @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
         from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
 
@@ -1549,6 +1700,338 @@ class HeatKernel(ExpressionKernel):
         t_mi = (*([0] * (self.dim - 1)), 1)
 
         return diff(w, t_mi) - alpha * laplacian(w)
+
+
+# }}}
+
+
+# {{{ vector PDE kernels
+
+
+@dataclass(frozen=True, repr=False)
+class ElasticitySystemKernel(SystemKernel):
+    r"""A kernel for the linear elasticity (Navier-Cauchy) equations
+    (see e.g. Section 2.2 in [Hsiao2008]_).
+
+    This kernel uses :class:`ElasticityComponentKernel` for its components.
+
+    .. autoattribute:: viscosity_mu_name
+    .. autoattribute:: poisson_ratio_name
+    """
+
+    mapper_method: ClassVar[str] = "map_elasticity_system_kernel"
+
+    viscosity_mu_name: str = "mu"
+    r"""The argument name to use for the dynamic viscosity :math:`\mu` when
+    generating functions to evaluate this kernel.
+    """
+    poisson_ratio_name: str = "nu"
+    r"""The argument name to use for Poisson's ratio :math:`\nu` when generating
+    functions to evaluate this kernel.
+    """
+
+    @override
+    def __str__(self) -> str:
+        return (
+            f"ElasticityKnl{self.dim}D"
+            f"({self.viscosity_mu_name}, {self.poisson_ratio_name})")
+
+    @override
+    def __reduce__(self):
+        return (
+            type(self),
+            (self.dim, self.viscosity_mu_name, self.poisson_ratio_name))
+
+    @property
+    @override
+    def shape(self) -> tuple[int, ...]:
+        return (self.dim, self.dim)
+
+    @override
+    @keyed_memoize_method(key=lambda i, j: tuple(sorted((i, j))))
+    def get_scalar_component(self, i: int, j: int, /) -> ScalarKernel:
+        # NOTE: the kernel is (i, j) -> (j, i) symmetric
+        i, j = sorted([i, j])
+
+        return ElasticityComponentKernel(
+            self.dim, i, j,
+            viscosity_mu_name=self.viscosity_mu_name,
+            poisson_ratio_name=self.poisson_ratio_name,
+        )
+
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        from sumpy.expansion.diff_op import (
+            divergence,
+            gradient,
+            laplacian,
+            make_identity_diff_op,
+        )
+
+        mu = sym.Symbol(self.viscosity_mu_name)
+        nu = sym.Symbol(self.poisson_ratio_name)
+        u = make_identity_diff_op(self.dim, self.dim)
+
+        return mu * laplacian(u) + mu / (1 - 2 * nu) * gradient(divergence(u))
+
+
+@dataclass(frozen=True, repr=False)
+class StokesletSystemKernel(SystemKernel):
+    r"""A kernel for the Stokes equations (see e.g. Chapter 2 in [Pozrikidis1992]_).
+
+    This kernel uses :class:`StokesletComponentKernel` for its components.
+
+    .. autoattribute:: viscosity_mu_name
+    """
+
+    mapper_method: ClassVar[str] = "map_stokeslet_system_kernel"
+
+    viscosity_mu_name: str = "mu"
+    r"""The argument name to use for the dynamic viscosity :math:`\mu` when
+    generating functions to evaluate this kernel.
+    """
+
+    @override
+    def __str__(self) -> str:
+        return (
+            f"StokesletKnl{self.dim}D({self.viscosity_mu_name})")
+
+    @override
+    def __reduce__(self):
+        return (type(self), (self.dim, self.viscosity_mu_name))
+
+    @property
+    @override
+    def shape(self) -> tuple[int, ...]:
+        return (self.dim, self.dim)
+
+    @override
+    @keyed_memoize_method(key=lambda i, j: tuple(sorted((i, j))))
+    def get_scalar_component(self, i: int, j: int, /) -> ScalarKernel:
+        # NOTE: the kernel is (i, j) -> (j, i) symmetric
+        i, j = sorted([i, j])
+
+        return StokesletComponentKernel(
+            self.dim, i, j,
+            viscosity_mu_name=self.viscosity_mu_name,
+        )
+
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        from sumpy.expansion.diff_op import (
+            concat,
+            divergence,
+            gradient,
+            laplacian,
+            make_identity_diff_op,
+        )
+
+        mu = sym.Symbol(self.viscosity_mu_name)
+        u_and_p = make_identity_diff_op(self.dim, self.dim + 1)
+        u = u_and_p[:self.dim]
+        p = u_and_p[self.dim]
+
+        return concat(mu * laplacian(u) - gradient(p), divergence(u))
+
+
+@dataclass(frozen=True, repr=False)
+class StressletSystemKernel(SystemKernel):
+    r"""A kernel for the Stokes equations (see e.g. Chapter 2 in [Pozrikidis1992]_).
+
+    This kernel uses :class:`StressletComponentKernel` for its components.
+
+    .. autoattribute:: viscosity_mu_name
+    """
+
+    mapper_method: ClassVar[str] = "map_stresslet_system_kernel"
+
+    viscosity_mu_name: str = "mu"
+    r"""The argument name to use for the dynamic viscosity :math:`\mu` when
+    generating functions to evaluate this kernel.
+    """
+
+    @override
+    def __str__(self) -> str:
+        return (
+            f"StressletKnl{self.dim}D({self.viscosity_mu_name})")
+
+    @override
+    def __reduce__(self):
+        return (type(self), (self.dim, self.viscosity_mu_name))
+
+    @property
+    @override
+    def shape(self) -> tuple[int, ...]:
+        return (self.dim, self.dim, self.dim)
+
+    @override
+    @keyed_memoize_method(key=lambda i, j, k: tuple(sorted((i, j, k))))
+    def get_scalar_component(self, i: int, j: int, k: int, /) -> ScalarKernel:
+        # NOTE: the kernel is fully permutation symmetric
+        i, j, k = sorted([i, j, k])
+
+        return StressletComponentKernel(
+            self.dim, i, j, k,
+            viscosity_mu_name=self.viscosity_mu_name,
+        )
+
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        from sumpy.expansion.diff_op import (
+            concat,
+            divergence,
+            gradient,
+            laplacian,
+            make_identity_diff_op,
+        )
+
+        mu = sym.Symbol(self.viscosity_mu_name)
+        u_and_p = make_identity_diff_op(self.dim, self.dim + 1)
+        u = u_and_p[:self.dim]
+        p = u_and_p[self.dim]
+
+        return concat(mu * laplacian(u) - gradient(p), divergence(u))
+
+
+@dataclass(frozen=True, repr=False)
+class BrinkmanletSystemKernel(SystemKernel):
+    r"""A kernel for the Brinkman equations.
+
+    This kernel uses :class:`BrinkmanletComponentKernel` for its components.
+
+    .. autoattribute:: viscosity_mu_name
+    .. autoattribute:: darcy_impermeability_name
+    """
+
+    mapper_method: ClassVar[str] = "map_brinkmanlet_system_kernel"
+
+    viscosity_mu_name: str = "mu"
+    """The argument name to use for the dynamic viscosity when generating
+    functions to evaluate this kernel.
+    """
+    darcy_impermeability_name: str = "k"
+    """The argument name to use for the Darcy impermeability when generating
+    functions to evaluate this kernel.
+    """
+
+    @override
+    def __str__(self) -> str:
+        return (
+            f"BrinkmanletKnl{self.dim}D"
+            f"({self.viscosity_mu_name}, {self.darcy_impermeability_name})")
+
+    @override
+    def __reduce__(self):
+        return (
+            type(self),
+            (self.dim, self.viscosity_mu_name, self.darcy_impermeability_name))
+
+    @property
+    @override
+    def shape(self) -> tuple[int, ...]:
+        return (self.dim, self.dim)
+
+    @override
+    @keyed_memoize_method(key=lambda i, j: tuple(sorted((i, j))))
+    def get_scalar_component(self, i: int, j: int, /) -> ScalarKernel:
+        # NOTE: the kernel is (i, j) -> (j, i) symmetric
+        i, j = sorted([i, j])
+
+        return BrinkmanletComponentKernel(
+            self.dim, i, j,
+            viscosity_mu_name=self.viscosity_mu_name,
+            darcy_impermeability_name=self.darcy_impermeability_name,
+        )
+
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        from sumpy.expansion.diff_op import (
+            concat,
+            divergence,
+            gradient,
+            laplacian,
+            make_identity_diff_op,
+        )
+
+        mu = sym.Symbol(self.viscosity_mu_name)
+        k = sym.Symbol(self.darcy_impermeability_name)
+
+        u_and_p = make_identity_diff_op(self.dim, self.dim + 1)
+        u = u_and_p[:self.dim]
+        p = u_and_p[self.dim]
+
+        return concat(mu * (laplacian(u) - k**2 * u) - gradient(p), divergence(u))
+
+
+@dataclass(frozen=True, repr=False)
+class BrinkmanStressSystemKernel(SystemKernel):
+    r"""A kernel for the Brinkman equations.
+
+    This kernel uses :class:`BrinkmanStressComponentKernel` for its components.
+
+    .. autoattribute:: viscosity_mu_name
+    .. autoattribute:: darcy_impermeability_name
+    """
+
+    mapper_method: ClassVar[str] = "map_brinkman_stress_system_kernel"
+
+    viscosity_mu_name: str = "mu"
+    """The argument name to use for the dynamic viscosity when generating
+    functions to evaluate this kernel.
+    """
+    darcy_impermeability_name: str = "k"
+    """The argument name to use for the Darcy impermeability when generating
+    functions to evaluate this kernel.
+    """
+
+    @override
+    def __str__(self) -> str:
+        return (
+            f"BrinkmanStressKnl{self.dim}D"
+            f"({self.viscosity_mu_name}, {self.darcy_impermeability_name})")
+
+    @override
+    def __reduce__(self):
+        return (
+            type(self),
+            (self.dim, self.viscosity_mu_name, self.darcy_impermeability_name))
+
+    @property
+    @override
+    def shape(self) -> tuple[int, ...]:
+        return (self.dim, self.dim, self.dim)
+
+    @override
+    @keyed_memoize_method(key=lambda i, j, k: ((min(i, k), j, max(i, k))))
+    def get_scalar_component(self, i: int, j: int, k: int, /) -> ScalarKernel:
+        # NOTE: the kernel is (i, j, k) -> (k, j, i) symmetric
+        if i > k:
+            i, k = k, i
+
+        return BrinkmanStressComponentKernel(
+            self.dim, i, j, k,
+            viscosity_mu_name=self.viscosity_mu_name,
+            darcy_impermeability_name=self.darcy_impermeability_name,
+        )
+
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        from sumpy.expansion.diff_op import (
+            concat,
+            divergence,
+            gradient,
+            laplacian,
+            make_identity_diff_op,
+        )
+
+        mu = sym.Symbol(self.viscosity_mu_name)
+        k = sym.Symbol(self.darcy_impermeability_name)
+
+        u_and_p = make_identity_diff_op(self.dim, self.dim + 1)
+        u = u_and_p[:self.dim]
+        p = u_and_p[self.dim]
+
+        return concat(mu * (laplacian(u) - k**2 * u) - gradient(p), divergence(u))
 
 
 # }}}
