@@ -58,18 +58,23 @@ from sumpy.expansion.diff_op import (
 )
 from sumpy.kernel import (
     BiharmonicKernel,
-    BrinkmanletKernel,
-    BrinkmanStressKernel,
-    ElasticityKernel,
+    BrinkmanletComponentKernel,
+    BrinkmanletSystemKernel,
+    BrinkmanStressComponentKernel,
+    BrinkmanStressSystemKernel,
+    ElasticityComponentKernel,
+    ElasticitySystemKernel,
     ExpressionKernel,
     HeatKernel,
     HelmholtzKernel,
-    Kernel,
     LaplaceKernel,
     LineOfCompressionKernel,
     ScalarKernel,
-    StokesletKernel,
-    StressletKernel,
+    StokesletComponentKernel,
+    StokesletSystemKernel,
+    StressletComponentKernel,
+    StressletSystemKernel,
+    SystemKernel,
     YukawaKernel,
 )
 
@@ -88,9 +93,9 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts([
 # {{{ pde check for kernels
 
 class KernelInfo:
-    kernel: Kernel
+    kernel: ScalarKernel
 
-    def __init__(self, kernel: Kernel, **kwargs):
+    def __init__(self, kernel: ScalarKernel, **kwargs: Any) -> None:
         self.kernel = kernel
         self.extra_kwargs = kwargs
         diff_op = self.kernel.get_pde_as_diff_op()
@@ -125,29 +130,29 @@ class KernelInfo:
     KernelInfo(LaplaceKernel(3)),
     KernelInfo(HelmholtzKernel(2), k=5),
     KernelInfo(HelmholtzKernel(3), k=5),
-    KernelInfo(StokesletKernel(2, 0, 1), mu=5),
-    KernelInfo(StokesletKernel(2, 1, 1), mu=5),
-    KernelInfo(StokesletKernel(3, 0, 1), mu=5),
-    KernelInfo(StokesletKernel(3, 1, 1), mu=5),
-    KernelInfo(StressletKernel(2, 0, 0, 0), mu=5),
-    KernelInfo(StressletKernel(2, 0, 0, 1), mu=5),
-    KernelInfo(StressletKernel(3, 0, 0, 0), mu=5),
-    KernelInfo(StressletKernel(3, 0, 0, 1), mu=5),
-    KernelInfo(StressletKernel(3, 0, 1, 2), mu=5),
-    KernelInfo(ElasticityKernel(2, 0, 1), mu=5, nu=0.2),
-    KernelInfo(ElasticityKernel(2, 0, 0), mu=5, nu=0.2),
-    KernelInfo(ElasticityKernel(3, 0, 1), mu=5, nu=0.2),
-    KernelInfo(ElasticityKernel(3, 0, 0), mu=5, nu=0.2),
+    KernelInfo(StokesletComponentKernel(2, 0, 1), mu=5),
+    KernelInfo(StokesletComponentKernel(2, 1, 1), mu=5),
+    KernelInfo(StokesletComponentKernel(3, 0, 1), mu=5),
+    KernelInfo(StokesletComponentKernel(3, 1, 1), mu=5),
+    KernelInfo(StressletComponentKernel(2, 0, 0, 0), mu=5),
+    KernelInfo(StressletComponentKernel(2, 0, 0, 1), mu=5),
+    KernelInfo(StressletComponentKernel(3, 0, 0, 0), mu=5),
+    KernelInfo(StressletComponentKernel(3, 0, 0, 1), mu=5),
+    KernelInfo(StressletComponentKernel(3, 0, 1, 2), mu=5),
+    KernelInfo(ElasticityComponentKernel(2, 0, 1), mu=5, nu=0.2),
+    KernelInfo(ElasticityComponentKernel(2, 0, 0), mu=5, nu=0.2),
+    KernelInfo(ElasticityComponentKernel(3, 0, 1), mu=5, nu=0.2),
+    KernelInfo(ElasticityComponentKernel(3, 0, 0), mu=5, nu=0.2),
     KernelInfo(LineOfCompressionKernel(3, 0), mu=5, nu=0.2),
     KernelInfo(LineOfCompressionKernel(3, 1), mu=5, nu=0.2),
-    KernelInfo(BrinkmanletKernel(2, 0, 1), mu=5, k=3),
-    KernelInfo(BrinkmanletKernel(2, 1, 1), mu=5, k=3),
-    KernelInfo(BrinkmanletKernel(3, 0, 1), mu=5, k=3),
-    KernelInfo(BrinkmanletKernel(3, 1, 1), mu=5, k=3),
-    KernelInfo(BrinkmanStressKernel(2, 0, 1, 0), mu=5, k=3),
-    KernelInfo(BrinkmanStressKernel(2, 0, 1, 1), mu=5, k=3),
-    KernelInfo(BrinkmanStressKernel(3, 0, 1, 0), mu=5, k=3),
-    KernelInfo(BrinkmanStressKernel(3, 0, 1, 2), mu=5, k=3),
+    KernelInfo(BrinkmanletComponentKernel(2, 0, 1), mu=5, k=3),
+    KernelInfo(BrinkmanletComponentKernel(2, 1, 1), mu=5, k=3),
+    KernelInfo(BrinkmanletComponentKernel(3, 0, 1), mu=5, k=3),
+    KernelInfo(BrinkmanletComponentKernel(3, 1, 1), mu=5, k=3),
+    KernelInfo(BrinkmanStressComponentKernel(2, 0, 1, 0), mu=5, k=3),
+    KernelInfo(BrinkmanStressComponentKernel(2, 0, 1, 1), mu=5, k=3),
+    KernelInfo(BrinkmanStressComponentKernel(3, 0, 1, 0), mu=5, k=3),
+    KernelInfo(BrinkmanStressComponentKernel(3, 0, 1, 2), mu=5, k=3),
     KernelInfo(HeatKernel(1), alpha=0.1),
     KernelInfo(HeatKernel(2), alpha=0.1),
     KernelInfo(HeatKernel(3), alpha=0.1),
@@ -562,9 +567,9 @@ def test_as_scalar_pde_brinkman():
 
 def test_elasticity_pickle():
     from pickle import dumps, loads
-    stokes_knl = StokesletKernel(
+    stokes_knl = StokesletComponentKernel(
         3, 0, 1, viscosity_mu_name="mu1")
-    elasticity_knl = ElasticityKernel(
+    elasticity_knl = ElasticityComponentKernel(
         3, 0, 1, viscosity_mu_name="mu1", poisson_ratio_name="nu1")
     elasticity_helper_knl = LineOfCompressionKernel(
         3, 0, viscosity_mu_name="mu1", poisson_ratio_name="nu1")
@@ -610,10 +615,8 @@ def test_to_fourier_matrix_stokes(dim: int) -> None:
     ks = sym.make_sym_vector("k", dim)
     mu = sym.Symbol("mu")
 
-    diff_op = make_identity_diff_op(dim, dim + 1)
-    u = diff_op[:dim]
-    p = diff_op[dim]
-    pde = concat(mu * laplacian(u) - gradient(p), divergence(u))
+    kernel = StokesletSystemKernel(dim=dim, viscosity_mu_name=mu.name)
+    pde = kernel.get_pde_as_diff_op()
 
     k_sqr = sum(k**2 for k in ks)
     if dim == 2:
@@ -647,8 +650,10 @@ def test_to_fourier_matrix_elasticity(dim: int) -> None:
     nu = sym.Symbol("nu")
     mn = mu / (1 - 2 * nu)
 
-    u = make_identity_diff_op(dim, dim)
-    pde = mu * laplacian(u) + mn * gradient(divergence(u))
+    kernel = ElasticitySystemKernel(dim,
+                                    viscosity_mu_name=mu.name,
+                                    poisson_ratio_name=nu.name)
+    pde = kernel.get_pde_as_diff_op()
 
     k_sqr = sum(k**2 for k in ks)
     if dim == 2:
@@ -679,10 +684,10 @@ def test_to_fourier_matrix_brinkman(dim: int) -> None:
     mu = sym.Symbol("mu")
     kappa = sym.Symbol("k")
 
-    diff_op = make_identity_diff_op(dim, dim + 1)
-    u = diff_op[:dim]
-    p = diff_op[dim]
-    pde = concat(mu * (laplacian(u) - kappa**2 * u) - gradient(p), divergence(u))
+    kernel = BrinkmanletSystemKernel(dim,
+                                     viscosity_mu_name=mu.name,
+                                     darcy_impermeability_name=kappa.name)
+    pde = kernel.get_pde_as_diff_op()
 
     k_sqr = sum(k**2 for k in ks)
     if dim == 2:
@@ -787,6 +792,112 @@ def test_get_storage_index(order, knl, compressed):
         wrangler = FullExpansionTermsWrangler(order, dim, max_mi=None)
     for i, mi in enumerate(wrangler.get_coefficient_identifiers()):
         assert i == wrangler.get_storage_index(mi)
+
+# }}}
+
+
+# {{{ test_system_kernel_components
+
+def _get_scalar_cls(knl: SystemKernel) -> type[ScalarKernel]:
+    if isinstance(knl, ElasticitySystemKernel):
+        return ElasticityComponentKernel
+    elif isinstance(knl, StokesletSystemKernel):
+        return StokesletComponentKernel
+    elif isinstance(knl, StressletSystemKernel):
+        return StressletComponentKernel
+    elif isinstance(knl, BrinkmanletSystemKernel):
+        return BrinkmanletComponentKernel
+    elif isinstance(knl, BrinkmanStressSystemKernel):
+        return BrinkmanStressComponentKernel
+    else:
+        raise AssertionError
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+@pytest.mark.parametrize("cls", [
+    ElasticitySystemKernel,
+    StokesletSystemKernel,
+    StressletSystemKernel,
+    BrinkmanletSystemKernel,
+    BrinkmanStressSystemKernel,
+])
+def test_system_kernel_components(dim: int, cls: type[SystemKernel]) -> None:
+    from itertools import product
+
+    knl = cls(dim=dim)
+    scalar_cls = _get_scalar_cls(knl)
+    shape = knl.shape
+    assert knl.ndim == len(shape)
+
+    d = sym.make_sym_vector("d", dim)
+    expr = knl.get_expression(d)
+    assert isinstance(expr, np.ndarray)
+    assert expr.shape == shape
+
+    # check components
+    if len(shape) == 2:
+        assert shape == (dim, dim)
+        for i, j in product(range(dim), repeat=2):
+            comp = knl[i, j]
+            assert comp.dim == dim
+            assert isinstance(comp, scalar_cls)
+            assert isinstance(comp.get_pde_system_kernel()[0], cls)
+    else:
+        assert shape == (dim, dim, dim)
+        for i, j, k in product(range(dim), repeat=3):
+            comp = knl[i, j, k]
+
+            assert comp.dim == dim
+            assert isinstance(comp, scalar_cls)
+            assert isinstance(comp.get_pde_system_kernel()[0], cls)
+
+    # check symmetry
+    if isinstance(knl, (
+            ElasticitySystemKernel,
+            StokesletSystemKernel,
+            BrinkmanletSystemKernel,
+        )):
+        for i, j in product(range(dim), repeat=2):
+            knl_ij = knl[i, j]
+            expected_ij = tuple(sorted([i, j]))
+
+            assert knl_ij == knl[j, i]
+            assert (knl_ij.icomp, knl_ij.jcomp) == expected_ij
+    elif isinstance(knl, (StressletSystemKernel,)):
+        for i, j, k in product(range(dim), repeat=3):
+            knl_ijk = knl[i, j, k]
+            expected_ij = tuple(sorted([i, j, k]))
+
+            assert knl_ijk == knl[expected_ij]
+            assert (knl_ijk.icomp, knl_ijk.jcomp, knl_ijk.kcomp) == expected_ij
+    elif isinstance(knl, (BrinkmanStressSystemKernel,)):
+        for i, j, k in product(range(dim), repeat=3):
+            knl_ijk = knl[i, j, k]
+            expected_ij = min(i, k), j, max(i, k)
+
+            assert knl_ijk == knl[expected_ij]
+            assert (knl_ijk.icomp, knl_ijk.jcomp, knl_ijk.kcomp) == expected_ij
+    else:
+        raise AssertionError
+
+# }}}
+
+
+# {{{ test_system_kernel_pickle
+
+@pytest.mark.parametrize("dim", [2, 3])
+@pytest.mark.parametrize("cls", [
+    ElasticitySystemKernel,
+    StokesletSystemKernel,
+    StressletSystemKernel,
+    BrinkmanletSystemKernel,
+    BrinkmanStressSystemKernel,
+])
+def test_system_kernel_pickle(dim: int, cls: type[SystemKernel]) -> None:
+    from pickle import dumps, loads
+
+    knl = cls(dim=dim)
+    assert loads(dumps(knl)) == knl
 
 # }}}
 
