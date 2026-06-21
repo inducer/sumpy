@@ -62,17 +62,17 @@ from sumpy.expansion.multipole import (
 from sumpy.kernel import (
     AxisTargetDerivative,
     BiharmonicKernel,
-    BrinkmanletKernel,
-    BrinkmanStressKernel,
+    BrinkmanletComponentKernel,
+    BrinkmanStressComponentKernel,
     DirectionalSourceDerivative,
-    ElasticityKernel,
+    ElasticityComponentKernel,
     HelmholtzKernel,
     LaplaceKernel,
     LineOfCompressionKernel,
     OneKernel,
     ScalarKernel,
-    StokesletKernel,
-    StressletKernel,
+    StokesletComponentKernel,
+    StressletComponentKernel,
     YukawaKernel,
 )
 from sumpy.test.geometries import make_ellipsoid, make_torus
@@ -165,7 +165,7 @@ def test_p2e_multiple(
             extra_kwargs["k"] = 0.2 * (0.707 + 0.707j)
         else:
             extra_kwargs["k"] = 0.2
-    if isinstance(base_knl, StokesletKernel):
+    if isinstance(base_knl, StokesletComponentKernel):
         extra_kwargs["mu"] = 0.2
 
     source_kernels = [
@@ -310,7 +310,7 @@ def test_p2e2p(
             extra_kwargs["k"] = 0.2 * (0.707 + 0.707j)
         else:
             extra_kwargs["k"] = 0.2
-    if isinstance(base_knl, StokesletKernel):
+    if isinstance(base_knl, StokesletComponentKernel):
         extra_kwargs["mu"] = 0.2
 
     if with_source_derivative:
@@ -478,13 +478,13 @@ def test_p2e2p(
     (HelmholtzKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
      LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
     (HelmholtzKernel(2), H2DLocalExpansion, H2DMultipoleExpansion, False),
-    (StokesletKernel(2, 0, 0), VolumeTaylorLocalExpansion,
+    (StokesletComponentKernel(2, 0, 0), VolumeTaylorLocalExpansion,
      VolumeTaylorMultipoleExpansion, False),
-    (StokesletKernel(2, 0, 0), LinearPDEConformingVolumeTaylorLocalExpansion,
+    (StokesletComponentKernel(2, 0, 0), LinearPDEConformingVolumeTaylorLocalExpansion,
      LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
-    (BrinkmanletKernel(2, 0, 0), VolumeTaylorLocalExpansion,
+    (BrinkmanletComponentKernel(2, 0, 0), VolumeTaylorLocalExpansion,
      VolumeTaylorMultipoleExpansion, False),
-    (BrinkmanStressKernel(2, 0, 0, 0), VolumeTaylorLocalExpansion,
+    (BrinkmanStressComponentKernel(2, 0, 0, 0), VolumeTaylorLocalExpansion,
      VolumeTaylorMultipoleExpansion, False),
     ])
 def test_translations(
@@ -507,12 +507,12 @@ def test_translations(
         extra_kwargs["k"] = 0.05
     elif isinstance(knl, YukawaKernel):
         extra_kwargs["lam"] = 0.05
-    elif isinstance(knl, (StokesletKernel, StressletKernel)):
+    elif isinstance(knl, (StokesletComponentKernel, StressletComponentKernel)):
         extra_kwargs["mu"] = 0.05
-    elif isinstance(knl, ElasticityKernel):
+    elif isinstance(knl, ElasticityComponentKernel):
         extra_kwargs["mu"] = 0.05
         extra_kwargs["nu"] = 0.1
-    elif isinstance(knl, (BrinkmanletKernel, BrinkmanStressKernel)):
+    elif isinstance(knl, (BrinkmanletComponentKernel, BrinkmanStressComponentKernel)):
         extra_kwargs["mu"] = 0.1
         extra_kwargs["k"] = 0.1
 
@@ -554,7 +554,7 @@ def test_translations(
     del eval_offset
 
     if knl.dim == 2:
-        if isinstance(knl, BrinkmanStressKernel):  # noqa: SIM108
+        if isinstance(knl, BrinkmanStressComponentKernel):
             orders = [3, 4, 5]
         else:
             orders = [2, 3, 4]
@@ -649,7 +649,7 @@ def test_m2m_and_l2l_exprs_simpler(base_knl, local_expn_class, mpole_expn_class,
             extra_kwargs["k"] = 0.2 * (0.707 + 0.707j)
         else:
             extra_kwargs["k"] = 0.2
-    if isinstance(base_knl, StokesletKernel):
+    if isinstance(base_knl, StokesletComponentKernel):
         extra_kwargs["mu"] = 0.2
 
     if with_source_derivative:
@@ -913,21 +913,21 @@ def get_kernel_name_for_test(knl: ScalarKernel) -> Callable[[str], str]:
 
 @pytest.mark.parametrize("knl", [
     BiharmonicKernel(2),
-    BrinkmanletKernel(2, 0, 1),
-    BrinkmanletKernel(3, 0, 0,
+    BrinkmanletComponentKernel(2, 0, 1),
+    BrinkmanletComponentKernel(3, 0, 0,
                       viscosity_mu_name="viscosity",
                       darcy_impermeability_name="kappa"),
-    BrinkmanStressKernel(2, 0, 1, 0),
-    BrinkmanStressKernel(3, 0, 0, 1,
+    BrinkmanStressComponentKernel(2, 0, 1, 0),
+    BrinkmanStressComponentKernel(3, 0, 0, 1,
                          viscosity_mu_name="viscosity",
                          darcy_impermeability_name="kappa"),
-    ElasticityKernel(2, 0, 0),
+    ElasticityComponentKernel(2, 0, 0),
     HelmholtzKernel(3, helmholtz_k_name="kay"),
     LaplaceKernel(3),
     LineOfCompressionKernel(),
     OneKernel(2),
-    StokesletKernel(2, 0, 0),
-    StressletKernel(2, 0, 0, 0),
+    StokesletComponentKernel(2, 0, 0),
+    StressletComponentKernel(2, 0, 0, 0),
     YukawaKernel(2, yukawa_lambda_name="lambda"),
 ])
 def test_pickle(knl: ScalarKernel) -> None:
