@@ -28,6 +28,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
+    Any,
     ClassVar,
     Generic,
     Literal,
@@ -88,31 +89,37 @@ Scalar PDE kernels
 .. autoclass:: LaplaceKernel
     :show-inheritance:
     :members: mapper_method
+
 .. autoclass:: BiharmonicKernel
     :show-inheritance:
     :members: mapper_method
+
 .. autoclass:: HelmholtzKernel
     :show-inheritance:
     :members: mapper_method
+
 .. autoclass:: YukawaKernel
     :show-inheritance:
     :members: mapper_method
-.. autoclass:: StokesletKernel
+
+.. autoclass:: StokesletComponentKernel
     :show-inheritance:
     :members: mapper_method
-.. autoclass:: StressletKernel
+.. autoclass:: StressletComponentKernel
     :show-inheritance:
     :members: mapper_method
-.. autoclass:: ElasticityKernel
+
+.. autoclass:: ElasticityComponentKernel
     :show-inheritance:
     :members: mapper_method
 .. autoclass:: LineOfCompressionKernel
     :show-inheritance:
     :members: mapper_method
-.. autoclass:: BrinkmanletKernel
+
+.. autoclass:: BrinkmanletComponentKernel
     :show-inheritance:
     :members: mapper_method
-.. autoclass:: BrinkmanStressKernel
+.. autoclass:: BrinkmanStressComponentKernel
     :show-inheritance:
     :members: mapper_method
 .. autoclass:: HeatKernel
@@ -814,7 +821,7 @@ class YukawaKernel(ExpressionKernel):
 
 
 @dataclass(frozen=True, repr=False)
-class ElasticityKernel(ExpressionKernel):
+class ElasticityComponentKernel(ExpressionKernel):
     r"""A kernel for the linear elasticity (Navier-Cauchy) equations
     (see e.g. Section 2.2 in [Hsiao2008]_).
 
@@ -923,7 +930,7 @@ class ElasticityKernel(ExpressionKernel):
 
 
 @dataclass(frozen=True, repr=False)
-class StokesletKernel(ExpressionKernel):
+class StokesletComponentKernel(ExpressionKernel):
     r"""A kernel for the Stokes equations (see e.g. Chapter 2 in [Pozrikidis1992]_).
 
     .. math::
@@ -1020,7 +1027,7 @@ class StokesletKernel(ExpressionKernel):
 
 
 @dataclass(frozen=True, repr=False)
-class StressletKernel(ExpressionKernel):
+class StressletComponentKernel(ExpressionKernel):
     r"""A kernel for the Stokes equations (see e.g. Chapter 2 in [Pozrikidis1992]_).
 
     .. math::
@@ -1029,8 +1036,9 @@ class StressletKernel(ExpressionKernel):
             -P_j \delta_{ik}
             + \mu (\partial_k K_{ij} + \partial_i K_{kj})
 
-    where the two-index :math:`K_{ij}` is the :class:`~sumpy.kernel.StokesletKernel`.
-    This kernel is often called the Stresslet and it represents the stress tensor.
+    where the two-index :math:`K_{ij}` is the
+    :class:`~sumpy.kernel.StokesletComponentKernel`. This kernel is often
+    called the Stresslet and it represents the stress tensor.
 
     .. autoattribute:: icomp
     .. autoattribute:: jcomp
@@ -1218,7 +1226,7 @@ class LineOfCompressionKernel(ExpressionKernel):
 
 
 @dataclass(frozen=True, repr=False)
-class BrinkmanletKernel(ExpressionKernel):
+class BrinkmanletComponentKernel(ExpressionKernel):
     r"""A kernel for the Brinkman equations.
 
     .. math::
@@ -1337,11 +1345,12 @@ class BrinkmanletKernel(ExpressionKernel):
 
         w = make_identity_diff_op(self.dim)
         k = sym.Symbol(self.darcy_impermeability_name)
+
         return laplacian(laplacian(w) - k**2 * w)
 
 
 @dataclass(frozen=True, repr=False)
-class BrinkmanStressKernel(ExpressionKernel):
+class BrinkmanStressComponentKernel(ExpressionKernel):
     r"""A kernel for the Brinkman equations.
 
     .. math::
@@ -1350,8 +1359,9 @@ class BrinkmanStressKernel(ExpressionKernel):
             -p_j \delta_{ik}
             + \mu (\partial_k K_{ij} + \partial_i K_{jk}),
 
-    where the two-index :math:`K_{ij}` is the :class:`~sumpy.kernel.BrinkmanletKernel`
-    and :math:`P_j` is the pressure kernel.
+    where the two-index :math:`K_{ij}` is the
+    :class:`~sumpy.kernel.BrinkmanletComponentKernel` and :math:`P_j` is the
+    pressure kernel.
     """
 
     mapper_method: ClassVar[str] = "map_brinkman_stress_kernel"
@@ -2010,12 +2020,12 @@ class KernelIdentityMapper(KernelMapper[ScalarKernel]):
     map_biharmonic_kernel: Callable[[Self, BiharmonicKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
     map_helmholtz_kernel: Callable[[Self, HelmholtzKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
     map_yukawa_kernel: Callable[[Self, YukawaKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
-    map_elasticity_kernel: Callable[[Self, ElasticityKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
+    map_elasticity_kernel: Callable[[Self, ElasticityComponentKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
     map_line_of_compression_kernel: Callable[[Self, LineOfCompressionKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
-    map_stokeslet_kernel: Callable[[Self, StokesletKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
-    map_stresslet_kernel: Callable[[Self, StressletKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
-    map_brinkmanlet_kernel: Callable[[Self, BrinkmanletKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
-    map_brinkman_stress_kernel: Callable[[Self, BrinkmanStressKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
+    map_stokeslet_kernel: Callable[[Self, StokesletComponentKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
+    map_stresslet_kernel: Callable[[Self, StressletComponentKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
+    map_brinkmanlet_kernel: Callable[[Self, BrinkmanletComponentKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
+    map_brinkman_stress_kernel: Callable[[Self, BrinkmanStressComponentKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
     map_heat_kernel: Callable[[Self, HeatKernel], ScalarKernel] = map_expression_kernel
 
     def map_axis_target_derivative(self, kernel: AxisTargetDerivative) -> ScalarKernel:
@@ -2093,17 +2103,17 @@ class DerivativeCounter(KernelCombineMapper[int]):
     map_yukawa_kernel: \
         Callable[[Self, YukawaKernel], int] = map_expression_kernel
     map_elasticity_kernel: \
-        Callable[[Self, ElasticityKernel], int] = map_expression_kernel
+        Callable[[Self, ElasticityComponentKernel], int] = map_expression_kernel
     map_line_of_compression_kernel: \
         Callable[[Self, LineOfCompressionKernel], int] = map_expression_kernel
     map_stokeslet_kernel: \
-        Callable[[Self, StokesletKernel], int] = map_expression_kernel
+        Callable[[Self, StokesletComponentKernel], int] = map_expression_kernel
     map_stresslet_kernel: \
-        Callable[[Self, StressletKernel], int] = map_expression_kernel
+        Callable[[Self, StressletComponentKernel], int] = map_expression_kernel
     map_brinkmanlet_kernel: \
-        Callable[[Self, BrinkmanletKernel], int] = map_expression_kernel
+        Callable[[Self, BrinkmanletComponentKernel], int] = map_expression_kernel
     map_brinkman_stress_kernel: \
-        Callable[[Self, BrinkmanStressKernel], int] = map_expression_kernel
+        Callable[[Self, BrinkmanStressComponentKernel], int] = map_expression_kernel
     map_heat_kernel: \
         Callable[[Self, HeatKernel], int] = map_expression_kernel
 
@@ -2117,5 +2127,36 @@ class DerivativeCounter(KernelCombineMapper[int]):
 
 # }}}
 
+
+# {{{ deprecations
+
+# TODO: once these deprecations expire, rename
+#       ElasticitySystemKernel -> ElasticityKernel
+#       ...
+_DEPRECATED_CLASSES = {
+    "BrinkmanStressKernel": (BrinkmanStressComponentKernel, 2027),
+    "BrinkmanletKernel": (BrinkmanletComponentKernel, 2027),
+    "ElasticityKernel": (ElasticityComponentKernel, 2027),
+    "Kernel": (ScalarKernel, 2027),
+    "StokesletKernel": (StokesletComponentKernel, 2027),
+    "StressletKernel": (StressletComponentKernel, 2027),
+}
+
+
+def __getattr__(name: str) -> Any:
+    result = _DEPRECATED_CLASSES.get(name)
+
+    if result is not None:
+        cls, year = result
+        from warnings import warn
+        warn(f"'sumpy.kernel.{name}' is deprecated. "
+                f"Use 'sumpy.kernel.{cls.__name__}' instead. "
+                f"'sumpy.kernel.{name}' will continue to work until {year}.",
+                DeprecationWarning, stacklevel=2)
+        return cls
+    else:
+        raise AttributeError(name)
+
+# }}}
 
 # vim: fdm=marker
