@@ -118,6 +118,9 @@ Scalar PDE kernels
 .. autoclass:: ElasticityComponentKernel
     :show-inheritance:
     :members: mapper_method
+.. autoclass:: ElasticityStressComponentKernel
+    :show-inheritance:
+    :members: mapper_method
 .. autoclass:: LineOfCompressionKernel
     :show-inheritance:
     :members: mapper_method
@@ -138,6 +141,9 @@ System PDE Kernels
 ------------------
 
 .. autoclass:: ElasticitySystemKernel
+    :show-inheritance:
+    :members: mapper_method
+.. autoclass:: ElasticityStressSystemKernel
     :show-inheritance:
     :members: mapper_method
 
@@ -975,7 +981,7 @@ class ElasticityComponentKernelBase(ExpressionKernel):
 
 @dataclass(frozen=True, repr=False)
 class ElasticityComponentKernel(ElasticityComponentKernelBase):
-    r"""A kernel for the linear elasticity (Navier-Cauchy) equations
+    r"""The displacement kernel for the linear elasticity (Navier-Cauchy) equations
     (see e.g. Section 2.2 in [Hsiao2008]_).
 
     .. math::
@@ -1058,6 +1064,103 @@ class ElasticityComponentKernel(ElasticityComponentKernelBase):
             viscosity_mu_name=self.viscosity_mu_name,
             poisson_ratio_name=self.poisson_ratio_name
         ), (self.icomp, self.jcomp)
+
+
+@dataclass(frozen=True, repr=False)
+class ElasticityStressComponentKernel(ElasticityComponentKernelBase):
+    r"""The stress kernel for the linear elasticity (Navier-Cauchy) equations
+    (see e.g. Section 2.2 in [Hsiao2008]_).
+
+    .. math::
+
+        K_{ijk}(\mathbf{x}, \mathbf{y}) =
+            \lambda \partial_l K_{kl}(\mathbf{x}, \mathbf{y}) \delta_{ij}
+            + \mu (\partial_j K_{ik}(\mathbf{x}, \mathbf{y})
+                   + \partial_i K_{jk}(\mathbf{x}, \mathbf{y})),
+
+    where the two-index :math:`K_{ij}` is the
+    :class:`~sumpy.kernel.ElasticityComponentKernel`.
+
+    .. autoattribute:: icomp
+    .. autoattribute:: jcomp
+    .. autoattribute:: kcomp
+    """
+
+    mapper_method: ClassVar[str] = "map_elasticity_stress_kernel"
+
+    icomp: int
+    """Component index for the kernel."""
+    jcomp: int
+    """Component index for the kernel."""
+    kcomp: int
+    """Component index for the kernel."""
+
+    def __init__(self,
+                 dim: int,
+                 icomp: int,
+                 jcomp: int,
+                 kcomp: int,
+                 viscosity_mu_name: str = "mu",
+                 poisson_ratio_name: str = "nu") -> None:
+        nu = sym.SpatialConstant(poisson_ratio_name)
+
+        d = make_sym_vector("d", dim)
+        r = sym.pymbolic_real_norm_2(d)
+        delta_ij = 1 if icomp == jcomp else 0
+        delta_ik = 1 if icomp == kcomp else 0
+        delta_jk = 1 if jcomp == kcomp else 0
+
+        if dim == 2:
+            expr = (
+                (1 - 2*nu) * (
+                    d[icomp] / r**2 * delta_jk
+                    + d[jcomp] / r**2 * delta_ik
+                    - d[kcomp] / r**2 * delta_ij)
+                + 3 * d[icomp] * d[jcomp] * d[kcomp] / r**4
+            )
+            scaling = -1/(4*var("pi")*(1 - nu))
+        elif dim == 3:
+            expr = (
+                (1 - 2*nu) * (
+                    d[icomp] / r**3 * delta_jk
+                    + d[jcomp] / r**3 * delta_ik
+                    - d[kcomp] / r**3 * delta_ij)
+                + 3 * d[icomp] * d[jcomp] * d[kcomp] / r**5
+            )
+            scaling = -1/(8*var("pi")*(1 - nu))
+        else:
+            raise NotImplementedError(f"unsupported dimension: '{dim}'")
+
+        super().__init__(dim, expression=expr, global_scaling_const=scaling,
+                         viscosity_mu_name=viscosity_mu_name,
+                         poisson_ratio_name=poisson_ratio_name)
+
+        object.__setattr__(self, "icomp", icomp)
+        object.__setattr__(self, "jcomp", jcomp)
+        object.__setattr__(self, "kcomp", kcomp)
+
+    @override
+    def __str__(self) -> str:
+        return (
+            f"ElasticityStressKnl{self.dim}D_{self.icomp}{self.jcomp}{self.kcomp}"
+            f"({self.viscosity_mu_name}, {self.poisson_ratio_name})")
+
+    @override
+    def __reduce__(self):
+        return (
+            type(self),
+            (self.dim, self.icomp, self.jcomp, self.kcomp,
+             self.viscosity_mu_name,
+             self.poisson_ratio_name))
+
+    @override
+    @memoize_method
+    def get_pde_system_kernel(self) -> tuple[SystemKernel, tuple[int, ...]]:
+        return ElasticityStressSystemKernel(
+            self.dim,
+            viscosity_mu_name=self.viscosity_mu_name,
+            poisson_ratio_name=self.poisson_ratio_name
+        ), (self.icomp, self.jcomp, self.kcomp)
 
 
 @dataclass(frozen=True, repr=False)
@@ -1684,7 +1787,7 @@ class HeatKernel(ExpressionKernel):
 
 @dataclass(frozen=True, repr=False)
 class ElasticitySystemKernel(SystemKernel):
-    r"""A kernel for the linear elasticity (Navier-Cauchy) equations
+    r"""The displacement kernel for the linear elasticity (Navier-Cauchy) equations
     (see e.g. Section 2.2 in [Hsiao2008]_).
 
     This kernel uses :class:`ElasticityComponentKernel` for its components.
@@ -1729,6 +1832,73 @@ class ElasticitySystemKernel(SystemKernel):
 
         return ElasticityComponentKernel(
             self.dim, i, j,
+            viscosity_mu_name=self.viscosity_mu_name,
+            poisson_ratio_name=self.poisson_ratio_name,
+        )
+
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        from sumpy.expansion.diff_op import (
+            divergence,
+            gradient,
+            laplacian,
+            make_identity_diff_op,
+        )
+
+        mu = sym.Symbol(self.viscosity_mu_name)
+        nu = sym.Symbol(self.poisson_ratio_name)
+        u = make_identity_diff_op(self.dim, self.dim)
+
+        return mu * laplacian(u) + mu / (1 - 2 * nu) * gradient(divergence(u))
+
+
+@dataclass(frozen=True, repr=False)
+class ElasticityStressSystemKernel(SystemKernel):
+    r"""The stress kernel for the linear elasticity (Navier-Cauchy) equations
+    (see e.g. Section 2.2 in [Hsiao2008]_).
+
+    This kernel uses :class:`ElasticityStressComponentKernel` for its components.
+
+    .. autoattribute:: viscosity_mu_name
+    .. autoattribute:: poisson_ratio_name
+    """
+
+    mapper_method: ClassVar[str] = "map_elasticity_stress_system_kernel"
+
+    viscosity_mu_name: str = "mu"
+    r"""The argument name to use for the dynamic viscosity :math:`\mu` when
+    generating functions to evaluate this kernel.
+    """
+    poisson_ratio_name: str = "nu"
+    r"""The argument name to use for Poisson's ratio :math:`\nu` when generating
+    functions to evaluate this kernel.
+    """
+
+    @override
+    def __str__(self) -> str:
+        return (
+            f"ElasticityStressKnl{self.dim}D"
+            f"({self.viscosity_mu_name}, {self.poisson_ratio_name})")
+
+    @override
+    def __reduce__(self):
+        return (
+            type(self),
+            (self.dim, self.viscosity_mu_name, self.poisson_ratio_name))
+
+    @property
+    @override
+    def shape(self) -> tuple[int, ...]:
+        return (self.dim, self.dim, self.dim)
+
+    @override
+    @keyed_memoize_method(key=lambda i, j, k: ((min(i, j), max(i, j), k)))
+    def get_scalar_component(self, i: int, j: int, k: int, /) -> ScalarKernel:
+        if i > j:
+            i, j = j, i
+
+        return ElasticityStressComponentKernel(
+            self.dim, i, j, k,
             viscosity_mu_name=self.viscosity_mu_name,
             poisson_ratio_name=self.poisson_ratio_name,
         )
@@ -2478,6 +2648,7 @@ class KernelIdentityMapper(KernelMapper[ScalarKernel]):
     map_helmholtz_kernel: Callable[[Self, HelmholtzKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
     map_yukawa_kernel: Callable[[Self, YukawaKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
     map_elasticity_kernel: Callable[[Self, ElasticityComponentKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
+    map_elasticity_stress_kernel: Callable[[Self, ElasticityStressComponentKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
     map_line_of_compression_kernel: Callable[[Self, LineOfCompressionKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
     map_stokeslet_kernel: Callable[[Self, StokesletComponentKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
     map_stresslet_kernel: Callable[[Self, StressletComponentKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
@@ -2561,6 +2732,8 @@ class DerivativeCounter(KernelCombineMapper[int]):
         Callable[[Self, YukawaKernel], int] = map_expression_kernel
     map_elasticity_kernel: \
         Callable[[Self, ElasticityComponentKernel], int] = map_expression_kernel
+    map_elasticity_stress_kernel: \
+        Callable[[Self, ElasticityStressComponentKernel], int] = map_expression_kernel
     map_line_of_compression_kernel: \
         Callable[[Self, LineOfCompressionKernel], int] = map_expression_kernel
     map_stokeslet_kernel: \
