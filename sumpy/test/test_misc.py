@@ -63,6 +63,8 @@ from sumpy.kernel import (
     BrinkmanStressComponentKernel,
     BrinkmanStressSystemKernel,
     ElasticityComponentKernel,
+    ElasticityStressComponentKernel,
+    ElasticityStressSystemKernel,
     ElasticitySystemKernel,
     ExpressionKernel,
     HeatKernel,
@@ -143,6 +145,10 @@ class KernelInfo:
     KernelInfo(ElasticityComponentKernel(2, 0, 0), mu=5, nu=0.2),
     KernelInfo(ElasticityComponentKernel(3, 0, 1), mu=5, nu=0.2),
     KernelInfo(ElasticityComponentKernel(3, 0, 0), mu=5, nu=0.2),
+    KernelInfo(ElasticityStressComponentKernel(2, 0, 1, 0), mu=5, nu=0.2),
+    KernelInfo(ElasticityStressComponentKernel(2, 0, 0, 1), mu=5, nu=0.2),
+    KernelInfo(ElasticityStressComponentKernel(3, 0, 1, 0), mu=5, nu=0.2),
+    KernelInfo(ElasticityStressComponentKernel(3, 0, 0, 0), mu=5, nu=0.2),
     KernelInfo(LineOfCompressionKernel(3, 0), mu=5, nu=0.2),
     KernelInfo(LineOfCompressionKernel(3, 1), mu=5, nu=0.2),
     KernelInfo(BrinkmanletComponentKernel(2, 0, 1), mu=5, k=3),
@@ -801,6 +807,8 @@ def test_get_storage_index(order, knl, compressed):
 def _get_scalar_cls(knl: SystemKernel) -> type[ScalarKernel]:
     if isinstance(knl, ElasticitySystemKernel):
         return ElasticityComponentKernel
+    if isinstance(knl, ElasticityStressSystemKernel):
+        return ElasticityStressComponentKernel
     elif isinstance(knl, StokesletSystemKernel):
         return StokesletComponentKernel
     elif isinstance(knl, StressletSystemKernel):
@@ -815,6 +823,7 @@ def _get_scalar_cls(knl: SystemKernel) -> type[ScalarKernel]:
 
 @pytest.mark.parametrize("dim", [2, 3])
 @pytest.mark.parametrize("cls", [
+    ElasticityStressSystemKernel,
     ElasticitySystemKernel,
     StokesletSystemKernel,
     StressletSystemKernel,
@@ -861,24 +870,31 @@ def test_system_kernel_components(dim: int, cls: type[SystemKernel]) -> None:
             knl_ij = knl[i, j]
             expected_ij = tuple(sorted([i, j]))
 
-            assert knl_ij == knl[j, i]
+            assert knl_ij is knl[j, i]
             assert (knl_ij.icomp, knl_ij.jcomp) == expected_ij
     elif isinstance(knl, (StressletSystemKernel,)):
         for i, j, k in product(range(dim), repeat=3):
             knl_ijk = knl[i, j, k]
             expected_ij = tuple(sorted([i, j, k]))
 
-            assert knl_ijk == knl[expected_ij]
+            assert knl_ijk is knl[expected_ij]
             assert (knl_ijk.icomp, knl_ijk.jcomp, knl_ijk.kcomp) == expected_ij
     elif isinstance(knl, (BrinkmanStressSystemKernel,)):
         for i, j, k in product(range(dim), repeat=3):
             knl_ijk = knl[i, j, k]
             expected_ij = min(i, k), j, max(i, k)
 
-            assert knl_ijk == knl[expected_ij]
+            assert knl_ijk is knl[expected_ij]
+            assert (knl_ijk.icomp, knl_ijk.jcomp, knl_ijk.kcomp) == expected_ij
+    elif isinstance(knl, (ElasticityStressSystemKernel,)):
+        for i, j, k in product(range(dim), repeat=3):
+            knl_ijk = knl[i, j, k]
+            expected_ij = min(i, j), max(i, j), k
+
+            assert knl_ijk is knl[expected_ij]
             assert (knl_ijk.icomp, knl_ijk.jcomp, knl_ijk.kcomp) == expected_ij
     else:
-        raise AssertionError
+        raise AssertionError(knl)
 
 # }}}
 
