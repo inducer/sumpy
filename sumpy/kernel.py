@@ -104,6 +104,8 @@ Scalar PDE kernels
     :show-inheritance:
     :members: mapper_method
 
+.. autoclass:: StokesComponentKernelBase
+    :show-inheritance:
 .. autoclass:: StokesletComponentKernel
     :show-inheritance:
     :members: mapper_method
@@ -111,13 +113,20 @@ Scalar PDE kernels
     :show-inheritance:
     :members: mapper_method
 
+.. autoclass:: ElasticityComponentKernelBase
+    :show-inheritance:
 .. autoclass:: ElasticityComponentKernel
+    :show-inheritance:
+    :members: mapper_method
+.. autoclass:: ElasticityStressComponentKernel
     :show-inheritance:
     :members: mapper_method
 .. autoclass:: LineOfCompressionKernel
     :show-inheritance:
     :members: mapper_method
 
+.. autoclass:: BrinkmanComponentKernelBase
+    :show-inheritance:
 .. autoclass:: BrinkmanletComponentKernel
     :show-inheritance:
     :members: mapper_method
@@ -132,6 +141,9 @@ System PDE Kernels
 ------------------
 
 .. autoclass:: ElasticitySystemKernel
+    :show-inheritance:
+    :members: mapper_method
+.. autoclass:: ElasticityStressSystemKernel
     :show-inheritance:
     :members: mapper_method
 
@@ -929,8 +941,47 @@ class YukawaKernel(ExpressionKernel):
 
 
 @dataclass(frozen=True, repr=False)
-class ElasticityComponentKernel(ExpressionKernel):
-    r"""A kernel for the linear elasticity (Navier-Cauchy) equations
+class ElasticityComponentKernelBase(ExpressionKernel):
+    r"""Base kernel class for the linear elasticity (Navier-Cauchy) equations
+    (see e.g. Section 2.2 in [Hsiao2008]_).
+
+    .. autoattribute:: viscosity_mu_name
+    .. autoattribute:: poisson_ratio_name
+    """
+
+    viscosity_mu_name: str
+    r"""The argument name to use for the dynamic viscosity :math:`\mu` when
+    generating functions to evaluate this kernel.
+    """
+    poisson_ratio_name: str
+    r"""The argument name to use for Poisson's ratio :math:`\nu` when generating
+    functions to evaluate this kernel.
+    """
+
+    @property
+    @override
+    def is_complex_valued(self) -> bool:
+        return False
+
+    @memoize_method
+    @override
+    def get_args(self) -> Sequence[KernelArgument]:
+        return [
+            KernelArgument(loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64)),
+            KernelArgument(loopy_arg=lp.ValueArg(self.poisson_ratio_name, np.float64)),
+        ]
+
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
+
+        w = make_identity_diff_op(self.dim)
+        return laplacian(laplacian(w))
+
+
+@dataclass(frozen=True, repr=False)
+class ElasticityComponentKernel(ElasticityComponentKernelBase):
+    r"""The displacement kernel for the linear elasticity (Navier-Cauchy) equations
     (see e.g. Section 2.2 in [Hsiao2008]_).
 
     .. math::
@@ -941,8 +992,6 @@ class ElasticityComponentKernel(ExpressionKernel):
 
     .. autoattribute:: icomp
     .. autoattribute:: jcomp
-    .. autoattribute:: viscosity_mu_name
-    .. autoattribute:: poisson_ratio_name
     """
 
     mapper_method: ClassVar[str] = "map_elasticity_kernel"
@@ -951,15 +1000,6 @@ class ElasticityComponentKernel(ExpressionKernel):
     """Component index for the kernel."""
     jcomp: int
     """Component index for the kernel."""
-
-    viscosity_mu_name: str
-    r"""The argument name to use for the dynamic viscosity :math:`\mu` when
-    generating functions to evaluate this kernel.
-    """
-    poisson_ratio_name: str
-    r"""The argument name to use for Poisson's ratio :math:`\nu` when generating
-    functions to evaluate this kernel.
-    """
 
     def __init__(self,
                  dim: int,
@@ -995,12 +1035,12 @@ class ElasticityComponentKernel(ExpressionKernel):
         else:
             raise NotImplementedError(f"unsupported dimension: '{dim}'")
 
-        super().__init__(dim, expression=expr, global_scaling_const=scaling)
+        super().__init__(dim, expression=expr, global_scaling_const=scaling,
+                         viscosity_mu_name=viscosity_mu_name,
+                         poisson_ratio_name=poisson_ratio_name)
 
         object.__setattr__(self, "icomp", icomp)
         object.__setattr__(self, "jcomp", jcomp)
-        object.__setattr__(self, "viscosity_mu_name", viscosity_mu_name)
-        object.__setattr__(self, "poisson_ratio_name", poisson_ratio_name)
 
     @override
     def __str__(self) -> str:
@@ -1016,6 +1056,126 @@ class ElasticityComponentKernel(ExpressionKernel):
              self.viscosity_mu_name,
              self.poisson_ratio_name))
 
+    @override
+    @memoize_method
+    def get_pde_system_kernel(self) -> tuple[SystemKernel, tuple[int, ...]]:
+        return ElasticitySystemKernel(
+            self.dim,
+            viscosity_mu_name=self.viscosity_mu_name,
+            poisson_ratio_name=self.poisson_ratio_name
+        ), (self.icomp, self.jcomp)
+
+
+@dataclass(frozen=True, repr=False)
+class ElasticityStressComponentKernel(ElasticityComponentKernelBase):
+    r"""The stress kernel for the linear elasticity (Navier-Cauchy) equations
+    (see e.g. Section 2.2 in [Hsiao2008]_).
+
+    .. math::
+
+        K_{ijk}(\mathbf{x}, \mathbf{y}) =
+            \lambda \partial_l K_{kl}(\mathbf{x}, \mathbf{y}) \delta_{ij}
+            + \mu (\partial_j K_{ik}(\mathbf{x}, \mathbf{y})
+                   + \partial_i K_{jk}(\mathbf{x}, \mathbf{y})),
+
+    where the two-index :math:`K_{ij}` is the
+    :class:`~sumpy.kernel.ElasticityComponentKernel`.
+
+    .. autoattribute:: icomp
+    .. autoattribute:: jcomp
+    .. autoattribute:: kcomp
+    """
+
+    mapper_method: ClassVar[str] = "map_elasticity_stress_kernel"
+
+    icomp: int
+    """Component index for the kernel."""
+    jcomp: int
+    """Component index for the kernel."""
+    kcomp: int
+    """Component index for the kernel."""
+
+    def __init__(self,
+                 dim: int,
+                 icomp: int,
+                 jcomp: int,
+                 kcomp: int,
+                 viscosity_mu_name: str = "mu",
+                 poisson_ratio_name: str = "nu") -> None:
+        nu = sym.SpatialConstant(poisson_ratio_name)
+
+        d = make_sym_vector("d", dim)
+        r = sym.pymbolic_real_norm_2(d)
+        delta_ij = 1 if icomp == jcomp else 0
+        delta_ik = 1 if icomp == kcomp else 0
+        delta_jk = 1 if jcomp == kcomp else 0
+
+        if dim == 2:
+            expr = (
+                (1 - 2*nu) * (
+                    d[icomp] / r**2 * delta_jk
+                    + d[jcomp] / r**2 * delta_ik
+                    - d[kcomp] / r**2 * delta_ij)
+                + 3 * d[icomp] * d[jcomp] * d[kcomp] / r**4
+            )
+            scaling = -1/(4*var("pi")*(1 - nu))
+        elif dim == 3:
+            expr = (
+                (1 - 2*nu) * (
+                    d[icomp] / r**3 * delta_jk
+                    + d[jcomp] / r**3 * delta_ik
+                    - d[kcomp] / r**3 * delta_ij)
+                + 3 * d[icomp] * d[jcomp] * d[kcomp] / r**5
+            )
+            scaling = -1/(8*var("pi")*(1 - nu))
+        else:
+            raise NotImplementedError(f"unsupported dimension: '{dim}'")
+
+        super().__init__(dim, expression=expr, global_scaling_const=scaling,
+                         viscosity_mu_name=viscosity_mu_name,
+                         poisson_ratio_name=poisson_ratio_name)
+
+        object.__setattr__(self, "icomp", icomp)
+        object.__setattr__(self, "jcomp", jcomp)
+        object.__setattr__(self, "kcomp", kcomp)
+
+    @override
+    def __str__(self) -> str:
+        return (
+            f"ElasticityStressKnl{self.dim}D_{self.icomp}{self.jcomp}{self.kcomp}"
+            f"({self.viscosity_mu_name}, {self.poisson_ratio_name})")
+
+    @override
+    def __reduce__(self):
+        return (
+            type(self),
+            (self.dim, self.icomp, self.jcomp, self.kcomp,
+             self.viscosity_mu_name,
+             self.poisson_ratio_name))
+
+    @override
+    @memoize_method
+    def get_pde_system_kernel(self) -> tuple[SystemKernel, tuple[int, ...]]:
+        return ElasticityStressSystemKernel(
+            self.dim,
+            viscosity_mu_name=self.viscosity_mu_name,
+            poisson_ratio_name=self.poisson_ratio_name
+        ), (self.icomp, self.jcomp, self.kcomp)
+
+
+@dataclass(frozen=True, repr=False)
+class StokesComponentKernelBase(ExpressionKernel):
+    """Base class for kernels of the Stokes equations
+    (see e.g. Chapter 2 in [Pozrikidis1992]_).
+
+    .. autoattribute:: viscosity_mu_name
+    """
+
+    viscosity_mu_name: str
+    r"""The argument name to use for the dynamic viscosity :math:`\mu` when
+    generating functions to evaluate this kernel.
+    """
+
     @property
     @override
     def is_complex_valued(self) -> bool:
@@ -1026,17 +1186,7 @@ class ElasticityComponentKernel(ExpressionKernel):
     def get_args(self) -> Sequence[KernelArgument]:
         return [
             KernelArgument(loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64)),
-            KernelArgument(loopy_arg=lp.ValueArg(self.poisson_ratio_name, np.float64)),
         ]
-
-    @override
-    @memoize_method
-    def get_pde_system_kernel(self) -> tuple[SystemKernel, tuple[int, ...]]:
-        return ElasticitySystemKernel(
-            self.dim,
-            viscosity_mu_name=self.viscosity_mu_name,
-            poisson_ratio_name=self.poisson_ratio_name
-        ), (self.icomp, self.jcomp)
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
@@ -1047,8 +1197,9 @@ class ElasticityComponentKernel(ExpressionKernel):
 
 
 @dataclass(frozen=True, repr=False)
-class StokesletComponentKernel(ExpressionKernel):
-    r"""A kernel for the Stokes equations (see e.g. Chapter 2 in [Pozrikidis1992]_).
+class StokesletComponentKernel(StokesComponentKernelBase):
+    r"""The velocity kernel for the Stokes equations (see e.g. Chapter 2 in
+    [Pozrikidis1992]_).
 
     .. math::
 
@@ -1065,7 +1216,6 @@ class StokesletComponentKernel(ExpressionKernel):
 
     .. autoattribute:: icomp
     .. autoattribute:: jcomp
-    .. autoattribute:: viscosity_mu_name
     """
 
     mapper_method: ClassVar[str] = "map_stokeslet_kernel"
@@ -1074,11 +1224,6 @@ class StokesletComponentKernel(ExpressionKernel):
     """Component index for the kernel."""
     jcomp: int
     """Component index for the kernel."""
-
-    viscosity_mu_name: str
-    r"""The argument name to use for the dynamic viscosity :math:`\mu` when
-    generating functions to evaluate this kernel.
-    """
 
     def __init__(self,
                  dim: int,
@@ -1104,10 +1249,10 @@ class StokesletComponentKernel(ExpressionKernel):
         else:
             raise NotImplementedError(f"unsupported dimension: '{dim}'")
 
-        super().__init__(dim, expression=expr, global_scaling_const=scaling)
+        super().__init__(dim, expression=expr, global_scaling_const=scaling,
+                         viscosity_mu_name=viscosity_mu_name)
         object.__setattr__(self, "icomp", icomp)
         object.__setattr__(self, "jcomp", jcomp)
-        object.__setattr__(self, "viscosity_mu_name", viscosity_mu_name)
 
     @override
     def __str__(self) -> str:
@@ -1121,20 +1266,6 @@ class StokesletComponentKernel(ExpressionKernel):
             type(self),
             (self.dim, self.icomp, self.jcomp, self.viscosity_mu_name))
 
-    @property
-    @override
-    def is_complex_valued(self) -> bool:
-        return False
-
-    @memoize_method
-    @override
-    def get_args(self) -> Sequence[KernelArgument]:
-        return [
-            KernelArgument(
-                loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64),
-            )
-        ]
-
     @override
     @memoize_method
     def get_pde_system_kernel(self) -> tuple[SystemKernel, tuple[int, ...]]:
@@ -1143,17 +1274,11 @@ class StokesletComponentKernel(ExpressionKernel):
             viscosity_mu_name=self.viscosity_mu_name,
         ), (self.icomp, self.jcomp)
 
-    @override
-    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
-        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
-
-        w = make_identity_diff_op(self.dim)
-        return laplacian(laplacian(w))
-
 
 @dataclass(frozen=True, repr=False)
-class StressletComponentKernel(ExpressionKernel):
-    r"""A kernel for the Stokes equations (see e.g. Chapter 2 in [Pozrikidis1992]_).
+class StressletComponentKernel(StokesComponentKernelBase):
+    r"""The stress kernel for the Stokes equations (see e.g. Chapter 2 in
+    [Pozrikidis1992]_).
 
     .. math::
 
@@ -1168,7 +1293,6 @@ class StressletComponentKernel(ExpressionKernel):
     .. autoattribute:: icomp
     .. autoattribute:: jcomp
     .. autoattribute:: kcomp
-    .. autoattribute:: viscosity_mu_name
     """
     mapper_method: ClassVar[str] = "map_stresslet_kernel"
 
@@ -1178,11 +1302,6 @@ class StressletComponentKernel(ExpressionKernel):
     """Component index for the kernel."""
     kcomp: int
     """Component index for the kernel."""
-
-    viscosity_mu_name: str
-    r"""The argument name to use for the dynamic viscosity :math:`\mu` when
-    generating functions to evaluate this kernel.
-    """
 
     def __init__(self,
                  dim: int,
@@ -1208,12 +1327,12 @@ class StressletComponentKernel(ExpressionKernel):
         else:
             raise NotImplementedError(f"unsupported dimension: '{dim}'")
 
-        super().__init__(dim, expression=expr, global_scaling_const=scaling)
+        super().__init__(dim, expression=expr, global_scaling_const=scaling,
+                         viscosity_mu_name=viscosity_mu_name)
 
         object.__setattr__(self, "icomp", icomp)
         object.__setattr__(self, "jcomp", jcomp)
         object.__setattr__(self, "kcomp", kcomp)
-        object.__setattr__(self, "viscosity_mu_name", viscosity_mu_name)
 
     @override
     def __reduce__(self) -> tuple[object, ...]:
@@ -1221,19 +1340,6 @@ class StressletComponentKernel(ExpressionKernel):
             self.__class__,
             (self.dim, self.icomp, self.jcomp, self.kcomp,
              self.viscosity_mu_name))
-
-    @property
-    @override
-    def is_complex_valued(self) -> bool:
-        return False
-
-    @memoize_method
-    @override
-    def get_args(self) -> Sequence[KernelArgument]:
-        # NOTE: this is not used, kept for symmetry with the StokesletComponentKernel
-        return [
-            KernelArgument(loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64))
-        ]
 
     @override
     def __str__(self) -> str:
@@ -1248,13 +1354,6 @@ class StressletComponentKernel(ExpressionKernel):
             self.dim,
             viscosity_mu_name=self.viscosity_mu_name,
         ), (self.icomp, self.jcomp, self.kcomp)
-
-    @override
-    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
-        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
-
-        w = make_identity_diff_op(self.dim)
-        return laplacian(laplacian(w))
 
 
 @dataclass(frozen=True, repr=False)
@@ -1359,8 +1458,54 @@ class LineOfCompressionKernel(ExpressionKernel):
 
 
 @dataclass(frozen=True, repr=False)
-class BrinkmanletComponentKernel(ExpressionKernel):
-    r"""A kernel for the Brinkman equations.
+class BrinkmanComponentKernelBase(ExpressionKernel):
+    """Base class for the Brinkman equations.
+
+    .. autoattribute:: viscosity_mu_name
+    .. autoattribute:: darcy_impermeability_name
+    """
+
+    viscosity_mu_name: str
+    """The argument name to use for the dynamic viscosity when generating
+    functions to evaluate this kernel.
+    """
+    darcy_impermeability_name: str
+    """The argument name to use for the Darcy impermeability when generating
+    functions to evaluate this kernel.
+    """
+
+    @property
+    @override
+    def is_complex_valued(self) -> bool:
+        # FIXME: 2D uses Hankel functions (complex-valued); 3D uses real exp
+        return self.dim == 2
+
+    @override
+    def prepare_loopy_kernel(self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
+        from sumpy.codegen import register_bessel_callables
+        return register_bessel_callables(loopy_knl)
+
+    @memoize_method
+    @override
+    def get_args(self) -> Sequence[KernelArgument]:
+        return [
+            KernelArgument(loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64)),
+            KernelArgument(loopy_arg=lp.ValueArg(self.darcy_impermeability_name, np.float64)),  # noqa: E501
+        ]
+
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
+
+        w = make_identity_diff_op(self.dim)
+        k = sym.Symbol(self.darcy_impermeability_name)
+
+        return laplacian(laplacian(w) - k**2 * w)
+
+
+@dataclass(frozen=True, repr=False)
+class BrinkmanletComponentKernel(BrinkmanComponentKernelBase):
+    r"""The velocity kernel for the Brinkman equations.
 
     .. math::
 
@@ -1373,6 +1518,9 @@ class BrinkmanletComponentKernel(ExpressionKernel):
         \end{cases}
 
     where :math:`P_j` is the pressure kernel.
+
+    .. autoattribute:: icomp
+    .. autoattribute:: jcomp
     """
 
     mapper_method: ClassVar[str] = "map_brinkmanlet_kernel"
@@ -1381,15 +1529,6 @@ class BrinkmanletComponentKernel(ExpressionKernel):
     """Component index for the kernel."""
     jcomp: int
     """Component index for the kernel."""
-
-    viscosity_mu_name: str
-    """The argument name to use for the dynamic viscosity when generating
-    functions to evaluate this kernel.
-    """
-    darcy_impermeability_name: str
-    """The argument name to use for the Darcy impermeability when generating
-    functions to evaluate this kernel.
-    """
 
     def __init__(self,
                  dim: int,
@@ -1432,12 +1571,12 @@ class BrinkmanletComponentKernel(ExpressionKernel):
         else:
             raise NotImplementedError(f"unsupported dimension: '{dim}'")
 
-        super().__init__(dim, expression=expr, global_scaling_const=scaling)
+        super().__init__(dim, expression=expr, global_scaling_const=scaling,
+                         viscosity_mu_name=viscosity_mu_name,
+                         darcy_impermeability_name=darcy_impermeability_name)
 
         object.__setattr__(self, "icomp", icomp)
         object.__setattr__(self, "jcomp", jcomp)
-        object.__setattr__(self, "viscosity_mu_name", viscosity_mu_name)
-        object.__setattr__(self, "darcy_impermeability_name", darcy_impermeability_name)
 
     @override
     def __reduce__(self) -> tuple[object, ...]:
@@ -1447,30 +1586,11 @@ class BrinkmanletComponentKernel(ExpressionKernel):
              self.viscosity_mu_name, self.darcy_impermeability_name),
         )
 
-    @property
-    @override
-    def is_complex_valued(self) -> bool:
-        # FIXME: 2D uses Hankel functions (complex-valued); 3D uses real exp
-        return self.dim == 2
-
     @override
     def __str__(self) -> str:
         return (
             f"BrinkmanletKnl{self.dim}D_{self.icomp}{self.jcomp}"
             f"({self.viscosity_mu_name}, {self.darcy_impermeability_name})")
-
-    @override
-    def prepare_loopy_kernel(self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
-        from sumpy.codegen import register_bessel_callables
-        return register_bessel_callables(loopy_knl)
-
-    @memoize_method
-    @override
-    def get_args(self) -> Sequence[KernelArgument]:
-        return [
-            KernelArgument(loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64)),
-            KernelArgument(loopy_arg=lp.ValueArg(self.darcy_impermeability_name, np.float64)),  # noqa: E501
-        ]
 
     @override
     @memoize_method
@@ -1481,18 +1601,9 @@ class BrinkmanletComponentKernel(ExpressionKernel):
             darcy_impermeability_name=self.darcy_impermeability_name,
         ), (self.icomp, self.jcomp)
 
-    @override
-    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
-        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
-
-        w = make_identity_diff_op(self.dim)
-        k = sym.Symbol(self.darcy_impermeability_name)
-
-        return laplacian(laplacian(w) - k**2 * w)
-
 
 @dataclass(frozen=True, repr=False)
-class BrinkmanStressComponentKernel(ExpressionKernel):
+class BrinkmanStressComponentKernel(BrinkmanComponentKernelBase):
     r"""A kernel for the Brinkman equations.
 
     .. math::
@@ -1504,6 +1615,10 @@ class BrinkmanStressComponentKernel(ExpressionKernel):
     where the two-index :math:`K_{ij}` is the
     :class:`~sumpy.kernel.BrinkmanletComponentKernel` and :math:`P_j` is the
     pressure kernel.
+
+    .. autoattribute:: icomp
+    .. autoattribute:: jcomp
+    .. autoattribute:: kcomp
     """
 
     mapper_method: ClassVar[str] = "map_brinkman_stress_kernel"
@@ -1514,17 +1629,6 @@ class BrinkmanStressComponentKernel(ExpressionKernel):
     """Component index for the kernel."""
     kcomp: int
     """Component index for the kernel."""
-
-    # NOTE: we keep the viscosity_mu_name for symmetry with the BrinkmanKernel,
-    # even though it isn't actually used in the stress kernel
-    viscosity_mu_name: str
-    """The argument name to use for the dynamic viscosity when generating
-    functions to evaluate this kernel.
-    """
-    darcy_impermeability_name: str
-    """The argument name to use for the Darcy impermeability when generating
-    functions to evaluate this kernel.
-    """
 
     def __init__(self,
                  dim: int,
@@ -1579,13 +1683,13 @@ class BrinkmanStressComponentKernel(ExpressionKernel):
         else:
             raise NotImplementedError(f"unsupported dimension: '{dim}'")
 
-        super().__init__(dim, expression=expr, global_scaling_const=scaling)
+        super().__init__(dim, expression=expr, global_scaling_const=scaling,
+                         viscosity_mu_name=viscosity_mu_name,
+                         darcy_impermeability_name=darcy_impermeability_name)
 
         object.__setattr__(self, "icomp", icomp)
         object.__setattr__(self, "jcomp", jcomp)
         object.__setattr__(self, "kcomp", kcomp)
-        object.__setattr__(self, "viscosity_mu_name", viscosity_mu_name)
-        object.__setattr__(self, "darcy_impermeability_name", darcy_impermeability_name)
 
     @override
     def __reduce__(self) -> tuple[object, ...]:
@@ -1595,30 +1699,11 @@ class BrinkmanStressComponentKernel(ExpressionKernel):
              self.viscosity_mu_name, self.darcy_impermeability_name),
         )
 
-    @property
-    @override
-    def is_complex_valued(self) -> bool:
-        # 2D uses Hankel functions (complex-valued); 3D uses real exp
-        return self.dim == 2
-
     @override
     def __str__(self) -> str:
         return (
             f"BrinkmanStressKnl{self.dim}D_{self.icomp}{self.jcomp}{self.kcomp}"
             f"({self.viscosity_mu_name}, {self.darcy_impermeability_name})")
-
-    @override
-    def prepare_loopy_kernel(self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
-        from sumpy.codegen import register_bessel_callables
-        return register_bessel_callables(loopy_knl)
-
-    @memoize_method
-    @override
-    def get_args(self) -> Sequence[KernelArgument]:
-        return [
-            KernelArgument(loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64)),
-            KernelArgument(loopy_arg=lp.ValueArg(self.darcy_impermeability_name, np.float64)),  # noqa: E501
-        ]
 
     @override
     @memoize_method
@@ -1628,14 +1713,6 @@ class BrinkmanStressComponentKernel(ExpressionKernel):
             viscosity_mu_name=self.viscosity_mu_name,
             darcy_impermeability_name=self.darcy_impermeability_name,
         ), (self.icomp, self.jcomp, self.kcomp)
-
-    @override
-    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
-        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
-
-        w = make_identity_diff_op(self.dim)
-        k = sym.Symbol(self.darcy_impermeability_name)
-        return laplacian(laplacian(w) - k**2 * w)
 
 
 @dataclass(frozen=True, repr=False)
@@ -1710,7 +1787,7 @@ class HeatKernel(ExpressionKernel):
 
 @dataclass(frozen=True, repr=False)
 class ElasticitySystemKernel(SystemKernel):
-    r"""A kernel for the linear elasticity (Navier-Cauchy) equations
+    r"""The displacement kernel for the linear elasticity (Navier-Cauchy) equations
     (see e.g. Section 2.2 in [Hsiao2008]_).
 
     This kernel uses :class:`ElasticityComponentKernel` for its components.
@@ -1755,6 +1832,73 @@ class ElasticitySystemKernel(SystemKernel):
 
         return ElasticityComponentKernel(
             self.dim, i, j,
+            viscosity_mu_name=self.viscosity_mu_name,
+            poisson_ratio_name=self.poisson_ratio_name,
+        )
+
+    @override
+    def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
+        from sumpy.expansion.diff_op import (
+            divergence,
+            gradient,
+            laplacian,
+            make_identity_diff_op,
+        )
+
+        mu = sym.Symbol(self.viscosity_mu_name)
+        nu = sym.Symbol(self.poisson_ratio_name)
+        u = make_identity_diff_op(self.dim, self.dim)
+
+        return mu * laplacian(u) + mu / (1 - 2 * nu) * gradient(divergence(u))
+
+
+@dataclass(frozen=True, repr=False)
+class ElasticityStressSystemKernel(SystemKernel):
+    r"""The stress kernel for the linear elasticity (Navier-Cauchy) equations
+    (see e.g. Section 2.2 in [Hsiao2008]_).
+
+    This kernel uses :class:`ElasticityStressComponentKernel` for its components.
+
+    .. autoattribute:: viscosity_mu_name
+    .. autoattribute:: poisson_ratio_name
+    """
+
+    mapper_method: ClassVar[str] = "map_elasticity_stress_system_kernel"
+
+    viscosity_mu_name: str = "mu"
+    r"""The argument name to use for the dynamic viscosity :math:`\mu` when
+    generating functions to evaluate this kernel.
+    """
+    poisson_ratio_name: str = "nu"
+    r"""The argument name to use for Poisson's ratio :math:`\nu` when generating
+    functions to evaluate this kernel.
+    """
+
+    @override
+    def __str__(self) -> str:
+        return (
+            f"ElasticityStressKnl{self.dim}D"
+            f"({self.viscosity_mu_name}, {self.poisson_ratio_name})")
+
+    @override
+    def __reduce__(self):
+        return (
+            type(self),
+            (self.dim, self.viscosity_mu_name, self.poisson_ratio_name))
+
+    @property
+    @override
+    def shape(self) -> tuple[int, ...]:
+        return (self.dim, self.dim, self.dim)
+
+    @override
+    @keyed_memoize_method(key=lambda i, j, k: ((min(i, j), max(i, j), k)))
+    def get_scalar_component(self, i: int, j: int, k: int, /) -> ScalarKernel:
+        if i > j:
+            i, j = j, i
+
+        return ElasticityStressComponentKernel(
+            self.dim, i, j, k,
             viscosity_mu_name=self.viscosity_mu_name,
             poisson_ratio_name=self.poisson_ratio_name,
         )
@@ -2504,6 +2648,7 @@ class KernelIdentityMapper(KernelMapper[ScalarKernel]):
     map_helmholtz_kernel: Callable[[Self, HelmholtzKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
     map_yukawa_kernel: Callable[[Self, YukawaKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
     map_elasticity_kernel: Callable[[Self, ElasticityComponentKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
+    map_elasticity_stress_kernel: Callable[[Self, ElasticityStressComponentKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
     map_line_of_compression_kernel: Callable[[Self, LineOfCompressionKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
     map_stokeslet_kernel: Callable[[Self, StokesletComponentKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
     map_stresslet_kernel: Callable[[Self, StressletComponentKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
@@ -2587,6 +2732,8 @@ class DerivativeCounter(KernelCombineMapper[int]):
         Callable[[Self, YukawaKernel], int] = map_expression_kernel
     map_elasticity_kernel: \
         Callable[[Self, ElasticityComponentKernel], int] = map_expression_kernel
+    map_elasticity_stress_kernel: \
+        Callable[[Self, ElasticityStressComponentKernel], int] = map_expression_kernel
     map_line_of_compression_kernel: \
         Callable[[Self, LineOfCompressionKernel], int] = map_expression_kernel
     map_stokeslet_kernel: \
