@@ -141,12 +141,12 @@ KernelLike: TypeAlias = "ScalarKernel | ExpansionBase"
 
 def add_mi(mi1: Sequence[int], mi2: Sequence[int]) -> tuple[int, ...]:
     # NOTE: these are used a lot and `tuple([])` is faster
-    return tuple([mi1i + mi2i for mi1i, mi2i in zip(mi1, mi2, strict=True)])  # noqa: C409
+    return tuple([mi1i + mi2i for mi1i, mi2i in zip(mi1, mi2, strict=True)])
 
 
 def sub_mi(mi1: Sequence[int], mi2: Sequence[int]) -> tuple[int, ...]:
     # NOTE: these are used a lot and `tuple([])` is faster
-    return tuple([mi1i - mi2i for mi1i, mi2i in zip(mi1, mi2, strict=True)])  # noqa: C409
+    return tuple([mi1i - mi2i for mi1i, mi2i in zip(mi1, mi2, strict=True)])
 
 
 def mi_factorial(mi: Sequence[int]) -> int:
