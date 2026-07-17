@@ -24,14 +24,6 @@
                     "endColumn": 50,
                     "lineCount": 1
                 }
-            },
-            {
-                "code": "reportCallIssue",
-                "range": {
-                    "startColumn": 13,
-                    "endColumn": 78,
-                    "lineCount": 1
-                }
             }
         ],
         "./examples/expansion-toys.py": [
@@ -5444,14 +5436,6 @@
                 "range": {
                     "startColumn": 33,
                     "endColumn": 43,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownMemberType",
-                "range": {
-                    "startColumn": 42,
-                    "endColumn": 52,
                     "lineCount": 1
                 }
             },
@@ -14352,86 +14336,6 @@
                     "endColumn": 36,
                     "lineCount": 1
                 }
-            },
-            {
-                "code": "reportUnknownMemberType",
-                "range": {
-                    "startColumn": 8,
-                    "endColumn": 18,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownMemberType",
-                "range": {
-                    "startColumn": 8,
-                    "endColumn": 24,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAny",
-                "range": {
-                    "startColumn": 16,
-                    "endColumn": 24,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAny",
-                "range": {
-                    "startColumn": 26,
-                    "endColumn": 34,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAny",
-                "range": {
-                    "startColumn": 36,
-                    "endColumn": 44,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAny",
-                "range": {
-                    "startColumn": 16,
-                    "endColumn": 25,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAny",
-                "range": {
-                    "startColumn": 27,
-                    "endColumn": 36,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportAny",
-                "range": {
-                    "startColumn": 38,
-                    "endColumn": 47,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownMemberType",
-                "range": {
-                    "startColumn": 8,
-                    "endColumn": 16,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnusedExpression",
-                "range": {
-                    "startColumn": 8,
-                    "endColumn": 11,
-                    "lineCount": 1
-                }
             }
         ],
         "./sumpy/test/test_codegen.py": [
@@ -16764,8 +16668,8 @@
             {
                 "code": "reportUnusedImport",
                 "range": {
-                    "startColumn": 67,
-                    "endColumn": 71,
+                    "startColumn": 4,
+                    "endColumn": 8,
                     "lineCount": 1
                 }
             },
@@ -17054,38 +16958,6 @@
                 "range": {
                     "startColumn": 40,
                     "endColumn": 47,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownMemberType",
-                "range": {
-                    "startColumn": 16,
-                    "endColumn": 67,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 21,
-                    "endColumn": 60,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownMemberType",
-                "range": {
-                    "startColumn": 8,
-                    "endColumn": 25,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownMemberType",
-                "range": {
-                    "startColumn": 8,
-                    "endColumn": 15,
                     "lineCount": 1
                 }
             },
@@ -18062,8 +17934,8 @@
             {
                 "code": "reportUnusedImport",
                 "range": {
-                    "startColumn": 67,
-                    "endColumn": 71,
+                    "startColumn": 4,
+                    "endColumn": 8,
                     "lineCount": 1
                 }
             },
@@ -18664,8 +18536,8 @@
             {
                 "code": "reportUnusedImport",
                 "range": {
-                    "startColumn": 67,
-                    "endColumn": 71,
+                    "startColumn": 4,
+                    "endColumn": 8,
                     "lineCount": 1
                 }
             },
@@ -20114,8 +19986,8 @@
             {
                 "code": "reportUnusedImport",
                 "range": {
-                    "startColumn": 67,
-                    "endColumn": 71,
+                    "startColumn": 4,
+                    "endColumn": 8,
                     "lineCount": 1
                 }
             },
@@ -20284,8 +20156,8 @@
             {
                 "code": "reportUnusedImport",
                 "range": {
-                    "startColumn": 67,
-                    "endColumn": 71,
+                    "startColumn": 4,
+                    "endColumn": 8,
                     "lineCount": 1
                 }
             },
@@ -20414,8 +20286,8 @@
             {
                 "code": "reportUnusedImport",
                 "range": {
-                    "startColumn": 67,
-                    "endColumn": 71,
+                    "startColumn": 4,
+                    "endColumn": 8,
                     "lineCount": 1
                 }
             },
@@ -20984,8 +20856,8 @@
             {
                 "code": "reportUnusedImport",
                 "range": {
-                    "startColumn": 67,
-                    "endColumn": 71,
+                    "startColumn": 4,
+                    "endColumn": 8,
                     "lineCount": 1
                 }
             },
@@ -22650,8 +22522,8 @@
             {
                 "code": "reportUnusedImport",
                 "range": {
-                    "startColumn": 67,
-                    "endColumn": 71,
+                    "startColumn": 4,
+                    "endColumn": 8,
                     "lineCount": 1
                 }
             },
@@ -23054,8 +22926,8 @@
             {
                 "code": "reportUnusedImport",
                 "range": {
-                    "startColumn": 67,
-                    "endColumn": 71,
+                    "startColumn": 4,
+                    "endColumn": 8,
                     "lineCount": 1
                 }
             },
