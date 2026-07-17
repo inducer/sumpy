@@ -879,7 +879,7 @@ class YukawaKernel(ExpressionKernel):
         if dim == 2:
             # NOTE: transform K(0, lam r) into a Hankel function using [2]
             expr = var("hankel_1")(0, var("I")*lam*r)
-            scaling_for_K0 = var("pi")/2*var("I")       # noqa: N806
+            scaling_for_K0 = var("pi")/2*var("I")       # ruff:ignore[non-lowercase-variable-in-function]
 
             scaling = 1/(2*var("pi")) * scaling_for_K0
         elif dim == 3:
@@ -1490,7 +1490,7 @@ class BrinkmanComponentKernelBase(ExpressionKernel):
     def get_args(self) -> Sequence[KernelArgument]:
         return [
             KernelArgument(loopy_arg=lp.ValueArg(self.viscosity_mu_name, np.float64)),
-            KernelArgument(loopy_arg=lp.ValueArg(self.darcy_impermeability_name, np.float64)),  # noqa: E501
+            KernelArgument(loopy_arg=lp.ValueArg(self.darcy_impermeability_name, np.float64)),  # ruff:ignore[line-too-long]
         ]
 
     @override
@@ -1541,7 +1541,7 @@ class BrinkmanletComponentKernel(BrinkmanComponentKernelBase):
 
         d = make_sym_vector("d", dim)
         r = sym.pymbolic_real_norm_2(d)
-        R = k * r  # noqa: N806
+        R = k * r  # ruff:ignore[non-lowercase-variable-in-function]
         delta_ij = 1 if icomp == jcomp else 0
 
         # NOTE:
@@ -1553,8 +1553,8 @@ class BrinkmanletComponentKernel(BrinkmanComponentKernelBase):
 
         if dim == 2:
             # transforming Bessel functions to Hankel functions using [2]
-            K0 = var("pi") * var("I") / 2 * var("hankel_1")(0, var("I") * R)  # noqa: N806
-            K1 = -var("pi") / 2 * var("hankel_1")(1, var("I") * R)            # noqa: N806
+            K0 = var("pi") * var("I") / 2 * var("hankel_1")(0, var("I") * R)  # ruff:ignore[non-lowercase-variable-in-function]
+            K1 = -var("pi") / 2 * var("hankel_1")(1, var("I") * R)            # ruff:ignore[non-lowercase-variable-in-function]
 
             # [1] Equations 7.7.5 and 7.7.6
             # [3] Equations 5.2 and 5.3 (for the scaling we use here)
@@ -1641,7 +1641,7 @@ class BrinkmanStressComponentKernel(BrinkmanComponentKernelBase):
 
         d = make_sym_vector("d", dim)
         r = sym.pymbolic_real_norm_2(d)
-        R = k * r  # noqa: N806
+        R = k * r  # ruff:ignore[non-lowercase-variable-in-function]
         delta_ij = 1 if icomp == jcomp else 0
         delta_ik = 1 if icomp == kcomp else 0
         delta_kj = 1 if jcomp == kcomp else 0
@@ -1655,8 +1655,8 @@ class BrinkmanStressComponentKernel(BrinkmanComponentKernelBase):
 
         if dim == 2:
             # transforming Bessel functions to Hankel functions using [2]
-            K0 = var("pi") * var("I") / 2 * var("hankel_1")(0, var("I") * R)  # noqa: N806
-            K1 = -var("pi") / 2 * var("hankel_1")(1, var("I") * R)            # noqa: N806
+            K0 = var("pi") * var("I") / 2 * var("hankel_1")(0, var("I") * R)  # ruff:ignore[non-lowercase-variable-in-function]
+            K1 = -var("pi") / 2 * var("hankel_1")(1, var("I") * R)            # ruff:ignore[non-lowercase-variable-in-function]
 
             # [1] Equations 7.7.7 and 7.7.8
             # [3] Equations 5.4-5.6 (for the scaling we use here)
@@ -2643,17 +2643,17 @@ class KernelIdentityMapper(KernelMapper[ScalarKernel]):
     def map_expression_kernel(self, kernel: ExpressionKernel) -> ScalarKernel:
         return kernel
 
-    map_laplace_kernel: Callable[[Self, LaplaceKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
-    map_biharmonic_kernel: Callable[[Self, BiharmonicKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
-    map_helmholtz_kernel: Callable[[Self, HelmholtzKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
-    map_yukawa_kernel: Callable[[Self, YukawaKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
-    map_elasticity_kernel: Callable[[Self, ElasticityComponentKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
-    map_elasticity_stress_kernel: Callable[[Self, ElasticityStressComponentKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
-    map_line_of_compression_kernel: Callable[[Self, LineOfCompressionKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
-    map_stokeslet_kernel: Callable[[Self, StokesletComponentKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
-    map_stresslet_kernel: Callable[[Self, StressletComponentKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
-    map_brinkmanlet_kernel: Callable[[Self, BrinkmanletComponentKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
-    map_brinkman_stress_kernel: Callable[[Self, BrinkmanStressComponentKernel], ScalarKernel] = map_expression_kernel  # noqa: E501
+    map_laplace_kernel: Callable[[Self, LaplaceKernel], ScalarKernel] = map_expression_kernel  # ruff:ignore[line-too-long]
+    map_biharmonic_kernel: Callable[[Self, BiharmonicKernel], ScalarKernel] = map_expression_kernel  # ruff:ignore[line-too-long]
+    map_helmholtz_kernel: Callable[[Self, HelmholtzKernel], ScalarKernel] = map_expression_kernel  # ruff:ignore[line-too-long]
+    map_yukawa_kernel: Callable[[Self, YukawaKernel], ScalarKernel] = map_expression_kernel  # ruff:ignore[line-too-long]
+    map_elasticity_kernel: Callable[[Self, ElasticityComponentKernel], ScalarKernel] = map_expression_kernel  # ruff:ignore[line-too-long]
+    map_elasticity_stress_kernel: Callable[[Self, ElasticityStressComponentKernel], ScalarKernel] = map_expression_kernel  # ruff:ignore[line-too-long]
+    map_line_of_compression_kernel: Callable[[Self, LineOfCompressionKernel], ScalarKernel] = map_expression_kernel  # ruff:ignore[line-too-long]
+    map_stokeslet_kernel: Callable[[Self, StokesletComponentKernel], ScalarKernel] = map_expression_kernel  # ruff:ignore[line-too-long]
+    map_stresslet_kernel: Callable[[Self, StressletComponentKernel], ScalarKernel] = map_expression_kernel  # ruff:ignore[line-too-long]
+    map_brinkmanlet_kernel: Callable[[Self, BrinkmanletComponentKernel], ScalarKernel] = map_expression_kernel  # ruff:ignore[line-too-long]
+    map_brinkman_stress_kernel: Callable[[Self, BrinkmanStressComponentKernel], ScalarKernel] = map_expression_kernel  # ruff:ignore[line-too-long]
     map_heat_kernel: Callable[[Self, HeatKernel], ScalarKernel] = map_expression_kernel
 
     def map_axis_target_derivative(self, kernel: AxisTargetDerivative) -> ScalarKernel:
@@ -2662,7 +2662,7 @@ class KernelIdentityMapper(KernelMapper[ScalarKernel]):
     def map_axis_source_derivative(self, kernel: AxisSourceDerivative) -> ScalarKernel:
         return type(kernel)(kernel.axis, self.rec(kernel.inner_kernel))
 
-    def map_target_point_multiplier(self, kernel: TargetPointMultiplier) -> ScalarKernel:  # noqa: E501
+    def map_target_point_multiplier(self, kernel: TargetPointMultiplier) -> ScalarKernel:  # ruff:ignore[line-too-long]
         return type(kernel)(kernel.axis, self.rec(kernel.inner_kernel))
 
     def map_directional_source_derivative(

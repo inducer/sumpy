@@ -36,7 +36,10 @@ from arraycontext import ArrayContextFactory, pytest_generate_tests_for_array_co
 from pytools.convergence import EOCRecorder
 
 import sumpy.toys as t
-from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
+from sumpy.array_context import (  # ruff:ignore[unused-import]
+    PytestPyOpenCLArrayContextFactory,
+    _acf,
+)
 from sumpy.expansion.local import (
     LinearPDEConformingVolumeTaylorLocalExpansion,
     VolumeTaylorLocalExpansion,
@@ -79,7 +82,7 @@ def test_heat_m2m(
     extra_kwargs = {"alpha": alpha}
 
     t_sep = 1.0
-    L = np.sqrt(4 * alpha * t_sep)  # noqa: N806
+    L = np.sqrt(4 * alpha * t_sep)  # ruff:ignore[non-lowercase-variable-in-function]
 
     src_center = np.array([1.0, 0.5])
     tgt_center = np.array([0.0, 2.5])
@@ -166,7 +169,7 @@ def test_heat_l2l(
     tgt_center = np.array([0.0, 2.5])
 
     t_sep = 2 * src_ht
-    L = np.sqrt(4 * alpha * t_sep)  # noqa: N806
+    L = np.sqrt(4 * alpha * t_sep)  # ruff:ignore[non-lowercase-variable-in-function]
 
     rng = np.random.default_rng(0)
     src_grid = np.linspace(-1.0, 1.0, 11)
@@ -251,7 +254,7 @@ def test_heat_m2l(
     tgt_center = np.array([0.0, 2.5])
 
     t_sep = 2 * src_ht
-    L = np.sqrt(4 * alpha * t_sep)  # noqa: N806
+    L = np.sqrt(4 * alpha * t_sep)  # ruff:ignore[non-lowercase-variable-in-function]
 
     rng = np.random.default_rng(0)
     src_grid = np.linspace(-1.0, 1.0, 11)

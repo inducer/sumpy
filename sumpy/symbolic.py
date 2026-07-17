@@ -63,7 +63,7 @@ def _find_symbolic_backend():
     global USE_SYMENGINE
 
     try:
-        import symengine  # noqa: F401
+        import symengine  # ruff:ignore[unused-import]
         symengine_found = True
         symengine_error = None
     except ImportError as import_error:
@@ -132,7 +132,7 @@ Integer = sym.Integer
 Rational = sym.Rational
 Matrix = sym.Matrix
 Subs = sym.Subs
-I = cast("Expr", sym.I)  # noqa: E741
+I = cast("Expr", sym.I)  # ruff:ignore[ambiguous-variable-name]
 pi = cast("Expr", sym.pi)
 functions = sym.functions
 Number = sym.Number
@@ -147,13 +147,13 @@ def _coeff_isneg(a: Basic) -> bool:
 
 
 if TYPE_CHECKING or USE_SYMENGINE:
-    def UnevaluatedExpr(x: T) -> T:  # noqa: N802
+    def UnevaluatedExpr(x: T) -> T:  # ruff:ignore[invalid-function-name]
         return x
 else:
     try:
         from sympy import UnevaluatedExpr
     except ImportError:
-        def UnevaluatedExpr(x):  # noqa: N802
+        def UnevaluatedExpr(x):  # ruff:ignore[invalid-function-name]
             return x
 
 
@@ -396,10 +396,10 @@ _SympyBesselJ = BesselJ
 _SympyHankel1 = Hankel1
 
 if not TYPE_CHECKING and USE_SYMENGINE:
-    def BesselJ(*args):   # noqa: N802
+    def BesselJ(*args):   # ruff:ignore[invalid-function-name]
         return sympify(_SympyBesselJ(*args))
 
-    def Hankel1(*args):   # noqa: N802
+    def Hankel1(*args):   # ruff:ignore[invalid-function-name]
         return sympify(_SympyHankel1(*args))
 
 # vim: fdm=marker

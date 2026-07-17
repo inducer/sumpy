@@ -42,7 +42,10 @@ from pytools.convergence import PConvergenceVerifier
 
 import sumpy.symbolic as sym
 import sumpy.toys as t
-from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
+from sumpy.array_context import (  # ruff:ignore[unused-import]
+    PytestPyOpenCLArrayContextFactory,
+    _acf,
+)
 from sumpy.expansion.local import (
     H2DLocalExpansion,
     LinearPDEConformingVolumeTaylorLocalExpansion,
@@ -672,14 +675,14 @@ def test_m2m_and_l2l_exprs_simpler(base_knl, local_expn_class, mpole_expn_class,
             dvec, tgt_rscale, _fast_version=False)
 
     for expr1, expr2 in zip(faster_m2m, slower_m2m, strict=True):
-        assert float(sym.doit(expr1 - expr2).expand()) == 0.0  # noqa: RUF069
+        assert float(sym.doit(expr1 - expr2).expand()) == 0.0  # ruff:ignore[float-equality-comparison]
 
     faster_l2l = local_expn.translate_from(local_expn, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale)
     slower_l2l = local_expn.translate_from(local_expn, src_coeff_exprs, src_rscale,
             dvec, tgt_rscale, _fast_version=False)
     for expr1, expr2 in zip(faster_l2l, slower_l2l, strict=True):
-        assert float(sym.doit(expr1 - expr2).expand()) == 0.0  # noqa: RUF069
+        assert float(sym.doit(expr1 - expr2).expand()) == 0.0  # ruff:ignore[float-equality-comparison]
 
 # }}}
 

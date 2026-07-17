@@ -31,7 +31,10 @@ import pytest
 
 from arraycontext import ArrayContextFactory, pytest_generate_tests_for_array_contexts
 
-from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
+from sumpy.array_context import (  # ruff:ignore[unused-import]
+    PytestPyOpenCLArrayContextFactory,
+    _acf,
+)
 from sumpy.expansion.local import LineTaylorLocalExpansion, VolumeTaylorLocalExpansion
 
 

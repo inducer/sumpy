@@ -193,7 +193,7 @@ class BesselJvvp1(lp.ScalarCallable):
         yield ("40-sumpy-bessel", BESSEL_PREAMBLE)
 
 
-class Hankel1_01(lp.ScalarCallable):  # noqa: N801
+class Hankel1_01(lp.ScalarCallable):  # ruff:ignore[invalid-class-name]
     @override
     def with_types(self,
                    arg_id_to_dtype: Mapping[int | str, LoopyType],
@@ -325,7 +325,7 @@ class BesselDerivativeReplacer(CSECachingIdentityMapper[P]):
 
             # AS (9.1.31)
             # https://dlmf.nist.gov/10.6.7
-            if order >= 0:  # noqa: SIM108
+            if order >= 0:  # ruff:ignore[if-else-block-instead-of-if-exp]
                 order_str = f"{order}"
             else:
                 order_str = f"m{-order}"
@@ -608,7 +608,7 @@ class ComplexRewriter(CSECachingIdentityMapper[[]]):
 
         complex_dtype = self.complex_dtype
         if complex_dtype is None:
-            if complex(np.complex64(expr)) == expr:  # noqa: RUF069
+            if complex(np.complex64(expr)) == expr:  # ruff:ignore[float-equality-comparison]
                 return np.complex64(expr)
 
             complex_dtype = np.complex128

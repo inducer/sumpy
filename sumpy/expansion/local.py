@@ -257,7 +257,7 @@ class VolumeTaylorLocalExpansionBase(VolumeTaylorExpansionMixin,
             # Following is a hack to make sure cse works.
             if 1:
                 def save_temp(x: sym.Expr) -> sym.Expr:
-                    return add_to_sac(sac, weight * x)  # noqa: B023
+                    return add_to_sac(sac, weight * x)  # ruff:ignore[function-uses-loop-variable]
 
                 for i, mi in enumerate(self.get_coefficient_identifiers()):
                     result[i] += taker.diff(mi, save_temp)

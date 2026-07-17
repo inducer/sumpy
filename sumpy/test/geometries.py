@@ -125,7 +125,7 @@ def make_torus(
                 length=0.1
             )
         plt.show()
-        1/0  # noqa: B018
+        1/0  # ruff:ignore[useless-expression]
 
     geo = Geometry(
         nodes=nodes.reshape(3, -1).copy(),

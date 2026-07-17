@@ -506,7 +506,7 @@ def tree_cse(exprs: Sequence[sym.Basic],
                 assert isinstance(expr, sym.Basic)
                 expr = opt_subs[expr]
 
-            if isinstance(expr, CSE_NO_DESCEND_CLASSES):  # noqa: SIM108
+            if isinstance(expr, CSE_NO_DESCEND_CLASSES):  # ruff:ignore[if-else-block-instead-of-if-exp]
                 args = ()
             else:
                 args = expr.args
@@ -569,7 +569,7 @@ def tree_cse(exprs: Sequence[sym.Basic],
 
     reduced_exprs: list[sym.Basic] = []
     for e in exprs:
-        if isinstance(e, sym.Basic):  # noqa: SIM108
+        if isinstance(e, sym.Basic):  # ruff:ignore[if-else-block-instead-of-if-exp]
             reduced_e = rebuild(e)
         else:
             reduced_e = e

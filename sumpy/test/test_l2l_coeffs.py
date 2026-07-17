@@ -39,7 +39,10 @@ from arraycontext import (
 
 import sumpy.toys as t
 from .coeff_test_tools import NumericMatVecOperator, get_repl_dict, to_scalar
-from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
+from sumpy.array_context import (  # ruff:ignore[unused-import]
+    PytestPyOpenCLArrayContextFactory,
+    _acf,
+)
 from sumpy.expansion.local import (
     LinearPDEConformingVolumeTaylorLocalExpansion,
     VolumeTaylorLocalExpansion,
@@ -115,9 +118,9 @@ def test_l2l_coefficient_differences(
     # Build matrix M
     p2l2l_expn = LinearPDEConformingVolumeTaylorLocalExpansion(knl, order)
     wrangler = p2l2l_expn.expansion_terms_wrangler
-    M_symbolic = wrangler.get_projection_matrix(rscale=1.0)  # noqa: N806
+    M_symbolic = wrangler.get_projection_matrix(rscale=1.0)  # ruff:ignore[non-lowercase-variable-in-function]
     numeric_op = NumericMatVecOperator(M_symbolic, repl_dict)
-    M = build_matrix(numeric_op, dtype=np.complex128)  # noqa: N806
+    M = build_matrix(numeric_op, dtype=np.complex128)  # ruff:ignore[non-lowercase-variable-in-function]
 
     # Get compressed coefficients
     mu_c_symbolic = wrangler.get_full_kernel_derivatives_from_stored(
@@ -145,7 +148,7 @@ def test_l2l_coefficient_differences(
         print(f'{"="*104}')
         print(f"c1 = {c1}, c2 = {c2}, h = {h}")
         print()
-        print(f"{'i':>3s} | {'ν(i)':>15s} | {'|ν|':4s} | "  # noqa: RUF001
+        print(f"{'i':>3s} | {'ν(i)':>15s} | {'|ν|':4s} | "  # ruff:ignore[ambiguous-unicode-character-string]
               f"{'formula':>31s} | {'direct':>31s} | {'abs err':>10s}")
         print("-" * 104)
 

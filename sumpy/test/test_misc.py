@@ -40,7 +40,10 @@ from arraycontext import ArrayContextFactory, pytest_generate_tests_for_array_co
 
 import sumpy.symbolic as sym
 import sumpy.toys as t
-from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
+from sumpy.array_context import (  # ruff:ignore[unused-import]
+    PytestPyOpenCLArrayContextFactory,
+    _acf,
+)
 from sumpy.expansion import (
     FullExpansionTermsWrangler,
     LinearPDEBasedExpansionTermsWrangler,
@@ -481,8 +484,8 @@ def test_as_scalar_pde_stokes():
 def test_as_scalar_pde_maxwell():
     from sumpy.symbolic import symbols
     op = make_identity_diff_op(3, 6, time_dependent=True)
-    E = op[:3]  # noqa: N806
-    B = op[3:]  # noqa: N806
+    E = op[:3]  # ruff:ignore[non-lowercase-variable-in-function]
+    B = op[3:]  # ruff:ignore[non-lowercase-variable-in-function]
     mu, epsilon = symbols("mu, epsilon")
     t = (0, 0, 0, 1)
 

@@ -40,7 +40,10 @@ from arraycontext import (
 )
 from pytools import obj_array
 
-from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
+from sumpy.array_context import (  # ruff:ignore[unused-import]
+    PytestPyOpenCLArrayContextFactory,
+    _acf,
+)
 from sumpy.expansion.local import (
     H2DLocalExpansion,
     LinearPDEConformingVolumeTaylorLocalExpansion,
@@ -264,10 +267,10 @@ def _test_sumpy_fmm(
 
         if order_varies_with_level:
             def fmm_level_to_order(kernel, kernel_args, tree, lev):
-                return order + lev % 2  # noqa: B023
+                return order + lev % 2  # ruff:ignore[function-uses-loop-variable]
         else:
             def fmm_level_to_order(kernel, kernel_args, tree, lev):
-                return order  # noqa: B023
+                return order  # ruff:ignore[function-uses-loop-variable]
 
         wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,
             fmm_level_to_order=fmm_level_to_order,

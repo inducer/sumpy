@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 import loopy as lp
-from loopy.version import MOST_RECENT_LANGUAGE_VERSION  # noqa: F401
+from loopy.version import MOST_RECENT_LANGUAGE_VERSION  # ruff:ignore[unused-import]
 from pytools import obj_array
 
 from sumpy.array_context import make_loopy_program
