@@ -97,13 +97,13 @@ extend-select = [
     "W",   # pycodestyle
 ]
 extend-ignore = [
-    "C90",      # McCabe complexity
-    "multiple-spaces-before-operator",     # multiple spaces before operator
-    "missing-whitespace-around-arithmetic-operator",     # missing whitespace around arithmetic operator
-    "module-import-not-at-top-of-file",     # module-level import not at top of file
-    "non-empty-init-module",   # non-empty-init-module
-    "type-check-without-type-error",
+    "complex-structure",
+    "missing-whitespace-around-arithmetic-operator",
+    "module-import-not-at-top-of-file",
+    "multiple-spaces-before-operator",
+    "non-empty-init-module",
     "try-consider-else",
+    "type-check-without-type-error",
 ]
 
 [tool.ruff.lint.flake8-quotes]
