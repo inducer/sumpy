@@ -449,7 +449,7 @@ class FullExpansionTermsWrangler(ExpansionTermsWrangler):
         axis_permutation = list(reversed(range(self.dim)))
 
         def mi_key(ident: MultiIndex | DerivativeIdentifier) -> tuple[int, ...]:
-            if isinstance(ident, DerivativeIdentifier):  # noqa: SIM108
+            if isinstance(ident, DerivativeIdentifier):  # ruff:ignore[if-else-block-instead-of-if-exp]
                 mi = ident.mi
             else:
                 mi = ident
@@ -641,7 +641,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         from sumpy.expansion.diff_op import DerivativeIdentifier
 
         def mi_key(ident: MultiIndex | DerivativeIdentifier) -> tuple[int, ...]:
-            if isinstance(ident, DerivativeIdentifier):  # noqa: SIM108
+            if isinstance(ident, DerivativeIdentifier):  # ruff:ignore[if-else-block-instead-of-if-exp]
                 mi = ident.mi
             else:
                 mi = ident

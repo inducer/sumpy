@@ -38,9 +38,9 @@ from arraycontext import (
 )
 from pytools.convergence import EOCRecorder
 
-from sumpy.array_context import (  # noqa: F401
+from sumpy.array_context import (  # ruff:ignore[unused-import]
     PytestPyOpenCLArrayContextFactory,
-    _acf,  # pyright: ignore[reportUnusedImport]
+    _acf,
 )
 from sumpy.expansion.local import LineTaylorLocalExpansion
 from sumpy.kernel import AxisTargetDerivative, LaplaceKernel, ScalarKernel

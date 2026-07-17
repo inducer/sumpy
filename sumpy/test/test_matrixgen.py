@@ -33,7 +33,10 @@ import pytest
 from arraycontext import ArrayContextFactory, pytest_generate_tests_for_array_contexts
 from pytools import obj_array
 
-from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
+from sumpy.array_context import (  # ruff:ignore[unused-import]
+    PytestPyOpenCLArrayContextFactory,
+    _acf,
+)
 
 
 logger = logging.getLogger(__name__)

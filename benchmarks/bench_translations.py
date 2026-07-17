@@ -4,7 +4,7 @@ import logging
 
 import numpy as np
 
-from pyopencl.tools import (  # noqa
+from pyopencl.tools import (  # ruff:ignore[unused-import]
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
 
@@ -53,7 +53,7 @@ class TranslationBenchmarkSuite:
 
     def setup(self, param):
         logging.basicConfig(level=logging.INFO)
-        np.random.seed(17)  # noqa: NPY002
+        np.random.seed(17)  # ruff:ignore[numpy-legacy-random]
         if self.__class__ == TranslationBenchmarkSuite:
             raise NotImplementedError
         mpole_expn_class = self.mpole_expn_class

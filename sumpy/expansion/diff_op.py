@@ -582,7 +582,7 @@ def make_identity_diff_op(
         is *True*, then the last dimension of the multi-index is time.
     """
 
-    if time_dependent:  # noqa: SIM108
+    if time_dependent:  # ruff:ignore[if-else-block-instead-of-if-exp]
         mi = tuple([0]*(ninput + 1))
     else:
         mi = tuple([0]*ninput)

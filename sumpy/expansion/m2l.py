@@ -432,7 +432,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         max_mi = [0]*dim
         for i in range(dim):
             max_mi[i] = max(mi[i] for mi in src_expansion.get_coefficient_identifiers())
-            max_mi[i] += max(mi[i] for mi in tgt_expansion.get_coefficient_identifiers())  # noqa: E501
+            max_mi[i] += max(mi[i] for mi in tgt_expansion.get_coefficient_identifiers())  # ruff:ignore[line-too-long]
 
         # These are the multi-indices representing the rows
         # in the circulant matrix.  Note that to get the circulant

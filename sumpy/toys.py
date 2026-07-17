@@ -1031,13 +1031,13 @@ class SchematicVisitor:
             label = psource_text_kwargs_copy.pop("s", label)
             text_kwargs.update(psource_text_kwargs_copy)
 
-        shrinkB = 0  # noqa
+        shrinkB = 0  # ruff:ignore[non-lowercase-variable-in-function]
         if isinstance(psource.derived_from, ExpansionPotentialSource):
             # Avoid overlapping the tail of the arrow with any expansion labels that
             # are present at the tail.
             import matplotlib as mpl
             font_size = mpl.rcParams["font.size"]
-            shrinkB = 7/8 * font_size  # noqa
+            shrinkB = 7/8 * font_size  # ruff:ignore[non-lowercase-variable-in-function]
 
         arrowprops = {"shrinkB": shrinkB, "arrowstyle": "<|-"}
 

@@ -98,12 +98,12 @@ extend-select = [
 ]
 extend-ignore = [
     "C90",      # McCabe complexity
-    "E221",     # multiple spaces before operator
-    "E226",     # missing whitespace around arithmetic operator
-    "E402",     # module-level import not at top of file
-    "RUF067",   # non-empty-init-module
-    "TRY004",
-    "TRY300",
+    "multiple-spaces-before-operator",     # multiple spaces before operator
+    "missing-whitespace-around-arithmetic-operator",     # missing whitespace around arithmetic operator
+    "module-import-not-at-top-of-file",     # module-level import not at top of file
+    "non-empty-init-module",   # non-empty-init-module
+    "type-check-without-type-error",
+    "try-consider-else",
 ]
 
 [tool.ruff.lint.flake8-quotes]
@@ -127,10 +127,10 @@ lines-after-imports = 2
 required-imports = ["from __future__ import annotations"]
 
 [tool.ruff.lint.per-file-ignores]
-"doc/**/*.py" = ["I002"]
-"examples/**/*.py" = ["I002"]
-"sumpy/test/test_*.py" = ["S102"]
-"doc/conf.py" = ["S102"]
+"doc/**/*.py" = ["missing-required-import"]
+"examples/**/*.py" = ["missing-required-import"]
+"sumpy/test/test_*.py" = ["exec-builtin"]
+"doc/conf.py" = ["exec-builtin"]
 
 [tool.typos.default]
 extend-ignore-re = [
@@ -189,6 +189,9 @@ exclude = [
     ".venv",
 ]
 
+# covered by ruff
+reportUnusedImport = "hint"
+
 [[tool.basedpyright.executionEnvironments]]
 root = "test"
 reportUnknownArgumentType = "none"
@@ -198,7 +201,6 @@ reportMissingParameterType = "none"
 reportAttributeAccessIssue = "hint"
 reportMissingTypeStubs = "hint"
 reportUnknownLambdaType = "hint"
-reportUnusedImport = "hint"
 reportUnusedParameter = "none"
 reportUnannotatedClassAttribute = "hint"
 reportAny = "hint"
@@ -216,7 +218,6 @@ reportMissingParameterType = "none"
 reportAttributeAccessIssue = "hint"
 reportMissingTypeStubs = "hint"
 reportUnknownLambdaType = "hint"
-reportUnusedImport = "hint"
 reportUnusedParameter = "none"
 reportUnannotatedClassAttribute = "hint"
 reportAny = "hint"

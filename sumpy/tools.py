@@ -784,7 +784,7 @@ def loopy_fft(
     m = n
     factors = []
     while m != 1:
-        N1, m = find_factors(m)  # noqa: N806
+        N1, m = find_factors(m)  # ruff:ignore[non-lowercase-variable-in-function]
         factors.append(N1)
 
     nfft = n
@@ -816,9 +816,9 @@ def loopy_fft(
         ),
     ]
 
-    for ilev, N1 in enumerate(list(reversed(factors))):  # noqa: N806
+    for ilev, N1 in enumerate(list(reversed(factors))):  # ruff:ignore[non-lowercase-variable-in-function]
         nfft //= N1
-        N2 = n // (nfft * N1)  # noqa: N806
+        N2 = n // (nfft * N1)  # ruff:ignore[non-lowercase-variable-in-function]
         init_happens_after = "copy" if ilev == 0 else f"update_{ilev-1}"
 
         temp = var("temp")
@@ -826,15 +826,15 @@ def loopy_fft(
         i = var(f"i_{ilev}")
         i2 = var(f"i2_{ilev}")
         ifft = var(f"ifft_{ilev}")
-        iN1 = var(f"iN1_{ilev}")           # noqa: N806
-        iN1_sum = var(f"iN1_sum_{ilev}")   # noqa: N806
-        iN2 = var(f"iN2_{ilev}")           # noqa: N806
+        iN1 = var(f"iN1_{ilev}")           # ruff:ignore[non-lowercase-variable-in-function]
+        iN1_sum = var(f"iN1_sum_{ilev}")   # ruff:ignore[non-lowercase-variable-in-function]
+        iN2 = var(f"iN2_{ilev}")           # ruff:ignore[non-lowercase-variable-in-function]
         table_idx = var(f"table_idx_{ilev}")
         exp = var(f"exp_{ilev}")
 
         i_batch = (*batch_dims, i)
         i2_batch = (*batch_dims, i2)
-        iN_batch = (*batch_dims, ifft + nfft * (iN1 * N2 + iN2))  # noqa: N806
+        iN_batch = (*batch_dims, ifft + nfft * (iN1 * N2 + iN2))  # ruff:ignore[non-lowercase-variable-in-function]
 
         insns += [
             lp.Assignment(
@@ -954,7 +954,7 @@ def _get_fft_backend(queue: pyopencl.CommandQueue) -> FFTBackend:
         return FFTBackend[env_val]
 
     try:
-        import pyvkfft.opencl  # noqa: F401
+        import pyvkfft.opencl  # ruff:ignore[unused-import]
     except ImportError:
         warnings.warn("VkFFT not found. FFT runs will be slower.", stacklevel=3)
         return FFTBackend.loopy

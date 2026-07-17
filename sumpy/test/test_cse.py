@@ -299,8 +299,8 @@ def test_issue_4499():
     from sympy import S, Tuple
     from sympy.abc import a, b
 
-    B = sym.Function("B")   # noqa: N806
-    G = sym.Function("G")   # noqa: N806
+    B = sym.Function("B")   # ruff:ignore[non-lowercase-variable-in-function]
+    G = sym.Function("G")   # ruff:ignore[non-lowercase-variable-in-function]
     t = Tuple(*(
         a,
         a + S(1)/2,
@@ -418,14 +418,14 @@ def test_symbols_exhausted_error():
 @sympyonly
 def test_issue_7840():
     # daveknippers' example
-    C393 = sym.sympify(     # noqa: N806
+    C393 = sym.sympify(     # ruff:ignore[non-lowercase-variable-in-function]
         "Piecewise((C391 - 1.65, C390 < 0.5), (Piecewise((C391 - 1.65, \
         C391 > 2.35), (C392, True)), True))"
     )
-    C391 = sym.sympify(     # noqa: N806
+    C391 = sym.sympify(     # ruff:ignore[non-lowercase-variable-in-function]
         "Piecewise((2.05*C390**(-1.03), C390 < 0.5), (2.5*C390**(-0.625), True))"
     )
-    C393 = C393.subs("C391", C391)   # noqa: N806
+    C393 = C393.subs("C391", C391)   # ruff:ignore[non-lowercase-variable-in-function]
     # simple substitution
     sub = {}
     sub["C390"] = 0.703451854

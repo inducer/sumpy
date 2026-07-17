@@ -39,7 +39,10 @@ from arraycontext import (
 
 import sumpy.toys as t
 from .coeff_test_tools import NumericMatVecOperator, get_repl_dict, to_scalar
-from sumpy.array_context import PytestPyOpenCLArrayContextFactory, _acf  # noqa: F401
+from sumpy.array_context import (  # ruff:ignore[unused-import]
+    PytestPyOpenCLArrayContextFactory,
+    _acf,
+)
 from sumpy.expansion.local import (
     LinearPDEConformingVolumeTaylorLocalExpansion,
 )
@@ -110,7 +113,7 @@ def test_m2m_coefficient_differences(
         print(f"m_center2 = {m_center2}")
         print(f"h = m_center2 - m_center1 = {h}")
         print()
-        print(f"{'k':>3s} | {'ν(k)':>15s} | {'|ν(k)|':6s} | "  # noqa: RUF001
+        print(f"{'k':>3s} | {'ν(k)':>15s} | {'|ν(k)|':6s} | "  # ruff:ignore[ambiguous-unicode-character-string]
               f"{'difference by formula':>31s} | "
               f"{'difference by direct computation':>31s} | "
               f"{'abs err':>10s}")
@@ -140,9 +143,9 @@ def test_m2m_coefficient_differences(
 
     # Build matrix M
     wrangler = mexpn.expansion_terms_wrangler
-    M_symbolic = wrangler.get_projection_matrix(rscale=1.0)  # noqa: N806
+    M_symbolic = wrangler.get_projection_matrix(rscale=1.0)  # ruff:ignore[non-lowercase-variable-in-function]
     numeric_op = NumericMatVecOperator(M_symbolic, repl_dict)
-    M = build_matrix(numeric_op, dtype=np.complex128)  # noqa: N806
+    M = build_matrix(numeric_op, dtype=np.complex128)  # ruff:ignore[non-lowercase-variable-in-function]
     coeffs_full = (M @ p2l.coeffs) * global_const
 
     # Get coefficient identifiers

@@ -31,7 +31,7 @@ import numpy as np
 from typing_extensions import override
 
 import loopy as lp
-from loopy.version import MOST_RECENT_LANGUAGE_VERSION  # noqa: F401
+from loopy.version import MOST_RECENT_LANGUAGE_VERSION  # ruff:ignore[unused-import]
 from pytools import memoize_method
 
 import sumpy.symbolic as sym

@@ -3,7 +3,11 @@ import numpy as np
 import pyopencl as cl
 
 import sumpy.toys as t
-from sumpy.kernel import HelmholtzKernel, LaplaceKernel, YukawaKernel  # noqa: F401
+from sumpy.kernel import (  # ruff:ignore[unused-import]
+    HelmholtzKernel,
+    LaplaceKernel,
+    YukawaKernel,
+)
 from sumpy.visualization import FieldPlotter
 
 
@@ -40,7 +44,7 @@ def main():
         plt.show()
 
     mexp = t.multipole_expand(actx, pt_src, [0, 0], order=5)
-    mexp2 = t.multipole_expand(actx, mexp, [0, 0.25])  # noqa: F841
+    mexp2 = t.multipole_expand(actx, mexp, [0, 0.25])  # ruff:ignore[unused-variable]
     lexp = t.local_expand(actx, mexp, [3, 0])
     lexp2 = t.local_expand(actx, lexp, [3, 1], order=3)
 
