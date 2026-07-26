@@ -537,8 +537,8 @@ class P2PFromCSR(P2PBase):
                 "{[inner]: 0 <= inner < work_items_per_group}",
                 "{[itgt_offset_outer]: 0 <= itgt_offset_outer <= tgt_outer_limit}",
                 "{[isrc_prefetch]: 0 <= isrc_prefetch < max_nsources_in_one_box}",
-                "{[isrc_offset]: 0 <= isrc_offset < max_nsources_in_one_box"
-                " and isrc_offset < isrc_end - isrc_start}",
+                ("{[isrc_offset]: 0 <= isrc_offset < max_nsources_in_one_box"
+                    " and isrc_offset < isrc_end - isrc_start}"),
             ]
         else:
             domains += [
