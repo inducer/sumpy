@@ -25,7 +25,6 @@ THE SOFTWARE.
 
 from typing import TYPE_CHECKING, Any
 
-from boxtree.array_context import PyOpenCLArrayContext as PyOpenCLArrayContextBase
 from typing_extensions import override
 
 import loopy as lp
@@ -33,6 +32,7 @@ from arraycontext.pytest import (
     _PytestPyOpenCLArrayContextFactoryWithClass,
     register_pytest_array_context_factory,
 )
+from boxtree.array_context import PyOpenCLArrayContext as PyOpenCLArrayContextBase
 
 
 if TYPE_CHECKING:
