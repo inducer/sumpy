@@ -118,6 +118,7 @@ known-first-party = [
     "loopy",
     "pymbolic",
     "pyopencl",
+    "boxtree",
     "pytools",
 ]
 known-local-folder = [

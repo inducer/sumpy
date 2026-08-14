@@ -42,10 +42,10 @@ from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any, Protocol, TypeAlias
 
 import numpy as np
-from boxtree.fmm import ExpansionWranglerInterface, TreeIndependentDataForWrangler
-from boxtree.tree import Tree
 from typing_extensions import override
 
+from boxtree.fmm import ExpansionWranglerInterface, TreeIndependentDataForWrangler
+from boxtree.tree import Tree
 from pytools import memoize_in, memoize_method, obj_array
 
 from sumpy import (
