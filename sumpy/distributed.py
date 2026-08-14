@@ -26,7 +26,6 @@ THE SOFTWARE.
 from typing import TYPE_CHECKING
 
 from boxtree.distributed.calculation import DistributedExpansionWranglerMixin
-
 from pytools import obj_array
 
 from sumpy.fmm import SumpyExpansionWrangler
