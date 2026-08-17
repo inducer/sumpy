@@ -38,7 +38,7 @@ from arraycontext.pytest import (
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
 
-    import islpy
+    import namedisl as nisl
     from numpy.typing import DTypeLike
 
     from arraycontext import ArrayContext
@@ -60,7 +60,7 @@ Array Context
 # {{{ PyOpenCLArrayContext
 
 def make_loopy_program(
-        domains: str | Sequence[str | islpy.BasicSet],
+        domains: str | Sequence[str | nisl.Set],
         statements: Sequence[InstructionBase | str] | str,
         kernel_data: list[Any] | None = None, *,
         name: str = "sumpy_loopy_kernel",
