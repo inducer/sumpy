@@ -10888,22 +10888,6 @@
             {
                 "code": "reportUnknownMemberType",
                 "range": {
-                    "startColumn": 30,
-                    "endColumn": 49,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownMemberType",
-                "range": {
-                    "startColumn": 22,
-                    "endColumn": 41,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownMemberType",
-                "range": {
                     "startColumn": 15,
                     "endColumn": 29,
                     "lineCount": 1
