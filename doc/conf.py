@@ -13,7 +13,7 @@ version = ".".join(release.split(".")[:2])
 intersphinx_mapping = {
     "arraycontext": ("https://documen.tician.de/arraycontext/", None),
     "boxtree": ("https://documen.tician.de/boxtree/", None),
-    "islpy": ("https://documen.tician.de/islpy", None),
+    "namedisl": ("https://documen.tician.de/namedisl", None),
     "loopy": ("https://documen.tician.de/loopy/", None),
     "matplotlib": ("https://matplotlib.org/stable/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
@@ -57,6 +57,8 @@ sphinxconfig_missing_reference_aliases = {
     # pymbolic
     "ArithmeticExpression": "obj:pymbolic.ArithmeticExpression",
     "Expression": "obj:pymbolic.typing.Expression",
+    # namedisl
+    "nisl.Set": "class:namedisl.Set",
     # loopy
     "Assignment": "class:loopy.kernel.instruction.Assignment",
     "CallInstruction": "class:loopy.kernel.instruction.CallInstruction",
