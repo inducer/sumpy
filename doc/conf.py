@@ -13,15 +13,16 @@ version = ".".join(release.split(".")[:2])
 intersphinx_mapping = {
     "arraycontext": ("https://documen.tician.de/arraycontext/", None),
     "boxtree": ("https://documen.tician.de/boxtree/", None),
-    "namedisl": ("https://documen.tician.de/namedisl", None),
     "loopy": ("https://documen.tician.de/loopy/", None),
     "matplotlib": ("https://matplotlib.org/stable/", None),
+    "namedisl": ("https://documen.tician.de/namedisl", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
     "pymbolic": ("https://documen.tician.de/pymbolic/", None),
     "pyopencl": ("https://documen.tician.de/pyopencl/", None),
     "pytential": ("https://documen.tician.de/pytential/", None),
     "python": ("https://docs.python.org/3/", None),
     "pytools": ("https://documen.tician.de/pytools/", None),
+    "pyvkfft": ("https://pyvkfft.readthedocs.io/en/latest/", None),
     "sympy": ("https://docs.sympy.org/latest/", None),
 }
 
@@ -57,6 +58,11 @@ sphinxconfig_missing_reference_aliases = {
     # pymbolic
     "ArithmeticExpression": "obj:pymbolic.ArithmeticExpression",
     "Expression": "obj:pymbolic.typing.Expression",
+    # pyopencl
+    "CLArray": "class:pyopencl.array.Array",
+    "WaitList": "obj:pyopencl.WaitList",
+    # pyvkfft
+    "VkFFTApp": "class:pyvkfft.base.VkFFTApp",
     # namedisl
     "nisl.Set": "class:namedisl.Set",
     # loopy
@@ -71,6 +77,7 @@ sphinxconfig_missing_reference_aliases = {
     # sumpy
     "ArithmeticExpr": "obj:sumpy.kernel.ArithmeticExpr",
     "OptimizationPair": "obj:sumpy.cse.OptimizationPair",
+    "TranslationClassesInfo": "class:boxtree.translation_classes.TranslationClassesInfo",  # ruff: ignore[line-too-long]
 }
 
 
