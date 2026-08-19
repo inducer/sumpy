@@ -44,6 +44,7 @@ from sumpy.version import VERSION_TEXT
 
 
 if TYPE_CHECKING:
+    import types
     from collections.abc import Hashable
 
     import loopy as lp
@@ -72,15 +73,13 @@ code_cache: WriteOncePersistentDict[Hashable, lp.TranslationUnit] = (
 
 # {{{ optimization control
 
-OPT_ENABLED = True
-
 OPT_ENABLED = "SUMPY_NO_OPT" not in os.environ
 
 
-def set_optimization_enabled(flag):
+def set_optimization_enabled(flag: bool) -> None:
     """Set whether the :mod:`loopy` kernels should be optimized."""
     global OPT_ENABLED
-    OPT_ENABLED = flag
+    OPT_ENABLED = flag  # pyright: ignore[reportConstantRedefinition]
 
 # }}}
 
@@ -91,17 +90,16 @@ CACHING_ENABLED = (
     "SUMPY_NO_CACHE" not in os.environ
     and "CG_NO_CACHE" not in os.environ)
 
-NO_CACHE_KERNELS = tuple(os.environ.get("SUMPY_NO_CACHE_KERNELS",
-                                        "").split(","))
+NO_CACHE_KERNELS = tuple(os.environ.get("SUMPY_NO_CACHE_KERNELS", "").split(","))
 
 
-def set_caching_enabled(flag, no_cache_kernels=()):
+def set_caching_enabled(flag: bool, no_cache_kernels: tuple[str, ...] = ()) -> None:
     """Set whether :mod:`loopy` is allowed to use disk caching for its various
     code generation stages.
     """
     global CACHING_ENABLED, NO_CACHE_KERNELS
-    NO_CACHE_KERNELS = no_cache_kernels
-    CACHING_ENABLED = flag
+    NO_CACHE_KERNELS = no_cache_kernels  # pyright: ignore[reportConstantRedefinition]
+    CACHING_ENABLED = flag  # pyright: ignore[reportConstantRedefinition]
 
 
 class CacheMode:
@@ -109,18 +107,38 @@ class CacheMode:
     disk caches.
     """
 
-    def __init__(self, new_flag, new_no_cache_kernels=()):
-        self.new_flag = new_flag
-        self.new_no_cache_kernels = new_no_cache_kernels
+    new_flag: bool
+    previous_flag: bool | None
 
-    def __enter__(self):
+    new_no_cache_kernels: tuple[str, ...]
+    previous_no_cache_kernels: tuple[str, ...] | None
+
+    def __init__(self,
+                 new_flag: bool,
+                 new_no_cache_kernels: tuple[str, ...] = ()) -> None:
+        self.new_flag = new_flag
+        self.previous_flag = None
+        self.new_no_cache_kernels = new_no_cache_kernels
+        self.previous_no_cache_kernels = None
+
+    def __enter__(self) -> None:
+        if self.previous_flag is not None or self.previous_no_cache_kernels is not None:
+            raise RuntimeError("cannot reuse the 'CacheMode' context manager")
+
         self.previous_flag = CACHING_ENABLED
-        self.previous_kernels = NO_CACHE_KERNELS
+        self.previous_no_cache_kernels = NO_CACHE_KERNELS
         set_caching_enabled(self.new_flag, self.new_no_cache_kernels)
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        set_caching_enabled(self.previous_flag, self.previous_kernels)
-        del self.previous_flag
-        del self.previous_kernels
+    def __exit__(self,
+                 exc_type: type[BaseException] | None,
+                 exc_val: BaseException | None,
+                 exc_tb: types.TracebackType | None) -> None:
+        if self.previous_flag is None or self.previous_no_cache_kernels is None:
+            raise RuntimeError("cannot reuse the 'CacheMode' context manager")
+
+        set_caching_enabled(self.previous_flag, self.previous_no_cache_kernels)
+
+        self.previous_flag = None
+        self.previous_no_cache_kernels = None
 
 # }}}
