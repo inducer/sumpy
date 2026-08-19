@@ -123,8 +123,17 @@ Profiling
 
 .. autofunction:: get_native_event
 .. autoclass:: ProfileGetter
+.. autoclass:: ProfilingEvent
+    :members:
+    :undoc-members:
 .. autoclass:: AggregateProfilingEvent
+    :show-inheritance:
+    :members:
+    :undoc-members:
 .. autoclass:: MarkerBasedProfilingEvent
+    :show-inheritance:
+    :members:
+    :undoc-members:
 
 References
 ----------
