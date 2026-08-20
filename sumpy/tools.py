@@ -1139,25 +1139,4 @@ def run_opencl_fft(
 # }}}
 
 
-# {{{ deprecations
-
-_depr_name_to_replacement_and_obj = {
-    "KernelCacheWrapper": (KernelCacheMixin, 2023),
-    }
-
-
-def __getattr__(name: str) -> Any:
-    replacement_and_year = _depr_name_to_replacement_and_obj.get(name)
-    if replacement_and_year is not None:
-        obj, year = replacement_and_year
-        from warnings import warn
-        warn(f"'sumpy.tools.{name}' is deprecated. Use '{obj.__name__}' instead. "
-             f"'sumpy.tools.{name}' will continue to work until {year}.",
-             DeprecationWarning, stacklevel=2)
-        return obj
-    else:
-        raise AttributeError(name)
-
-# }}}
-
 # vim: fdm=marker
