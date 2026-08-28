@@ -55,6 +55,11 @@ logger = logging.getLogger(__name__)
 
 # {{{ rewrite_using_base_kernel
 
+
+class RewriteFailedError(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class LinearOperatorRepresentation:
     r"""Expresses a target kernel as a linear operator acting on a base kernel.
@@ -119,19 +124,144 @@ def rewrite_using_base_kernel(
         order=order,
     )
 
+
+# }}}
+
+
+# {{{ rewrite_using_base_kernel_fourier
+
+
+def rewrite_using_base_kernel_fourier(
+    target_kernel: ScalarKernel,
+    base_kernel: ScalarKernel,
+) -> LinearOperatorRepresentation:
+    r"""Find a relation between *target_kernel* and *base_kernel* using the
+    Fourier symbol of their respective PDEs.
+
+    The algorithm works by computing the Fourier symbols :math:`P_{\text{base}}`
+    and :math:`P_{\text{target}}` of the scalar PDEs satisfied by the two
+    kernels. The target kernel can be expressed as a differential operator
+    applied to the base kernel if and only if the ratio
+
+    .. math::
+
+        D(i \boldsymbol{k}) = \frac{P_{\text{base}}(\boldsymbol{k})}
+                                   {P_{\text{target}}(\boldsymbol{k})}
+
+    is a polynomial in :math:`\boldsymbol{k}`. When it is, each monomial
+    :math:`\prod_j (i k_j)^{\alpha_j}` corresponds to the derivative
+    :math:`\partial^{|\alpha|} / \partial \boldsymbol{r}^{\alpha}`.
+    """
+    import sympy as sp
+
+    # FIXME: want to add a general check for this?
+    try:
+        _ = base_kernel.get_pde_system_kernel()
+    except TypeError:
+        pass
+    else:
+        raise ValueError(
+            f"'base_kernel' cannot be part of a system: {type(base_kernel)}"
+        )
+
+    dim = base_kernel.dim
+    if target_kernel.dim != dim:
+        raise ValueError(
+            f"kernel dimension mismatch: {target_kernel.dim} (target_kernel) and "
+            f"{dim} (base_kernel)"
+        )
+
+    from sumpy.expansion.diff_op import to_fourier_matrix
+
+    ks = sp.Matrix([sp.Symbol(f"_k{j}") for j in range(dim)])
+
+    pde_base = base_kernel.get_pde_as_diff_op()
+    fourier_base = to_fourier_matrix(pde_base, ks).inv()
+
+    try:
+        target_system_kernel, idx = target_kernel.get_pde_system_kernel()
+    except TypeError:
+        target_system_kernel, idx = None, None
+
+    if target_system_kernel is None:
+        pde_target = target_kernel.get_pde_as_diff_op()
+        fourier_target = to_fourier_matrix(pde_target, ks).inv()
+    else:
+        assert idx is not None
+
+        pde_target_system = target_system_kernel.get_pde_as_diff_op()
+        fourier_target_system = to_fourier_matrix(pde_target_system, ks)
+        fourier_target_system_inv = sp.simplify(fourier_target_system.inv())
+
+        fourier_target = sp.Matrix([fourier_target_system_inv[idx]])
+
+    p_base: sp.Expr = sp.Integer(1)
+    for entry in fourier_base:
+        p_base = p_base * entry
+
+    p_target: sp.Expr = sp.Integer(1)
+    for entry in fourier_target:
+        p_target = p_target * entry
+
+    quotient = sp.simplify(p_target / p_base)
+    if not quotient.is_polynomial(*ks):
+        raise RewriteFailedError(
+            f"cannot rewrite {target_kernel} in terms of {base_kernel}"
+        )
+
+    mis: list[MultiIndex] = []
+    coeffs: list[sp.Expr] = []
+
+    for exponent, coeff in sp.Poly(quotient, *ks).as_dict().items():
+        coeff = sp.simplify(coeff)
+        if coeff == sp.Integer(0):
+            continue
+
+        mis.append(exponent)
+        coeffs.append(coeff)
+
+    if not mis:
+        raise RewriteFailedError(
+            f"cannot rewrite {target_kernel} in terms of {base_kernel}"
+        )
+
+    # compute constant term, if any
+    dvec = sym.make_sym_vector("d", dim)
+    base_scaled = (
+        base_kernel.get_global_scaling_const()
+        * base_kernel.get_expression(dvec)
+    )
+
+    # build the differential operator part in real space
+    const: sp.Expr = (
+        target_kernel.get_global_scaling_const()
+        * target_kernel.get_expression(dvec)
+    )
+
+    for mi, c in zip(mis, coeffs, strict=True):
+        term = c * base_scaled
+        for i, n in enumerate(mi):
+            term = term.diff(dvec[i], n)
+        const = const - sp.simplify(term)
+    const = sp.simplify(const)
+
+    return LinearOperatorRepresentation(
+        target_kernel,
+        base_kernel,
+        mis,
+        [sym.to_pymbolic(expr) for expr in [const, *coeffs]],
+    )
+
+
 # }}}
 
 
 # {{{ rewrite_using_base_kernel_lu
 
-INT_MAX = 10 ** 15
+INT_MAX = 10**15
 
 
 class FactorizationFailedError(Exception):
-    pass
-
-
-class RewriteFailedError(Exception):
     pass
 
 
