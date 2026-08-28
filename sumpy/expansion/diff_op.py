@@ -421,8 +421,7 @@ def as_scalar_pde(
     """
     indices: set[int] = set()
     for eq in pde.eqs:
-        for deriv_ident in eq:
-            indices.add(deriv_ident.vec_idx)
+        indices.update(deriv_ident.vec_idx for deriv_ident in eq)
 
     # this is already a scalar pde
     if len(indices) == 1 and next(iter(indices)) == comp_idx:

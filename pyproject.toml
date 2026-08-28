@@ -102,6 +102,7 @@ extend-ignore = [
     "module-import-not-at-top-of-file",
     "multiple-spaces-before-operator",
     "non-empty-init-module",
+    "pytest-parameter-with-default-argument",
     "try-consider-else",
     "type-check-without-type-error",
 ]
