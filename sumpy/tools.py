@@ -985,96 +985,110 @@ def loopy_fft(
     return lp.linearize(knl)
 
 
+@enum.unique
 class FFTBackend(enum.Enum):
-    #: FFT backend based on the vkFFT library.
-    pyvkfft = 1
-    #: FFT backend based on :mod:`loopy` used as a fallback.
-    loopy = 2
+    """Supported FFT backends."""
+
+    PYVKFFT = enum.auto()
+    """FFT backend based on the vkFFT library."""
+    LOOPY = enum.auto()
+    """FFT backend based on :mod:`loopy` used as a fallback."""
 
 
 def _get_fft_backend(queue: pyopencl.CommandQueue) -> FFTBackend:
     import os
 
-    env_val = os.environ.get("SUMPY_FFT_BACKEND")
-    if env_val:
-        if env_val not in ["loopy", "pyvkfft"]:
-            raise ValueError("Expected 'loopy' or 'pyvkfft' for SUMPY_FFT_BACKEND. "
-                   f"Found {env_val}.")
-        return FFTBackend[env_val]
+    env_backend = os.environ.get("SUMPY_FFT_BACKEND")
+    if env_backend:
+        env_backend = env_backend.upper()
+        if env_backend not in (backends := {v.name for v in FFTBackend}):
+            raise ValueError(
+                "'SUMPY_FFT_BACKEND' environment variable has an unsupported value: "
+                f"{env_backend!r}. Supported backends are: {backends}"
+            )
+
+        return FFTBackend[env_backend]
 
     try:
         import pyvkfft.opencl  # ruff:ignore[unused-import]
     except ImportError:
-        warnings.warn("VkFFT not found. FFT runs will be slower.", stacklevel=3)
-        return FFTBackend.loopy
+        warnings.warn("VkFFT not found. FFT runs will use a slower built-in backend.",
+                      stacklevel=3)
+        return FFTBackend.LOOPY
 
     from pyopencl import command_queue_properties
 
     if queue.properties & command_queue_properties.OUT_OF_ORDER_EXEC_MODE_ENABLE:
         warnings.warn(
             "VkFFT does not support out of order queues yet. "
-            "Falling back to slower implementation.", stacklevel=3)
-        return FFTBackend.loopy
+            "Falling back to a slower built-in backend.", stacklevel=3)
+        return FFTBackend.LOOPY
 
     from pyopencl.characterize import get_pocl_version
     pocl_ver = get_pocl_version(queue.device.platform)
 
-    import platform
-    import sys
-
     if pocl_ver is not None:
+        import platform
+        import sys
+
         if pocl_ver >= (7,):
             warnings.warn(
                 "PoCL>=7 miscompiles VkFFT. "
                 "See https://github.com/pocl/pocl/issues/2069 for details. "
-                "Falling back to slower implementation.", stacklevel=3)
-            return FFTBackend.loopy
+                "Falling back to a slower built-in backend.", stacklevel=3)
+            return FFTBackend.LOOPY
 
-        if (sys.platform == "darwin"
-                and platform.machine() == "x86_64"):
+        if sys.platform == "darwin" and platform.machine() == "x86_64":
             warnings.warn(
                 "PoCL crashes on some VkFFT kernels on MacOS. "
                 "See https://github.com/inducer/sumpy/issues/129. "
                 "Falling back to slower implementation.", stacklevel=3)
-            return FFTBackend.loopy
+            return FFTBackend.LOOPY
 
-    return FFTBackend.pyvkfft
+    return FFTBackend.PYVKFFT
 
 
 def get_opencl_fft_app(
         actx: ArrayContext,
+        *,
         shape: tuple[int, ...],
         dtype: np.dtype[Any],
-        inverse: bool) -> tuple[lp.TranslationUnit | VkFFTApp, FFTBackend]:
-    """Setup an object for out-of-place FFT on with given shape and dtype
-    on given queue.
+        inverse: bool = False,
+        backend: FFTBackend | None = None,
+    ) -> lp.TranslationUnit | VkFFTApp:
+    """Setup an object for FFT computations.
+
+    :arg backend: if not provided, it will be automatically determined from the
+        given *actx*. A known faster backend will be preferred. This will first
+        check the ``SUMPY_FFT_BACKEND`` environment.
     """
     assert isinstance(actx, PyOpenCLArrayContext)
-    assert dtype.type in (np.float32, np.float64, np.complex64,
-                           np.complex128)
+    assert dtype.type in (np.float32, np.float64, np.complex64, np.complex128)
 
-    backend = _get_fft_backend(actx.queue)
+    if backend is None:
+        backend = _get_fft_backend(actx.queue)
 
-    if backend == FFTBackend.loopy:
+    if backend == FFTBackend.LOOPY:
         return loopy_fft(
             shape[-1],
             n_batch_dims=len(shape) - 1,
             inverse=inverse,
-            complex_dtype=dtype.type), backend
-    elif backend == FFTBackend.pyvkfft:
+            complex_dtype=dtype.type)
+    elif backend == FFTBackend.PYVKFFT:
         from pyvkfft.opencl import VkFFTApp
         app = VkFFTApp(
             shape=shape, dtype=dtype,  # pyright: ignore[reportArgumentType]
             queue=actx.queue, ndim=1, inplace=False)
-        return app, backend
+        return app
     else:
         raise RuntimeError(f"Unsupported FFT backend {backend}")
 
 
 def run_opencl_fft(
         actx: ArrayContext,
-        fft_app: tuple[lp.TranslationUnit | VkFFTApp, FFTBackend],
+        app: lp.TranslationUnit | VkFFTApp,
         input_vec: CLArray,
+        *,
         inverse: bool = False,
         wait_for: WaitList | None = None
     ) -> tuple[pyopencl.Event | MarkerBasedProfilingEvent, CLArray]:
@@ -1084,20 +1098,15 @@ def run_opencl_fft(
     Only supports in-order queues.
     """
     assert isinstance(actx, PyOpenCLArrayContext)
+    if wait_for is None:
+        wait_for = []
 
-    app, backend = fft_app
-
-    if backend == FFTBackend.loopy:
-        assert isinstance(app, lp.TranslationUnit)
+    if isinstance(app, lp.TranslationUnit):
         evt, output_vec = app(actx.queue, y=input_vec, wait_for=wait_for)
         return (evt, output_vec["x"])
-    elif backend == FFTBackend.pyvkfft:
-        from pyvkfft.opencl import VkFFTApp
-        assert isinstance(app, VkFFTApp)
 
-        if wait_for is None:
-            wait_for = []
-
+    from pyvkfft.opencl import VkFFTApp
+    if isinstance(app, VkFFTApp):
         import pyopencl as cl
 
         queue = actx.queue
@@ -1108,33 +1117,31 @@ def run_opencl_fft(
             for evt in wait_for:
                 if evt.command_queue != queue:
                     raise RuntimeError(
-                        "Different queues not supported with NVIDIA CUDA")
+                        "different queues not supported with NVIDIA CUDA")
             start_evt = cl.enqueue_marker(queue)
         else:
             start_evt = cl.enqueue_marker(queue, wait_for=wait_for[:])
 
         if app.inplace:
-            raise RuntimeError("inplace fft is not supported")
+            raise RuntimeError("inplace FFT is not supported by pyvkfft")
         else:
             # FIXME: All very imperative. FFT functionality should move into the actx?
             output_vec = actx.np.zeros_like(input_vec)
 
         meth = app.ifft if inverse else app.fft
-
         meth(input_vec, output_vec, queue=queue)
 
         if queue.device.platform.name == "NVIDIA CUDA":
             end_evt = cl.enqueue_marker(queue)
         else:
             end_evt = cl.enqueue_marker(queue, wait_for=[start_evt])
-
         output_vec.add_event(end_evt)
 
         return (
             MarkerBasedProfilingEvent(end_event=end_evt, start_event=start_evt),
             output_vec)
-    else:
-        raise RuntimeError(f"Unsupported FFT backend {backend}")
+
+    raise RuntimeError(f"unsupported FFT backend: {type(app)}")
 
 # }}}
 

@@ -414,9 +414,9 @@ def _m2l(actx: ArrayContext,
 
         if toy_ctx.use_fft:
 
-            fft_app = get_opencl_fft_app(actx, (1, expn_size,),
+            fft_app = get_opencl_fft_app(actx, shape=(1, expn_size,),
                 dtype=preprocessed_src_expansions.dtype, inverse=False)
-            ifft_app = get_opencl_fft_app(actx, (1, expn_size,),
+            ifft_app = get_opencl_fft_app(actx, shape=(1, expn_size,),
                 dtype=preprocessed_src_expansions.dtype, inverse=True)
 
             _evt, preprocessed_src_expansions = run_opencl_fft(actx, fft_app,
