@@ -115,9 +115,11 @@ class LocalExpansionFromOrderFactory(Protocol):
 
 class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
     """Objects of this type serve as a place to keep the code needed
-    for :class:`SumpyExpansionWrangler`. Since :class:`SumpyExpansionWrangler`
-    contains data that is allowed to be more ephemeral than the code, the code's
-    lifetime is decoupled by storing it in this object.
+    for :class:`SumpyExpansionWrangler`.
+
+    Since :class:`SumpyExpansionWrangler` contains data that is allowed to be
+    more ephemeral than the code, the code's lifetime is decoupled by storing
+    it in this object.
     """
 
     multipole_expansion_factory: MultipoleExpansionFromOrderFactory
@@ -127,6 +129,7 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
     exclude_self: bool
     use_rscale: bool | None
     strength_usage: Sequence[int] | None
+    fft_backend: FFTBackend | None
 
     def __init__(self,
                  array_context: ArrayContext,
@@ -136,7 +139,9 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
                  exclude_self: bool = False,
                  use_rscale: bool | None = None,
                  strength_usage: Sequence[int] | None = None,
-                 source_kernels: Sequence[ScalarKernel] | None = None) -> None:
+                 source_kernels: Sequence[ScalarKernel] | None = None,
+                 fft_backend: FFTBackend | None = None,
+                 ) -> None:
         """
         :arg multipole_expansion_factory: a callable of a single argument (order)
             that returns a multipole expansion.
@@ -146,10 +151,16 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
         :arg exclude_self: whether the self contribution should be excluded
         :arg strength_usage: passed unchanged to p2l, p2m and p2p.
         :arg source_kernels: passed unchanged to p2l, p2m and p2p.
+        :arg fft_backend: the FFT backend used for compressing M2L interactions.
+            If not provided, it will be determined at runtime for the given
+            array context.
         """
         super().__init__()
 
-        self._setup_actx: ArrayContext = array_context
+        from arraycontext import PyOpenCLArrayContext
+
+        assert isinstance(array_context, PyOpenCLArrayContext)
+        self._setup_actx: PyOpenCLArrayContext = array_context
 
         self.multipole_expansion_factory = multipole_expansion_factory
         self.local_expansion_factory = local_expansion_factory
@@ -158,6 +169,7 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
         self.exclude_self = exclude_self
         self.use_rscale = use_rscale
         self.strength_usage = strength_usage
+        self.fft_backend = fft_backend
 
     @memoize_method
     def get_base_kernel(self) -> ScalarKernel:
@@ -262,14 +274,24 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
 
     def opencl_fft_app(
             self,
+            *,
             shape: tuple[int, ...],
             dtype: np.dtype[Any],
-            inverse: bool) -> tuple[lp.TranslationUnit | VkFFTApp, FFTBackend]:
+            inverse: bool,
+        ) -> lp.TranslationUnit | VkFFTApp:
+        backend = self.fft_backend
+        if backend is None:
+            from sumpy.tools import _get_fft_backend
+            backend = _get_fft_backend(self._setup_actx.queue)
+
         @memoize_in(self._setup_actx, (
             SumpyTreeIndependentDataForWrangler.opencl_fft_app,
-            shape, dtype, inverse))
-        def app() -> tuple[lp.TranslationUnit | VkFFTApp, FFTBackend]:
-            return get_opencl_fft_app(self._setup_actx, shape, dtype, inverse=inverse)
+            shape, dtype, inverse, backend))
+        def app() -> lp.TranslationUnit | VkFFTApp:
+            return get_opencl_fft_app(
+                self._setup_actx, shape=shape, dtype=dtype, inverse=inverse,
+                backend=backend
+            )
 
         return app()
 
@@ -653,7 +675,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             inverse: bool,
             wait_for: WaitList | None = None) -> Array:
         app = self.tree_indep.opencl_fft_app(
-            input_vec.shape, input_vec.dtype, inverse=inverse)
+            shape=input_vec.shape, dtype=input_vec.dtype, inverse=inverse)
         evt, result = run_opencl_fft(
             actx, app, input_vec, inverse=inverse, wait_for=wait_for)
 
