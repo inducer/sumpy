@@ -12,9 +12,10 @@ import numpy as np
 import pytest
 
 import sumpy.symbolic as sym
-from sumpy.kernel import BiharmonicKernel, LaplaceKernel, StokesletKernel
+from sumpy.kernel import BiharmonicKernel, LaplaceKernel, StokesletComponentKernel
 from sumpy.kernel_rewrite import (
     LinearOperatorRepresentation,
+    rewrite_using_base_kernel_fourier,
     rewrite_using_base_kernel_lu,
 )
 
@@ -52,6 +53,8 @@ def check_kernel_rewrite(op: LinearOperatorRepresentation) -> None:
     assert abs(result) < 3.0 * 1.0e-16
 
 
+# {{{ test_rewrite_using_base_kernel_lu
+
 @pytest.mark.parametrize("dim", [2, 3])
 def test_laplace_biharmonic_rewrite(dim: int) -> None:
     rng = np.random.default_rng(seed=42)
@@ -76,7 +79,7 @@ def test_stokeslet_biharmonic_rewrite(dim: int) -> None:
         if not i <= j:
             continue
 
-        target_kernel = StokesletKernel(dim, i, j, viscosity_mu=1)
+        target_kernel = StokesletComponentKernel(dim, i, j, viscosity_mu_name="mu")
         result = rewrite_using_base_kernel_lu(target_kernel, base_kernel, rng=rng)
         print(result.pretty())
 
@@ -85,6 +88,68 @@ def test_stokeslet_biharmonic_rewrite(dim: int) -> None:
 @pytest.mark.parametrize("dim", [2, 3])
 def test_stresslet_biharmonic_rewrite(dim: int) -> None:
     pass
+
+
+# }}}
+
+
+# {{{ test_rewrite_using_base_kernel_fourier_laplace_biharmonic
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_rewrite_using_base_kernel_fourier_laplace_biharmonic(dim: int) -> None:
+    """Test that the Fourier-based algorithm recovers Laplace from biharmonic."""
+    base_kernel = BiharmonicKernel(dim)
+    target_kernel = LaplaceKernel(dim)
+    result = rewrite_using_base_kernel_fourier(target_kernel, base_kernel)
+
+    logger.info(result.pretty())
+    check_kernel_rewrite(result)
+
+
+# }}}
+
+
+# {{{ test_stokeslet_biharmonic_fourier_rewrite
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_rewrite_using_base_kernel_fourier_stokeslet_biharmonic(dim: int) -> None:
+    """Test that the Fourier-based algorithm recovers the Stokeslet from biharmonic."""
+    from itertools import product
+
+    base_kernel = BiharmonicKernel(dim)
+
+    for i, j in product(range(dim), repeat=2):
+        target_kernel = StokesletComponentKernel(dim, i, j, viscosity_mu_name="mu")
+        result = rewrite_using_base_kernel_fourier(target_kernel, base_kernel)
+
+    logger.info(result.pretty())
+    check_kernel_rewrite(result)
+
+# }}}
+
+
+# {{{ test_rewrite_using_base_kernel_fourier_indivisible
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_rewrite_using_base_kernel_fourier_indivisible(dim: int) -> None:
+    """Test that a ValueError is raised when P_base is not divisible by P_target."""
+    from sumpy.kernel_rewrite import (
+        RewriteFailedError,
+        rewrite_using_base_kernel_fourier,
+    )
+
+    # Laplace Fourier symbol (-|k|^2) is not divisible by biharmonic (|k|^4)
+    base_kernel = LaplaceKernel(dim)
+    target_kernel = BiharmonicKernel(dim)
+
+    with pytest.raises(RewriteFailedError, match="cannot rewrite"):
+        rewrite_using_base_kernel_fourier(target_kernel, base_kernel)
+
+
+# }}}
 
 
 if __name__ == "__main__":
