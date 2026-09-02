@@ -615,7 +615,10 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
                     *gather_loopy_arguments([self.src_expansion, self.tgt_expansion])
                 ],
                 name=self.name,
-                assumptions="ntranslation_classes>=1",
+                assumptions="ntranslation_classes>=1 and "
+                "translation_classes_level_start>=0 and "
+                "translation_classes_level_start + ntranslation_classes "
+                "<= ntranslation_vectors",
                 fixed_parameters={
                     "dim": self.dim,
                     "m2l_translation_classes_dependent_ndata": (
