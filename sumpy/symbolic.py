@@ -95,6 +95,9 @@ _find_symbolic_backend()
 
 # }}}
 
+
+# {{{ symbolic expressions
+
 if TYPE_CHECKING or not USE_SYMENGINE:
     import sympy as sym
 
@@ -169,6 +172,8 @@ else:
 
     def unevaluated_pow(a: Expr, b: complex | Expr) -> Expr:
         return Pow(a, b, evaluate=False)
+
+# }}}
 
 
 # {{{ debugging of sympy CSE via Maxima
@@ -253,6 +258,8 @@ def checked_cse(exprs, symbols=None):
 # }}}
 
 
+# {{{ pymbolic expressions
+
 def sym_real_norm_2(x: Matrix) -> Expr:
     return sqrt((x.T*x)[0, 0])
 
@@ -295,6 +302,10 @@ class SpatialConstant(prim.Variable):
 
         raise ValueError(f"expression is not a spatial constant: {expr!r}")
 
+# }}}
+
+
+# {{{ sympy <-> pymbolic interop
 
 class PymbolicToSympyMapper(PymbolicToSympyMapperBase):
     def map_spatial_constant(self, expr: SpatialConstant) -> Basic:
@@ -364,6 +375,45 @@ class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):
         return PymbolicToSympyMapper.map_call(self, expr)
 
 
+class SympyToPymbolicMapperWithSymbols(SympyToPymbolicMapper):
+    if USE_SYMENGINE:
+        @override
+        def map_Constant(self, expr: object) -> Expression:
+            if expr is pi:
+                return prim.Variable("pi")
+            elif expr is I:
+                return prim.Variable("I")
+            else:
+                return super().map_Constant(expr)
+    else:
+        @override
+        def map_NumberSymbol(self, expr: sym.NumberSymbol) -> Expression:
+            if expr is pi:
+                return prim.Variable("pi")
+            elif expr is I:
+                return prim.Variable("I")
+            else:
+                return super().map_NumberSymbol(expr)
+
+    @override
+    def not_supported(self, expr: object) -> Expression:
+        if getattr(expr, "is_Function", False):
+            function_name = self.function_name(expr)
+            if function_name in {"Hankel1", "BesselJ"}:
+                order, arg, nderivs = expr.args
+                if nderivs == 0:
+                    return prim.Variable({
+                        "Hankel1": "hankel_1",
+                        "BesselJ": "bessel_j",
+                    }[function_name])(self.rec(order), self.rec(arg))
+
+        return super().not_supported(expr)
+
+# }}}
+
+
+# {{{ symbolic functions
+
 from sympy import Function as SympyFunction
 
 
@@ -401,5 +451,7 @@ if not TYPE_CHECKING and USE_SYMENGINE:
 
     def Hankel1(*args):   # ruff:ignore[invalid-function-name]
         return sympify(_SympyHankel1(*args))
+
+# }}}
 
 # vim: fdm=marker

@@ -921,6 +921,37 @@ def test_system_kernel_pickle(dim: int, cls: type[SystemKernel]) -> None:
 # }}}
 
 
+# {{{ test_symbolic_roundtrip_with_symbols
+
+def test_symbolic_roundtrip_with_symbols() -> None:
+    from pymbolic.primitives import Variable
+
+    s2p = sym.SympyToPymbolicMapperWithSymbols()
+    p2s = sym.PymbolicToSympyMapperWithSymbols()
+
+    sympy_exprs = [
+        sym.pi,
+        sym.Symbol("x"),
+        sym.sin(sym.Symbol("x")),
+    ]
+    for expr in sympy_exprs:
+        back = p2s.to_expr(s2p(expr))
+        assert sym.sympify(expr) == sym.sympify(back)
+
+    pymbolic_exprs = [
+        Variable("pi"),
+        Variable("x"),
+        sym.SpatialConstant("k"),
+        Variable("hankel_1")(0, Variable("x")),
+        Variable("bessel_j")(2, Variable("x")),
+    ]
+    for expr in pymbolic_exprs:
+        back = s2p(p2s.to_expr(expr))
+        assert expr == back
+
+# }}}
+
+
 # You can test individual routines by typing
 # $ python test_misc.py 'test_pde_check_kernels(_acf,
 #       KernelInfo(HelmholtzKernel(2), k=5), order=5)'
