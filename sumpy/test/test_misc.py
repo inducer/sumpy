@@ -433,6 +433,82 @@ def test_cse_matvec():
 # }}}
 
 
+# {{{ test_solve_lu
+
+def _make_lu_system(
+        n: int, *,
+        seed: int,
+        force_pivot: bool = True,
+        symbolic_rhs: bool = False,
+    ) -> tuple[sym.Matrix, sym.Matrix, list[tuple[int, int]], sym.Matrix, sym.Matrix]:
+    rng = np.random.default_rng(seed)
+
+    while True:
+        a_mat = sym.Matrix(n, n, [sym.Integer(rng.integers(-5, 6)) for _ in range(n*n)])
+        if force_pivot:
+            a_mat[0, 0] = 0
+
+        if a_mat.det() != 0:
+            break
+
+    if symbolic_rhs:
+        s = sym.Symbol("s")
+        x_true = sym.Matrix([
+            s if i == 0 else (s**2 if i == n - 1 else sym.Integer(i + 1))
+            for i in range(n)
+        ])
+    else:
+        x_true = sym.Matrix([sym.Integer(1)] * n)
+
+    l_mat, u_mat, permutation = a_mat.LUdecomposition()
+    return l_mat, u_mat, permutation, a_mat * x_true, x_true
+
+
+@pytest.mark.parametrize("n", [3, 4])
+@pytest.mark.parametrize("seed", [0, 1, 2])
+@pytest.mark.parametrize("force_pivot", [False, True])
+def test_solve_lu(n: int, seed: int, force_pivot: bool) -> None:
+    l_mat, u_mat, permutation, rhs, x_true = _make_lu_system(
+        n, seed=seed, force_pivot=force_pivot)
+
+    rhs_orig = sym.Matrix(rhs)
+    got = sym.solve_lu(l_mat, u_mat, permutation, rhs)
+
+    assert all((got[i] - x_true[i]).expand() == 0 for i in range(n))
+    assert rhs == rhs_orig
+
+    # postprocess is applied after each division and may change the form of
+    # the solution without changing its value
+    got = sym.solve_lu(l_mat, u_mat, permutation, rhs,
+                       postprocess=lambda e: e.expand())
+    assert all((got[i] - x_true[i]).expand() == 0 for i in range(n))
+
+
+@pytest.mark.parametrize("n", [3, 4])
+def test_solve_lu_symbolic_rhs(n: int) -> None:
+    l_mat, u_mat, permutation, rhs, x_true = _make_lu_system(
+        n, seed=42, symbolic_rhs=True)
+
+    got = sym.solve_lu(l_mat, u_mat, permutation, rhs,
+                       postprocess=lambda e: e.expand())
+    assert all((got[i] - x_true[i]).expand() == 0 for i in range(n))
+
+
+def test_solve_lu_raises_on_bad_shapes() -> None:
+    l_mat, u_mat, permutation, _, _ = _make_lu_system(3, seed=0)
+
+    # wrong-sized b
+    with pytest.raises(ValueError):
+        sym.solve_lu(l_mat, u_mat, permutation, sym.Matrix([1, 2, 3, 4]))
+
+    # non-square L
+    bad_l = sym.Matrix([[1, 0], [2, 1], [0, 0]])
+    with pytest.raises(ValueError):
+        sym.solve_lu(bad_l, u_mat, permutation, sym.Matrix([[1], [2], [3]]))
+
+# }}}
+
+
 # {{{ test_diff_op_stokes
 
 def test_diff_op_stokes():
