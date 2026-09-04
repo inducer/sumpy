@@ -39,7 +39,7 @@ __doc__ = """
 
 import logging
 import math
-from typing import TYPE_CHECKING, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from typing_extensions import override
 
@@ -57,19 +57,21 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 USE_SYMENGINE = False
+HAS_SYMENGINE = False
 
 
 # {{{ symbolic backend
 
 def _find_symbolic_backend():
     global USE_SYMENGINE
+    global HAS_SYMENGINE
 
     try:
         import symengine  # ruff:ignore[unused-import]
-        symengine_found = True
+        HAS_SYMENGINE = True
         symengine_error = None
     except ImportError as import_error:
-        symengine_found = False
+        HAS_SYMENGINE = False
         symengine_error = import_error
 
     allowed_backends = ("sympy", "symengine")
@@ -85,12 +87,12 @@ def _find_symbolic_backend():
                     ", ".join(f"'{val}'" for val in allowed_backends))
                 )
 
-        if backend == "symengine" and not symengine_found:
+        if backend == "symengine" and not HAS_SYMENGINE:
             raise RuntimeError(f"could not find SymEngine: {symengine_error}")
 
         USE_SYMENGINE = (backend == "symengine")  # pyright: ignore[reportConstantRedefinition]
     else:
-        USE_SYMENGINE = symengine_found  # pyright: ignore[reportConstantRedefinition]
+        USE_SYMENGINE = HAS_SYMENGINE  # pyright: ignore[reportConstantRedefinition]
 
 
 _find_symbolic_backend()
@@ -100,19 +102,23 @@ _find_symbolic_backend()
 
 # {{{ symbolic expressions
 
+
 if TYPE_CHECKING or not USE_SYMENGINE:
     import sympy as sym
-
-    from pymbolic.interop.sympy import (
-        PymbolicToSympyMapper as PymbolicToSympyMapperBase,
-        SympyToPymbolicMapper as SympyToPymbolicMapperBase,
-    )
 else:
     import symengine as sym
 
+
+from pymbolic.interop.sympy import (
+    PymbolicToSympyMapper as PymbolicToSympyMapperBase,
+    SympyToPymbolicMapper as SympyToPymbolicMapperBase,
+)
+
+
+if HAS_SYMENGINE:
     from pymbolic.interop.symengine import (
-        PymbolicToSymEngineMapper as PymbolicToSympyMapperBase,
-        SymEngineToPymbolicMapper as SympyToPymbolicMapperBase,
+        PymbolicToSymEngineMapper as PymbolicToSymEngineMapperBase,
+        SymEngineToPymbolicMapper as SymEngineToPymbolicMapperBase,
     )
 
 # Symbolic API common to SymEngine and sympy.
@@ -201,7 +207,6 @@ def _get_assignments_in_maxima(
     from pymbolic.interop.maxima import MaximaStringifyMapper
 
     mstr = MaximaStringifyMapper()
-    s2p = SympyToPymbolicMapper()
     dkill = _DerivativeKiller()
 
     result: list[str] = []
@@ -216,7 +221,7 @@ def _get_assignments_in_maxima(
                 write_assignment(symb.name)
 
         result.append("{}{} : {};".format(
-            prefix, name, mstr(dkill(s2p(
+            prefix, name, mstr(dkill(to_pymbolic(
                 assignments[name].subs(prefix_subst_dict))))))
         written_assignments.add(name)
 
@@ -404,33 +409,88 @@ class SpatialConstant(prim.Variable):
 
 # {{{ sympy <-> pymbolic interop
 
-class PymbolicToSympyMapper(PymbolicToSympyMapperBase):
+
+class PymbolicToSympyLikeMixin:
+    def map_variable(self, expr: prim.Variable) -> Basic:
+        if not self.symbols:
+            return super().map_variable(expr)
+
+        if expr.name == "I":
+            return self.sym.I
+        elif expr.name == "pi":
+            return self.sym.pi
+        else:
+            return super().map_variable(expr)
+
+    def map_subscript(self, expr: prim.Subscript) -> sym.Basic:
+        if not self.symbols:
+            return super().map_subscript(expr)
+
+        if isinstance(expr.aggregate, prim.Variable) and isinstance(expr.index, int):
+            return self.sym.Symbol(f"{expr.aggregate.name}{expr.index}")
+        else:
+            self.raise_conversion_error(expr)
+
+    def map_call(self, expr: prim.Call) -> sym.Basic:
+        if not self.symbols:
+            return super().map_call(expr)
+
+        function = expr.function
+        if isinstance(function, prim.Variable):
+            if function.name == "hankel_1":
+                args = [self.rec(param) for param in expr.parameters]
+                args.append(self.sym.sympify(0))
+                return Hankel1(*args)
+            elif function.name == "bessel_j":
+                args = [self.rec(param) for param in expr.parameters]
+                args.append(self.sym.sympify(0))
+                return BesselJ(*args)
+
+        return super().map_call(expr)
+
+
+class PymbolicToSympyMapper(PymbolicToSympyLikeMixin, PymbolicToSympyMapperBase):
+    symbols: bool
+
+    def __init__(self, *, symbols: bool = False) -> None:
+        self.symbols = symbols
+
     def map_spatial_constant(self, expr: SpatialConstant) -> Basic:
-        return expr.as_sympy()
+        return self.sym.Symbol(f"{expr.prefix}{expr.name}")
 
 
-class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
-    @override
-    def map_Symbol(self, expr: Symbol) -> Expression:
-        try:
-            return SpatialConstant.from_sympy(expr)
-        except ValueError:
-            return SympyToPymbolicMapperBase.map_Symbol(self, expr)
+if HAS_SYMENGINE:
+    class PymbolicToSymEngineMapper(PymbolicToSympyLikeMixin,
+                                    PymbolicToSymEngineMapperBase):
+        symbols: bool
 
-    @override
-    def map_Pow(self, expr: Pow) -> Expression:
+        def __init__(self, *, symbols: bool = False) -> None:
+            self.symbols = symbols
+
+        def map_spatial_constant(self, expr: SpatialConstant) -> Basic:
+            return self.sym.Symbol(f"{expr.prefix}{expr.name}")
+
+
+class SympyLikeToPymbolicMixin:
+    def map_Symbol(self, expr: Symbol) -> Expression:  # ruff: ignore[invalid-function-name]
+        if (isinstance(expr, self.sym.Symbol)
+            and expr.name.startswith(SpatialConstant.prefix)):
+            return SpatialConstant(expr.name[len(SpatialConstant.prefix):])
+
+        return super().map_Symbol(expr)
+
+    def map_Pow(self, expr: Pow) -> Expression:  # ruff: ignore[invalid-function-name]
         if expr.exp == -1:
             return 1 / self.rec_arith(expr.base)
         else:
-            return SympyToPymbolicMapperBase.map_Pow(self, expr)
+            return super().map_Pow(expr)
 
-    @override
-    def map_Mul(self, expr: Mul) -> Expression:
+    def map_Mul(self, expr: Mul) -> Expression:  # ruff: ignore[invalid-function-name]
         num_args: list[ArithmeticExpression] = []
         den_args: list[ArithmeticExpression] = []
         for child in expr.args:
-            if (isinstance(child, Pow)
-                    and isinstance(child.exp, Integer)
+            if (isinstance(child, self.sym.Pow)
+                    and isinstance(child.exp, self.sym.Integer)
                     and child.exp < 0):
                 den_args.append(self.rec_arith(child.base)**(-self.rec_arith(child.exp)))
             else:
@@ -438,63 +498,8 @@ class SympyToPymbolicMapper(SympyToPymbolicMapperBase):
 
         return math.prod(num_args) / math.prod(den_args)
 
-
-class PymbolicToSympyMapperWithSymbols(PymbolicToSympyMapper):
-    @override
-    def map_variable(self, expr: prim.Variable) -> Basic:
-        if expr.name == "I":
-            return I
-        elif expr.name == "pi":
-            return pi
-        else:
-            return PymbolicToSympyMapper.map_variable(self, expr)
-
-    @override
-    def map_subscript(self, expr: prim.Subscript) -> sym.Basic:
-        if isinstance(expr.aggregate, prim.Variable) and isinstance(expr.index, int):
-            return Symbol(f"{expr.aggregate.name}{expr.index}")
-        else:
-            self.raise_conversion_error(expr)
-
-    @override
-    def map_call(self, expr: prim.Call) -> sym.Basic:
-        function = expr.function
-        if isinstance(function, prim.Variable):
-            if function.name == "hankel_1":
-                args = [self.rec(param) for param in expr.parameters]
-                args.append(sympify(0))
-                return Hankel1(*args)
-            elif function.name == "bessel_j":
-                args = [self.rec(param) for param in expr.parameters]
-                args.append(sympify(0))
-                return BesselJ(*args)
-
-        return PymbolicToSympyMapper.map_call(self, expr)
-
-
-class SympyToPymbolicMapperWithSymbols(SympyToPymbolicMapper):
-    if USE_SYMENGINE:
-        @override
-        def map_Constant(self, expr: object) -> Expression:
-            if expr is pi:
-                return prim.Variable("pi")
-            elif expr is I:
-                return prim.Variable("I")
-            else:
-                return super().map_Constant(expr)
-    else:
-        @override
-        def map_NumberSymbol(self, expr: sym.NumberSymbol) -> Expression:
-            if expr is pi:
-                return prim.Variable("pi")
-            elif expr is I:
-                return prim.Variable("I")
-            else:
-                return super().map_NumberSymbol(expr)
-
-    @override
     def not_supported(self, expr: object) -> Expression:
-        if getattr(expr, "is_Function", False):
+        if self.symbols and getattr(expr, "is_Function", False):
             function_name = self.function_name(expr)
             if function_name in {"Hankel1", "BesselJ"}:
                 order, arg, nderivs = expr.args
@@ -505,6 +510,98 @@ class SympyToPymbolicMapperWithSymbols(SympyToPymbolicMapper):
                     }[function_name])(self.rec(order), self.rec(arg))
 
         return super().not_supported(expr)
+
+
+class SympyToPymbolicMapper(SympyLikeToPymbolicMixin,
+                            SympyToPymbolicMapperBase):
+    symbols: bool
+
+    def __init__(self, *, symbols: bool = False) -> None:
+        self.symbols = symbols
+
+    @property
+    def sym(self) -> Any:
+        import sympy as sp
+        return sp
+
+    @override
+    def map_NumberSymbol(self, expr: sym.NumberSymbol) -> Expression:
+        if not self.symbols:
+            return super().map_NumberSymbol(expr)
+
+        if expr is self.sym.pi:
+            return prim.Variable("pi")
+        elif expr is self.sym.I:
+            return prim.Variable("I")
+        else:
+            return super().map_NumberSymbol(expr)
+
+
+if HAS_SYMENGINE:
+    class SymEngineToPymbolicMapper(SympyLikeToPymbolicMixin,
+                                    SymEngineToPymbolicMapperBase):
+        symbols: bool
+
+        def __init__(self, *, symbols: bool = False) -> None:
+            self.symbols = symbols
+
+        @property
+        def sym(self) -> Any:
+            import symengine as sp
+            return sp
+
+        @override
+        def map_Constant(self, expr: object) -> Expression:
+            if not self.symbols:
+                return super().map_Constant(expr)
+
+            if expr is self.sym.pi:
+                return prim.Variable("pi")
+            elif expr is self.sym.I:
+                return prim.Variable("I")
+            else:
+                return super().map_Constant(expr)
+
+
+def to_pymbolic(expr: Basic, *, symbols: bool = False) -> Expression:
+    r"""Convert the symbolic expression *expr* to :mod:`pymbolic`.
+
+    :arg symbols: if *True*, this will also convert known symbols (e.g. :math:`\pi`)
+        to variables.
+    """
+    if USE_SYMENGINE:
+        p2s = SymEngineToPymbolicMapper(symbols=symbols)
+    else:
+        p2s = SympyToPymbolicMapper(symbols=symbols)
+
+    return p2s(expr)
+
+
+def to_symbolic(expr: Expression, *, symbols: bool = False) -> Basic:
+    r"""Convert from :mod:`pymbolic` to a symbolic object.
+
+    :arg symbols: if *True*, this will also convert known symbols (e.g. :math:`\pi`)
+        to their respective constants in the symbolic backend.
+    """
+    if USE_SYMENGINE:
+        s2p = PymbolicToSymEngineMapper(symbols=symbols)
+    else:
+        s2p = PymbolicToSympyMapper(symbols=symbols)
+
+    return s2p(expr)
+
+
+def to_symbolic_expr(expr: Expression, *, symbols: bool = False) -> Expr:
+    r"""Convert from :mod:`pymbolic` to a symbolic expression.
+
+    This is similar to :func:`to_symbolic`, but will raise an exception if the
+    result is not an algebraic expression.
+    """
+    result = to_symbolic(expr, symbols=symbols)
+    if not isinstance(result, Expr):
+        raise TypeError(f"result is not an expression: {type(result)}")
+
+    return result
 
 # }}}
 

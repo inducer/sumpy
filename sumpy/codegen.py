@@ -64,11 +64,9 @@ logger = logging.getLogger(__name__)
 
 
 __doc__ = """
-
 Conversion of :mod:`sympy` expressions to :mod:`loopy`
 ------------------------------------------------------
 
-.. autoclass:: SympyToPymbolicMapper
 .. autofunction:: to_loopy_insns
 """
 
@@ -76,26 +74,6 @@ Conversion of :mod:`sympy` expressions to :mod:`loopy`
 def wrap_in_cse(expr: Expression,
                 prefix: str | None = None) -> prim.CommonSubexpression:
     return prim.make_common_subexpression(expr, prefix, wrap_vars=False)
-
-
-# {{{ sympy -> pymbolic mapper
-
-_SPECIAL_FUNCTION_NAMES = frozenset(dir(sym.functions))
-
-
-class SympyToPymbolicMapper(sym.SympyToPymbolicMapper):
-    @override
-    def not_supported(self, expr: object) -> Expression:
-        if isinstance(expr, int):
-            return expr
-        elif getattr(expr, "is_Function", False):
-            func_name = sym.SympyToPymbolicMapper.function_name(self, expr)
-            return prim.Variable(func_name)(
-                    *tuple(self.rec(arg) for arg in expr.args))
-        else:
-            return sym.SympyToPymbolicMapper.not_supported(self, expr)
-
-# }}}
 
 
 # {{{ bessel -> loopy codegen
@@ -758,8 +736,7 @@ def to_loopy_insns(
     assignments = list(assignments)
 
     # convert from sympy
-    sympy_conv = SympyToPymbolicMapper()
-    pymbolic_assignments = [(name, sympy_conv(expr)) for name, expr in assignments]
+    pymbolic_assignments = [(name, sym.to_pymbolic(expr)) for name, expr in assignments]
 
     flat = FlattenMapper()
     bdr = BesselDerivativeReplacer()

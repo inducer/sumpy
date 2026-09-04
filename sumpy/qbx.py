@@ -111,9 +111,7 @@ class LayerPotentialBase(KernelCacheMixin, KernelComputation, ABC):
                 tuple(self.value_dtypes))
 
     def _expand(self, sac, avec, bvec, rscale, isrc):
-        from sumpy.symbolic import PymbolicToSympyMapper
-        conv = PymbolicToSympyMapper()
-        strengths = [conv.to_expr(self.get_strength_or_not(isrc, idx))
+        strengths = [sym.to_symbolic_expr(self.get_strength_or_not(isrc, idx))
                      for idx in range(len(self.source_kernels))]
         return self.expansion.coefficients_from_source_vec(
             self.source_kernels, avec, bvec, rscale=rscale, weights=strengths,

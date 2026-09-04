@@ -107,12 +107,12 @@ class E2PBase(KernelCacheMixin, ABC):
         return gather_loopy_arguments((self.expansion, *tuple(self.kernels)))
 
     def get_kernel_scaling_assignment(self):
-        from sumpy.symbolic import SympyToPymbolicMapper
-        sympy_conv = SympyToPymbolicMapper()
+        from sumpy.symbolic import to_pymbolic
         return [lp.Assignment(id="kernel_scaling",
                     assignee="kernel_scaling",
-                    expression=sympy_conv(
-                        self.expansion.kernel.get_global_scaling_const()),
+                    expression=to_pymbolic(
+                        self.expansion.kernel.get_global_scaling_const(),
+                    ),
                     temp_var_type=lp.Optional(None),
                     )]
 # }}}

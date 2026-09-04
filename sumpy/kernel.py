@@ -580,7 +580,7 @@ class ExpressionKernel(ScalarKernel, ABC):
 
     @override
     def get_expression(self, dist_vec: sym.Matrix) -> sym.Expr:
-        expr = sym.PymbolicToSympyMapperWithSymbols().to_expr(self.expression)
+        expr = sym.to_symbolic_expr(self.expression, symbols=True)
 
         if self.dim != len(dist_vec):
             raise ValueError(
@@ -594,7 +594,7 @@ class ExpressionKernel(ScalarKernel, ABC):
 
     @override
     def get_global_scaling_const(self) -> sym.Expr:
-        return sym.PymbolicToSympyMapperWithSymbols().to_expr(self.global_scaling_const)
+        return sym.to_symbolic_expr(self.global_scaling_const, symbols=True)
 
     @override
     def get_derivative_taker(

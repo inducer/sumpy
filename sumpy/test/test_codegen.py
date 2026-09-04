@@ -62,7 +62,7 @@ def test_line_taylor_coeff_growth():
 
     from sumpy.expansion.local import LineTaylorLocalExpansion
     from sumpy.kernel import LaplaceKernel
-    from sumpy.symbolic import SympyToPymbolicMapper, make_sym_vector
+    from sumpy.symbolic import make_sym_vector, to_pymbolic
 
     order = 10
     expn = LineTaylorLocalExpansion(LaplaceKernel(2), order)
@@ -70,8 +70,7 @@ def test_line_taylor_coeff_growth():
     bvec = make_sym_vector("b", 2)
     coeffs = expn.coefficients_from_source(expn.kernel, avec, bvec, rscale=1)
 
-    sym2pymbolic = SympyToPymbolicMapper()
-    coeffs_pymbolic = [sym2pymbolic(c) for c in coeffs]
+    coeffs_pymbolic = [to_pymbolic(c) for c in coeffs]
 
     from pymbolic.mapper.flop_counter import FlopCounter
     flop_counter = FlopCounter()
