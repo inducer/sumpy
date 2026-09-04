@@ -48,6 +48,8 @@ from pymbolic.mapper import IdentityMapper as IdentityMapperBase
 
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
+
     from pymbolic.typing import ArithmeticExpression, Expression
     from pytools import T
     from pytools.obj_array import ObjectArray1D
@@ -254,6 +256,101 @@ def checked_cse(exprs, symbols=None):
     check_call(["maxima", "--very-quiet", "-r", 'load("check.mac");'])
 
     return new_assignments, new_exprs
+
+# }}}
+
+
+# {{{ solve_lu
+
+def _solve_lu_forward_substitution(
+        L: Matrix,  # ruff: ignore[invalid-argument-name]
+        b: Matrix,
+        postprocess: Callable[[Basic], Basic],
+    ) -> Matrix:
+    """Solve the lower triangular system :math:`L x = b`.
+
+    :arg postprocess: a callable that is applied on each expression at the end
+        of division calls.
+    """
+    n = len(b)
+    x = b
+
+    for i in range(n):
+        for j in range(i):
+            x[i] -= L[i, j] * x[j]
+        x[i] = postprocess(x[i] / L[i, i])
+
+    return x
+
+
+def _solve_lu_backward_substitution(
+        U: Matrix,  # ruff: ignore[invalid-argument-name]
+        b: Matrix,
+        postprocess: Callable[[Basic], Basic],
+    ) -> Matrix:
+    """Solve the upper triangular system :math:`U x = b`.
+
+    :arg postprocess: a callable that is applied on each expression at the end
+        of division calls.
+    """
+    n = len(b)
+    x = b
+
+    for i in range(n - 1, -1, -1):
+        for j in range(n - 1, i, -1):
+            x[i] -= U[i, j] * x[j]
+        x[i] = postprocess(x[i] / U[i, i])
+
+    return x
+
+
+def solve_lu(
+        L: Matrix,  # ruff: ignore[invalid-argument-name]
+        U: Matrix,  # ruff: ignore[invalid-argument-name]
+        permutation: Sequence[tuple[int, int]],
+        b: Matrix, *,
+        postprocess: Callable[[Basic], Basic] | None = None,
+    ) -> Matrix:
+    """Solve the system :math:`L U x = P b`.
+
+    This function uses standard forward and backward substitution to solve the
+    system. The matrix *L* is assumed to be unit lower triangular, *U* is
+    assumed to be upper triangular and *permutation* is a sequence of row swaps
+    for the LU decomposition.
+
+    :arg postprocess: a callable that is applied on each expression at the end
+        of division calls in both forward and backward substitution.
+    """
+
+    if postprocess is None:
+        def default_postprocess(x: Basic) -> Basic:
+            return x
+
+        postprocess = default_postprocess
+
+    if L.shape[0] != U.shape[1]:
+        raise ValueError(
+            f"system matrix is not square: L is {L.shape} and U is {U.shape}"
+        )
+
+    if L.shape[1] != U.shape[0]:
+        raise ValueError(
+            f"incorrect LU decomposition shapes: L is {L.shape} and U is {U.shape}"
+        )
+
+    if b.shape != (U.shape[1], 1):
+        raise ValueError(f"'b' is not a column vector matching U: {b.shape}")
+
+    b = Matrix(b)
+
+    # Permute first
+    for p, q in permutation:
+        b[p], b[q] = b[q], b[p]
+
+    y = _solve_lu_forward_substitution(L, b, postprocess=postprocess)
+    x = _solve_lu_backward_substitution(U, y, postprocess=postprocess)
+
+    return x
 
 # }}}
 
