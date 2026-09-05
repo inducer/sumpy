@@ -40,7 +40,6 @@ from typing_extensions import override
 
 import loopy as lp
 from pymbolic.mapper.dependency import DependencyMapper
-from pyopencl.characterize import get_pocl_version
 from pytools import T, memoize_method
 from pytools.tag import Tag, tag_dataclass
 
@@ -49,14 +48,16 @@ from sumpy.array_context import PyOpenCLArrayContext, make_loopy_program
 
 
 if TYPE_CHECKING:
-    import numpy
     from numpy.typing import DTypeLike
     from optype.numpy import Array2D
+    from pyvkfft.opencl import VkFFTApp
 
     import pyopencl
     from arraycontext import ArrayContext
     from pymbolic.primitives import Variable
     from pymbolic.typing import Expression
+    from pyopencl.array import Array as CLArray
+    from pyopencl.typing import WaitList
 
     from sumpy.assignment_collection import SymbolicAssignmentCollection
     from sumpy.expansion import ExpansionBase
@@ -122,8 +123,17 @@ Profiling
 
 .. autofunction:: get_native_event
 .. autoclass:: ProfileGetter
+.. autoclass:: ProfilingEvent
+    :members:
+    :undoc-members:
 .. autoclass:: AggregateProfilingEvent
+    :show-inheritance:
+    :members:
+    :undoc-members:
 .. autoclass:: MarkerBasedProfilingEvent
+    :show-inheritance:
+    :members:
+    :undoc-members:
 
 References
 ----------
@@ -276,19 +286,28 @@ class ScalingAssignmentTag(Tag):
 class KernelComputation(ABC):
     """Common input processing for kernel computations.
 
-    .. attribute:: name
-    .. attribute:: target_kernels
-    .. attribute:: source_kernels
-    .. attribute:: strength_usage
+    .. autoattribute:: name
+    .. autoattribute:: target_kernels
+    .. autoattribute:: source_kernels
+    .. autoattribute:: strength_usage
+    .. autoattribute:: strength_count
 
     .. automethod:: get_kernel
     """
 
+    name: str
+    target_kernels: tuple[ScalarKernel, ...]
+    source_kernels: tuple[ScalarKernel, ...]
+    value_dtypes: tuple[np.dtype[Any], ...]
+
+    strength_usage: tuple[int, ...]
+    strength_count: int
+
     def __init__(self,
-            target_kernels: list[ScalarKernel],
-            source_kernels: list[ScalarKernel],
-            strength_usage: list[int] | None = None,
-            value_dtypes: list[numpy.dtype[Any]] | None = None,
+            target_kernels: Sequence[ScalarKernel],
+            source_kernels: Sequence[ScalarKernel],
+            strength_usage: Sequence[int] | None = None,
+            value_dtypes: Sequence[DTypeLike] | DTypeLike | None = None,
             name: str | None = None) -> None:
         """
         :arg target_kernels: list of :class:`~sumpy.kernel.ScalarKernel` instances,
@@ -313,9 +332,9 @@ class KernelComputation(ABC):
                 else:
                     value_dtypes.append(np.dtype(np.float64))
 
-        if not isinstance(value_dtypes, Sequence):
+        if isinstance(value_dtypes, str) or not isinstance(value_dtypes, Sequence):
             value_dtypes = [np.dtype(value_dtypes)] * len(target_kernels)
-        value_dtypes = [np.dtype(vd) for vd in value_dtypes]
+        value_dtypes = tuple(np.dtype(vd) for vd in value_dtypes)
 
         # }}}
 
@@ -333,13 +352,13 @@ class KernelComputation(ABC):
         self.source_kernels = tuple(source_kernels)
         self.target_kernels = tuple(target_kernels)
         self.value_dtypes = value_dtypes
-        self.strength_usage = strength_usage
+        self.strength_usage = tuple(strength_usage)
         self.strength_count = strength_count
 
         self.name = name or self.default_name
 
     @property
-    def nresults(self):
+    def nresults(self) -> int:
         return len(self.target_kernels)
 
     @property
@@ -347,7 +366,7 @@ class KernelComputation(ABC):
     def default_name(self) -> str:
         pass
 
-    def get_kernel_scaling_assignments(self):
+    def get_kernel_scaling_assignments(self) -> Sequence[lp.Assignment]:
         from sumpy.symbolic import SympyToPymbolicMapper
         sympy_conv = SympyToPymbolicMapper()
 
@@ -472,11 +491,15 @@ class KernelCacheMixin(ABC):
         ...
 
     @memoize_method
-    def get_cached_kernel(self, **kwargs) -> lp.TranslationUnit:
+    def get_cached_kernel(self, **kwargs: Any) -> lp.TranslationUnit:
         from sumpy import CACHING_ENABLED, NO_CACHE_KERNELS, OPT_ENABLED, code_cache
 
-        if CACHING_ENABLED and not (
-                NO_CACHE_KERNELS and self.name in NO_CACHE_KERNELS):
+        cache_key = None
+        caching_enabled = (
+            CACHING_ENABLED
+            and not (NO_CACHE_KERNELS and self.name in NO_CACHE_KERNELS))
+
+        if caching_enabled:
             import loopy.version
 
             from sumpy.version import KERNEL_VERSION
@@ -495,10 +518,8 @@ class KernelCacheMixin(ABC):
                 pass
 
         logger.info("%s: kernel cache miss", self.name)
-        if CACHING_ENABLED and not (
-                NO_CACHE_KERNELS and self.name in NO_CACHE_KERNELS):
-            logger.info("%s: kernel cache miss [key=%s]",
-                self.name, cache_key)
+        if caching_enabled:
+            logger.info("%s: kernel cache miss [key=%s]", self.name, cache_key)
 
         from pytools import MinRecursionLimit
         with MinRecursionLimit(3000):
@@ -507,8 +528,7 @@ class KernelCacheMixin(ABC):
             else:
                 knl = self.get_kernel()
 
-        if CACHING_ENABLED and not (
-                NO_CACHE_KERNELS and self.name in NO_CACHE_KERNELS):
+        if caching_enabled:
             code_cache.store_if_not_present(cache_key, knl)
 
         return knl
@@ -525,15 +545,18 @@ class KernelCacheMixin(ABC):
 KernelCacheWrapper = KernelCacheMixin
 
 
-def is_obj_array_like(ary):
+def is_obj_array_like(ary: object) -> bool:
     return (
-            isinstance(ary, tuple | list)
-            or (isinstance(ary, np.ndarray) and ary.dtype.char == "O"))
+        isinstance(ary, (tuple, list))
+        or (isinstance(ary, np.ndarray) and ary.dtype.char == "O")
+    )
 
 
 # {{{ matrices
 
-def reduced_row_echelon_form(m: Array2D[Any], atol: float = 0):
+def reduced_row_echelon_form(
+        m: Array2D[Any], atol: float = 0,
+    ) -> tuple[Array2D[Any], Sequence[int]]:
     """Calculates a reduced row echelon form of a
     matrix `m`.
 
@@ -544,10 +567,11 @@ def reduced_row_echelon_form(m: Array2D[Any], atol: float = 0):
     """
 
     mat = np.array(m, dtype=object)
+    nrows = int(mat.shape[0])
+    ncols = int(mat.shape[1])
+
     index = 0
-    nrows = mat.shape[0]
-    ncols = mat.shape[1]
-    pivot_cols = []
+    pivot_cols: list[int] = []
     for i in range(ncols):
         if index == nrows:
             break
@@ -574,7 +598,7 @@ def reduced_row_echelon_form(m: Array2D[Any], atol: float = 0):
         if isinstance(scale, int | sym.Integer):
             scale = int(scale)
 
-        for j in range(mat.shape[1]):
+        for j in range(ncols):
             elem = mat[index, j]
             if isinstance(scale, int) and isinstance(elem, int | sym.Integer):
                 quo = int(elem) // scale
@@ -596,7 +620,7 @@ def reduced_row_echelon_form(m: Array2D[Any], atol: float = 0):
     return mat, pivot_cols
 
 
-def nullspace(m: Array2D[Any], atol: float = 0):
+def nullspace(m: Array2D[Any], atol: float = 0) -> Array2D[Any]:
     """Calculates the nullspace of a matrix `m`.
 
     :arg m: a 2D :class:`numpy.ndarray` or a list of lists or a sympy Matrix
@@ -609,7 +633,7 @@ def nullspace(m: Array2D[Any], atol: float = 0):
 
     free_vars = [i for i in range(cols) if i not in pivot_cols]
 
-    n = []
+    n: list[list[Any]] = []
     for free_var in free_vars:
         vec = [0]*cols
         vec[free_var] = 1
@@ -620,6 +644,7 @@ def nullspace(m: Array2D[Any], atol: float = 0):
                 else:
                     vec[piv_col] -= mat[piv_row, pos]
         n.append(vec)
+
     return np.array(n, dtype=object).T
 
 # }}}
@@ -717,61 +742,85 @@ def to_complex_dtype(dtype: DTypeLike) -> np.dtype[np.complexfloating]:
         raise RuntimeError(f"Unknown dtype: {dtype}") from err
 
 
-@dataclass(frozen=True)
-class ProfileGetter:
-    start: int
-    end: int
-
-
-def get_native_event(evt):
+def get_native_event(evt: pyopencl.Event | ProfilingEvent) -> pyopencl.Event:
     from pyopencl import Event
     return evt if isinstance(evt, Event) else evt.native_event
 
 
-class AggregateProfilingEvent:
-    """An object to hold a list of events and provides compatibility
-    with some of the functionality of :class:`pyopencl.Event`.
-    Assumes that the last event waits on all of the previous events.
+@dataclass(frozen=True)
+class ProfileGetter:
+    """Workalike for :class:`pyopencl.ProfilingInfoGetter`."""
+    start: int
+    end: int
+
+
+@dataclass(frozen=True)
+class ProfilingEvent:
+    """An event generated during profiling.
+
+    This object also provides some compatibility with :class:`pyopencl.Event`.
     """
-    def __init__(self, events):
-        self.events = events[:]
-        self.native_event = get_native_event(events[-1])
+    native_event: pyopencl.Event
 
     @property
-    def profile(self):
+    def profile(self) -> ProfileGetter:
+        raise AttributeError("profile")
+
+    def wait(self) -> None:
+        self.native_event.wait()
+
+
+@dataclass(frozen=True)
+class AggregateProfilingEvent(ProfilingEvent):
+    """An object to hold a list of events.
+
+    Assumes that the last event waits on all of the previous events.
+    """
+
+    events: tuple[ProfilingEvent | pyopencl.Event, ...]
+
+    def __init__(self, events: Sequence[ProfilingEvent | pyopencl.Event]) -> None:
+        super().__init__(get_native_event(events[-1]))
+        object.__setattr__(self, "events", tuple(events))
+
+    @property
+    @override
+    def profile(self) -> ProfileGetter:
         total = sum(evt.profile.end - evt.profile.start for evt in self.events)
         end = self.native_event.profile.end
         return ProfileGetter(start=end - total, end=end)
 
-    def wait(self):
-        return self.native_event.wait()
 
+@dataclass(frozen=True)
+class MarkerBasedProfilingEvent(ProfilingEvent):
+    """An object to hold two marker events."""
 
-class MarkerBasedProfilingEvent:
-    """An object to hold two marker events and provides compatibility
-    with some of the functionality of :class:`pyopencl.Event`.
-    """
-    def __init__(self, *, end_event, start_event):
-        self.native_event = end_event
-        self.start_event = start_event
+    start_event: pyopencl.Event | ProfilingEvent
+    end_event: pyopencl.Event | ProfilingEvent
+
+    def __init__(self, *,
+                 end_event: pyopencl.Event | ProfilingEvent,
+                 start_event: pyopencl.Event | ProfilingEvent) -> None:
+        super().__init__(get_native_event(end_event))
+        object.__setattr__(self, "end_event", end_event)
+        object.__setattr__(self, "start_event", start_event)
 
     @property
+    @override
     def profile(self):
         return ProfileGetter(start=self.start_event.profile.start,
                              end=self.native_event.profile.end)
 
-    def wait(self):
-        return self.native_event.wait()
-
 
 def loopy_fft(
-            n: int,
-            *, n_batch_dims: int,
-            inverse: bool,
-            complex_dtype: DTypeLike,
-            index_dtype: DTypeLike | None = None,
-            name: str | None = None
-        ):
+        n: int,
+        *,
+        n_batch_dims: int,
+        inverse: bool,
+        complex_dtype: DTypeLike,
+        index_dtype: DTypeLike | None = None,
+        name: str | None = None
+    ) -> lp.TranslationUnit:
     from math import pi
 
     from pymbolic import var
@@ -782,7 +831,7 @@ def loopy_fft(
     sign = 1 if not inverse else -1
 
     m = n
-    factors = []
+    factors: list[int] = []
     while m != 1:
         N1, m = find_factors(m)  # ruff:ignore[non-lowercase-variable-in-function]
         factors.append(N1)
@@ -936,113 +985,128 @@ def loopy_fft(
     return lp.linearize(knl)
 
 
+@enum.unique
 class FFTBackend(enum.Enum):
-    #: FFT backend based on the vkFFT library.
-    pyvkfft = 1
-    #: FFT backend based on :mod:`loopy` used as a fallback.
-    loopy = 2
+    """Supported FFT backends."""
+
+    PYVKFFT = enum.auto()
+    """FFT backend based on the vkFFT library."""
+    LOOPY = enum.auto()
+    """FFT backend based on :mod:`loopy` used as a fallback."""
 
 
 def _get_fft_backend(queue: pyopencl.CommandQueue) -> FFTBackend:
     import os
 
-    env_val = os.environ.get("SUMPY_FFT_BACKEND")
-    if env_val:
-        if env_val not in ["loopy", "pyvkfft"]:
-            raise ValueError("Expected 'loopy' or 'pyvkfft' for SUMPY_FFT_BACKEND. "
-                   f"Found {env_val}.")
-        return FFTBackend[env_val]
+    env_backend = os.environ.get("SUMPY_FFT_BACKEND")
+    if env_backend:
+        env_backend = env_backend.upper()
+        if env_backend not in (backends := {v.name for v in FFTBackend}):
+            raise ValueError(
+                "'SUMPY_FFT_BACKEND' environment variable has an unsupported value: "
+                f"{env_backend!r}. Supported backends are: {backends}"
+            )
+
+        return FFTBackend[env_backend]
 
     try:
         import pyvkfft.opencl  # ruff:ignore[unused-import]
     except ImportError:
-        warnings.warn("VkFFT not found. FFT runs will be slower.", stacklevel=3)
-        return FFTBackend.loopy
+        warnings.warn("VkFFT not found. FFT runs will use a slower built-in backend.",
+                      stacklevel=3)
+        return FFTBackend.LOOPY
 
     from pyopencl import command_queue_properties
 
     if queue.properties & command_queue_properties.OUT_OF_ORDER_EXEC_MODE_ENABLE:
         warnings.warn(
             "VkFFT does not support out of order queues yet. "
-            "Falling back to slower implementation.", stacklevel=3)
-        return FFTBackend.loopy
+            "Falling back to a slower built-in backend.", stacklevel=3)
+        return FFTBackend.LOOPY
 
-    import platform
-    import sys
-
+    from pyopencl.characterize import get_pocl_version
     pocl_ver = get_pocl_version(queue.device.platform)
+
     if pocl_ver is not None:
+        import platform
+        import sys
+
         if pocl_ver >= (7,):
             warnings.warn(
                 "PoCL>=7 miscompiles VkFFT. "
                 "See https://github.com/pocl/pocl/issues/2069 for details. "
-                "Falling back to slower implementation.", stacklevel=3)
-            return FFTBackend.loopy
+                "Falling back to a slower built-in backend.", stacklevel=3)
+            return FFTBackend.LOOPY
 
-        if (sys.platform == "darwin"
-                and platform.machine() == "x86_64"):
+        if sys.platform == "darwin" and platform.machine() == "x86_64":
             warnings.warn(
                 "PoCL crashes on some VkFFT kernels on MacOS. "
                 "See https://github.com/inducer/sumpy/issues/129. "
                 "Falling back to slower implementation.", stacklevel=3)
-            return FFTBackend.loopy
+            return FFTBackend.LOOPY
 
-    return FFTBackend.pyvkfft
+    return FFTBackend.PYVKFFT
 
 
 def get_opencl_fft_app(
         actx: ArrayContext,
+        *,
         shape: tuple[int, ...],
-        dtype: numpy.dtype[Any],
-        inverse: bool) -> Any:
-    """Setup an object for out-of-place FFT on with given shape and dtype
-    on given queue.
+        dtype: np.dtype[Any],
+        inverse: bool = False,
+        backend: FFTBackend | None = None,
+    ) -> lp.TranslationUnit | VkFFTApp:
+    """Setup an object for FFT computations.
+
+    :arg backend: if not provided, it will be automatically determined from the
+        given *actx*. A known faster backend will be preferred. This will first
+        check the ``SUMPY_FFT_BACKEND`` environment.
     """
     assert isinstance(actx, PyOpenCLArrayContext)
-    assert dtype.type in (np.float32, np.float64, np.complex64,
-                           np.complex128)
+    assert dtype.type in (np.float32, np.float64, np.complex64, np.complex128)
 
-    backend = _get_fft_backend(actx.queue)
+    if backend is None:
+        backend = _get_fft_backend(actx.queue)
 
-    if backend == FFTBackend.loopy:
+    if backend == FFTBackend.LOOPY:
         return loopy_fft(
             shape[-1],
             n_batch_dims=len(shape) - 1,
             inverse=inverse,
-            complex_dtype=dtype.type), backend
-    elif backend == FFTBackend.pyvkfft:
+            complex_dtype=dtype.type)
+    elif backend == FFTBackend.PYVKFFT:
         from pyvkfft.opencl import VkFFTApp
         app = VkFFTApp(
             shape=shape, dtype=dtype,  # pyright: ignore[reportArgumentType]
             queue=actx.queue, ndim=1, inplace=False)
-        return app, backend
+        return app
     else:
         raise RuntimeError(f"Unsupported FFT backend {backend}")
 
 
 def run_opencl_fft(
         actx: ArrayContext,
-        fft_app: tuple[Any, FFTBackend],
-        input_vec: Any,
+        app: lp.TranslationUnit | VkFFTApp,
+        input_vec: CLArray,
+        *,
         inverse: bool = False,
-        wait_for: list[pyopencl.Event] | None = None
-    ) -> tuple[pyopencl.Event | MarkerBasedProfilingEvent, Any]:
+        wait_for: WaitList | None = None
+    ) -> tuple[pyopencl.Event | MarkerBasedProfilingEvent, CLArray]:
     """Runs an FFT on input_vec and returns a :class:`MarkerBasedProfilingEvent`
     that indicate the end and start of the operations carried out and the output
     vector.
     Only supports in-order queues.
     """
     assert isinstance(actx, PyOpenCLArrayContext)
+    if wait_for is None:
+        wait_for = []
 
-    app, backend = fft_app
-
-    if backend == FFTBackend.loopy:
+    if isinstance(app, lp.TranslationUnit):
         evt, output_vec = app(actx.queue, y=input_vec, wait_for=wait_for)
         return (evt, output_vec["x"])
-    elif backend == FFTBackend.pyvkfft:
-        if wait_for is None:
-            wait_for = []
 
+    from pyvkfft.opencl import VkFFTApp
+    if isinstance(app, VkFFTApp):
         import pyopencl as cl
 
         queue = actx.queue
@@ -1053,56 +1117,33 @@ def run_opencl_fft(
             for evt in wait_for:
                 if evt.command_queue != queue:
                     raise RuntimeError(
-                        "Different queues not supported with NVIDIA CUDA")
+                        "different queues not supported with NVIDIA CUDA")
             start_evt = cl.enqueue_marker(queue)
         else:
             start_evt = cl.enqueue_marker(queue, wait_for=wait_for[:])
 
         if app.inplace:
-            raise RuntimeError("inplace fft is not supported")
+            raise RuntimeError("inplace FFT is not supported by pyvkfft")
         else:
             # FIXME: All very imperative. FFT functionality should move into the actx?
             output_vec = actx.np.zeros_like(input_vec)
 
         meth = app.ifft if inverse else app.fft
-
         meth(input_vec, output_vec, queue=queue)
 
         if queue.device.platform.name == "NVIDIA CUDA":
             end_evt = cl.enqueue_marker(queue)
         else:
             end_evt = cl.enqueue_marker(queue, wait_for=[start_evt])
-
         output_vec.add_event(end_evt)
 
-        return (MarkerBasedProfilingEvent(end_event=end_evt, start_event=start_evt),
+        return (
+            MarkerBasedProfilingEvent(end_event=end_evt, start_event=start_evt),
             output_vec)
-    else:
-        raise RuntimeError(f"Unsupported FFT backend {backend}")
+
+    raise RuntimeError(f"unsupported FFT backend: {type(app)}")
 
 # }}}
 
-
-# {{{ deprecations
-
-_depr_name_to_replacement_and_obj = {
-    "KernelCacheWrapper": ("KernelCacheMixin", 2023),
-    }
-
-
-def __getattr__(name: str):
-    replacement_and_obj = _depr_name_to_replacement_and_obj.get(name)
-    if replacement_and_obj is not None:
-        replacement, obj, year = replacement_and_obj
-        from warnings import warn
-        warn(f"'sumpy.tools.{name}' is deprecated. "
-                f"Use '{replacement}' instead. "
-                f"'sumpy.tools.{name}' will continue to work until {year}.",
-                DeprecationWarning, stacklevel=2)
-        return obj
-    else:
-        raise AttributeError(name)
-
-# }}}
 
 # vim: fdm=marker

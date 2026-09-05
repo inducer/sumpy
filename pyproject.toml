@@ -46,7 +46,8 @@ dev = [
     {include-group = "lint"},
 ]
 type = [
-    "optype"
+    "optype",
+    "pyvkfft>=2024.1",
 ]
 lint = [
     # https://github.com/astral-sh/ruff/issues/16943
@@ -119,6 +120,7 @@ known-first-party = [
     "loopy",
     "pymbolic",
     "pyopencl",
+    "boxtree",
     "pytools",
 ]
 known-local-folder = [

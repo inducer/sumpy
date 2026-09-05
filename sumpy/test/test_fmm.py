@@ -24,10 +24,10 @@ THE SOFTWARE.
 """
 
 import logging
-import os
 import sys
 from dataclasses import fields
 from functools import partial
+from typing import TYPE_CHECKING
 
 import numpy as np
 import numpy.linalg as la
@@ -47,12 +47,14 @@ from sumpy.array_context import (  # ruff:ignore[unused-import]
 from sumpy.expansion.local import (
     H2DLocalExpansion,
     LinearPDEConformingVolumeTaylorLocalExpansion,
+    LocalExpansionBase,
     VolumeTaylorLocalExpansion,
     Y2DLocalExpansion,
 )
 from sumpy.expansion.multipole import (
     H2DMultipoleExpansion,
     LinearPDEConformingVolumeTaylorMultipoleExpansion,
+    MultipoleExpansionBase,
     VolumeTaylorMultipoleExpansion,
     Y2DMultipoleExpansion,
 )
@@ -66,6 +68,11 @@ from sumpy.kernel import (
 )
 
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    import pyopencl as cl
+
 logger = logging.getLogger(__name__)
 
 pytest_generate_tests = pytest_generate_tests_for_array_contexts([
@@ -76,15 +83,14 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts([
 # {{{ test_sumpy_fmm
 
 @pytest.mark.parametrize(
-    ("use_translation_classes", "use_fft", "fft_backend"), [
+    ("use_translation_classes", "use_fft", "fft_backend_name"), [
         (False, False, None),
         (True, False, None),
         (True, True, "loopy"),
         (True, True, "pyvkfft"),
     ])
 @pytest.mark.parametrize(
-        ("knl", "local_expn_class", "mpole_expn_class",
-        "order_varies_with_level"), [
+    ("knl", "local_expn_class", "mpole_expn_class", "order_varies_with_level"), [
             (LaplaceKernel(2), VolumeTaylorLocalExpansion,
                 VolumeTaylorMultipoleExpansion, False),
             (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
@@ -103,20 +109,19 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts([
                 VolumeTaylorMultipoleExpansion, False),
             (HelmholtzKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
                 LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
-            (YukawaKernel(2), Y2DLocalExpansion, Y2DMultipoleExpansion,
-                False),
-            ])
+            (YukawaKernel(2), Y2DLocalExpansion, Y2DMultipoleExpansion, False),
+    ])
 def test_sumpy_fmm(
             actx_factory: ArrayContextFactory,
             knl: ScalarKernel,
-            local_expn_class,
-            mpole_expn_class,
-            order_varies_with_level,
-            use_translation_classes,
-            use_fft,
-            fft_backend,
-            visualize=False):
-    if fft_backend == "pyvkfft":
+            local_expn_class: type[LocalExpansionBase],
+            mpole_expn_class: type[MultipoleExpansionBase],
+            order_varies_with_level: bool,
+            use_translation_classes: bool,
+            use_fft: bool,
+            fft_backend_name: str | None,
+            visualize: bool = False) -> None:
+    if fft_backend_name == "pyvkfft":
         pytest.importorskip("pyvkfft")
 
     if visualize:
@@ -128,58 +133,66 @@ def test_sumpy_fmm(
     if local_expn_class in [H2DLocalExpansion, Y2DLocalExpansion] and use_fft:
         pytest.skip("Fourier/Bessel based expansions with FFT is not supported yet.")
 
-    if use_fft:
-        from unittest.mock import patch
-
-        with patch.dict(os.environ, {"SUMPY_FFT_BACKEND": fft_backend}):
-            _test_sumpy_fmm(actx_factory, knl, local_expn_class, mpole_expn_class,
-                order_varies_with_level, use_translation_classes, use_fft,
-                fft_backend)
-    else:
-        _test_sumpy_fmm(actx_factory, knl, local_expn_class, mpole_expn_class,
-            order_varies_with_level, use_translation_classes, use_fft,
-            fft_backend)
+    _test_sumpy_fmm(
+        actx_factory, knl,
+        local_expn_class, mpole_expn_class,
+        order_varies_with_level=order_varies_with_level,
+        use_translation_classes=use_translation_classes,
+        use_fft=use_fft,
+        fft_backend_name=fft_backend_name,
+        visualize=visualize,
+   )
 
 
 def _test_sumpy_fmm(
             actx_factory: ArrayContextFactory,
             knl: ScalarKernel,
-            local_expn_class,
-            mpole_expn_class,
-            order_varies_with_level,
-            use_translation_classes,
-            use_fft,
-            fft_backend):
+            local_expn_class: type[LocalExpansionBase],
+            mpole_expn_class: type[MultipoleExpansionBase], *,
+            order_varies_with_level: bool,
+            use_translation_classes: bool,
+            use_fft: bool,
+            fft_backend_name: str | None,
+            visualize: bool = False) -> None:
+    from sumpy.tools import FFTBackend
+
+    if fft_backend_name is None:
+        fft_backend = None
+    else:
+        fft_backend = FFTBackend[fft_backend_name.upper()]
 
     actx = actx_factory()
-
-    if fft_backend == "pyvkfft":
+    if fft_backend == FFTBackend.PYVKFFT and isinstance(actx, PyOpenCLArrayContext):
         from pyopencl.characterize import get_pocl_version
-        if (isinstance(actx, PyOpenCLArrayContext)
-                    and get_pocl_version(actx.queue.device.platform) >= (7,)):
+        pocl_version = get_pocl_version(actx.queue.device.platform)
+
+        if pocl_version and pocl_version >= (7,):
             pytest.skip("pocl 7 and pyvkfft don't get along: "
                         "https://github.com/pocl/pocl/issues/2069")
 
+    rng = np.random.default_rng(44)
+
     nsources = 1000
     ntargets = 300
-    dtype = np.float64
+    dtype = np.dtype(np.float64)
 
     from boxtree.tools import make_normal_particle_array as p_normal
-    sources = p_normal(actx, nsources, knl.dim, dtype, seed=15)
+    sources = p_normal(actx, nsources, knl.dim, dtype, rng=rng)
 
-    if 1:
-        offset = np.zeros(knl.dim)
-        offset[0] = 0.1
-        targets = offset + p_normal(actx, ntargets, knl.dim, dtype, seed=18)
-
-        del offset
+    if not visualize:
+        targets = obj_array.new_1d([
+            x + offset for offset, x in zip(
+                [0.1, 0.0, 0.0, 0.0][:knl.dim],
+                p_normal(actx, ntargets, knl.dim, dtype, rng=rng),
+                strict=True)
+        ])
     else:
         from sumpy.visualization import FieldPlotter
         fp = FieldPlotter(np.array([0.5, 0]), extent=3, npoints=200)
 
         targets = obj_array.new_1d([fp.points[i] for i in range(knl.dim)])
 
-    from boxtree import TreeBuilder
+    from boxtree import Tree, TreeBuilder
     tb = TreeBuilder(actx)
     tree, _ = tb(actx, sources, targets=targets,
             max_particles_in_box=30, debug=True)
@@ -190,16 +203,15 @@ def _test_sumpy_fmm(
 
     # {{{ plot tree
 
-    if 0:
+    if visualize:
         host_tree = actx.to_numpy(tree)
         host_trav = actx.to_numpy(trav)
 
-        if 0:
-            logger.info("src_box: %s", host_tree.find_box_nr_for_source(403))
-            logger.info("tgt_box: %s", host_tree.find_box_nr_for_target(28))
-            logger.info("%s",
-                list(host_trav.target_or_target_parent_boxes).index(37))
-            logger.info("%s", host_trav.get_box_list("sep_bigger", 22))
+        logger.info("src_box: %s", host_tree.find_box_nr_for_source(403))
+        logger.info("tgt_box: %s", host_tree.find_box_nr_for_target(28))
+        logger.info("%s",
+            list(host_trav.target_or_target_parent_boxes).index(37))
+        logger.info("%s", host_trav.get_box_list("sep_bigger", 22))
 
         from boxtree.visualization import TreePlotter
         plotter = TreePlotter(host_tree)
@@ -212,14 +224,13 @@ def _test_sumpy_fmm(
 
     # }}}
 
-    rng = np.random.default_rng(44)
     weights = actx.from_numpy(rng.random(nsources, dtype=np.float64))
     logger.info("computing direct (reference) result")
 
     from pytools.convergence import PConvergenceVerifier
     pconv_verifier = PConvergenceVerifier()
 
-    extra_kwargs = {}
+    extra_kwargs: dict[str, object] = {}
     dtype = np.float64
     order_values = [1, 2, 3]
     if isinstance(knl, HelmholtzKernel):
@@ -263,13 +274,25 @@ def _test_sumpy_fmm(
                 actx,
                 partial(mpole_expn_class, knl),
                 local_expansion_factory,
-                target_kernels)
+                target_kernels,
+                fft_backend=fft_backend,
+        )
 
         if order_varies_with_level:
-            def fmm_level_to_order(kernel, kernel_args, tree, lev):
+            def fmm_level_to_order(  # pyright: ignore[reportRedeclaration]
+                    _kernel: ScalarKernel,
+                    _kernel_args: frozenset[tuple[str, object]],
+                    _tree: Tree,
+                    lev: int
+                ) -> int:
                 return order + lev % 2  # ruff:ignore[function-uses-loop-variable]
         else:
-            def fmm_level_to_order(kernel, kernel_args, tree, lev):
+            def fmm_level_to_order(
+                    _kernel: ScalarKernel,
+                    _kernel_args: frozenset[tuple[str, object]],
+                    _tree: Tree,
+                    _lev: int
+                ) -> int:
                 return order  # ruff:ignore[function-uses-loop-variable]
 
         wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,
@@ -302,7 +325,8 @@ def _test_sumpy_fmm(
 # {{{ test_coeff_magnitude_rscale
 
 @pytest.mark.parametrize("knl", [LaplaceKernel(2), BiharmonicKernel(2)])
-def test_coeff_magnitude_rscale(actx_factory: ArrayContextFactory, knl):
+def test_coeff_magnitude_rscale(
+        actx_factory: ArrayContextFactory, knl: ScalarKernel) -> None:
     """Checks that the rscale used keeps the coefficient magnitude
     difference small
     """
@@ -310,20 +334,23 @@ def test_coeff_magnitude_rscale(actx_factory: ArrayContextFactory, knl):
     mpole_expn_class = LinearPDEConformingVolumeTaylorMultipoleExpansion
 
     actx = actx_factory()
+    rng = np.random.default_rng(31)
 
     nsources = 1000
     ntargets = 300
-    dtype = np.float64
+    dtype = np.dtype(np.float64)
 
     from boxtree.tools import make_normal_particle_array as p_normal
 
-    sources = p_normal(actx, nsources, knl.dim, dtype, seed=15)
-    offset = np.zeros(knl.dim)
-    offset[0] = 0.1
+    sources = p_normal(actx, nsources, knl.dim, dtype, rng=rng)
+    targets = obj_array.new_1d([
+        x + offset for offset, x in zip(
+            [0.1, 0.0, 0.0, 0.0][:knl.dim],
+            p_normal(actx, ntargets, knl.dim, dtype, rng=rng),
+            strict=True)
+    ])
 
-    targets = offset + p_normal(actx, ntargets, knl.dim, dtype, seed=18)
-
-    from boxtree import TreeBuilder
+    from boxtree import Tree, TreeBuilder
     tb = TreeBuilder(actx)
     tree, _ = tb(actx, sources, targets=targets, max_particles_in_box=30, debug=True)
 
@@ -331,10 +358,9 @@ def test_coeff_magnitude_rscale(actx_factory: ArrayContextFactory, knl):
     tbuild = FMMTraversalBuilder(actx)
     trav, _ = tbuild(actx, tree, debug=True)
 
-    rng = np.random.default_rng(31)
     weights = actx.from_numpy(rng.random(nsources, dtype=np.float64))
 
-    extra_kwargs = {}
+    extra_kwargs: dict[str, object] = {}
     dtype = np.float64
     order = 10
     if isinstance(knl, HelmholtzKernel):
@@ -353,7 +379,12 @@ def test_coeff_magnitude_rscale(actx_factory: ArrayContextFactory, knl):
         partial(local_expn_class, knl),
         target_kernels)
 
-    def fmm_level_to_order(kernel, kernel_args, tree, lev):
+    def fmm_level_to_order(
+            _kernel: ScalarKernel,
+            _kernel_args: frozenset[tuple[str, object]],
+            _tree: Tree,
+            _lev: int
+        ) -> int:
         return order
 
     wrangler = SumpyExpansionWrangler(tree_indep, trav, dtype,
@@ -363,6 +394,7 @@ def test_coeff_magnitude_rscale(actx_factory: ArrayContextFactory, knl):
     weights = wrangler.reorder_sources(weights)
     (weights,) = wrangler.distribute_source_weights(actx, (weights,), None)
 
+    assert trav.level_start_target_or_target_parent_box_nrs is not None
     local_result = wrangler.form_locals(
         actx,
         trav.level_start_target_or_target_parent_box_nrs,
@@ -383,7 +415,8 @@ def test_coeff_magnitude_rscale(actx_factory: ArrayContextFactory, knl):
 
 # {{{ test_unified_single_and_double
 
-def test_unified_single_and_double(actx_factory: ArrayContextFactory, visualize=False):
+def test_unified_single_and_double(
+        actx_factory: ArrayContextFactory, visualize: bool = False) -> None:
     """
     Test that running one FMM for single layer + double layer gives the
     same result as running one FMM for each and adding the results together
@@ -393,6 +426,7 @@ def test_unified_single_and_double(actx_factory: ArrayContextFactory, visualize=
         logging.basicConfig(level=logging.INFO)
 
     actx = actx_factory()
+    rng = np.random.default_rng(44)
 
     knl = LaplaceKernel(2)
     local_expn_class = LinearPDEConformingVolumeTaylorLocalExpansion
@@ -404,12 +438,13 @@ def test_unified_single_and_double(actx_factory: ArrayContextFactory, visualize=
 
     from boxtree.tools import make_normal_particle_array as p_normal
 
-    sources = p_normal(actx, nsources, knl.dim, dtype, seed=15)
-    offset = np.zeros(knl.dim)
-    offset[0] = 0.1
-
-    targets = offset + p_normal(actx, ntargets, knl.dim, dtype, seed=18)
-    del offset
+    sources = p_normal(actx, nsources, knl.dim, dtype, rng=rng)
+    targets = obj_array.new_1d([
+        x + offset for offset, x in zip(
+            [0.1, 0.0, 0.0, 0.0][:knl.dim],
+            p_normal(actx, ntargets, knl.dim, dtype, rng=rng),
+            strict=True)
+    ])
 
     from boxtree import TreeBuilder
     tb = TreeBuilder(actx)
@@ -419,7 +454,6 @@ def test_unified_single_and_double(actx_factory: ArrayContextFactory, visualize=
     tbuild = FMMTraversalBuilder(actx)
     trav, _ = tbuild(actx, tree, debug=True)
 
-    rng = np.random.default_rng(44)
     weights = (
         actx.from_numpy(rng.random(nsources, dtype=np.float64)),
         actx.from_numpy(rng.random(nsources, dtype=np.float64))
@@ -438,13 +472,13 @@ def test_unified_single_and_double(actx_factory: ArrayContextFactory, visualize=
     source_kernel_vecs = [[knl], [deriv_knl], [knl, deriv_knl]]
     strength_usages = [[0], [1], [0, 1]]
 
-    alpha = np.linspace(0, 2*np.pi, nsources, np.float64)
+    alpha = np.linspace(0, 2*np.pi, nsources, dtype=np.float64)
     dir_vec = actx.from_numpy(np.vstack([np.cos(alpha), np.sin(alpha)]))
 
-    results = []
+    results: list[np.ndarray[tuple[int, int], np.dtype[np.float64]]] = []
     for source_kernels, strength_usage in zip(
             source_kernel_vecs, strength_usages, strict=True):
-        source_extra_kwargs = {}
+        source_extra_kwargs: dict[str, object] = {}
         if deriv_knl in source_kernels:
             source_extra_kwargs["dir_vec"] = dir_vec
         tree_indep = SumpyTreeIndependentDataForWrangler(
@@ -474,7 +508,10 @@ def test_unified_single_and_double(actx_factory: ArrayContextFactory, visualize=
 # {{{ test_sumpy_fmm_timing_data_collection
 
 @pytest.mark.parametrize("use_fft", [True, False])
-def test_sumpy_fmm_timing_data_collection(ctx_factory, use_fft, visualize=False):
+def test_sumpy_fmm_timing_data_collection(
+        ctx_factory: Callable[[], cl.Context],
+        use_fft: bool,
+        visualize: bool = False) -> None:
     if visualize:
         logging.basicConfig(level=logging.INFO)
 
@@ -487,6 +524,7 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory, use_fft, visualize=False)
         properties=cl.command_queue_properties.PROFILING_ENABLE)
     actx = PyOpenCLArrayContext(queue)
 
+    rng = np.random.default_rng(44)
     nsources = 500
     dtype = np.float64
 
@@ -497,7 +535,7 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory, use_fft, visualize=False)
     mpole_expn_class = VolumeTaylorMultipoleExpansion
     order = 1
 
-    sources = p_normal(actx, nsources, knl.dim, dtype, seed=15)
+    sources = p_normal(actx, nsources, knl.dim, dtype, rng=rng)
 
     from boxtree import TreeBuilder
     tb = TreeBuilder(actx)
@@ -507,7 +545,6 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory, use_fft, visualize=False)
     tbuild = FMMTraversalBuilder(actx)
     trav, _ = tbuild(actx, tree, debug=True)
 
-    rng = np.random.default_rng(44)
     weights = actx.from_numpy(rng.random(nsources, dtype=np.float64))
 
     target_kernels = [knl]
@@ -535,11 +572,13 @@ def test_sumpy_fmm_timing_data_collection(ctx_factory, use_fft, visualize=False)
     _pot, = drive_fmm(actx, wrangler, (weights,))
 
 
-def test_sumpy_fmm_exclude_self(actx_factory: ArrayContextFactory, visualize=False):
+def test_sumpy_fmm_exclude_self(
+        actx_factory: ArrayContextFactory, visualize: bool = False) -> None:
     if visualize:
         logging.basicConfig(level=logging.INFO)
 
     actx = actx_factory()
+    rng = np.random.default_rng(44)
 
     nsources = 500
     dtype = np.float64
@@ -551,7 +590,7 @@ def test_sumpy_fmm_exclude_self(actx_factory: ArrayContextFactory, visualize=Fal
     mpole_expn_class = VolumeTaylorMultipoleExpansion
     order = 10
 
-    sources = p_normal(actx, nsources, knl.dim, dtype, seed=15)
+    sources = p_normal(actx, nsources, knl.dim, dtype, rng=rng)
 
     from boxtree import TreeBuilder
     tb = TreeBuilder(actx)
@@ -562,7 +601,6 @@ def test_sumpy_fmm_exclude_self(actx_factory: ArrayContextFactory, visualize=Fal
     tbuild = FMMTraversalBuilder(actx)
     trav, _ = tbuild(actx, tree, debug=True)
 
-    rng = np.random.default_rng(44)
     weights = actx.from_numpy(rng.random(nsources, dtype=np.float64))
 
     target_to_source = actx.from_numpy(np.arange(tree.ntargets, dtype=np.int32))
@@ -604,11 +642,12 @@ def test_sumpy_fmm_exclude_self(actx_factory: ArrayContextFactory, visualize=Fal
 
 def test_sumpy_axis_source_derivative(
             actx_factory: ArrayContextFactory,
-            visualize=False):
+            visualize: bool = False) -> None:
     if visualize:
         logging.basicConfig(level=logging.INFO)
 
     actx = actx_factory()
+    rng = np.random.default_rng(12)
 
     nsources = 500
     dtype = np.float64
@@ -620,7 +659,7 @@ def test_sumpy_axis_source_derivative(
     mpole_expn_class = VolumeTaylorMultipoleExpansion
     order = 10
 
-    sources = p_normal(actx, nsources, knl.dim, dtype, seed=15)
+    sources = p_normal(actx, nsources, knl.dim, dtype, rng=rng)
 
     from boxtree import TreeBuilder
     tb = TreeBuilder(actx)
@@ -630,7 +669,6 @@ def test_sumpy_axis_source_derivative(
     tbuild = FMMTraversalBuilder(actx)
     trav, _ = tbuild(actx, tree, debug=True)
 
-    rng = np.random.default_rng(12)
     weights = actx.from_numpy(rng.random(nsources, dtype=np.float64))
 
     target_to_source = actx.from_numpy(np.arange(tree.ntargets, dtype=np.int32))
@@ -638,7 +676,7 @@ def test_sumpy_axis_source_derivative(
 
     from sumpy.kernel import AxisSourceDerivative, AxisTargetDerivative
 
-    pots = []
+    pots: list[np.ndarray[tuple[int], np.dtype[np.float64]]] = []
     for tgt_knl, src_knl in [
             (AxisTargetDerivative(0, knl), knl),
             (knl, AxisSourceDerivative(0, knl))]:
@@ -672,12 +710,13 @@ def test_sumpy_axis_source_derivative(
 @pytest.mark.parametrize("deriv_axes", [(), (0,), (1,)])
 def test_sumpy_target_point_multiplier(
             actx_factory: ArrayContextFactory,
-            deriv_axes,
-            visualize=False):
+            deriv_axes: tuple[int, ...],
+            visualize: bool = False) -> None:
     if visualize:
         logging.basicConfig(level=logging.INFO)
 
     actx = actx_factory()
+    rng = np.random.default_rng(12)
 
     nsources = 500
     dtype = np.float64
@@ -689,7 +728,7 @@ def test_sumpy_target_point_multiplier(
     mpole_expn_class = VolumeTaylorMultipoleExpansion
     order = 5
 
-    sources = p_normal(actx, nsources, knl.dim, dtype, seed=15)
+    sources = p_normal(actx, nsources, knl.dim, dtype, rng=rng)
 
     from boxtree import TreeBuilder
     tb = TreeBuilder(actx)
@@ -701,7 +740,6 @@ def test_sumpy_target_point_multiplier(
     tbuild = FMMTraversalBuilder(actx)
     trav, _ = tbuild(actx, tree, debug=True)
 
-    rng = np.random.default_rng(12)
     weights = actx.from_numpy(rng.random(nsources, dtype=np.float64))
 
     target_to_source = actx.from_numpy(np.arange(tree.ntargets, dtype=np.int32))
@@ -709,7 +747,7 @@ def test_sumpy_target_point_multiplier(
 
     from sumpy.kernel import AxisTargetDerivative, TargetPointMultiplier
 
-    tgt_knls = [TargetPointMultiplier(0, knl), knl, knl]
+    tgt_knls: list[ScalarKernel] = [TargetPointMultiplier(0, knl), knl, knl]
     for axis in deriv_axes:
         tgt_knls[0] = AxisTargetDerivative(axis, tgt_knls[0])
         tgt_knls[1] = AxisTargetDerivative(axis, tgt_knls[1])
