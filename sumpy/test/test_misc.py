@@ -1002,27 +1002,26 @@ def test_system_kernel_pickle(dim: int, cls: type[SystemKernel]) -> None:
 def test_symbolic_roundtrip_with_symbols() -> None:
     from pymbolic.primitives import Variable
 
-    s2p = sym.SympyToPymbolicMapperWithSymbols()
-    p2s = sym.PymbolicToSympyMapperWithSymbols()
-
     sympy_exprs = [
         sym.pi,
+        sym.I,
         sym.Symbol("x"),
         sym.sin(sym.Symbol("x")),
     ]
     for expr in sympy_exprs:
-        back = p2s.to_expr(s2p(expr))
+        back = sym.to_symbolic(sym.to_pymbolic(expr, symbols=True), symbols=True)
         assert sym.sympify(expr) == sym.sympify(back)
 
     pymbolic_exprs = [
         Variable("pi"),
+        Variable("I"),
         Variable("x"),
         sym.SpatialConstant("k"),
         Variable("hankel_1")(0, Variable("x")),
         Variable("bessel_j")(2, Variable("x")),
     ]
     for expr in pymbolic_exprs:
-        back = s2p(p2s.to_expr(expr))
+        back = sym.to_pymbolic(sym.to_symbolic(expr, symbols=True), symbols=True)
         assert expr == back
 
 # }}}

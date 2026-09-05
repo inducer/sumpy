@@ -348,14 +348,13 @@ class KernelComputation(ABC):
         pass
 
     def get_kernel_scaling_assignments(self):
-        from sumpy.symbolic import SympyToPymbolicMapper
-        sympy_conv = SympyToPymbolicMapper()
-
         import loopy as lp
         return [
                 lp.Assignment(id=f"knl_{i}_scaling",
                     assignee=f"knl_{i}_scaling",
-                    expression=sympy_conv(kernel.get_global_scaling_const()),
+                    expression=sym.to_pymbolic(
+                        kernel.get_global_scaling_const()
+                    ),
                     temp_var_type=lp.Optional(dtype),
                     tags=frozenset([ScalingAssignmentTag()]))
                 for i, (kernel, dtype) in enumerate(
