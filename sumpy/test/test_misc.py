@@ -1004,6 +1004,7 @@ def test_symbolic_roundtrip_with_symbols() -> None:
 
     sympy_exprs = [
         sym.pi,
+        sym.I,
         sym.Symbol("x"),
         sym.sin(sym.Symbol("x")),
     ]
@@ -1013,6 +1014,7 @@ def test_symbolic_roundtrip_with_symbols() -> None:
 
     pymbolic_exprs = [
         Variable("pi"),
+        Variable("I"),
         Variable("x"),
         sym.SpatialConstant("k"),
         Variable("hankel_1")(0, Variable("x")),

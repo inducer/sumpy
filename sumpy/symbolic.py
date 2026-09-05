@@ -531,10 +531,15 @@ class SympyToPymbolicMapper(SympyLikeToPymbolicMixin,
 
         if expr is self.sym.pi:
             return prim.Variable("pi")
-        elif expr is self.sym.I:
-            return prim.Variable("I")
         else:
             return super().map_NumberSymbol(expr)
+
+    @override
+    def map_ImaginaryUnit(self, expr: sym.ImaginaryUnit) -> Expression:
+        if not self.symbols:
+            return super().map_ImaginaryUnit(expr)
+
+        return prim.Variable("I")
 
 
 if HAS_SYMENGINE:
@@ -557,10 +562,14 @@ if HAS_SYMENGINE:
 
             if expr is self.sym.pi:
                 return prim.Variable("pi")
-            elif expr is self.sym.I:
-                return prim.Variable("I")
             else:
                 return super().map_Constant(expr)
+
+        def map_ImaginaryUnit(self, expr: object) -> Expression:  # ruff: ignore[invalid-function-name]
+            if not self.symbols:
+                return super().map_Complex(expr)
+
+            return prim.Variable("I")
 
 
 def to_pymbolic(expr: Basic, *, symbols: bool = False) -> Expression:
