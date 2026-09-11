@@ -333,7 +333,6 @@ def simplify(expr: sym.Basic) -> sym.Basic:
 def _generate_points_shells(
         dim: int,
         npoints: int, *,
-        nshells: int = 2,
         rmin: float = 0.25,
         rmax: float = 2.0,
         rng: np.random.Generator | None = None
@@ -344,9 +343,6 @@ def _generate_points_shells(
     if npoints < 1:
         raise ValueError(f"'npoints' must be >= 1: {npoints!r}")
 
-    if nshells < 1:
-        raise ValueError(f"'nshells' must be >= 1: {nshells!r}")
-
     if rmin >= rmax:
         raise ValueError(f"'rmin' must be smaller than 'rmax': {rmin} >= {rmax}")
 
@@ -354,18 +350,13 @@ def _generate_points_shells(
         rng = np.random.default_rng()
 
     # make log spaced shell radii
-    # NOTE: we uniformly sample in each shell to ensure that:
-    #   1. we're not too close to the origin
-    #   2. the radii don't repeat to avoid issues with radially symmetric kernels
-    edges = np.geomspace(rmin, rmax, nshells + 1)
-    shell = np.arange(npoints) % nshells
-    log_r = rng.uniform(np.log(edges[shell]), np.log(edges[shell + 1]))
+    radii = np.exp(rng.uniform(np.log(rmin), np.log(rmax), npoints))
 
     # generate points on the unit sphere
     p = rng.standard_normal((dim, npoints))
     p /= np.linalg.norm(p, axis=0)
 
-    return np.exp(log_r) * p
+    return radii * p
 
 
 def _make_expr_derivatives(
