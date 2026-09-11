@@ -397,6 +397,36 @@ def _make_derivative_matrix(
     return sym.Matrix(entries)
 
 
+def _check_linear_combination(
+        target_expr: sym.Expr,
+        base_expr: sym.Expr,
+        dvec: sym.Matrix,
+        mis: Sequence[MultiIndex],
+        coeffs: Sequence[sym.Basic],
+        *,
+        rng: np.random.Generator,
+        rtol: float = 1.0e-8,
+    ) -> bool:
+    dim = len(dvec)
+    mi_to_derivative = _make_expr_derivatives(base_expr, dvec, mis)
+    points = _generate_points_shells(dim, len(mis) + 1, rng=rng)
+
+    max_lhs = 0.0
+    max_err = 0.0
+    for i in range(points.shape[1]):
+        subst = dict(zip(dvec, points[:, i], strict=True))
+        lhs = float(evalf(target_expr.xreplace(subst)))
+
+        rhs = float(evalf(coeffs[0]))
+        for c, mi in zip(coeffs[1:], mis, strict=True):
+            rhs += float(evalf(c * mi_to_derivative[mi].xreplace(subst)))
+
+        max_lhs = max(max_lhs, abs(lhs))
+        max_err = max(max_err, abs(lhs - rhs))
+
+    return max_err <= rtol * max(max_lhs, 1.0)
+
+
 def _get_base_kernel_matrix_lu_factorization(
         base_kernel: ScalarKernel,
         order: int,
@@ -502,12 +532,12 @@ def rewrite_using_base_kernel_lu(
     dim = base_kernel.dim
     dvec = sym.make_sym_vector("d", dim)
     target_expr = target_kernel.get_expression(dvec)
+    base_expr = base_kernel.get_expression(dvec)
 
     target_scaling = target_kernel.get_global_scaling_const()
     base_scaling = base_kernel.get_global_scaling_const()
 
     order = min_order
-    to_pymbolic = sym.SympyToPymbolicMapperWithSymbols()
     while order <= pde.order:
         try:
             lu = _get_base_kernel_matrix_lu_factorization(
@@ -535,7 +565,7 @@ def rewrite_using_base_kernel_lu(
                                   postprocess=lambda x: x.expand())
 
         # gather all non-zero coefficients from the result
-        const = 0
+        const = sym.Integer(0)
         coeffs = []
         mis = []
         for i, coeff in enumerate(all_coeffs):
@@ -544,20 +574,28 @@ def rewrite_using_base_kernel_lu(
                 continue
 
             if i == 0:
-                const = to_pymbolic(simplify(coeff * target_scaling))
-                logger.debug("  %s", coeff)
+                const = coeff
+                logger.debug("  %s", const)
             else:
-                mi = lu.mis[i - 1]
-                coeff = simplify(coeff * target_scaling / base_scaling)
-
-                mis.append(mi)
-                coeffs.append(to_pymbolic(coeff))
-                logger.debug("  + %s*%s.diff%s", coeff, base_kernel, mi)
+                mis.append(lu.mis[i - 1])
+                coeffs.append(coeff)
+                logger.debug("  + %s*%s.diff%s", coeff, base_kernel, lu.mis[-1])
 
         if coeffs:
             coeffs.insert(0, const)
+
+        success = _check_linear_combination(
+            target_expr,
+            base_expr,
+            dvec,
+            mis,
+            coeffs,
+            rng=rng,
+        )
+        if coeffs and success:
             break
 
+        coeffs = []
         order += 1
 
     if not coeffs:
@@ -565,7 +603,16 @@ def rewrite_using_base_kernel_lu(
             f"could not express {target_kernel} in terms of {base_kernel}"
         )
 
-    return LinearOperatorRepresentation(target_kernel, base_kernel, mis, coeffs)
+    to_pymbolic = sym.SympyToPymbolicMapperWithSymbols()
+    return LinearOperatorRepresentation(
+        target_kernel, base_kernel, mis,
+        tuple(
+            to_pymbolic(simplify(
+                c * (target_scaling if i == 0 else (target_scaling / base_scaling))
+            ))
+            for i, c in enumerate(coeffs)
+        ),
+    )
 
 
 # }}}
