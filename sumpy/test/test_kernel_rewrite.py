@@ -26,6 +26,7 @@ from sumpy.kernel_rewrite import (
 
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 
 def mi_derivative(expr: sym.Expr, x: sym.Matrix, mi: tuple[int, ...]) -> sym.Expr:
@@ -58,6 +59,56 @@ def check_kernel_rewrite(op: LinearOperatorRepresentation) -> None:
 
     result = evalf(simplify(target_expr - expr))
     assert abs(result) < 3.0 * 1.0e-16
+
+
+# {{{ test_rewrite_using_base_kernel_lu_conditioning
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_rewrite_using_base_kernel_lu_conditioning(dim: int) -> None:
+    from pytools import (
+        generate_nonnegative_integer_tuples_summing_to_at_most as gnitstam,
+    )
+
+    from sumpy.kernel_rewrite import (
+        _generate_points_shells,
+        _make_derivative_matrix,
+        _make_expr_derivatives,
+    )
+
+    rng = np.random.default_rng(42)
+    base_kernel = BiharmonicKernel(dim)
+
+    dvec = sym.make_sym_vector("d", dim)
+    base_expr = base_kernel.get_expression(dvec)
+
+    pde = base_kernel.get_pde_as_diff_op()
+    mis = list(gnitstam(pde.order, dim))
+    pde_mis = [ident.mi for eq in pde.eqs for ident in eq]
+    pde_mis = [mi for mi in pde_mis if sum(mi) == pde.order]
+    mis.remove(pde_mis[-1])
+
+    mi_to_derivative = _make_expr_derivatives(base_expr, dvec, mis)
+
+    nruns = 16
+    kappa = np.empty(nruns)
+
+    for i in range(nruns):
+        points = _generate_points_shells(dim, len(mis) + 1, rng=rng)
+        mat = _make_derivative_matrix(points, dvec, mis, mi_to_derivative)
+
+        mat = np.array([
+            [float(mat[i, j]) for j in range(mat.shape[1])]
+            for i in range(mat.shape[0])
+        ])
+
+        kappa[i] = np.linalg.cond(mat)
+        logger.info("kappa = %.8e", kappa[i])
+
+    logger.info("median: %.8e max %.8e", np.median(kappa), np.max(kappa))
+    assert np.max(kappa) < 2.0e+5
+
+# }}}
 
 
 # {{{ test_rewrite_using_base_kernel_lu_laplace_biharmonic
