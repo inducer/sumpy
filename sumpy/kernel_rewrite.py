@@ -397,6 +397,61 @@ def _make_derivative_matrix(
     return sym.Matrix(entries)
 
 
+def _get_base_kernel_matrix_lu_factorization(
+        base_kernel: ScalarKernel,
+        order: int,
+        *,
+        rng: np.random.Generator,
+        retries: int,
+    ) -> _LUDecomposition:
+    pde = base_kernel.get_pde_as_diff_op()
+    if order > pde.order:
+        raise NotImplementedError(
+            "Rewriting when the base kernel's derivatives are linearly dependent "
+            "is not implemented")
+
+    dim = base_kernel.dim
+
+    mis = list(gnitstam(order, dim))
+    if order == pde.order:
+        pde_mis = [ident.mi for eq in pde.eqs for ident in eq]
+        pde_mis = [mi for mi in pde_mis if sum(mi) == order]
+        mis.remove(pde_mis[-1])
+
+        logger.debug("Removing %s to avoid linear dependent mis", pde_mis[-1])
+
+    # get sympy expression for the base kernel
+    dvec = sym.make_sym_vector("d", dim)
+    base_expr = base_kernel.get_expression(dvec)
+
+    # evaluate all the needed derivatives
+    mi_to_derivative = _make_expr_derivatives(base_expr, dvec, mis)
+
+    # try to LU factorize on random points
+    for _ in range(retries):
+        points = _generate_points_shells(dim, len(mis) + 1, rng=rng)
+        mat = _make_derivative_matrix(points, dvec, mis, mi_to_derivative)
+
+        # NOTE: this can only happen if the points are somehow degenerate, e.g.
+        # points[:, 0] == points[:, 1], so it shouldn't happen under normal
+        # operating conditions?
+        try:
+            L, U, perm = mat.LUdecomposition()  # ruff: ignore[non-lowercase-variable-in-function]
+        except RuntimeError:
+            continue
+        else:
+            # NOTE: and sympy seems to set the last row of U to 0
+            if not sym.USE_SYMENGINE and all(expr == 0 for expr in U[-1, :]):
+                continue
+
+        return _LUDecomposition(L, U, perm, mis, points)
+
+    raise FactorizationFailedError(
+        f"failed to compute LU factorization to order {order} for {base_kernel} "
+        f"after {retries} retries"
+    )
+
+
 def rewrite_using_base_kernel_lu(
         target_kernel: ScalarKernel,
         base_kernel: ScalarKernel,
@@ -420,6 +475,14 @@ def rewrite_using_base_kernel_lu(
     :arg retries: maximum number of retries for each order. If the LU decomposition
         fails due to a poor choice of random points, it is retried several times.
     """
+    try:
+        _ = base_kernel.get_pde_system_kernel()
+    except TypeError:
+        pass
+    else:
+        raise ValueError(
+            f"'base_kernel' cannot be part of a system: {type(base_kernel)}"
+        )
 
     pde = base_kernel.get_pde_as_diff_op()
     if min_order is None:
@@ -504,59 +567,5 @@ def rewrite_using_base_kernel_lu(
 
     return LinearOperatorRepresentation(target_kernel, base_kernel, mis, coeffs)
 
-
-def _get_base_kernel_matrix_lu_factorization(
-        base_kernel: ScalarKernel,
-        order: int,
-        *,
-        rng: np.random.Generator,
-        retries: int,
-    ) -> _LUDecomposition:
-    pde = base_kernel.get_pde_as_diff_op()
-    if order > pde.order:
-        raise NotImplementedError(
-            "Rewriting when the base kernel's derivatives are linearly dependent "
-            "is not implemented")
-
-    dim = base_kernel.dim
-
-    mis = list(gnitstam(order, dim))
-    if order == pde.order:
-        pde_mis = [ident.mi for eq in pde.eqs for ident in eq]
-        pde_mis = [mi for mi in pde_mis if sum(mi) == order]
-        mis.remove(pde_mis[-1])
-
-        logger.debug("Removing %s to avoid linear dependent mis", pde_mis[-1])
-
-    # get sympy expression for the base kernel
-    dvec = sym.make_sym_vector("d", dim)
-    base_expr = base_kernel.get_expression(dvec)
-
-    # evaluate all the needed derivatives
-    mi_to_derivative = _make_expr_derivatives(base_expr, dvec, mis)
-
-    # try to LU factorize on random points
-    for _ in range(retries):
-        points = _generate_points_shells(dim, len(mis) + 1, rng=rng)
-        mat = _make_derivative_matrix(points, dvec, mis, mi_to_derivative)
-
-        # TODO: LUdecomposition in symengine is not implemented for non-square matrices
-        try:
-            L, U, perm = mat.LUdecomposition()  # ruff: ignore[non-lowercase-variable-in-function]
-        except RuntimeError:
-            # NOTE: symengine seems to throw a SymEngineError -> RuntimeError when
-            # it fails to do the LU factorization due to rank-deficiency
-            continue
-        else:
-            # NOTE: and sympy seems to set the last row of U to 0
-            if not sym.USE_SYMENGINE and all(expr == 0 for expr in U[-1, :]):
-                continue
-
-        return _LUDecomposition(L, U, perm, mis, points)
-
-    raise FactorizationFailedError(
-        f"failed to compute LU factorization to order {order} for {base_kernel} "
-        f"after {retries} retries"
-    )
 
 # }}}
