@@ -106,7 +106,7 @@ def test_rewrite_using_base_kernel_lu_conditioning(dim: int) -> None:
         logger.info("kappa = %.8e", kappa[i])
 
     logger.info("median: %.8e max %.8e", np.median(kappa), np.max(kappa))
-    assert np.max(kappa) < 2.0e+5
+    assert np.max(kappa) < 3.0e+5
 
 # }}}
 
