@@ -14,9 +14,11 @@ import pytest
 import sumpy.symbolic as sym
 from sumpy.kernel import (
     BiharmonicKernel,
+    BrinkmanletComponentKernel,
     LaplaceKernel,
     StokesletComponentKernel,
     StressletComponentKernel,
+    YukawaKernel,
 )
 from sumpy.kernel_rewrite import (
     LinearOperatorRepresentation,
@@ -146,6 +148,26 @@ def test_rewrite_using_base_kernel_lu_stokeslet_biharmonic(dim: int) -> None:
 # }}}
 
 
+# {{{ test_rewrite_using_base_kernel_lu_brinkman_yukawa
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_rewrite_using_base_kernel_lu_brinkman_yukawa(dim: int) -> None:
+    from pytools import generate_nonnegative_integer_tuples_below as gnitb
+
+    rng = np.random.default_rng(seed=42)
+
+    base_kernel = YukawaKernel(dim, yukawa_lambda_name="k")
+    for i, j in gnitb(dim, 2):
+        target_kernel = BrinkmanletComponentKernel(
+            dim, i, j, viscosity_mu_name="mu", darcy_impermeability_name="k")
+        result = rewrite_using_base_kernel_lu(target_kernel, base_kernel, rng=rng)
+        print(result.pretty())
+        check_kernel_rewrite(result)
+
+
+# }}}
+
+
 # {{{ test_rewrite_using_base_kernel_lu_stresslet_biharmonic
 
 @pytest.mark.parametrize("dim", [2, 3])
@@ -194,6 +216,26 @@ def test_rewrite_using_base_kernel_fourier_stokeslet_biharmonic(dim: int) -> Non
 
     for i, j in product(range(dim), repeat=2):
         target_kernel = StokesletComponentKernel(dim, i, j, viscosity_mu_name="mu")
+        result = rewrite_using_base_kernel_fourier(target_kernel, base_kernel)
+
+    logger.info(result.pretty())
+    check_kernel_rewrite(result)
+
+# }}}
+
+
+# {{{ test_rewrite_using_base_kernel_fourier_brinkman_yukawa
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_rewrite_using_base_kernel_fourier_brinkman_yukawa(dim: int) -> None:
+    from itertools import product
+
+    base_kernel = YukawaKernel(dim, yukawa_lambda_name="k")
+
+    for i, j in product(range(dim), repeat=2):
+        target_kernel = BrinkmanletComponentKernel(
+            dim, i, j, viscosity_mu_name="mu", darcy_impermeability_name="k")
         result = rewrite_using_base_kernel_fourier(target_kernel, base_kernel)
 
     logger.info(result.pretty())
