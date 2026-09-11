@@ -1027,6 +1027,42 @@ def test_symbolic_roundtrip_with_symbols() -> None:
 # }}}
 
 
+# {{{ test_symbolic_bessel_hankel_evalf
+
+@pytest.mark.parametrize("name", ["bessel_j", "hankel_1"])
+@pytest.mark.parametrize("nderivs", [0, 1, 2])
+def test_symbolic_bessel_hankel_evalf(name: str, nderivs: int) -> None:
+    """Test Hankel1 and BesselJ evalf.
+
+    This crashes without the `_eval_evalf` implementation due to some re-entrant
+    calls between `symengine` and `sympy`.
+    """
+    if not sym.USE_SYMENGINE:
+        pytest.skip("Only relevant for symengine")
+
+    import sympy as sp
+
+    prec = 100
+    cls = {"bessel_j": sym.BesselJ, "hankel_1": sym.Hankel1}[name]
+    ref = {"bessel_j": sp.besselj, "hankel_1": sp.hankel1}[name]
+
+    # FIXME: this still crashes, so evalf-ing something like the YukawaKernel
+    # with symbolic lambda will not work and cannot be caught.
+    # z = sym.I * sym.Symbol("_z")
+    # got = cls(0, z, nderivs).n(prec=prec)
+    # assert isinstance(got, sym.Basic)
+
+    z = sym.I * sym.Float(1.5)
+    got = complex(cls(0, z, nderivs).n(prec=prec))
+
+    zz = sp.Symbol("_z")
+    zvalue = sp.I * sp.Float(1.5)
+    expected = complex(ref(0, zz).diff(zz, nderivs).subs(zz, zvalue).evalf(prec))
+    assert abs(got - expected) < 1.0e-12 * max(1.0, abs(expected))
+
+# }}}
+
+
 # You can test individual routines by typing
 # $ python test_misc.py 'test_pde_check_kernels(_acf,
 #       KernelInfo(HelmholtzKernel(2), k=5), order=5)'
