@@ -258,8 +258,6 @@ def rewrite_using_base_kernel_fourier(
 
 # {{{ rewrite_using_base_kernel_lu
 
-INT_MAX = 10**15
-
 
 class FactorizationFailedError(Exception):
     pass
@@ -434,6 +432,45 @@ def rewrite_using_base_kernel_lu(
     return LinearOperatorRepresentation(target_kernel, base_kernel, mis, coeffs)
 
 
+def generate_points(
+        dim: int,
+        npoints: int, *,
+        nshells: int = 2,
+        rmin: float = 0.25,
+        rmax: float = 2.0,
+        rng: np.random.Generator | None = None
+    ) -> onp.Array2D[Any]:
+    if dim < 1:
+        raise ValueError(f"'dim' must be >= 1: {dim!r}")
+
+    if npoints < 1:
+        raise ValueError(f"'npoints' must be >= 1: {npoints!r}")
+
+    if nshells < 1:
+        raise ValueError(f"'nshells' must be >= 1: {nshells!r}")
+
+    if rmin >= rmax:
+        raise ValueError(f"'rmin' must be smaller than 'rmax': {rmin} >= {rmax}")
+
+    if rng is None:
+        rng = np.random.default_rng()
+
+    # make log spaced shell radii
+    radii = np.geomspace(rmin, rmax, nshells)
+    shell = np.arange(npoints) % nshells
+
+    # jitter the radius within each shell so that the points do not all share
+    # the same (few) radii, which would alias radial modes of the kernels
+    ratio = (rmax / rmin)**(1 / (nshells - 1)) if nshells > 1 else 1.0
+    jitter = rng.uniform(1.0, ratio, npoints) if ratio > 1.0 else 1.0
+
+    # generate points on the unit sphere
+    p = rng.standard_normal((dim, npoints))
+    p /= np.linalg.norm(p, axis=0)
+
+    return radii[shell] * jitter * p
+
+
 def _get_base_kernel_matrix_lu_factorization(
         base_kernel: ScalarKernel,
         order: int,
@@ -474,11 +511,7 @@ def _get_base_kernel_matrix_lu_factorization(
 
     # try to LU factorize on random points
     for _ in range(retries):
-        # TODO: is it faster to generate numbers and then sympify them?
-        points = np.empty((dim, len(mis) + 1), dtype=object)
-        for i in range(points.shape[0]):
-            for j in range(points.shape[1]):
-                points[i, j] = sym.Integer(rng.integers(1, INT_MAX)) / INT_MAX
+        points = generate_points(dim, len(mis) + 1, rng=rng)
 
         # evaluate derivatives at points and construct matrix
         entries: list[list[sym.Basic]] = []
