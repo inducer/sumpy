@@ -642,11 +642,10 @@ from sympy import Function as SympyFunction
 
 
 class _BesselOrHankel(SympyFunction):
-    """A symbolic function for BesselJ or Hankel1 functions
-    that keeps track of the derivatives taken of the function.
-    Arguments are ``(order, z, nderivs)``.
-    """
     nargs: ClassVar[tuple[int, ...]] = (3,)
+    """Number of arguments."""
+    _sp_name: ClassVar[str]
+    """Name of the corresponding numerical Bessel function in :mod:`sympy`."""
 
     @override
     def fdiff(self, argindex: int = 1) -> Basic:
@@ -657,13 +656,35 @@ class _BesselOrHankel(SympyFunction):
         order, z, nderivs = self.args
         return self.func(order, z, nderivs + 1)
 
+    @override
+    def _eval_evalf(self, prec: int) -> Basic:
+        import sympy as sp
+
+        order, z, nderivs = self.args
+        zz = sp.Symbol("_z")
+
+        func = getattr(sp, self._sp_name)
+        expr = func(order, zz).diff(zz, nderivs).subs(zz, sp.sympify(z))
+
+        return expr._eval_evalf(prec)
+
 
 class BesselJ(_BesselOrHankel):
-    pass
+    """A symbolic expression for the BesselJ function that keeps track of its
+    derivatives.
+
+    Arguments are ``(order, z, nderivs)``.
+    """
+    _sp_name: ClassVar[str] = "besselj"
 
 
 class Hankel1(_BesselOrHankel):
-    pass
+    """A symbolic expression for the Hankel1 function that keeps track of its
+    derivatives.
+
+    Arguments are ``(order, z, nderivs)``.
+    """
+    _sp_name: ClassVar[str] = "hankel1"
 
 
 _SympyBesselJ = BesselJ
