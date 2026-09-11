@@ -754,6 +754,7 @@ class P2PFromCSR(P2PBase):
             if strength_dtype == source_dtype:
                 knl = lp.concatenate_arrays(knl, local_arrays, "local_isrc")
                 local_arrays = ["local_isrc"]
+                local_array_isrc_axis = [1]
                 local_array_sizes = [self.dim + self.strength_count]
                 local_array_dtypes = [source_dtype]
             # We try to mark the local arrays (sources, strengths)
@@ -811,8 +812,8 @@ class P2PFromCSR(P2PBase):
 
         is_gpu = not is_cl_cpu(actx)
         if is_gpu:
-            source_dtype = kwargs["sources"][0].dtype
-            strength_dtype = kwargs["strength"].dtype
+            source_dtype = sources[0].dtype
+            strength_dtype = kwargs["strength"][0].dtype
         else:
             # these are unused for not GPU and defeats the caching
             # set them to None to keep the caching across dtypes
