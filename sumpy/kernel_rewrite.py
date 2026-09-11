@@ -294,12 +294,14 @@ def evalf(expr: sym.Expr, prec: int = 100) -> sym.Expr:
 def round_expr(
         expr: sym.Basic, atol: float = 1.0e-8, rtol: float = 1.0e-5
     ) -> sym.Basic:
-    """Round all numeric values in *expr* to the nearest integer.
+    """Round all numeric values in *expr* to the nearest integer or fraction.
 
     This function clips all numbers close to zero (effectively removing them
-    from the expression due to SymPy's automatic symplifications) and rounds all
+    from the expression due to SymPy's automatic simplifications) and rounds all
     numbers to the nearest integer using the given *atol* and *rtol*.
     """
+    from fractions import Fraction
+
     nums = expr.atoms(sym.Float)
     replace_dict: dict[Any, float] = {}
 
@@ -310,7 +312,11 @@ def round_expr(
         if abs(value - nearest_int) < atol + rtol * abs(value):
             replace_dict[num] = sym.Integer(nearest_int)
         else:
-            replace_dict[num] = value
+            frac = Fraction(value).limit_denominator(1000)
+            if abs(float(frac) - value) < atol + rtol * abs(value):
+                replace_dict[num] = sym.Rational(frac.numerator, frac.denominator)
+            else:
+                replace_dict[num] = value
 
     return expr.xreplace(replace_dict)
 
