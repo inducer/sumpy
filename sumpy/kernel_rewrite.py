@@ -330,6 +330,82 @@ def simplify(expr: sym.Basic) -> sym.Basic:
         return sp.simplify(expr)
 
 
+def _generate_points_shells(
+        dim: int,
+        npoints: int, *,
+        nshells: int = 2,
+        rmin: float = 0.25,
+        rmax: float = 2.0,
+        rng: np.random.Generator | None = None
+    ) -> onp.Array2D[Any]:
+    if dim < 1:
+        raise ValueError(f"'dim' must be >= 1: {dim!r}")
+
+    if npoints < 1:
+        raise ValueError(f"'npoints' must be >= 1: {npoints!r}")
+
+    if nshells < 1:
+        raise ValueError(f"'nshells' must be >= 1: {nshells!r}")
+
+    if rmin >= rmax:
+        raise ValueError(f"'rmin' must be smaller than 'rmax': {rmin} >= {rmax}")
+
+    if rng is None:
+        rng = np.random.default_rng()
+
+    # make log spaced shell radii
+    # NOTE: we uniformly sample in each shell to ensure that:
+    #   1. we're not too close to the origin
+    #   2. the radii don't repeat to avoid issues with radially symmetric kernels
+    edges = np.geomspace(rmin, rmax, nshells + 1)
+    shell = np.arange(npoints) % nshells
+    log_r = rng.uniform(np.log(edges[shell]), np.log(edges[shell + 1]))
+
+    # generate points on the unit sphere
+    p = rng.standard_normal((dim, npoints))
+    p /= np.linalg.norm(p, axis=0)
+
+    return np.exp(log_r) * p
+
+
+def _make_expr_derivatives(
+    base_expr: sym.Expr, dvec: sym.Matrix, mis: Sequence[MultiIndex]
+    ) -> dict[MultiIndex, sym.Basic]:
+    mi_to_derivative: dict[MultiIndex, sym.Basic] = {}
+    for mi in mis:
+        expr = base_expr
+        for i, nderivs in enumerate(mi):
+            if nderivs == 0:
+                continue
+            expr = expr.diff(dvec[i], nderivs)
+
+        mi_to_derivative[mi] = expr
+
+    return mi_to_derivative
+
+
+def _make_derivative_matrix(
+        points: onp.Array2D[Any],
+        dvec: sym.Matrix,
+        mis: Sequence[MultiIndex],
+        mi_to_derivative: dict[MultiIndex, sym.Basic]
+    ) -> sym.Matrix:
+    # evaluate derivatives at points and construct matrix
+    entries: list[list[sym.Basic]] = []
+    for i in range(points.shape[1]):
+        row: list[sym.Basic] = [sym.Integer(1)]
+
+        for mi in mis:
+            expr = mi_to_derivative[mi].xreplace(
+                dict(zip(dvec, points[:, i], strict=True))
+            )
+            row.append(evalf(expr))
+
+        entries.append(row)
+
+    return sym.Matrix(entries)
+
+
 def rewrite_using_base_kernel_lu(
         target_kernel: ScalarKernel,
         base_kernel: ScalarKernel,
@@ -438,45 +514,6 @@ def rewrite_using_base_kernel_lu(
     return LinearOperatorRepresentation(target_kernel, base_kernel, mis, coeffs)
 
 
-def generate_points(
-        dim: int,
-        npoints: int, *,
-        nshells: int = 2,
-        rmin: float = 0.25,
-        rmax: float = 2.0,
-        rng: np.random.Generator | None = None
-    ) -> onp.Array2D[Any]:
-    if dim < 1:
-        raise ValueError(f"'dim' must be >= 1: {dim!r}")
-
-    if npoints < 1:
-        raise ValueError(f"'npoints' must be >= 1: {npoints!r}")
-
-    if nshells < 1:
-        raise ValueError(f"'nshells' must be >= 1: {nshells!r}")
-
-    if rmin >= rmax:
-        raise ValueError(f"'rmin' must be smaller than 'rmax': {rmin} >= {rmax}")
-
-    if rng is None:
-        rng = np.random.default_rng()
-
-    # make log spaced shell radii
-    radii = np.geomspace(rmin, rmax, nshells)
-    shell = np.arange(npoints) % nshells
-
-    # jitter the radius within each shell so that the points do not all share
-    # the same (few) radii, which would alias radial modes of the kernels
-    ratio = (rmax / rmin)**(1 / (nshells - 1)) if nshells > 1 else 1.0
-    jitter = rng.uniform(1.0, ratio, npoints) if ratio > 1.0 else 1.0
-
-    # generate points on the unit sphere
-    p = rng.standard_normal((dim, npoints))
-    p /= np.linalg.norm(p, axis=0)
-
-    return radii[shell] * jitter * p
-
-
 def _get_base_kernel_matrix_lu_factorization(
         base_kernel: ScalarKernel,
         order: int,
@@ -505,33 +542,12 @@ def _get_base_kernel_matrix_lu_factorization(
     base_expr = base_kernel.get_expression(dvec)
 
     # evaluate all the needed derivatives
-    mi_to_derivative: dict[MultiIndex, sym.Basic] = {}
-    for mi in mis:
-        expr = base_expr
-        for i, nderivs in enumerate(mi):
-            if nderivs == 0:
-                continue
-            expr = expr.diff(dvec[i], nderivs)
-
-        mi_to_derivative[mi] = expr
+    mi_to_derivative = _make_expr_derivatives(base_expr, dvec, mis)
 
     # try to LU factorize on random points
     for _ in range(retries):
-        points = generate_points(dim, len(mis) + 1, rng=rng)
-
-        # evaluate derivatives at points and construct matrix
-        entries: list[list[sym.Basic]] = []
-        for i in range(points.shape[1]):
-            row: list[sym.Basic] = [sym.Integer(1)]
-
-            for mi in mis:
-                expr = mi_to_derivative[mi].replace(
-                    dict(zip(dvec, points[:, i], strict=True))
-                )
-                row.append(evalf(expr))
-
-            entries.append(row)
-        mat = sym.Matrix(entries)
+        points = _generate_points_shells(dim, len(mis) + 1, rng=rng)
+        mat = _make_derivative_matrix(points, dvec, mis, mi_to_derivative)
 
         # TODO: LUdecomposition in symengine is not implemented for non-square matrices
         try:
