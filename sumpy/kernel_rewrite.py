@@ -415,14 +415,19 @@ def _check_linear_combination(
     max_err = 0.0
     for i in range(points.shape[1]):
         subst = dict(zip(dvec, points[:, i], strict=True))
-        lhs = float(evalf(target_expr.xreplace(subst)))
+        lhs = evalf(target_expr.xreplace(subst))
 
-        rhs = float(evalf(coeffs[0]))
+        rhs = evalf(coeffs[0])
         for c, mi in zip(coeffs[1:], mis, strict=True):
-            rhs += float(evalf(c * mi_to_derivative[mi].xreplace(subst)))
+            rhs += evalf(c * mi_to_derivative[mi].xreplace(subst))
 
-        max_lhs = max(max_lhs, abs(lhs))
-        max_err = max(max_err, abs(lhs - rhs))
+        if lhs.is_number and rhs.is_number:
+            max_lhs = max(max_lhs, abs(lhs))
+            max_err = max(max_err, abs(lhs - rhs))
+        else:
+            max_err = round_expr(simplify(lhs - rhs), rtol=rtol)
+            if not max_err.is_zero:
+                return False
 
     return max_err <= rtol * max(max_lhs, 1.0)
 
@@ -603,13 +608,12 @@ def rewrite_using_base_kernel_lu(
             f"could not express {target_kernel} in terms of {base_kernel}"
         )
 
-    to_pymbolic = sym.SympyToPymbolicMapperWithSymbols()
     return LinearOperatorRepresentation(
         target_kernel, base_kernel, mis,
         tuple(
-            to_pymbolic(simplify(
+            sym.to_pymbolic(simplify(
                 c * (target_scaling if i == 0 else (target_scaling / base_scaling))
-            ))
+            ), symbols=True)
             for i, c in enumerate(coeffs)
         ),
     )

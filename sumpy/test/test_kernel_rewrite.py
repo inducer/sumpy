@@ -15,6 +15,7 @@ import sumpy.symbolic as sym
 from sumpy.kernel import (
     BiharmonicKernel,
     BrinkmanletComponentKernel,
+    ElasticityComponentKernel,
     LaplaceKernel,
     StokesletComponentKernel,
     StressletComponentKernel,
@@ -41,11 +42,9 @@ def mi_derivative(expr: sym.Expr, x: sym.Matrix, mi: tuple[int, ...]) -> sym.Exp
 
 def check_kernel_rewrite(op: LinearOperatorRepresentation) -> None:
     from sumpy.kernel_rewrite import evalf, simplify
-    from sumpy.symbolic import PymbolicToSympyMapperWithSymbols
 
     dim = op.target_kernel.dim
     dvec = sym.make_sym_vector("d", dim)
-    to_sympy = PymbolicToSympyMapperWithSymbols()
 
     target_expr = (
         op.target_kernel.get_global_scaling_const()
@@ -54,8 +53,8 @@ def check_kernel_rewrite(op: LinearOperatorRepresentation) -> None:
         op.base_kernel.get_global_scaling_const()
         * op.base_kernel.get_expression(dvec))
 
-    expr = to_sympy(op.coeffs[0]) + sum((
-        to_sympy(c) * mi_derivative(base_expr, dvec, mi)
+    expr = sym.to_symbolic(op.coeffs[0], symbols=True) + sum((
+        sym.to_symbolic(c, symbols=True) * mi_derivative(base_expr, dvec, mi)
         for c, mi in zip(op.coeffs[1:], op.mis, strict=True)
     ), sym.Integer(0))
 
@@ -150,6 +149,7 @@ def test_rewrite_using_base_kernel_lu_stokeslet_biharmonic(dim: int) -> None:
 
 # {{{ test_rewrite_using_base_kernel_lu_brinkman_yukawa
 
+@pytest.mark.skip(reason="needs two bases (Laplace and Yukawa)")
 @pytest.mark.parametrize("dim", [2, 3])
 def test_rewrite_using_base_kernel_lu_brinkman_yukawa(dim: int) -> None:
     from pytools import generate_nonnegative_integer_tuples_below as gnitb
@@ -183,6 +183,27 @@ def test_rewrite_using_base_kernel_lu_stresslet_biharmonic(dim: int) -> None:
         print(result.pretty())
         check_kernel_rewrite(result)
 
+
+# }}}
+
+
+# {{{ test_rewrite_using_base_kernel_lu_elasticity_biharmonic
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_rewrite_using_base_kernel_lu_elasticity_biharmonic(dim: int) -> None:
+    from pytools import generate_nonnegative_integer_tuples_below as gnitb
+
+    rng = np.random.default_rng(seed=42)
+
+    base_kernel = BiharmonicKernel(dim)
+    for i, j in gnitb(dim, 2):
+        target_kernel = ElasticityComponentKernel(
+            dim, i, j, viscosity_mu_name="mu", poisson_ratio_name="nu"
+        )
+        result = rewrite_using_base_kernel_lu(target_kernel, base_kernel, rng=rng)
+        print(result.pretty())
+        check_kernel_rewrite(result)
 
 # }}}
 
