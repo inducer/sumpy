@@ -840,7 +840,7 @@ class HelmholtzKernel(ExpressionKernel):
         from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
 
         w = make_identity_diff_op(self.dim)
-        k = sym.Symbol(self.helmholtz_k_name)
+        k = sym.SpatialConstant(self.helmholtz_k_name).as_sympy()
         return laplacian(w) + k**2 * w
 
 
@@ -936,7 +936,7 @@ class YukawaKernel(ExpressionKernel):
         from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
 
         w = make_identity_diff_op(self.dim)
-        lam = sym.Symbol(self.yukawa_lambda_name)
+        lam = sym.SpatialConstant(self.yukawa_lambda_name).as_sympy()
         return laplacian(w) - lam**2 * w
 
 
@@ -1498,7 +1498,7 @@ class BrinkmanComponentKernelBase(ExpressionKernel):
         from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
 
         w = make_identity_diff_op(self.dim)
-        k = sym.Symbol(self.darcy_impermeability_name)
+        k = sym.SpatialConstant(self.darcy_impermeability_name).as_sympy()
 
         return laplacian(laplacian(w) - k**2 * w)
 
@@ -1772,7 +1772,7 @@ class HeatKernel(ExpressionKernel):
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
         from sumpy.expansion.diff_op import diff, laplacian, make_identity_diff_op
 
-        alpha = sym.Symbol(self.heat_alpha_name)
+        alpha = sym.SpatialConstant(self.heat_alpha_name).as_sympy()
         w = make_identity_diff_op(self.dim - 1, time_dependent=True)
         t_mi = (*([0] * (self.dim - 1)), 1)
 
@@ -1845,8 +1845,8 @@ class ElasticitySystemKernel(SystemKernel):
             make_identity_diff_op,
         )
 
-        mu = sym.Symbol(self.viscosity_mu_name)
-        nu = sym.Symbol(self.poisson_ratio_name)
+        mu = sym.SpatialConstant(self.viscosity_mu_name).as_sympy()
+        nu = sym.SpatialConstant(self.poisson_ratio_name).as_sympy()
         u = make_identity_diff_op(self.dim, self.dim)
 
         return mu * laplacian(u) + mu / (1 - 2 * nu) * gradient(divergence(u))
@@ -1912,8 +1912,8 @@ class ElasticityStressSystemKernel(SystemKernel):
             make_identity_diff_op,
         )
 
-        mu = sym.Symbol(self.viscosity_mu_name)
-        nu = sym.Symbol(self.poisson_ratio_name)
+        mu = sym.SpatialConstant(self.viscosity_mu_name).as_sympy()
+        nu = sym.SpatialConstant(self.poisson_ratio_name).as_sympy()
         u = make_identity_diff_op(self.dim, self.dim)
 
         return mu * laplacian(u) + mu / (1 - 2 * nu) * gradient(divergence(u))
@@ -1970,7 +1970,7 @@ class StokesletSystemKernel(SystemKernel):
             make_identity_diff_op,
         )
 
-        mu = sym.Symbol(self.viscosity_mu_name)
+        mu = sym.SpatialConstant(self.viscosity_mu_name).as_sympy()
         u_and_p = make_identity_diff_op(self.dim, self.dim + 1)
         u = u_and_p[:self.dim]
         p = u_and_p[self.dim]
@@ -2029,7 +2029,7 @@ class StressletSystemKernel(SystemKernel):
             make_identity_diff_op,
         )
 
-        mu = sym.Symbol(self.viscosity_mu_name)
+        mu = sym.SpatialConstant(self.viscosity_mu_name).as_sympy()
         u_and_p = make_identity_diff_op(self.dim, self.dim + 1)
         u = u_and_p[:self.dim]
         p = u_and_p[self.dim]
@@ -2097,8 +2097,8 @@ class BrinkmanletSystemKernel(SystemKernel):
             make_identity_diff_op,
         )
 
-        mu = sym.Symbol(self.viscosity_mu_name)
-        k = sym.Symbol(self.darcy_impermeability_name)
+        mu = sym.SpatialConstant(self.viscosity_mu_name).as_sympy()
+        k = sym.SpatialConstant(self.darcy_impermeability_name).as_sympy()
 
         u_and_p = make_identity_diff_op(self.dim, self.dim + 1)
         u = u_and_p[:self.dim]
@@ -2168,8 +2168,8 @@ class BrinkmanStressSystemKernel(SystemKernel):
             make_identity_diff_op,
         )
 
-        mu = sym.Symbol(self.viscosity_mu_name)
-        k = sym.Symbol(self.darcy_impermeability_name)
+        mu = sym.SpatialConstant(self.viscosity_mu_name).as_sympy()
+        k = sym.SpatialConstant(self.darcy_impermeability_name).as_sympy()
 
         u_and_p = make_identity_diff_op(self.dim, self.dim + 1)
         u = u_and_p[:self.dim]
