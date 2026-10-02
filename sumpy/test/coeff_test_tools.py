@@ -26,7 +26,8 @@ THE SOFTWARE.
 """
 
 import numpy as np
-import sympy as sp
+
+import sumpy.symbolic as sym
 
 
 def to_scalar(val):
@@ -60,9 +61,4 @@ class NumericMatVecOperator:
 
 def get_repl_dict(kernel, extra_kwargs):
     """Numeric substitution for symbolic kernel parameters."""
-    repl_dict = {}
-    if "lam" in extra_kwargs:
-        repl_dict[sp.Symbol("lam")] = extra_kwargs["lam"]
-    if "k" in extra_kwargs:
-        repl_dict[sp.Symbol("k")] = extra_kwargs["k"]
-    return repl_dict
+    return {sym.SpatialConstant(k).as_sympy(): v for k, v in extra_kwargs.items()}
