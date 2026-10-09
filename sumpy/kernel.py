@@ -1118,7 +1118,7 @@ class ElasticityStressComponentKernel(ElasticityComponentKernelBase):
                     - d[kcomp] / r**2 * delta_ij)
                 + 2 * d[icomp] * d[jcomp] * d[kcomp] / r**4
             )
-            scaling = -1/(4*var("pi")*(1 - nu))
+            scaling = 1/(4*var("pi")*(1 - nu))
         elif dim == 3:
             expr = (
                 (1 - 2*nu) * (
@@ -1127,7 +1127,7 @@ class ElasticityStressComponentKernel(ElasticityComponentKernelBase):
                     - d[kcomp] / r**3 * delta_ij)
                 + 3 * d[icomp] * d[jcomp] * d[kcomp] / r**5
             )
-            scaling = -1/(8*var("pi")*(1 - nu))
+            scaling = 1/(8*var("pi")*(1 - nu))
         else:
             raise NotImplementedError(f"unsupported dimension: '{dim}'")
 
