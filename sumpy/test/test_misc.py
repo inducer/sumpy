@@ -205,6 +205,101 @@ def test_pde_check_kernels(actx_factory: ArrayContextFactory, knl_info, order=5)
 # }}}
 
 
+# {{{ test_stress_kernel_definition
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+@pytest.mark.parametrize(["name", "kernel_kwargs"], [
+    ("stokes", {"mu": 2.5}),
+    ("elasticity", {"mu": 2.5, "nu": 0.2}),
+    ("brinkman", {"mu": 2.5, "k": 1.3}),
+])
+def test_stress_kernel_definition(
+        dim: int, name: str, kernel_kwargs: dict[str, float]
+    ) -> None:
+    from itertools import product
+
+    rng = np.random.default_rng(42)
+    dvec = sym.make_sym_vector("d", dim)
+    kernel_kwargs = {
+        sym.SpatialConstant(k).as_sympy().name: v for k, v in kernel_kwargs.items()
+    }
+
+    def evalf(expr: sym.Expr) -> complex:
+        if sym.USE_SYMENGINE:
+            return complex(expr.n(prec=100))
+        else:
+            return complex(expr.evalf(30))
+
+    def pressure_expr(i: int) -> sym.Expr:
+        kernel = LaplaceKernel(dim)
+        expr = kernel.get_global_scaling_const() * kernel.get_expression(dvec)
+        return expr.diff(dvec[i])
+
+    def stokeslet_expr(i: int, j: int) -> sym.Expr:
+        u = StokesletComponentKernel(dim, i, j)
+        return u.get_global_scaling_const() * u.get_expression(dvec)
+
+    def brinkmanlet_expr(i: int, j: int) -> sym.Expr:
+        u = BrinkmanletComponentKernel(dim, i, j)
+        return u.get_global_scaling_const() * u.get_expression(dvec)
+
+    def elasticity_expr(i: int, j: int) -> sym.Expr:
+        u = ElasticityComponentKernel(dim, i, j)
+        return u.get_global_scaling_const() * u.get_expression(dvec)
+
+    def ref_stokes_stress(i: int, j: int, k: int) -> sym.Expr:
+        mu = sym.SpatialConstant("mu").as_sympy()
+        return (
+            -pressure_expr(j) * int(i == k)
+            + mu * (stokeslet_expr(i, j).diff(dvec[k])
+                    + stokeslet_expr(k, j).diff(dvec[i]))
+        )
+
+    def ref_brinkman_stress(i: int, j: int, k: int) -> sym.Expr:
+        mu = sym.SpatialConstant("mu").as_sympy()
+        return (
+            -pressure_expr(j) * int(i == k)
+            + mu * (brinkmanlet_expr(i, j).diff(dvec[k])
+                    + brinkmanlet_expr(k, j).diff(dvec[i]))
+        )
+
+    def ref_elasticity_stress(i: int, j: int, k: int) -> sym.Expr:
+        mu = sym.SpatialConstant("mu").as_sympy()
+        nu = sym.SpatialConstant("nu").as_sympy()
+        lm = 2 * mu * nu / (1 - 2 * nu)
+
+        return (
+            lm * int(i == j) * sum(
+                elasticity_expr(d, k).diff(dvec[d]) for d in range(dim)
+            ) + mu * (elasticity_expr(i, k).diff(dvec[j])
+                      + elasticity_expr(j, k).diff(dvec[i]))
+        )
+
+    for ijk in product(range(dim), repeat=3):
+        if name == "stokes":
+            kernel = StressletComponentKernel(dim, *ijk)
+            stress = kernel.get_global_scaling_const() * kernel.get_expression(dvec)
+            ref = ref_stokes_stress(*ijk)
+        elif name == "elasticity":
+            kernel = ElasticityStressComponentKernel(dim, *ijk)
+            stress = kernel.get_global_scaling_const() * kernel.get_expression(dvec)
+            ref = ref_elasticity_stress(*ijk)
+        elif name == "brinkman":
+            kernel = BrinkmanStressComponentKernel(dim, *ijk)
+            stress = kernel.get_global_scaling_const() * kernel.get_expression(dvec)
+            ref = ref_brinkman_stress(*ijk)
+        else:
+            raise AssertionError
+
+        for _ in range(3):
+            point = dict(zip(dvec, rng.uniform(0.3, 1.2, dim), strict=True))
+            ratio = evalf((stress / ref).subs({**kernel_kwargs, **point}))
+            assert abs(ratio - 1) < 1.0e-10, f"{kernel}: got ratio {ratio}"
+
+# }}}
+
+
 # {{{ test_pde_check
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
