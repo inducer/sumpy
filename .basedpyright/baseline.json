@@ -11708,14 +11708,6 @@
         ],
         "./sumpy/test/coeff_test_tools.py": [
             {
-                "code": "reportMissingTypeStubs",
-                "range": {
-                    "startColumn": 7,
-                    "endColumn": 12,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportUnknownParameterType",
                 "range": {
                     "startColumn": 14,
@@ -11984,6 +11976,22 @@
                 "range": {
                     "startColumn": 26,
                     "endColumn": 38,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnknownArgumentType",
+                "range": {
+                    "startColumn": 32,
+                    "endColumn": 33,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnknownMemberType",
+                "range": {
+                    "startColumn": 61,
+                    "endColumn": 79,
                     "lineCount": 1
                 }
             }
@@ -16446,14 +16454,6 @@
                 }
             },
             {
-                "code": "reportUnknownArgumentType",
-                "range": {
-                    "startColumn": 51,
-                    "endColumn": 60,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportUnknownMemberType",
                 "range": {
                     "startColumn": 8,
@@ -16612,14 +16612,6 @@
                 "range": {
                     "startColumn": 39,
                     "endColumn": 49,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownArgumentType",
-                "range": {
-                    "startColumn": 51,
-                    "endColumn": 60,
                     "lineCount": 1
                 }
             },
@@ -17366,8 +17358,8 @@
             {
                 "code": "reportAny",
                 "range": {
-                    "startColumn": 45,
-                    "endColumn": 46,
+                    "startColumn": 19,
+                    "endColumn": 20,
                     "lineCount": 1
                 }
             },
