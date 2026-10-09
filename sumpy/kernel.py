@@ -1116,7 +1116,7 @@ class ElasticityStressComponentKernel(ElasticityComponentKernelBase):
                     d[icomp] / r**2 * delta_jk
                     + d[jcomp] / r**2 * delta_ik
                     - d[kcomp] / r**2 * delta_ij)
-                + 3 * d[icomp] * d[jcomp] * d[kcomp] / r**4
+                + 2 * d[icomp] * d[jcomp] * d[kcomp] / r**4
             )
             scaling = -1/(4*var("pi")*(1 - nu))
         elif dim == 3:
