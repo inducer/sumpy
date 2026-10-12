@@ -368,6 +368,7 @@ class KernelComputation(ABC):
 
     def get_kernel_scaling_assignments(self) -> Sequence[lp.Assignment]:
         import loopy as lp
+
         from sumpy.codegen import SpatialConstantRewriter
 
         spatial_rewriter = SpatialConstantRewriter()
