@@ -107,12 +107,15 @@ class E2PBase(KernelCacheMixin, ABC):
         return gather_loopy_arguments((self.expansion, *tuple(self.kernels)))
 
     def get_kernel_scaling_assignment(self):
+        from sumpy.codegen import SpatialConstantRewriter
         from sumpy.symbolic import to_pymbolic
+
+        spatial_rewriter = SpatialConstantRewriter()
         return [lp.Assignment(id="kernel_scaling",
                     assignee="kernel_scaling",
-                    expression=to_pymbolic(
+                    expression=spatial_rewriter(to_pymbolic(
                         self.expansion.kernel.get_global_scaling_const(),
-                    ),
+                    )),
                     temp_var_type=lp.Optional(None),
                     )]
 # }}}

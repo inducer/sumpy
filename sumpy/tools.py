@@ -368,12 +368,15 @@ class KernelComputation(ABC):
 
     def get_kernel_scaling_assignments(self) -> Sequence[lp.Assignment]:
         import loopy as lp
+        from sumpy.codegen import SpatialConstantRewriter
+
+        spatial_rewriter = SpatialConstantRewriter()
         return [
                 lp.Assignment(id=f"knl_{i}_scaling",
                     assignee=f"knl_{i}_scaling",
-                    expression=sym.to_pymbolic(
+                    expression=spatial_rewriter(sym.to_pymbolic(
                         kernel.get_global_scaling_const()
-                    ),
+                    )),
                     temp_var_type=lp.Optional(dtype),
                     tags=frozenset([ScalingAssignmentTag()]))
                 for i, (kernel, dtype) in enumerate(

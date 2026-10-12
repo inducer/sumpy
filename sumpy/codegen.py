@@ -35,6 +35,7 @@ from typing_extensions import override
 import loopy as lp
 import pymbolic.primitives as prim
 from loopy.kernel.instruction import Assignment, CallInstruction, make_assignment
+from loopy.symbolic import IdentityMapper as LoopyIdentityMapper
 from pymbolic.mapper import CSECachingMapperMixin, IdentityMapper, P
 from pymbolic.mapper.flattener import FlattenMapper
 from pymbolic.typing import ArithmeticExpression, Expression
@@ -713,6 +714,13 @@ class MathConstantRewriter(CSECachingIdentityMapper[P]):
 
 # {{{ to-loopy conversion
 
+class SpatialConstantRewriter(LoopyIdentityMapper[[]]):
+    """Convert Sumpy's spatial constants to variables at the Loopy boundary."""
+
+    def map_spatial_constant(self, expr: sym.SpatialConstant, /) -> prim.Variable:
+        return prim.Variable(expr.name)
+
+
 def to_loopy_insns(
         assignments: Iterable[tuple[str, sym.Basic]],
         vector_names: AbstractSet[str] | None = None,
@@ -784,6 +792,12 @@ def to_loopy_insns(
                     temp_var_type=lp.Optional(None)))
 
         result.extend(bessel_sub.assignments)
+
+        # Keep spatial constants through symbolic/code transformations, then
+        # lower them in every outgoing instruction, including Bessel helpers.
+        spatial_rewriter = SpatialConstantRewriter()
+        result = [insn.with_transformed_expressions(spatial_rewriter)
+                  for insn in result]
 
     logger.info("loopy instruction generation: done")
     return result

@@ -53,6 +53,27 @@ def test_symbolic_assignment_name_uniqueness():
 # }}}
 
 
+# {{{ test_spatial_constants_at_loopy_boundary
+
+def test_to_loopy_insns_rewrites_spatial_constants():
+    import pymbolic.primitives as prim
+    from pymbolic.mapper.dependency import DependencyMapper
+
+    import sumpy.symbolic as sym
+    from sumpy.codegen import to_loopy_insns
+
+    k = sym.SpatialConstant("k").as_sympy()
+    instructions = to_loopy_insns([("result", sym.BesselJ(2, k, 0))])
+    dependencies = set()
+    mapper = DependencyMapper(include_calls=False, include_subscripts=False)
+    for instruction in instructions:
+        dependencies.update(mapper(instruction.expression))
+    assert prim.Variable("k") in dependencies
+    assert all(type(dep) is prim.Variable for dep in dependencies)
+
+# }}}
+
+
 # {{{ test_line_taylor_coeff_growth
 
 def test_line_taylor_coeff_growth():
