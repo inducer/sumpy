@@ -274,6 +274,9 @@ def rewrite_using_base_kernel_fourier(
     Source and target derivatives of the target kernel are accounted for by
     multiplying its symbol by the corresponding :math:`\pm i k_j` factors.
     """
+    # NOTE: This is a no-symengine code path, even if the rest of sumpy
+    # is being driven by symengine, because for now (2026-10) no polynomials.
+
     import sympy as sp
 
     dim = target_kernel.dim
@@ -320,11 +323,13 @@ def rewrite_using_base_kernel_fourier(
         mat = to_sympy_matrix(to_fourier_matrix(pde_target_system, ks))
 
         # NOTE: this uses the cofactor formula to get the inverse of just (i, j)
+        # NOTE: A 1x1 matrix
         i, j = idx
         fourier_target = sp.Matrix([
             sp.cancel(mat.cofactor(j, i) / mat.det())
         ])
 
+    # NOTE: 1-long for loops are the best!
     p_base: sp.Expr = sp.Integer(1)
     for entry in fourier_base:
         p_base = p_base * entry
@@ -365,7 +370,7 @@ def rewrite_using_base_kernel_fourier(
 
     # }}}
 
-    # {{{ fix scaling and translation
+    # {{{ fix scaling and additive constant
 
     dvec = sym.Matrix([sym.Symbol(f"d{i}") for i in range(dim)])
     base_kernel_expr = sp.sympify(
@@ -380,12 +385,12 @@ def rewrite_using_base_kernel_fourier(
     # build the differential operator part in real space
     dvec = sp.Matrix([sp.Symbol(f"d{i}") for i in range(dim)])
 
-    operator: sp.Expr = sp.Integer(0)
+    diffed_base_kernel: sp.Expr = sp.Integer(0)
     for mi, c in zip(mis, coeffs, strict=True):
         term = c * base_kernel_expr
         for i, n in enumerate(mi):
             term = term.diff(dvec[i], n)
-        operator += term
+        diffed_base_kernel += term
 
     # NOTE: the ratio of the Fourier symbols is only determined up to the
     # relative normalization of the two kernels. Find it by requiring that
@@ -393,7 +398,7 @@ def rewrite_using_base_kernel_fourier(
     # is a constant, i.e. that its gradient vanishes.
     fac: sp.Expr | None = None
     for i in range(dim):
-        d_operator = sp.diff(operator, dvec[i])
+        d_operator = sp.diff(diffed_base_kernel, dvec[i])
         if d_operator != 0:
             fac = sp.simplify(sp.diff(target_kernel_expr, dvec[i]) / d_operator)
             break
@@ -403,7 +408,7 @@ def rewrite_using_base_kernel_fourier(
             f"cannot rewrite {target_kernel} in terms of {base_kernel}"
         )
 
-    const = sp.simplify(target_kernel_expr - fac * operator)
+    const = sp.simplify(target_kernel_expr - fac * diffed_base_kernel)
     if const.free_symbols & set(dvec):
         raise RewriteFailedError(
             f"cannot rewrite {target_kernel} in terms of {base_kernel}"
