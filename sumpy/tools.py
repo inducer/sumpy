@@ -195,6 +195,16 @@ def mi_power(
     return result
 
 
+def mi_derivative(
+        expr: sym.Expr, x: sym.Matrix, mi: Sequence[int]
+    ) -> sym.Expr:
+    result = expr
+    for i, n in enumerate(mi):
+        result = result.diff(x[i], n)
+
+    return result
+
+
 def add_to_sac(sac: SymbolicAssignmentCollection | None, expr: sym.Expr):
     if sac is None:
         return expr
