@@ -65,7 +65,7 @@ def check_kernel_rewrite(op: LinearOperatorRepresentation) -> None:
     dim = op.target_kernel.dim
     dvec = sym.make_sym_vector("d", dim)
 
-    const = sym.to_symbolic(op.coeffs[0], symbols=True)
+    const = sym.to_symbolic(op.const, symbols=True)
     assert not (const.free_symbols & set(dvec)), f"constant term depends on d: {const}"
 
     # apply any source/target derivatives to get the actual target expression
@@ -86,9 +86,9 @@ def check_kernel_rewrite(op: LinearOperatorRepresentation) -> None:
         op.base_kernel.get_global_scaling_const()
         * op.base_kernel.get_expression(dvec))
 
-    expr = sym.to_symbolic(op.coeffs[0], symbols=True) + sum((
+    expr = sym.to_symbolic(op.const, symbols=True) + sum((
         sym.to_symbolic(c, symbols=True) * mi_derivative(base_expr, dvec, mi)
-        for c, mi in zip(op.coeffs[1:], op.mis, strict=True)
+        for c, mi in zip(op.coeffs, op.mis, strict=True)
     ), sym.Integer(0))
 
     result = evalf(simplify(target_expr - expr))
@@ -122,9 +122,9 @@ def check_rewrite_all_methods(
         logger.info("[%7s] %s (%s)", method, result.pretty(), pt)
 
         assert result.target_kernel is target_kernel
-        assert len(result.coeffs) == len(result.mis) + 1
+        assert len(result.coeffs) == len(result.mis)
         if nderivs > 0:
-            assert result.coeffs[0] == 0
+            assert result.const == 0
 
         check_kernel_rewrite(result)
 
@@ -256,9 +256,9 @@ def test_rewrite_using_base_kernel_stresslet_biharmonic(
         logger.info("[%7s] %s (%s)", "lu", result.pretty(), pt)
 
         assert result.target_kernel is target_kernel
-        assert len(result.coeffs) == len(result.mis) + 1
+        assert len(result.coeffs) == len(result.mis)
         if nderivs > 0:
-            assert result.coeffs[0] == 0
+            assert result.const == 0
 
         check_kernel_rewrite(result)
 

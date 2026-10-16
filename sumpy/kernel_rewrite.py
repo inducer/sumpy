@@ -80,6 +80,7 @@ class LinearOperatorRepresentation:
     .. autoattribute:: target_kernel
     .. autoattribute:: base_kernel
     .. autoattribute:: mis
+    .. autoattribute:: const
     .. autoattribute:: coeffs
     """
 
@@ -90,19 +91,22 @@ class LinearOperatorRepresentation:
 
     mis: Sequence[MultiIndex]
     """Multi-indices for each non-zero term in the linear combination."""
-    coeffs: Sequence[ArithmeticExpression]
-    """Constant coefficients in the linear combination. Note that the coefficients
-    have length ``len(mis) + 1``, where the first element is always the constant term.
+    const: ArithmeticExpression
+    """Additive constant in the linear combination. Note that this cannot be
+    expressed with a multi-indenx, since ``(0, 0, 0)`` corresponds to the no
+    derivative case.
     """
+    coeffs: Sequence[ArithmeticExpression]
+    """Constant coefficients in the linear combination."""
 
     def pretty(self) -> str:
         from sumpy.kernel import AxisTargetDerivative
 
         terms: list[str] = []
-        if self.coeffs[0] != 0:
-            terms.append(str(self.coeffs[0]))
+        if self.const != 0:
+            terms.append(str(self.const))
 
-        for mi, c in zip(self.mis, self.coeffs[1:], strict=True):
+        for mi, c in zip(self.mis, self.coeffs, strict=True):
             expr = self.base_kernel
             for d, n in enumerate(mi):
                 for _ in range(n):
@@ -160,7 +164,8 @@ def _add_derivatives_to_representation(
         target_kernel=target_kernel,
         base_kernel=op.base_kernel,
         mis=tuple(add_mi(mi, mi_shift) for mi in op.mis),
-        coeffs=(0, *(c if fac == 1 else -c for c in op.coeffs[1:])),
+        const=0,
+        coeffs=tuple(c if fac == 1 else -c for c in op.coeffs),
     )
 
 
@@ -418,12 +423,12 @@ def rewrite_using_base_kernel_fourier(
     from pymbolic.mapper.flattener import flatten
 
     to_pymbolic = sym.SympyToPymbolicMapper(symbols=True)
-    coeffs = [fac * c for c in coeffs]
     return LinearOperatorRepresentation(
         target_kernel,
         base_kernel,
-        mis,
-        [flatten(to_pymbolic(expr)) for expr in [const, *coeffs]],
+        mis=mis,
+        const=flatten(to_pymbolic(const)),
+        coeffs=[flatten(to_pymbolic(fac * coeff)) for coeff in coeffs],
     )
 
 
@@ -576,6 +581,7 @@ def _check_linear_combination(
         base_expr: sym.Expr,
         dvec: sym.Matrix,
         mis: Sequence[MultiIndex],
+        const: sym.Basic,
         coeffs: Sequence[sym.Basic],
         *,
         rng: np.random.Generator,
@@ -590,9 +596,9 @@ def _check_linear_combination(
     for i in range(points.shape[1]):
         subst = dict(zip(dvec, points[:, i], strict=True))
         lhs = evalf(target_expr.xreplace(subst))
-        rhs = coeffs[0]
 
-        for c, mi in zip(coeffs[1:], mis, strict=True):
+        rhs = const
+        for c, mi in zip(coeffs, mis, strict=True):
             rhs += evalf(c * mi_to_derivative[mi].xreplace(subst))
 
         if lhs.is_number and rhs.is_number:
@@ -748,13 +754,13 @@ def rewrite_using_base_kernel_lu(
                 mis.append(lu.mis[i - 1])
                 coeffs.append(coeff)
                 logger.debug("  + %s*%s.diff%s", coeff, base_kernel, lu.mis[i - 1])
-        coeffs.insert(0, const)
 
         if coeffs and _check_linear_combination(
             target_expr,
             base_expr,
             dvec,
             mis,
+            const,
             coeffs,
             rtol=rtol,
             rng=rng,
@@ -771,14 +777,13 @@ def rewrite_using_base_kernel_lu(
 
     from pymbolic.mapper.flattener import flatten
 
+    def to_pymbolic(expr: sym.Expr) -> sym.Expr:
+        return flatten(sym.to_pymbolic(simplify(expr), symbols=True))
+
     return LinearOperatorRepresentation(
         target_kernel, base_kernel, mis,
-        tuple(
-            flatten(sym.to_pymbolic(simplify(
-                c * (target_scaling if i == 0 else (target_scaling / base_scaling))
-            ), symbols=True))
-            for i, c in enumerate(coeffs)
-        ),
+        const=to_pymbolic(const * target_scaling),
+        coeffs=tuple(to_pymbolic(target_scaling / base_scaling * c) for c in coeffs)
     )
 
 
