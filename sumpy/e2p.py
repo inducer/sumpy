@@ -231,6 +231,23 @@ class E2PFromSingleBox(E2PBase):
 # {{{ E2PFromCSR: E2P from CSR-like interaction list
 
 class E2PFromCSR(E2PBase):
+    """Evaluate CSR-listed expansions at each target box's particles.
+
+    :arg work_items_per_group: OpenCL workgroup size, with one group per
+        target box and target particles distributed across its workitems.
+        *None* selects the default serial schedule.
+    """
+
+    # M2P (List 3) target-box parallelization:
+    # Each (leaf) target box is a workgroup with W workitems.
+    # Workitem j handles target offsets j, j + W, j + 2*W, ... within its box.
+    def __init__(self, expansion, kernels, name=None, *, work_items_per_group=None):
+        super().__init__(expansion, kernels, name)
+        self.work_items_per_group = work_items_per_group
+
+    def get_cache_key(self):
+        return (*super().get_cache_key(), self.work_items_per_group)
+
     @property
     def default_name(self):
         return "e2p_from_csr"
@@ -242,7 +259,7 @@ class E2PFromCSR(E2PBase):
         loopy_knl = make_loopy_program(
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
-                    "{[itgt]: itgt_start<=itgt<itgt_end}",
+                    "{[itgt_offset]: 0<=itgt_offset<itgt_count}",
                     "{[isrc_box]: isrc_box_start<=isrc_box<isrc_box_end }",
                     "{[idim]: 0<=idim<dim}",
                     "{[icoeff]: 0<=icoeff<ncoeffs}",
@@ -251,11 +268,13 @@ class E2PFromCSR(E2PBase):
                 *self.get_kernel_scaling_assignment(),
                 """
                 for itgt_box
-                    <> tgt_ibox = target_boxes[itgt_box]
-                    <> itgt_start = box_target_starts[tgt_ibox]
-                    <> itgt_end = itgt_start+box_target_counts_nonchild[tgt_ibox]
+                    <> tgt_ibox = target_boxes[itgt_box]  {id=fetch_tgt_box_0}
+                    <> itgt_start = box_target_starts[tgt_ibox]  {id=fetch_tgt_box_1}
+                    <> itgt_count = box_target_counts_nonchild[tgt_ibox] \
+                        {id=fetch_tgt_box_2}
 
-                    for itgt
+                    for itgt_offset
+                        <> itgt = itgt_start + itgt_offset
                         <> tgt[idim] = targets[idim,itgt]  {id=fetch_tgt,dup=idim}
 
                         <> isrc_box_start = source_box_starts[itgt_box]
@@ -315,15 +334,51 @@ class E2PFromCSR(E2PBase):
 
         loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
         loopy_knl = lp.tag_inames(loopy_knl, "iknl*:unr")
-        loopy_knl = lp.prioritize_loops(loopy_knl, "itgt_box,itgt,isrc_box")
+        loopy_knl = lp.prioritize_loops(loopy_knl, "itgt_box,itgt_offset,isrc_box")
         loopy_knl = self.add_loopy_eval_callable(loopy_knl)
         return lp.tag_array_axes(loopy_knl, "targets", "sep,C")
 
     def get_optimized_kernel(self):
-        # FIXME
         knl = self.get_kernel()
+        if self.work_items_per_group is not None:
+            import namedisl as nisl
+
+            # Target-parallel E2P scheduling follows the idea in Isuru Fernando's
+            # https://github.com/inducer/sumpy/pull/180.
+            # Unlike #180, the coefficients are not loaded into local memory:
+            # each workitem reads every source box's coefficients itself and
+            # accumulates the sum over source boxes.
+
+            # iwork_item is tagged l.0 and each workitem runs its own serial loop:
+            #
+            #   for itgt_outer in range((itgt_count + W - 1 - iwork_item) // W):
+            #       itgt_offset = W * itgt_outer + iwork_item
+            #       ...
+            knl = lp.split_iname(knl, "itgt_offset", self.work_items_per_group,
+                outer_iname="itgt_outer", inner_iname="iwork_item", inner_tag="l.0")
+
+            # Loopy does not allow a parallel iname (iwork_item) in a domain
+            # whose bound depends on data (itgt_count), so we split the domain.
+            entry = knl.default_entrypoint
+            idom = entry.get_home_domain_index("iwork_item")
+            domains = list(entry.domains)
+            domains[idom:idom + 1] = [
+                nisl.make_set(
+                    f"{{[iwork_item]: "
+                    f"0<=iwork_item<{self.work_items_per_group}}}"),
+                nisl.make_set(
+                    "[iwork_item, itgt_count] -> {[itgt_outer]: "
+                    "0 <= itgt_outer and "
+                    f"{self.work_items_per_group}*itgt_outer"
+                    " + iwork_item < itgt_count}"),
+            ]
+            knl = knl.with_kernel(entry.copy(domains=domains))
+
         knl = lp.tag_inames(knl, {"itgt_box": "g.0"})
         knl = lp.add_inames_to_insn(knl, "itgt_box", "id:kernel_scaling")
+        if self.work_items_per_group is not None:
+            knl = lp.add_inames_to_insn(knl, "iwork_item",
+                    "id:fetch_tgt_box_* or id:kernel_scaling")
         return lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
 
