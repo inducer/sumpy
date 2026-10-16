@@ -41,25 +41,25 @@ def check_kernel_rewrite(op: LinearOperatorRepresentation) -> None:
     from sumpy.kernel_rewrite import evalf, simplify
     from sumpy.tools import mi_derivative
 
-    dim = op.target_kernel.dim
+    dim = op.kernel.dim
     dvec = sym.make_sym_vector("d", dim)
 
     const = sym.to_symbolic(op.const, symbols=True)
     assert not (const.free_symbols & set(dvec)), f"constant term depends on d: {const}"
 
     # apply any source/target derivatives to get the actual target expression
-    kernel = op.target_kernel
+    kernel = op.kernel
     derivatives: list[tuple[int, int]] = []
     while isinstance(kernel, (AxisTargetDerivative, AxisSourceDerivative)):
         sign = 1 if isinstance(kernel, AxisTargetDerivative) else -1
         derivatives.append((sign, kernel.axis))
         kernel = kernel.inner_kernel
 
-    target_expr = (
+    kernel_expr = (
         kernel.get_global_scaling_const()
         * kernel.get_expression(dvec))
     for sign, axis in derivatives:
-        target_expr = sign * target_expr.diff(dvec[axis])
+        kernel_expr = sign * kernel_expr.diff(dvec[axis])
 
     base_expr = (
         op.base_kernel.get_global_scaling_const()
@@ -70,7 +70,7 @@ def check_kernel_rewrite(op: LinearOperatorRepresentation) -> None:
         for c, mi in zip(op.coeffs, op.mis, strict=True)
     ), sym.Integer(0))
 
-    result = evalf(simplify(target_expr - expr))
+    result = evalf(simplify(kernel_expr - expr))
     assert abs(result) < 3.0 * 1.0e-16, f"result is not zero: {result!r}"
 
 
@@ -88,7 +88,7 @@ def make_random_derivatives(
 
 
 def check_rewrite_all_methods(
-        target_kernel: ScalarKernel,
+        kernel: ScalarKernel,
         base_kernel: ScalarKernel,
         rng: np.random.Generator,
         *,
@@ -97,10 +97,10 @@ def check_rewrite_all_methods(
     for method in ("fourier", "lu"):
         with ProcessTimer() as pt:
             result = rewrite_using_base_kernel(
-                target_kernel, base_kernel, method=method, rng=rng)
+                kernel, base_kernel, method=method, rng=rng)
         logger.info("[%7s] %s (%s)", method, result.pretty(), pt)
 
-        assert result.target_kernel is target_kernel
+        assert result.kernel is kernel
         assert len(result.coeffs) == len(result.mis)
         if nderivs > 0:
             assert result.const == 0
@@ -171,8 +171,8 @@ def test_rewrite_using_base_kernel_laplace_biharmonic(
     rng = np.random.default_rng(seed=42)
 
     base_kernel = BiharmonicKernel(dim)
-    target_kernel = make_random_derivatives(LaplaceKernel(dim), nderivs, rng=rng)
-    check_rewrite_all_methods(target_kernel, base_kernel, rng, nderivs=nderivs)
+    kernel = make_random_derivatives(LaplaceKernel(dim), nderivs, rng=rng)
+    check_rewrite_all_methods(kernel, base_kernel, rng, nderivs=nderivs)
 
 # }}}
 
@@ -190,20 +190,20 @@ def test_rewrite_using_base_kernel_stokeslet_biharmonic(
     for i, j in gnitb(dim, 2):
         # Biharmonic -> works
         base_kernel = BiharmonicKernel(dim)
-        target_kernel = make_random_derivatives(
+        kernel = make_random_derivatives(
             StokesletComponentKernel(dim, i, j, viscosity_mu_name="mu"),
             nderivs, rng=rng)
-        check_rewrite_all_methods(target_kernel, base_kernel, rng, nderivs=nderivs)
+        check_rewrite_all_methods(kernel, base_kernel, rng, nderivs=nderivs)
 
         # Laplace -> fails
         base_kernel = LaplaceKernel(dim)
-        target_kernel = make_random_derivatives(
+        kernel = make_random_derivatives(
             StokesletComponentKernel(dim, i, j, viscosity_mu_name="mu"),
             nderivs, rng=rng)
 
         with pytest.raises(RewriteFailedError):
             _ = rewrite_using_base_kernel(
-                target_kernel, base_kernel, method="fourier", rng=rng
+                kernel, base_kernel, method="fourier", rng=rng
             )
 
 # }}}
@@ -221,20 +221,20 @@ def test_rewrite_using_base_kernel_stresslet_biharmonic(
 
     base_kernel = BiharmonicKernel(dim)
     for i, j, k in gnitb(dim, 3):
-        target_kernel = make_random_derivatives(
+        kernel = make_random_derivatives(
             StressletComponentKernel(dim, i, j, k, viscosity_mu_name="mu"),
             nderivs, rng=rng)
 
         with pytest.raises(RewriteFailedError):
             _ = rewrite_using_base_kernel(
-                target_kernel, base_kernel, method="fourier", rng=rng)
+                kernel, base_kernel, method="fourier", rng=rng)
 
         with ProcessTimer() as pt:
             result = rewrite_using_base_kernel(
-                target_kernel, base_kernel, method="lu", rng=rng)
+                kernel, base_kernel, method="lu", rng=rng)
         logger.info("[%7s] %s (%s)", "lu", result.pretty(), pt)
 
-        assert result.target_kernel is target_kernel
+        assert result.kernel is kernel
         assert len(result.coeffs) == len(result.mis)
         if nderivs > 0:
             assert result.const == 0
@@ -258,10 +258,10 @@ def test_rewrite_using_base_kernel_brinkman_yukawa(dim: int) -> None:
 
     base_kernel = YukawaKernel(dim, yukawa_lambda_name="k")
     for i, j in gnitb(dim, 2):
-        target_kernel = BrinkmanletComponentKernel(
+        kernel = BrinkmanletComponentKernel(
             dim, i, j, viscosity_mu_name="mu", darcy_impermeability_name="k")
 
-        check_rewrite_all_methods(target_kernel, base_kernel, rng)
+        check_rewrite_all_methods(kernel, base_kernel, rng)
 
 # }}}
 
@@ -279,11 +279,11 @@ def test_rewrite_using_base_kernel_elasticity_biharmonic(
 
     base_kernel = BiharmonicKernel(dim)
     for i, j in gnitb(dim, 2):
-        target_kernel = make_random_derivatives(
+        kernel = make_random_derivatives(
             ElasticityComponentKernel(
                 dim, i, j, viscosity_mu_name="mu", poisson_ratio_name="nu"),
             nderivs, rng=rng)
-        check_rewrite_all_methods(target_kernel, base_kernel, rng, nderivs=nderivs)
+        check_rewrite_all_methods(kernel, base_kernel, rng, nderivs=nderivs)
 
 # }}}
 
@@ -305,8 +305,8 @@ def test_rewrite_using_base_kernel_random_derivatives(
     ) -> None:
     rng = np.random.default_rng(seed=42)
 
-    target_kernel = make_random_derivatives(base_kernel, nderivs, rng=rng)
-    check_rewrite_all_methods(target_kernel, base_kernel, rng, nderivs=nderivs)
+    kernel = make_random_derivatives(base_kernel, nderivs, rng=rng)
+    check_rewrite_all_methods(kernel, base_kernel, rng, nderivs=nderivs)
 
 # }}}
 
@@ -322,14 +322,14 @@ def test_rewrite_using_base_kernel_biharmonic_laplace(dim: int) -> None:
 
     # Laplace Fourier symbol (-|k|^2) is not divisible by biharmonic (|k|^4)
     base_kernel = LaplaceKernel(dim)
-    target_kernel = BiharmonicKernel(dim)
+    kernel = BiharmonicKernel(dim)
 
     with pytest.raises(RewriteFailedError, match="could not express"):
         rewrite_using_base_kernel(
-            target_kernel, base_kernel, method="lu", rng=rng)
+            kernel, base_kernel, method="lu", rng=rng)
 
     with pytest.raises(RewriteFailedError, match="cannot rewrite"):
-        rewrite_using_base_kernel(target_kernel, base_kernel, method="fourier")
+        rewrite_using_base_kernel(kernel, base_kernel, method="fourier")
 
 
 # }}}

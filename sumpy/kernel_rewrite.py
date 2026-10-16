@@ -68,7 +68,7 @@ class RewriteFailedError(Exception):
 
 @dataclass(frozen=True)
 class LinearOperatorRepresentation:
-    r"""Expresses a target kernel as a linear operator acting on a base kernel.
+    r"""Expresses a kernel as a linear operator acting on a base kernel.
 
     .. math::
 
@@ -77,23 +77,23 @@ class LinearOperatorRepresentation:
             \frac{\partial^{|\boldsymbol{\alpha}|} G_0}
                  {\partial \boldsymbol{r}^{\boldsymbol{\alpha}}}
 
-    .. autoattribute:: target_kernel
+    .. autoattribute:: kernel
     .. autoattribute:: base_kernel
     .. autoattribute:: mis
     .. autoattribute:: const
     .. autoattribute:: coeffs
     """
 
-    target_kernel: ScalarKernel
-    """The target kernel expressed in terms of :attr:`base_kernel`."""
+    kernel: ScalarKernel
+    """The kernel expressed in terms of :attr:`base_kernel`."""
     base_kernel: ScalarKernel
-    """A base kernel used to express the target kernel."""
+    """A base kernel used to express the :attr:`kernel`."""
 
     mis: Sequence[MultiIndex]
     """Multi-indices for each non-zero term in the linear combination."""
     const: ArithmeticExpression
     """Additive constant in the linear combination. Note that this cannot be
-    expressed with a multi-indenx, since ``(0, 0, 0)`` corresponds to the no
+    expressed with a multi-index, since ``(0, 0, 0)`` corresponds to the no
     derivative case.
     """
     coeffs: Sequence[ArithmeticExpression]
@@ -114,7 +114,7 @@ class LinearOperatorRepresentation:
 
             terms.append(f"{c} * {expr}")
 
-        return f"{self.target_kernel} = " + " + ".join(terms)
+        return f"{self.kernel} = " + " + ".join(terms)
 
 
 def _get_base_kernel_derivatives(
@@ -145,13 +145,13 @@ def _get_base_kernel_derivatives(
 
 def _add_derivatives_to_representation(
         op: LinearOperatorRepresentation,
-        target_kernel: ScalarKernel,
+        kernel: ScalarKernel,
         ds: tuple[tuple[int, int], ...]
     ) -> LinearOperatorRepresentation:
     if not ds:
         return op
 
-    mi_shift = [0] * target_kernel.dim
+    mi_shift = [0] * kernel.dim
     fac = 1
 
     for sign, axis in ds:
@@ -161,7 +161,7 @@ def _add_derivatives_to_representation(
     from sumpy.tools import add_mi
 
     return LinearOperatorRepresentation(
-        target_kernel=target_kernel,
+        kernel=kernel,
         base_kernel=op.base_kernel,
         mis=tuple(add_mi(mi, mi_shift) for mi in op.mis),
         const=0,
@@ -170,7 +170,7 @@ def _add_derivatives_to_representation(
 
 
 def rewrite_using_base_kernel(
-        target_kernel: ScalarKernel,
+        kernel: ScalarKernel,
         base_kernel: ScalarKernel,
         *,
         method: Literal["fourier", "lu"] | None = None,
@@ -178,16 +178,16 @@ def rewrite_using_base_kernel(
         rtol: float = 1.0e-8,
         rng: np.random.Generator | None = None,
     ) -> LinearOperatorRepresentation:
-    """Rewrite the *target_kernel* as a :class:`LinearOperatorRepresentation`
+    """Rewrite the *kernel* as a :class:`LinearOperatorRepresentation`
     of the *base_kernel*.
 
     :arg min_order: (lu) minimum order guess for the required derivatives of
-        *base_kernel* to obtain *target_kernel*.
+        *base_kernel* to obtain *kernel*.
     :arg rtol: (lu) relative tolerance used to determine if the linear combination
-        of the *base_kernel* matches the *target_kernel*.
+        of the *base_kernel* matches the *kernel*.
     :arg rng: (lu) used to generate random points for the LU-based rewrite.
 
-    :raises RewriteFailedError: if no rewrite of the *target_kernels* in terms
+    :raises RewriteFailedError: if no rewrite of the *kernel* in terms
         of the *base_kernel* is possible.
     """
     if min_order is not None and min_order <= 0:
@@ -197,16 +197,16 @@ def rewrite_using_base_kernel(
         raise ValueError(f"'rtol' must be in (0, 1]: {rtol}")
 
     dim = base_kernel.dim
-    if target_kernel.dim != dim:
+    if kernel.dim != dim:
         raise ValueError(
-            f"kernel dimension mismatch: 'target_kernel' is {target_kernel.dim}d "
+            f"kernel dimension mismatch: 'kernel' is {kernel.dim}d "
             f"and 'base_kernel' is {dim}d"
         )
 
-    inner_target_kernel, derivatives = _get_base_kernel_derivatives(target_kernel)
+    inner_kernel, derivatives = _get_base_kernel_derivatives(kernel)
 
-    if isinstance(inner_target_kernel, KernelWrapper):
-        raise TypeError(f"'target_kernel' cannot be wrapped: {type(target_kernel)}")
+    if isinstance(inner_kernel, KernelWrapper):
+        raise TypeError(f"'kernel' cannot be wrapped: {type(inner_kernel)}")
 
     if isinstance(base_kernel, KernelWrapper):
         raise TypeError(f"'base_kernel' cannot be wrapped: {type(base_kernel)}")
@@ -226,19 +226,19 @@ def rewrite_using_base_kernel(
 
     if method is None:
         try:
-            result = rewrite_using_base_kernel_fourier(inner_target_kernel, base_kernel)
+            result = rewrite_using_base_kernel_fourier(inner_kernel, base_kernel)
         except RewriteFailedError:
             result = rewrite_using_base_kernel_lu(
-                inner_target_kernel, base_kernel,
+                inner_kernel, base_kernel,
                 min_order=min_order,
                 rtol=rtol,
                 rng=rng,
             )
     elif method == "fourier":
-        result = rewrite_using_base_kernel_fourier(inner_target_kernel, base_kernel)
+        result = rewrite_using_base_kernel_fourier(inner_kernel, base_kernel)
     elif method == "lu":
         result = rewrite_using_base_kernel_lu(
-            inner_target_kernel, base_kernel,
+            inner_kernel, base_kernel,
             min_order=min_order,
             rtol=rtol,
             rng=rng,
@@ -246,7 +246,7 @@ def rewrite_using_base_kernel(
     else:
         raise ValueError(f"unknown rewrite method: {method!r}")
 
-    return _add_derivatives_to_representation(result, target_kernel, derivatives)
+    return _add_derivatives_to_representation(result, kernel, derivatives)
 
 
 # }}}
@@ -256,39 +256,33 @@ def rewrite_using_base_kernel(
 
 
 def rewrite_using_base_kernel_fourier(
-    target_kernel: ScalarKernel,
+    kernel: ScalarKernel,
     base_kernel: ScalarKernel,
 ) -> LinearOperatorRepresentation:
-    r"""Find a relation between *target_kernel* and *base_kernel* using the
-    Fourier symbol of their respective PDEs.
+    r"""Find a relation between *kernel* and *base_kernel* using the Fourier
+    symbol of their respective PDEs.
 
     The algorithm works by computing the Fourier symbols :math:`P_{\text{base}}`
-    and :math:`P_{\text{target}}` of the scalar PDEs satisfied by the two
-    kernels. The target kernel can be expressed as a differential operator
+    and :math:`P_{\text{kernel}}` of the scalar PDEs satisfied by the two
+    kernels. The *kernel* can be expressed as a differential operator
     applied to the base kernel if and only if the ratio
 
     .. math::
 
         D(i \boldsymbol{k}) = \frac{P_{\text{base}}(\boldsymbol{k})}
-                                   {P_{\text{target}}(\boldsymbol{k})}
+                                   {P_{\text{kernel}}(\boldsymbol{k})}
 
-    is a polynomial in :math:`\boldsymbol{k}`. When it is, each monomial
-    :math:`\prod_j (i k_j)^{\alpha_j}` corresponds to the derivative
-    :math:`\partial^{|\alpha|} / \partial \boldsymbol{r}^{\alpha}`.
-
-    Source and target derivatives of the target kernel are accounted for by
-    multiplying its symbol by the corresponding :math:`\pm i k_j` factors.
+    is a polynomial in :math:`\boldsymbol{k}`.
     """
-
     # NOTE: This is a no-symengine code path, even if the rest of sumpy
     # is being driven by symengine, because for now (2026-10) no polynomials.
 
     import sympy as sp
 
-    dim = target_kernel.dim
+    dim = kernel.dim
 
     assert base_kernel.dim == dim
-    assert not isinstance(target_kernel, KernelWrapper)
+    assert not isinstance(kernel, KernelWrapper)
     assert not isinstance(base_kernel, KernelWrapper)
 
     from sumpy.expansion.diff_op import to_fourier_matrix
@@ -310,39 +304,38 @@ def rewrite_using_base_kernel_fourier(
     fourier_base = 1 / mat[0, 0]
 
     try:
-        target_system_kernel, idx = target_kernel.get_pde_system_kernel()
+        system_kernel, idx = kernel.get_pde_system_kernel()
     except TypeError:
-        target_system_kernel, idx = None, None
+        system_kernel, idx = None, None
 
-    if target_system_kernel is None:
-        pde_target = target_kernel.get_pde_as_diff_op()
-        mat = to_sympy_matrix(to_fourier_matrix(pde_target, ks))
+    if system_kernel is None:
+        pde_kernel = kernel.get_pde_as_diff_op()
+        mat = to_sympy_matrix(to_fourier_matrix(pde_kernel, ks))
 
-        fourier_target = 1 / mat[0, 0]
+        fourier_kernel = 1 / mat[0, 0]
     else:
         assert idx is not None
 
         try:
-            pde_target_system = target_system_kernel.get_pde_as_diff_op()
+            pde_system = system_kernel.get_pde_as_diff_op()
         except NotImplementedError:
             raise RewriteFailedError(
-                f"cannot rewrite kernel with unknown PDE: {target_system_kernel}"
+                f"cannot rewrite kernel with unknown PDE: {system_kernel}"
             ) from None
 
-        mat = to_sympy_matrix(to_fourier_matrix(pde_target_system, ks))
+        mat = to_sympy_matrix(to_fourier_matrix(pde_system, ks))
 
         # NOTE: this uses the cofactor formula to get the inverse of just (i, j)
-        # NOTE: A 1x1 matrix
         i, j = idx
-        fourier_target = sp.cancel(mat.cofactor(j, i) / mat.det())
+        fourier_kernel = sp.cancel(mat.cofactor(j, i) / mat.det())
 
     # }}}
 
     ks = sp.Matrix([sp.Symbol(f"_k{j}") for j in range(dim)])
-    quotient = sp.simplify(fourier_target / fourier_base)
+    quotient = sp.simplify(fourier_kernel / fourier_base)
     if not quotient.is_polynomial(*ks):
         raise RewriteFailedError(
-            f"cannot rewrite {target_kernel} in terms of {base_kernel}"
+            f"cannot rewrite {kernel} in terms of {base_kernel}"
         )
 
     # {{{ construct linear operator
@@ -363,7 +356,7 @@ def rewrite_using_base_kernel_fourier(
 
     if not mis:
         raise RewriteFailedError(
-            f"cannot rewrite {target_kernel} in terms of {base_kernel}"
+            f"cannot rewrite {kernel} in terms of {base_kernel}"
         )
 
     # }}}
@@ -375,9 +368,9 @@ def rewrite_using_base_kernel_fourier(
         base_kernel.get_global_scaling_const()
         * base_kernel.get_expression(dvec)
     )
-    target_kernel_expr = sp.sympify(
-        target_kernel.get_global_scaling_const()
-        * target_kernel.get_expression(dvec)
+    kernel_expr = sp.sympify(
+        kernel.get_global_scaling_const()
+        * kernel.get_expression(dvec)
     )
 
     # build the differential operator part in real space
@@ -388,34 +381,34 @@ def rewrite_using_base_kernel_fourier(
     for mi, c in zip(mis, coeffs, strict=True):
         base_kernel_expr_diff += c * mi_derivative(base_kernel_expr, dvec, mi)
 
-    # NOTE: the coefficients obtained from `fourier_target / fourier_base` only
+    # NOTE: the coefficients obtained from `fourier_kernel / fourier_base` only
     # define the linear representation up to a factor and an additive constant.
     #
     # For example, taking Laplace and Biharmonic in 3D, we get that
     #   D(base_kernel_expr) = \Delta (-r / (8 * pi))
     #                       = -1 / (4 * pi * r)
-    #                       = -target_kernel_expr
+    #                       = -kernel_expr
     #
     # We then also have the additive constant. We fix these by requiring that
-    #   target_kernel_expr - fac * base_kernel_expr_diff
+    #   kernel_expr - fac * base_kernel_expr_diff
     # is a constant (independent of dvec). The loop below will almost always just
     # do one iteration, since `base_kernel_expr_diff` is not going to be constant.
     fac: sp.Expr | None = None
     for i in range(dim):
         di = sp.diff(base_kernel_expr_diff, dvec[i])
         if di != 0:
-            fac = sp.simplify(sp.diff(target_kernel_expr, dvec[i]) / di)
+            fac = sp.simplify(sp.diff(kernel_expr, dvec[i]) / di)
             break
 
     if fac is None or (fac.free_symbols & set(dvec)):
         raise RewriteFailedError(
-            f"cannot rewrite {target_kernel} in terms of {base_kernel}"
+            f"cannot rewrite {kernel} in terms of {base_kernel}"
         )
 
-    const = sp.simplify(target_kernel_expr - fac * base_kernel_expr_diff)
+    const = sp.simplify(kernel_expr - fac * base_kernel_expr_diff)
     if const.free_symbols & set(dvec):
         raise RewriteFailedError(
-            f"cannot rewrite {target_kernel} in terms of {base_kernel}"
+            f"cannot rewrite {kernel_expr} in terms of {base_kernel}"
         )
 
     # }}}
@@ -424,7 +417,7 @@ def rewrite_using_base_kernel_fourier(
 
     to_pymbolic = sym.SympyToPymbolicMapper(symbols=True)
     return LinearOperatorRepresentation(
-        target_kernel,
+        kernel,
         base_kernel,
         mis=mis,
         const=flatten(to_pymbolic(const)),
@@ -450,7 +443,7 @@ class _LUDecomposition(NamedTuple):
     mis: Sequence[MultiIndex]
     """The multi-indices for which the derivatives were computed. These correspond
     to rows in the matrix and should be used to recover the expansion of the
-    target kernel in terms of the base kernel.
+    kernel in terms of the base kernel.
     """
     points: onp.Array2D[Any]
     """An array of shape ``(dim, npoints)`` of points where the base kernel was
@@ -577,7 +570,7 @@ def _make_derivative_matrix(
 
 
 def _check_linear_combination(
-        target_expr: sym.Expr,
+        kernel_expr: sym.Expr,
         base_expr: sym.Expr,
         dvec: sym.Matrix,
         mis: Sequence[MultiIndex],
@@ -595,7 +588,7 @@ def _check_linear_combination(
     max_err = 0.0
     for i in range(points.shape[1]):
         subst = dict(zip(dvec, points[:, i], strict=True))
-        lhs = evalf(target_expr.xreplace(subst))
+        lhs = evalf(kernel_expr.xreplace(subst))
 
         rhs = const
         for c, mi in zip(coeffs, mis, strict=True):
@@ -663,7 +656,7 @@ def _get_base_kernel_matrix_lu_factorization(
 
 
 def rewrite_using_base_kernel_lu(
-        target_kernel: ScalarKernel,
+        kernel: ScalarKernel,
         base_kernel: ScalarKernel,
         *,
         min_order: int | None = None,
@@ -671,11 +664,11 @@ def rewrite_using_base_kernel_lu(
         retries: int = 5,
         rng: np.random.Generator | None = None,
     ) -> LinearOperatorRepresentation:
-    """Find a relation between the *target_kernel* and the *base_kernel* using
+    """Find a relation between the *kernel* and the *base_kernel* using
     a numerical LU-based algorithm.
 
     The algorithm samples the *base_kernel* and its derivatives at random
-    points to get a matrix ``A``. It also samples the target kernel at the same
+    points to get a matrix ``A``. It also samples the kernel at the same
     points to get a vector ``b``. We then solve the system ``A c = b`` using
     an LU factorization of ``A``. The solution ``c`` is the vector of coefficients
     in the :class:`LinearOperatorRepresentation`.
@@ -683,10 +676,10 @@ def rewrite_using_base_kernel_lu(
     :arg retries: maximum number of retries for each order. If the LU decomposition
         fails due to a poor choice of random points, it is retried several times.
     """
-    dim = target_kernel.dim
+    dim = kernel.dim
 
     assert base_kernel.dim == dim
-    assert not isinstance(target_kernel, KernelWrapper)
+    assert not isinstance(kernel, KernelWrapper)
     assert not isinstance(base_kernel, KernelWrapper)
 
     pde = base_kernel.get_pde_as_diff_op()
@@ -705,10 +698,10 @@ def rewrite_using_base_kernel_lu(
     mis: list[MultiIndex] = []
 
     dvec = sym.make_sym_vector("d", dim)
-    target_expr = target_kernel.get_expression(dvec)
+    kernel_expr = kernel.get_expression(dvec)
     base_expr = base_kernel.get_expression(dvec)
 
-    target_scaling = target_kernel.get_global_scaling_const()
+    kernel_scaling = kernel.get_global_scaling_const()
     base_scaling = base_kernel.get_global_scaling_const()
 
     order = min_order
@@ -730,7 +723,7 @@ def rewrite_using_base_kernel_lu(
 
         # evaluate right-hand side
         b = sym.Matrix([
-            target_expr.xreplace(dict(zip(dvec, lu.points[:, i], strict=True)))
+            kernel_expr.xreplace(dict(zip(dvec, lu.points[:, i], strict=True)))
             for i in range(lu.points.shape[1])
         ])
 
@@ -756,7 +749,7 @@ def rewrite_using_base_kernel_lu(
                 logger.debug("  + %s*%s.diff%s", coeff, base_kernel, lu.mis[i - 1])
 
         if coeffs and _check_linear_combination(
-            target_expr,
+            kernel_expr,
             base_expr,
             dvec,
             mis,
@@ -772,18 +765,18 @@ def rewrite_using_base_kernel_lu(
 
     if not coeffs:
         raise RewriteFailedError(
-            f"could not express {target_kernel} in terms of {base_kernel}"
+            f"could not express {kernel} in terms of {base_kernel}"
         )
 
     from pymbolic.mapper.flattener import flatten
 
-    def to_pymbolic(expr: sym.Expr) -> sym.Expr:
+    def to_pymbolic(expr: sym.Expr) -> ArithmeticExpression:
         return flatten(sym.to_pymbolic(simplify(expr), symbols=True))
 
     return LinearOperatorRepresentation(
-        target_kernel, base_kernel, mis,
-        const=to_pymbolic(const * target_scaling),
-        coeffs=tuple(to_pymbolic(target_scaling / base_scaling * c) for c in coeffs)
+        kernel, base_kernel, mis,
+        const=to_pymbolic(const * kernel_scaling),
+        coeffs=tuple(to_pymbolic(kernel_scaling / base_scaling * c) for c in coeffs)
     )
 
 
