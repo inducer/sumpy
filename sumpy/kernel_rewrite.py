@@ -763,9 +763,7 @@ def rewrite_using_base_kernel_lu(
         order += 1
 
     if not coeffs:
-        raise RewriteFailedError(
-            f"could not express {kernel} in terms of {base_kernel}"
-        )
+        raise RewriteFailedError(f"cannot rewrite {kernel} in terms of {base_kernel}")
 
     from pymbolic.mapper.flattener import flatten
 
