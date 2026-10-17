@@ -452,13 +452,18 @@ class _LUDecomposition(NamedTuple):
 
 def evalf(expr: sym.Expr, prec: int = 100) -> sym.Expr:
     """Evaluate an expression numerically using ``prec`` number of bits."""
+    import sympy as sp
+
     from sumpy.symbolic import USE_SYMENGINE
 
     if USE_SYMENGINE:
-        return expr.n(prec=prec)
+        # NOTE: symengine does not like evalf-inf our Hankel1 with symbolic args
+        #   https://github.com/symengine/symengine.py/pull/532
+        # so we go to sympy, evaluate, then go back to symengine :facepalm:
+        dps = int(sp.log(2**prec, 10))
+        return sym.sympify(sp.sympify(expr).evalf(dps))
     else:
-        import sympy
-        dps = int(sympy.log(2**prec, 10))
+        dps = int(sp.log(2**prec, 10))
         return expr.n(n=dps)
 
 
