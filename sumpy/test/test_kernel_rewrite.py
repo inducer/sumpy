@@ -345,7 +345,7 @@ def test_rewrite_using_base_kernel_biharmonic_laplace(dim: int) -> None:
     base_kernel = LaplaceKernel(dim)
     kernel = BiharmonicKernel(dim)
 
-    with pytest.raises(RewriteFailedError, match="could not express"):
+    with pytest.raises(RewriteFailedError, match="cannot rewrite"):
         rewrite_using_base_kernel(
             kernel, base_kernel, method="lu", rng=rng)
 

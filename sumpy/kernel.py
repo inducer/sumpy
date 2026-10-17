@@ -1905,18 +1905,7 @@ class ElasticityStressSystemKernel(SystemKernel):
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
-        from sumpy.expansion.diff_op import (
-            divergence,
-            gradient,
-            laplacian,
-            make_identity_diff_op,
-        )
-
-        mu = sym.SpatialConstant(self.viscosity_mu_name).as_sympy()
-        nu = sym.SpatialConstant(self.poisson_ratio_name).as_sympy()
-        u = make_identity_diff_op(self.dim, self.dim)
-
-        return mu * laplacian(u) + mu / (1 - 2 * nu) * gradient(divergence(u))
+        raise NotImplementedError
 
 
 @dataclass(frozen=True, repr=False)
@@ -2021,20 +2010,7 @@ class StressletSystemKernel(SystemKernel):
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
-        from sumpy.expansion.diff_op import (
-            concat,
-            divergence,
-            gradient,
-            laplacian,
-            make_identity_diff_op,
-        )
-
-        mu = sym.SpatialConstant(self.viscosity_mu_name).as_sympy()
-        u_and_p = make_identity_diff_op(self.dim, self.dim + 1)
-        u = u_and_p[:self.dim]
-        p = u_and_p[self.dim]
-
-        return concat(mu * laplacian(u) - gradient(p), divergence(u))
+        raise NotImplementedError
 
 
 @dataclass(frozen=True, repr=False)
@@ -2160,22 +2136,7 @@ class BrinkmanStressSystemKernel(SystemKernel):
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
-        from sumpy.expansion.diff_op import (
-            concat,
-            divergence,
-            gradient,
-            laplacian,
-            make_identity_diff_op,
-        )
-
-        mu = sym.SpatialConstant(self.viscosity_mu_name).as_sympy()
-        k = sym.SpatialConstant(self.darcy_impermeability_name).as_sympy()
-
-        u_and_p = make_identity_diff_op(self.dim, self.dim + 1)
-        u = u_and_p[:self.dim]
-        p = u_and_p[self.dim]
-
-        return concat(mu * (laplacian(u) - k**2 * u) - gradient(p), divergence(u))
+        raise NotImplementedError
 
 
 # }}}
