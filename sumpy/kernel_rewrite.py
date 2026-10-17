@@ -224,29 +224,28 @@ def rewrite_using_base_kernel(
     if min_order is None:
         min_order = pde.order
 
-    if method is None:
-        try:
-            result = rewrite_using_base_kernel_fourier(inner_kernel, base_kernel)
-        except RewriteFailedError:
-            result = rewrite_using_base_kernel_lu(
-                inner_kernel, base_kernel,
-                min_order=min_order,
-                rtol=rtol,
-                rng=rng,
-            )
-    elif method == "fourier":
-        result = rewrite_using_base_kernel_fourier(inner_kernel, base_kernel)
-    elif method == "lu":
-        result = rewrite_using_base_kernel_lu(
-            inner_kernel, base_kernel,
-            min_order=min_order,
-            rtol=rtol,
-            rng=rng,
-        )
-    else:
-        raise ValueError(f"unknown rewrite method: {method!r}")
+    # NOTE: default order is by speed
+    methods = ("fourier", "lu") if method is None else (method,)
 
-    return _add_derivatives_to_representation(result, kernel, derivatives)
+    for m in methods:
+        try:
+            if m == "fourier":
+                result = rewrite_using_base_kernel_fourier(inner_kernel, base_kernel)
+            elif m == "lu":
+                result = rewrite_using_base_kernel_lu(
+                    inner_kernel, base_kernel,
+                    min_order=min_order,
+                    rtol=rtol,
+                    rng=rng,
+                )
+            else:
+                raise ValueError(f"unknown rewrite method: {m!r}")
+        except RewriteFailedError:
+            continue
+
+        return _add_derivatives_to_representation(result, kernel, derivatives)
+
+    raise RewriteFailedError(f"cannot rewrite {kernel} in terms of {base_kernel}")
 
 
 # }}}
