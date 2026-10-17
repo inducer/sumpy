@@ -121,6 +121,21 @@ class E2PBase(KernelCacheMixin, ABC):
 # {{{ E2PFromSingleBox: E2P to single box (L2P, likely)
 
 class E2PFromSingleBox(E2PBase):
+    """Evaluate one expansion at each target in its box.
+
+    :arg work_items_per_group: a positive OpenCL workgroup size supported by
+        the device. One group handles each target box, with targets distributed
+        across its workitems. *None* (the default) keeps targets serial within
+        each box.
+    """
+
+    def __init__(self, expansion, kernels, name=None, *, work_items_per_group=None):
+        super().__init__(expansion, kernels, name)
+        self.work_items_per_group = work_items_per_group
+
+    def get_cache_key(self):
+        return (*super().get_cache_key(), self.work_items_per_group)
+
     @property
     def default_name(self):
         return "e2p_from_single_box"
@@ -132,16 +147,19 @@ class E2PFromSingleBox(E2PBase):
         loopy_knl = make_loopy_program(
                 [
                     "{[itgt_box]: 0<=itgt_box<ntgt_boxes}",
-                    "{[itgt,idim]: itgt_start<=itgt<itgt_end and 0<=idim<dim}",
+                    "{[itgt_offset]: 0<=itgt_offset<itgt_count}",
+                    "{[idim]: 0<=idim<dim}",
                     "{[icoeff]: 0<=icoeff<ncoeffs}",
                     "{[iknl]: 0<=iknl<nresults}",
                 ], [
                 *self.get_kernel_scaling_assignment(),
                 """
                 for itgt_box
-                    <> tgt_ibox = target_boxes[itgt_box]
-                    <> itgt_start = box_target_starts[tgt_ibox]
-                    <> itgt_end = itgt_start+box_target_counts_nonchild[tgt_ibox]
+                    <> tgt_ibox = target_boxes[itgt_box]  {id=fetch_tgt_box_0}
+                    <> itgt_start = box_target_starts[tgt_ibox] \
+                        {id=fetch_tgt_box_1}
+                    <> itgt_count = box_target_counts_nonchild[tgt_ibox] \
+                        {id=fetch_tgt_box_2}
 
                     <> center[idim] = centers[idim, tgt_ibox] {id=fetch_center}
 
@@ -149,7 +167,8 @@ class E2PFromSingleBox(E2PBase):
                             src_expansions[tgt_ibox - src_base_ibox, icoeff] \
                             {id=fetch_coeffs}
 
-                    for itgt
+                    for itgt_offset
+                        <> itgt = itgt_start + itgt_offset
                         <> tgt[idim] = targets[idim, itgt] {id=fetch_tgt,dup=idim}
                         <> result_temp[iknl] = 0  {id=init_result,dup=iknl}
                         [iknl]: result_temp[iknl] = e2p(
@@ -196,8 +215,41 @@ class E2PFromSingleBox(E2PBase):
         return self.add_loopy_eval_callable(loopy_knl)
 
     def get_optimized_kernel(self):
-        # FIXME
         knl = self.get_kernel()
+        if self.work_items_per_group is not None:
+            import namedisl as nisl
+
+            # Target-parallel L2P scheduling follows the idea in Isuru Fernando's
+            # https://github.com/inducer/sumpy/pull/158.
+
+            knl = lp.split_iname(knl, "itgt_offset", self.work_items_per_group,
+                outer_iname="itgt_outer", inner_iname="iwork_item", inner_tag="l.0")
+
+            #  [itgt_count] -> {[itgt_outer, iwork_item]: 0 <= itgt_outer and
+            #      0 <= iwork_item < W and W*itgt_outer + iwork_item < itgt_count}
+            #
+            # Loopy does not allow a parallel iname in such a domain, so we give
+            # iwork_item its own domain and make it a parameter of itgt_outer's.
+            entry = knl.default_entrypoint
+            idom = entry.get_home_domain_index("iwork_item")
+            domains = list(entry.domains)
+            domains[idom:idom + 1] = [
+                nisl.make_set(
+                    f"{{[iwork_item]: 0<=iwork_item<{self.work_items_per_group}}}"),
+                nisl.make_set(
+                    "[iwork_item, itgt_count] -> {[itgt_outer]: "
+                    "0 <= itgt_outer and "
+                    f"{self.work_items_per_group}*itgt_outer"
+                    " + iwork_item < itgt_count}"),
+            ]
+            knl = knl.with_kernel(entry.copy(domains=domains))
+
+            # Each workitem loads its own private coefficients and box data,
+            # including workitems with no targets to evaluate.
+            knl = lp.add_inames_to_insn(knl, "iwork_item",
+                "id:fetch_tgt_box_* or id:fetch_center or id:fetch_coeffs "
+                "or id:kernel_scaling")
+
         knl = lp.tag_inames(knl, {"itgt_box": "g.0"})
         knl = lp.add_inames_to_insn(knl, "itgt_box", "id:kernel_scaling")
         return lp.set_options(knl,
