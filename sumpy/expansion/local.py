@@ -677,7 +677,7 @@ class H2DLocalExpansion(FourierBesselLocalExpansionMixin):
         kernel = self.kernel.get_base_kernel()
         assert isinstance(kernel, HelmholtzKernel)
 
-        return sym.Symbol(kernel.helmholtz_k_name)
+        return sym.SpatialConstant(kernel.helmholtz_k_name).as_sympy()
 
 
 class Y2DLocalExpansion(FourierBesselLocalExpansionMixin):
@@ -701,7 +701,7 @@ class Y2DLocalExpansion(FourierBesselLocalExpansionMixin):
         kernel = self.kernel.get_base_kernel()
         assert isinstance(kernel, YukawaKernel)
 
-        return sym.I * sym.Symbol(kernel.yukawa_lambda_name)
+        return sym.I * sym.SpatialConstant(kernel.yukawa_lambda_name).as_sympy()
 
 # }}}
 
