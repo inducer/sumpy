@@ -168,7 +168,7 @@ def test_p2e_multiple(
             extra_kwargs["k"] = 0.2 * (0.707 + 0.707j)
         else:
             extra_kwargs["k"] = 0.2
-    if isinstance(base_knl, StokesletComponentKernel):
+    elif isinstance(base_knl, StokesletComponentKernel):
         extra_kwargs["mu"] = 0.2
 
     source_kernels = [
@@ -313,7 +313,7 @@ def test_p2e2p(
             extra_kwargs["k"] = 0.2 * (0.707 + 0.707j)
         else:
             extra_kwargs["k"] = 0.2
-    if isinstance(base_knl, StokesletComponentKernel):
+    elif isinstance(base_knl, StokesletComponentKernel):
         extra_kwargs["mu"] = 0.2
 
     if with_source_derivative:
