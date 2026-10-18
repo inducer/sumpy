@@ -112,7 +112,10 @@ class KernelInfo:
         return str(self.kernel)
 
     def pde_func(self, cp, pot):
-        subs_dict = {sym.Symbol(k): v for k, v in self.extra_kwargs.items()}
+        subs_dict = {
+            sym.SpatialConstant(k).as_sympy(): v
+            for k, v in self.extra_kwargs.items()
+        }
         result = 0
         for ident, coeff in self.eq.items():
             lresult = pot
@@ -201,6 +204,101 @@ def test_pde_check_kernels(actx_factory: ArrayContextFactory, knl_info, order=5)
 
     logger.info("eoc:\n%s", eoc_rec)
     assert eoc_rec.order_estimate() > order - knl_info.nderivs + 1 - 0.1
+
+# }}}
+
+
+# {{{ test_stress_kernel_definition
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+@pytest.mark.parametrize(["name", "kernel_kwargs"], [
+    ("stokes", {"mu": 2.5}),
+    ("elasticity", {"mu": 2.5, "nu": 0.2}),
+    ("brinkman", {"mu": 2.5, "k": 1.3}),
+])
+def test_stress_kernel_definition(
+        dim: int, name: str, kernel_kwargs: dict[str, float]
+    ) -> None:
+    from itertools import product
+
+    rng = np.random.default_rng(42)
+    dvec = sym.make_sym_vector("d", dim)
+    kernel_kwargs = {
+        sym.SpatialConstant(k).as_sympy().name: v for k, v in kernel_kwargs.items()
+    }
+
+    def evalf(expr: sym.Expr) -> complex:
+        if sym.USE_SYMENGINE:
+            return complex(expr.n(prec=100))
+        else:
+            return complex(expr.evalf(30))
+
+    def pressure_expr(i: int) -> sym.Expr:
+        kernel = LaplaceKernel(dim)
+        expr = kernel.get_global_scaling_const() * kernel.get_expression(dvec)
+        return expr.diff(dvec[i])
+
+    def stokeslet_expr(i: int, j: int) -> sym.Expr:
+        u = StokesletComponentKernel(dim, i, j)
+        return u.get_global_scaling_const() * u.get_expression(dvec)
+
+    def brinkmanlet_expr(i: int, j: int) -> sym.Expr:
+        u = BrinkmanletComponentKernel(dim, i, j)
+        return u.get_global_scaling_const() * u.get_expression(dvec)
+
+    def elasticity_expr(i: int, j: int) -> sym.Expr:
+        u = ElasticityComponentKernel(dim, i, j)
+        return u.get_global_scaling_const() * u.get_expression(dvec)
+
+    def ref_stokes_stress(i: int, j: int, k: int) -> sym.Expr:
+        mu = sym.SpatialConstant("mu").as_sympy()
+        return (
+            -pressure_expr(j) * int(i == k)
+            + mu * (stokeslet_expr(i, j).diff(dvec[k])
+                    + stokeslet_expr(k, j).diff(dvec[i]))
+        )
+
+    def ref_brinkman_stress(i: int, j: int, k: int) -> sym.Expr:
+        mu = sym.SpatialConstant("mu").as_sympy()
+        return (
+            -pressure_expr(j) * int(i == k)
+            + mu * (brinkmanlet_expr(i, j).diff(dvec[k])
+                    + brinkmanlet_expr(k, j).diff(dvec[i]))
+        )
+
+    def ref_elasticity_stress(i: int, j: int, k: int) -> sym.Expr:
+        mu = sym.SpatialConstant("mu").as_sympy()
+        nu = sym.SpatialConstant("nu").as_sympy()
+        lm = 2 * mu * nu / (1 - 2 * nu)
+
+        return (
+            lm * int(i == j) * sum(
+                elasticity_expr(d, k).diff(dvec[d]) for d in range(dim)
+            ) + mu * (elasticity_expr(i, k).diff(dvec[j])
+                      + elasticity_expr(j, k).diff(dvec[i]))
+        )
+
+    for ijk in product(range(dim), repeat=3):
+        if name == "stokes":
+            kernel = StressletComponentKernel(dim, *ijk)
+            stress = kernel.get_global_scaling_const() * kernel.get_expression(dvec)
+            ref = ref_stokes_stress(*ijk)
+        elif name == "elasticity":
+            kernel = ElasticityStressComponentKernel(dim, *ijk)
+            stress = kernel.get_global_scaling_const() * kernel.get_expression(dvec)
+            ref = ref_elasticity_stress(*ijk)
+        elif name == "brinkman":
+            kernel = BrinkmanStressComponentKernel(dim, *ijk)
+            stress = kernel.get_global_scaling_const() * kernel.get_expression(dvec)
+            ref = ref_brinkman_stress(*ijk)
+        else:
+            raise AssertionError
+
+        for _ in range(3):
+            point = dict(zip(dvec, rng.uniform(0.3, 1.2, dim), strict=True))
+            ratio = evalf((stress / ref).subs({**kernel_kwargs, **point}))
+            assert abs(ratio - 1) < 1.0e-10, f"{kernel}: got ratio {ratio}"
 
 # }}}
 
@@ -625,8 +723,8 @@ def test_as_scalar_pde_elasticity():
 
 def test_as_scalar_pde_brinkman():
     dim = 3
-    mu = sym.Symbol("mu")
-    k = sym.Symbol("k")
+    mu = sym.SpatialConstant("mu").as_sympy()
+    k = sym.SpatialConstant("k").as_sympy()
 
     # NOTE: momentum + incompressibility equations
     diff_op = make_identity_diff_op(dim, dim + 1)
@@ -670,7 +768,7 @@ def test_elasticity_pickle():
 
 def test_to_fourier_matrix_scalar() -> None:
     ks = sym.make_sym_vector("k", 3)
-    lam = sym.Symbol("lam")
+    lam = sym.SpatialConstant("lam").as_sympy()
 
     # LaplaceKernel
     kernel = LaplaceKernel(2)
@@ -682,11 +780,11 @@ def test_to_fourier_matrix_scalar() -> None:
     assert mat == sym.Matrix([[-ks[0]**2 - ks[1]**2 - ks[2]**2]])
 
     # YukawaKernel
-    kernel = YukawaKernel(2, yukawa_lambda_name=lam.name)
+    kernel = YukawaKernel(2, yukawa_lambda_name="lam")
     mat = to_fourier_matrix(kernel.get_pde_as_diff_op(), ks)
     assert mat == sym.Matrix([[-ks[0]**2 - ks[1]**2 - lam**2]])
 
-    kernel = YukawaKernel(3, yukawa_lambda_name=lam.name)
+    kernel = YukawaKernel(3, yukawa_lambda_name="lam")
     mat = to_fourier_matrix(kernel.get_pde_as_diff_op(), ks)
     assert mat == sym.Matrix([[-ks[0]**2 - ks[1]**2 - ks[2]**2 - lam**2]])
 
@@ -698,9 +796,9 @@ def test_to_fourier_matrix_scalar() -> None:
 @pytest.mark.parametrize("dim", [2, 3])
 def test_to_fourier_matrix_stokes(dim: int) -> None:
     ks = sym.make_sym_vector("k", dim)
-    mu = sym.Symbol("mu")
+    mu = sym.SpatialConstant("mu").as_sympy()
 
-    kernel = StokesletSystemKernel(dim=dim, viscosity_mu_name=mu.name)
+    kernel = StokesletSystemKernel(dim=dim, viscosity_mu_name="mu")
     pde = kernel.get_pde_as_diff_op()
 
     k_sqr = sum(k**2 for k in ks)
@@ -731,13 +829,13 @@ def test_to_fourier_matrix_stokes(dim: int) -> None:
 @pytest.mark.parametrize("dim", [2, 3])
 def test_to_fourier_matrix_elasticity(dim: int) -> None:
     ks = sym.make_sym_vector("k", dim)
-    mu = sym.Symbol("mu")
-    nu = sym.Symbol("nu")
+    mu = sym.SpatialConstant("mu").as_sympy()
+    nu = sym.SpatialConstant("nu").as_sympy()
     mn = mu / (1 - 2 * nu)
 
     kernel = ElasticitySystemKernel(dim,
-                                    viscosity_mu_name=mu.name,
-                                    poisson_ratio_name=nu.name)
+                                    viscosity_mu_name="mu",
+                                    poisson_ratio_name="nu")
     pde = kernel.get_pde_as_diff_op()
 
     k_sqr = sum(k**2 for k in ks)
@@ -766,12 +864,12 @@ def test_to_fourier_matrix_elasticity(dim: int) -> None:
 @pytest.mark.parametrize("dim", [2, 3])
 def test_to_fourier_matrix_brinkman(dim: int) -> None:
     ks = sym.make_sym_vector("k", dim)
-    mu = sym.Symbol("mu")
-    kappa = sym.Symbol("k")
+    mu = sym.SpatialConstant("mu").as_sympy()
+    kappa = sym.SpatialConstant("k").as_sympy()
 
     kernel = BrinkmanletSystemKernel(dim,
-                                     viscosity_mu_name=mu.name,
-                                     darcy_impermeability_name=kappa.name)
+                                     viscosity_mu_name="mu",
+                                     darcy_impermeability_name="k")
     pde = kernel.get_pde_as_diff_op()
 
     k_sqr = sum(k**2 for k in ks)
