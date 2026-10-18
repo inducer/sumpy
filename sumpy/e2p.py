@@ -124,9 +124,8 @@ class E2PFromSingleBox(E2PBase):
     """Evaluate one expansion at each target in its box.
 
     :arg work_items_per_group: a positive OpenCL workgroup size supported by
-        the device. One group handles each target box, with targets distributed
-        across its workitems. *None* (the default) keeps targets serial within
-        each box.
+        the device. Each workgroup handles one target box, with targets
+        distributed across its workitems.
     """
 
     def __init__(self, expansion, kernels, name=None, *, work_items_per_group=None):
@@ -215,12 +214,14 @@ class E2PFromSingleBox(E2PBase):
         return self.add_loopy_eval_callable(loopy_knl)
 
     def get_optimized_kernel(self):
+        """
+        Adapted from Isuru Fernando's https://github.com/inducer/sumpy/pull/158.
+        Unlike #158, the kernel does not use `max_ntargets_in_one_box` to determine
+        the workgroup size.
+        """
         knl = self.get_kernel()
         if self.work_items_per_group is not None:
             import namedisl as nisl
-
-            # Target-parallel L2P scheduling follows the idea in Isuru Fernando's
-            # https://github.com/inducer/sumpy/pull/158.
 
             knl = lp.split_iname(knl, "itgt_offset", self.work_items_per_group,
                 outer_iname="itgt_outer", inner_iname="iwork_item", inner_tag="l.0")
@@ -244,11 +245,15 @@ class E2PFromSingleBox(E2PBase):
             ]
             knl = knl.with_kernel(entry.copy(domains=domains))
 
-            # Each workitem loads its own private coefficients and box data,
-            # including workitems with no targets to evaluate.
             knl = lp.add_inames_to_insn(knl, "iwork_item",
-                "id:fetch_tgt_box_* or id:fetch_center or id:fetch_coeffs "
-                "or id:kernel_scaling")
+                "id:fetch_tgt_box_* or id:fetch_center or id:kernel_scaling")
+
+            # The coefficient load is spread over the workitems.
+            knl = lp.split_iname(knl, "icoeff", self.work_items_per_group,
+                outer_iname="icoeff_outer", inner_iname="icoeff_inner",
+                inner_tag="l.0")
+            knl = lp.set_temporary_address_space(
+                knl, "coeffs", lp.AddressSpace.LOCAL)
 
         knl = lp.tag_inames(knl, {"itgt_box": "g.0"})
         knl = lp.add_inames_to_insn(knl, "itgt_box", "id:kernel_scaling")
