@@ -236,7 +236,7 @@ class E2PFromCSR(E2PBase):
     :arg work_items_per_group: OpenCL workgroup size, with one group per
         target box and target particles distributed across its workitems.
         *None* uses 128 workitems when ``max_ntargets_in_one_box``
-        is supplied to :meth:`__call__`, and selects the serial schedule
+        is supplied to ``__call__``, and selects the serial schedule
         otherwise.
     """
 
@@ -515,11 +515,6 @@ class E2PFromCSR(E2PBase):
             # each workitem reads every source box's coefficients itself and
             # accumulates the sum over source boxes.
 
-            # iwork_item is tagged l.0 and each workitem runs its own serial loop:
-            #
-            #   for itgt_outer in range((itgt_count + W - 1 - iwork_item) // W):
-            #       itgt_offset = W * itgt_outer + iwork_item
-            #       ...
             knl = lp.split_iname(knl, "itgt_offset", self.work_items_per_group,
                 outer_iname="itgt_outer", inner_iname="iwork_item", inner_tag="l.0")
 
