@@ -130,6 +130,7 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
     use_rscale: bool | None
     strength_usage: Sequence[int] | None
     fft_backend: FFTBackend | None
+    m2p_work_items_per_group: int | None
 
     def __init__(self,
                  array_context: ArrayContext,
@@ -141,6 +142,7 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
                  strength_usage: Sequence[int] | None = None,
                  source_kernels: Sequence[ScalarKernel] | None = None,
                  fft_backend: FFTBackend | None = None,
+                 m2p_work_items_per_group: int | None = None,
                  ) -> None:
         """
         :arg multipole_expansion_factory: a callable of a single argument (order)
@@ -154,6 +156,8 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
         :arg fft_backend: the FFT backend used for compressing M2L interactions.
             If not provided, it will be determined at runtime for the given
             array context.
+        :arg m2p_work_items_per_group: the OpenCL workgroup size of m2p,
+            passed unchanged to :class:`~sumpy.e2p.E2PFromCSR`.
         """
         super().__init__()
 
@@ -170,6 +174,7 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
         self.use_rscale = use_rscale
         self.strength_usage = strength_usage
         self.fft_backend = fft_backend
+        self.m2p_work_items_per_group = m2p_work_items_per_group
 
     @memoize_method
     def get_base_kernel(self) -> ScalarKernel:
@@ -257,7 +262,8 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
     def m2p(self, src_order: int) -> E2PBase:
         return E2PFromCSR(
                 self.multipole_expansion(src_order),
-                self.target_kernels, name="m2p")
+                self.target_kernels, name="m2p",
+                work_items_per_group=self.m2p_work_items_per_group)
 
     @memoize_method
     def l2p(self, src_order: int) -> E2PBase:
@@ -1047,6 +1053,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     source_box_lists=ssn.lists,
                     centers=self.tree.box_centers,
                     result=pot,
+                    max_ntargets_in_one_box=self.max_ntargets_in_one_box,
 
                     rscale=self.level_to_rscale(isrc_level),
 
