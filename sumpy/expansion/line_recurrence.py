@@ -17,7 +17,7 @@ Assumptions:
 - The ODE's leading coefficient is nonzero at :math:`q_0`.
 
 .. autofunction:: recurrence
-.. autofunction:: recurrence_table
+.. autofunction:: line_recurrence_table
 """
 
 q = sp.Symbol("q")
@@ -50,9 +50,11 @@ def _ode_differentiation(
 def recurrence(
         ode_coeffs: Sequence[sp.Expr],
         max_derivative_order: int,
+        *, init_conds: Sequence[sp.Expr] | None = None,
+        q0: sp.Expr = q0, q1: sp.Expr = q1, q2: sp.Expr = q2,
 ) -> tuple[tuple[sp.Expr, ...], tuple[sp.Expr, ...]]:
     r"""
-    Return initial conditions and updates for the states
+    Return extended initial conditions and update expressions for the states
     :math:`U_{i,j} = [\tau^j]g^{(i)}(q(\tau))`.
     """
     ode_order = len(ode_coeffs)-1
@@ -63,8 +65,11 @@ def recurrence(
 
     M = max(max_derivative_order, ode_order-1)  # noqa: N806
 
-    init_conds: list[sp.Expr] = [sp.Symbol(f"s{i}") for i in range(ode_order)]
-    leading_coeff = ode_coeffs[-1].subs(q, q0)
+    if init_conds is None:
+        init_conds = [sp.Symbol(f"s{i}") for i in range(ode_order)]
+    else:
+        init_conds = list(init_conds)
+    leading_coeff_at_q0 = ode_coeffs[-1].subs(q, q0)
     # For i >= ode_order, we use the initial conditions
     # {g^(0)(q0), g^(1)(q0), ..., g^(ode_order-1)(q0)} to obtain
     # the initial conditions g^(ode_order)(q0),... for higher-order
@@ -76,7 +81,7 @@ def recurrence(
             -sp.Add(*(
                 coeff.subs(q, q0)*init_cond
                 for coeff, init_cond in zip(ode_coeffs, init_conds, strict=False)))
-            / leading_coeff)
+            / leading_coeff_at_q0)
         init_conds.append(g_derivative)
 
     ode_coeffs = _ode_differentiation(ode_coeffs, M+1)
@@ -89,11 +94,11 @@ def recurrence(
     # where q(tau) = q0 + q1*tau + q2*tau^2.
     #
     # Therefore, the coefficient of tau^(j-1) in the LHS is
-    #  q0*j*U[1, j]                                     (unknown)
-    #  + q1*(j-1)*U[1, j-1] + q2*(j-2)*U[1, j-2]        (rest = sum(...))
-    #  + q1*U[1, j-1] + 2*q2*U[1, j-2]                  (rest += sum(...))
+    #  q0*j*U[M, j]                                     (unknown)
+    #  + q1*(j-1)*U[M, j-1] + q2*(j-2)*U[M, j-2]        (rest = sum(...))
+    #  + q1*U[M, j-1] + 2*q2*U[M, j-2]                  (rest += sum(...))
     #
-    # Hence, U[1, j] = -(q1*U[1, j-1] + q2*U[1, j-2])/q0.
+    # Hence, U[M, j] = -(q1*U[M, j-1] + q2*U[M, j-2])/q0.
 
     q_tau = q0 + q1*tau + q2*tau**2
     dq_tau = sp.diff(q_tau, tau)
@@ -105,18 +110,22 @@ def recurrence(
         lower_coeffs = sp.Poly(dq_tau*coeff.subs(q, q_tau), tau).terms()
         rest += sum(weight*U[i, j-1-k] for (k,), weight in lower_coeffs)
 
-    # i < M: (d/dtau)U_i(tau) = q'(tau)*U_{i+1}(tau).
-    updates = [
-        (q1*U[i+1, j-1] + 2*q2*U[i+1, j-2])/j for i in range(M)]
     # i = M: solve the differentiated ODE in tau for U[M, j].
-    updates.append(-rest/(leading_coeff*j))
-    return tuple(init_conds), tuple(updates)
+    umj_update_expr = -rest/(leading_coeff_at_q0*j)
+
+    # i < M: (d/dtau)U_i(tau) = q'(tau)*U_{i+1}(tau).
+    # [tau^(j-1)] (d/dtau)U_i(tau): j*U[i, j].
+    # [tau^(j-1)] q'(tau)*U_{i+1}(tau): q1*U[i+1, j-1] + 2*q2*U[i+1, j-2].
+    uij_update_exprs = [
+        (q1*U[i+1, j-1] + 2*q2*U[i+1, j-2])/j for i in range(M)]
+    uij_update_exprs.append(umj_update_expr)
+    return tuple(init_conds), tuple(uij_update_exprs)
 
 
 _ValueT = TypeVar("_ValueT")
 
 
-class _RecurrenceTable(dict[tuple[int, int], _ValueT | Literal[0]]):
+class _LineRecurrenceTable(dict[tuple[int, int], _ValueT | Literal[0]]):
     def __missing__(self, key: tuple[int, int]) -> Literal[0]:
         """
         Return zero for negative Taylor degrees and raise KeyError otherwise.
@@ -127,20 +136,20 @@ class _RecurrenceTable(dict[tuple[int, int], _ValueT | Literal[0]]):
         raise KeyError(key)
 
 
-def recurrence_table(
+def line_recurrence_table(
         init_conds: Sequence[_ValueT],
-        update: Callable[[int, _RecurrenceTable[_ValueT]], Iterable[_ValueT]],
-        order: int,
-) -> _RecurrenceTable[_ValueT]:
+        uij_update: Callable[[int, _LineRecurrenceTable[_ValueT]], Iterable[_ValueT]],
+        expansion_order: int,
+) -> _LineRecurrenceTable[_ValueT]:
     r"""
     Return the state table :math:`U_{i,j} = [\tau^j]g^{(i)}(q(\tau))`
-    through the given Taylor order.
+    through Taylor degree ``expansion_order``.
     """
-    states = _RecurrenceTable()
+    states = _LineRecurrenceTable()
     for i, value in enumerate(init_conds):
         states[i, 0] = value
 
-    for j in range(1, order+1):
-        for i, value in enumerate(update(j, states)):
+    for j in range(1, expansion_order+1):
+        for i, value in enumerate(uij_update(j, states)):
             states[i, j] = value
     return states
