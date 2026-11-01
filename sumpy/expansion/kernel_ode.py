@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import sympy as sp
 
@@ -47,7 +47,7 @@ def chain_rule_weights(
     # w_i(z) is the chain rule weight of g^(i)(|z|^2).
     weights = {}
     for i in range(sum(mi)+1):
-        g_derivative = cast("sp.Expr", sp.diff(g(q), q, i).subs(q, r2))
+        g_derivative = sp.diff(g(q), q, i).subs(q, r2)
         weight = derivative.coeff(g_derivative)
         if weight != 0:
             weights[i] = weight
@@ -116,8 +116,8 @@ def kernel_ode(
     ode_coeffs = pde_to_ode(pde_coeffs, z)
     ode_order = len(ode_coeffs)-1
 
-    init_conditions = []
+    init_conds = []
     for i in range(ode_order):
         g_derivative = sp.diff(g, q, i)
-        init_conditions.append(g_derivative.subs(q, q0))
-    return ode_coeffs, init_conditions
+        init_conds.append(g_derivative.subs(q, q0))
+    return ode_coeffs, init_conds
