@@ -35,7 +35,11 @@ from sumpy.array_context import (  # ruff:ignore[unused-import]
     PytestPyOpenCLArrayContextFactory,
     _acf,
 )
-from sumpy.expansion.local import LineTaylorLocalExpansion, VolumeTaylorLocalExpansion
+from sumpy.expansion.local import (
+    LineTaylorLocalExpansion,
+    ODELineTaylorLocalExpansion,
+    VolumeTaylorLocalExpansion,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -49,6 +53,7 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts([
 
 @pytest.mark.parametrize("expn_class", [
             LineTaylorLocalExpansion,
+            ODELineTaylorLocalExpansion,
             VolumeTaylorLocalExpansion,
             ])
 def test_direct_qbx_vs_eigval(
@@ -122,6 +127,7 @@ def test_direct_qbx_vs_eigval(
 
 @pytest.mark.parametrize("expn_class", [
             LineTaylorLocalExpansion,
+            ODELineTaylorLocalExpansion,
             VolumeTaylorLocalExpansion,
             ])
 def test_direct_qbx_vs_eigval_with_tgt_deriv(
@@ -141,13 +147,17 @@ def test_direct_qbx_vs_eigval_with_tgt_deriv(
 
     from sumpy.qbx import LayerPotential
 
-    lpot_dx = LayerPotential(
-        expansion=expn_class(lknl, order),
-        target_kernels=(AxisTargetDerivative(0, lknl),),
-        source_kernels=(lknl,))
-    lpot_dy = LayerPotential(
-        expansion=expn_class(lknl, order),
-        target_kernels=(AxisTargetDerivative(1, lknl),),
+    target_kernels = (
+        AxisTargetDerivative(0, lknl),
+        AxisTargetDerivative(1, lknl),
+    )
+    if expn_class is ODELineTaylorLocalExpansion:
+        expansion = expn_class(lknl, order, target_kernels=target_kernels)
+    else:
+        expansion = expn_class(lknl, order)
+    lpot = LayerPotential(
+        expansion=expansion,
+        target_kernels=target_kernels,
         source_kernels=(lknl,))
 
     mode_nr = 15
@@ -177,11 +187,7 @@ def test_direct_qbx_vs_eigval_with_tgt_deriv(
         expansion_radii = actx.from_numpy(radius * np.ones(n))
         strengths = (actx.from_numpy(sigma * h),)
 
-        result_qbx_dx, = lpot_dx(
-                actx,
-                targets, sources, centers, strengths,
-                expansion_radii=expansion_radii)
-        result_qbx_dy, = lpot_dy(
+        result_qbx_dx, result_qbx_dy = lpot(
                 actx,
                 targets, sources, centers, strengths,
                 expansion_radii=expansion_radii)

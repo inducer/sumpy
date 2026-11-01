@@ -37,6 +37,7 @@ from sumpy.array_context import (  # ruff:ignore[unused-import]
     PytestPyOpenCLArrayContextFactory,
     _acf,
 )
+from sumpy.expansion.local import LineTaylorLocalExpansion, ODELineTaylorLocalExpansion
 
 
 logger = logging.getLogger(__name__)
@@ -95,10 +96,15 @@ def _build_subset_indices(actx, ntargets, nsources, factor):
 
 @pytest.mark.parametrize("factor", [1.0, 0.6])
 @pytest.mark.parametrize("lpot_id", [1, 2])
+@pytest.mark.parametrize("expn_class", [
+            LineTaylorLocalExpansion,
+            ODELineTaylorLocalExpansion,
+            ])
 def test_qbx_direct(
             actx_factory: ArrayContextFactory,
             factor,
             lpot_id,
+            expn_class,
             visualize=False):
     if visualize:
         logging.basicConfig(level=logging.INFO)
@@ -119,8 +125,7 @@ def test_qbx_direct(
     else:
         raise ValueError(f"unknown lpot_id: {lpot_id}")
 
-    from sumpy.expansion.local import LineTaylorLocalExpansion
-    expn = LineTaylorLocalExpansion(knl, order)
+    expn = expn_class(knl, order)
 
     from sumpy.qbx import LayerPotential
     lpot = LayerPotential(
