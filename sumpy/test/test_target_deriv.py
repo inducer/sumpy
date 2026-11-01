@@ -42,7 +42,7 @@ from sumpy.array_context import (  # ruff:ignore[unused-import]
     PytestPyOpenCLArrayContextFactory,
     _acf,
 )
-from sumpy.expansion.local import LineTaylorLocalExpansion
+from sumpy.expansion.local import LineTaylorLocalExpansion, ODELineTaylorLocalExpansion
 from sumpy.kernel import AxisTargetDerivative, LaplaceKernel, ScalarKernel
 from sumpy.test.geometries import make_starfish
 
@@ -56,9 +56,14 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts([
 
 
 @pytest.mark.parametrize("knl", [LaplaceKernel(2)])
+@pytest.mark.parametrize("expn_class", [
+            LineTaylorLocalExpansion,
+            ODELineTaylorLocalExpansion,
+            ])
 def test_lpot_dx_jump_relation_convergence(
             actx_factory: ArrayContextFactory,
-            knl: ScalarKernel):
+            knl: ScalarKernel,
+            expn_class: type[LineTaylorLocalExpansion | ODELineTaylorLocalExpansion]):
     """Test convergence of jump relations for single layer potential derivatives."""
 
     actx = actx_factory()
@@ -73,15 +78,14 @@ def test_lpot_dx_jump_relation_convergence(
     targets = actx.from_numpy(targets_h)
 
     from sumpy.qbx import LayerPotential
-    expansion = LineTaylorLocalExpansion(knl, qbx_order)
-    lplot_dx = LayerPotential(
+    target_kernels = (AxisTargetDerivative(0, knl), AxisTargetDerivative(1, knl))
+    if expn_class is ODELineTaylorLocalExpansion:
+        expansion = expn_class(knl, qbx_order, target_kernels=target_kernels)
+    else:
+        expansion = expn_class(knl, qbx_order)
+    lplot = LayerPotential(
         expansion=expansion,
-        target_kernels=(AxisTargetDerivative(0, knl),),
-        source_kernels=(knl,)
-    )
-    lplot_dy = LayerPotential(
-        expansion=expansion,
-        target_kernels=(AxisTargetDerivative(1, knl),),
+        target_kernels=target_kernels,
         source_kernels=(knl,)
     )
     eocrec = EOCRecorder()
@@ -101,25 +105,13 @@ def test_lpot_dx_jump_relation_convergence(
                             targets_h + target_geo.normals * expansion_radii_h)
 
         strengths = (weights_nodes,)
-        (eval_in_dx,) = lplot_dx(
+        eval_in_dx, eval_in_dy = lplot(
             actx,
             targets, sources, centers_in, strengths,
             expansion_radii=expansion_radii
         )
 
-        (eval_in_dy,) = lplot_dy(
-            actx,
-            targets, sources, centers_in, strengths,
-            expansion_radii=expansion_radii
-        )
-
-        (eval_out_dx,) = lplot_dx(
-            actx,
-            targets, sources, centers_out, strengths,
-            expansion_radii=expansion_radii
-        )
-
-        (eval_out_dy,) = lplot_dy(
+        eval_out_dx, eval_out_dy = lplot(
             actx,
             targets, sources, centers_out, strengths,
             expansion_radii=expansion_radii
