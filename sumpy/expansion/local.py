@@ -318,9 +318,9 @@ class ODELineTaylorLocalExpansion(LocalExpansionBase):
             self, mi: tuple[int, ...], avec: sym.Matrix, bvec: sym.Matrix,
     ) -> dict[tuple[int, int], sp.Expr]:
         r"""
-        Return the chain-rule weights :math:`\{(i,k): C_{i,k}\}` of
+        Return the chain-rule weights :math:`\{(i,k): c_{i,k}\}` of
         :math:`(\partial_z^{\mathrm{mi}}G)(z)\big|_{z=z(\tau)}
-        = \sum_{i,k} C_{i,k}\tau^k g^{(i)}(q(\tau))`, where
+        = \sum_{i,k} c_{i,k}\tau^k g^{(i)}(q(\tau))`, where
         :math:`z(\tau) = \mathrm{avec} + \tau\mathrm{bvec}` and
         :math:`q(\tau) = |z(\tau)|^2`.
         Only terms with :math:`k \le p` are returned, where :math:`p` is the
@@ -331,13 +331,13 @@ class ODELineTaylorLocalExpansion(LocalExpansionBase):
         tau = sp.Symbol("tau")
         z = sp.Matrix(sp.symbols(f"z0:{self.dim}"))
         z_tau = dict(zip(z, avec + tau*bvec, strict=False))
-        C = {}  # noqa: N806
+        c = {}
         for i, weight in chain_rule_weights(mi, z).items():
             polynomial = sp.Poly(weight.xreplace(z_tau), tau)
             for (k,), cik in polynomial.terms():
                 if k <= self.order:
-                    C[i, k] = cik
-        return C
+                    c[i, k] = cik
+        return c
 
     @override
     def coefficients_from_source_vec(
@@ -347,25 +347,26 @@ class ODELineTaylorLocalExpansion(LocalExpansionBase):
             sac: SymbolicAssignmentCollection | None = None,
     ) -> list[sp.Expr]:
         r"""
-        :returns: a list of weighted line Taylor sums at :math:`\tau=1`,
-            ordered by ``target_stored_identifiers``.
+        Return the weighted line Taylor coefficients around :math:`\tau=0`,
+        ordered by :meth:`get_coefficient_identifiers`.
         """
         from sumpy.tools import add_mi
 
         # src_order is the highest |mi| across all source kernels.
         # tgt_order is the highest |mi| across all target kernels.
+        src_derivatives = []
         src_order = 0
         for src_knl in kernels:
-            src_knl_mis = src_knl.get_derivative_coeff_dict_at_source(
-                {(0,)*self.dim: 1}).keys()
-            src_order = max(src_order, max(sum(mi) for mi in src_knl_mis))
+            src_knl_mi_weights = src_knl.get_derivative_coeff_dict_at_source(
+                {(0,)*self.dim: 1})
+            src_derivatives.append(src_knl_mi_weights)
+            src_order = max(src_order, max(sum(mi) for mi in src_knl_mi_weights))
         tgt_order = max(sum(mi) for mi in self.target_stored_identifiers)
-
         # One shared U[i,j] table supplies all source/target kernels.
         uij_table = self._assign_states_to_sac(
-            tgt_order+src_order, avec, bvec, sac)
+            src_order+tgt_order, avec, bvec, sac)
 
-        # Example: 3D Helmholtz S+D.
+        # Example: 3D Helmholtz S+D (target_stored_identifiers = ((0, 0, 0),)).
         # G(z) = g(q) = exp(I*k*sqrt(q))/sqrt(q), where q = |z|^2.
         # The ODE is q*g^(2) + (3/2)*g^(1) + (k^2/4)*g = 0.
         # Before global kernel scaling, the single and double layers are
@@ -381,66 +382,38 @@ class ODELineTaylorLocalExpansion(LocalExpansionBase):
         #     [tau^j] S(z(tau)) = U[0, j],
         #     [tau^j] D(z(tau)) = -2*<n, avec>*U[1, j]
         #                         - 2*<n, bvec>*U[1, j-1].
-        #
-        # Sum through Taylor degree p and evaluate at tau = 1:
-        #     S_p = sum_{j=0}^p U[0, j],
-        #     D_p = -2*<n, avec>*sum_{j=0}^p U[1, j]
-        #           -2*<n, bvec>*sum_{j=0}^{p-1} U[1, j].
-        # The source contribution is strength_S*S_p + strength_D*D_p.
 
-        # We define uij_partial_sums[i, j] = U[i, 0] + ... + U[i, j].
-        # Then,
-        #     S_p = uij_partial_sums[0, p],
-        #     D_p = -2*<n, avec>*uij_partial_sums[1, p]
-        #           -2*<n, bvec>*uij_partial_sums[1, p-1].
-
-        uij_partial_sums = {}
-        for (i, j), uij in uij_table.items():
-            if j == 0:
-                uij_partial_sums[i, 0] = uij
-
-        taylor_sums = []
+        taylor_coeffs = []
         for tgt_mi_idx, tgt_mi in enumerate(self.target_stored_identifiers):
-            taylor_sum = 0
-            for src_knl_idx, src_knl in enumerate(kernels):
-                src_knl_mi_weights = src_knl.get_derivative_coeff_dict_at_source(
-                    {(0,)*self.dim: 1}).items()
+            taylor_coeffs_per_tgt_mi = [0]*(self.order+1)
+            for src_knl_idx, src_knl_mi_weights in enumerate(src_derivatives):
+                c = defaultdict(int)
+                for src_mi, src_knl_weight in src_knl_mi_weights.items():
+                    mi = add_mi(src_mi, tgt_mi)
 
-                C = defaultdict(int)  # noqa: N806
-                for src_knl_mi, src_knl_weight in src_knl_mi_weights:
-                    mi = add_mi(src_knl_mi, tgt_mi)
                     # \partial_z^{mi} G(z(tau))
                     #     = \sum_{i,k} cik*tau^k*g^(i)(q(tau))
                     #     = \sum_{i,k} cik*tau^k*(U[i,0] + U[i,1]*tau + ...).
                     #
                     # We only need
-                    #   [tau^k] \partial_z^{mi} G(z(tau)) for k = 0, ..., self.order.
+                    #   [tau^j] \partial_z^{mi} G(z(tau)) for j = 0, ..., self.order.
+
                     for (i, k), cik in self._line_chain_rule_weights(
                             mi, avec, bvec).items():
-                        C[i, k] += src_knl_weight*cik
+                        # Scale each coefficient by src_knl_weight.
+                        c[i, k] += src_knl_weight*cik
 
-                src_knl_taylor_sum = 0
-                for (i, k), cik in sorted(C.items()):
-                    # For each (i, k), the contribution to src_knl_taylor_sum is:
-                    #     cik * tau^k * (U[i,0] + U[i,1] + ... + U[i,self.order-k])
-                    #    = cik * uij_partial_sums[i, self.order-k]
-                    # where tau is evaluated at 1.
+                for (i, k), cik in sorted(c.items()):
                     if cik == 0:
                         continue
                     assigned_cik = sp.Symbol(sac.assign_unique(
-                        f"Ct{tgt_mi_idx}s{src_knl_idx}i{i}k{k}", cik))
-                    for j in range(1, self.order-k+1):
-                        if (i, j) not in uij_partial_sums:
-                            # uij_partial_sums[i,j]
-                            #     = uij_partial_sums[i,j-1]+U[i,j].
-                            uij_partial_sums[i, j] = sp.Symbol(sac.assign_unique(
-                                f"S{i}j{j}",
-                                uij_partial_sums[i, j-1]+uij_table[i, j]))
-                    src_knl_taylor_sum += (
-                        assigned_cik*uij_partial_sums[i, self.order-k])
-                taylor_sum += weights[src_knl_idx]*src_knl_taylor_sum
-            taylor_sums.append(taylor_sum)
-        return taylor_sums
+                        f"ct{tgt_mi_idx}s{src_knl_idx}i{i}k{k}", cik))
+                    # [tau^j] c[i,k]*tau^k*g^(i)(q(tau)) = c[i,k]*U[i,j-k].
+                    for j in range(k, self.order+1):
+                        taylor_coeffs_per_tgt_mi[j] += (
+                            weights[src_knl_idx]*assigned_cik*uij_table[i, j-k])
+            taylor_coeffs.extend(taylor_coeffs_per_tgt_mi)
+        return taylor_coeffs
 
     @override
     def coefficients_from_source(
@@ -454,20 +427,21 @@ class ODELineTaylorLocalExpansion(LocalExpansionBase):
     def evaluate(
             self, kernel: ScalarKernel, coeffs: Sequence[sp.Expr], bvec: sym.Matrix,
             rscale: sym.Expr, sac: SymbolicAssignmentCollection | None = None,
+            *, tau: sym.Expr | float = 1,
     ) -> sp.Expr:
         r"""
-        Return the Taylor expansion for the given target kernel and related source
-        kernels at :math:`\tau=1`.
+        Return the Taylor expansion for the target kernel and related source
+        kernels at :math:`\tau`.
 
-        For single- and double-layer source kernels :math:`S,D` with weights
-        :math:`w_S,w_D` and target kernel :math:`G`, return
-        :math:`w_S S_p+w_D D_p`, where :math:`S_p,D_p` are the line Taylor
-        expansions of order :math:`p` around :math:`\tau=0`, evaluated at
-        :math:`\tau=1`.
+        :arg kernel: the target kernel.
         """
         result = 0
         for mi, weight in self._target_kernel_derivatives(kernel).items():
-            result += weight*coeffs[self.get_storage_index(mi)]
+            value = 0
+            # Horner's method
+            for j in range(self.order, -1, -1):
+                value = coeffs[self.get_storage_index((*mi, j))]+tau*value
+            result += weight*value
         return result
 
     @property
@@ -481,11 +455,17 @@ class ODELineTaylorLocalExpansion(LocalExpansionBase):
 
     @override
     def get_coefficient_identifiers(self) -> list[tuple[int, ...]]:
-        return list(self.target_stored_identifiers)
+        return [(*mi, j) for mi in self.target_stored_identifiers
+                for j in range(self.order+1)]
 
     @override
     def get_storage_index(self, mi: tuple[int, ...]) -> int:
-        return self.target_stored_identifiers.index(mi)
+        # get_coefficient_identifiers returns identifiers of the form (*tgt_mi, j).
+        # For example, (1, 0, 5) means tgt_mi = (1, 0)
+        # and Taylor expansion degree j = 5.
+        tgt_mi, j = mi[:-1], mi[-1]
+        # Each tgt_mi has self.order+1 consecutive coefficients, with j varying fastest.
+        return self.target_stored_identifiers.index(tgt_mi)*(self.order+1)+j
 
 # }}}
 

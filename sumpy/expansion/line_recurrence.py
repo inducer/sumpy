@@ -63,7 +63,7 @@ def recurrence(
     if ode_coeffs[-1] == 0:
         raise ValueError("the ODE needs a nonzero leading coefficient")
 
-    M = max(max_derivative_order, ode_order-1)  # noqa: N806
+    M = max(max_derivative_order, ode_order-1)  # ruff:ignore[non-lowercase-variable-in-function]
 
     if init_conds is None:
         init_conds = [sp.Symbol(f"s{i}") for i in range(ode_order)]
@@ -125,7 +125,7 @@ def recurrence(
 _ValueT = TypeVar("_ValueT")
 
 
-class _LineRecurrenceTable(dict[tuple[int, int], _ValueT | Literal[0]]):
+class _LineRecurrenceTable(dict[tuple[int, int], _ValueT | Literal[0]]):  # ruff:ignore[subclass-builtin]
     def __missing__(self, key: tuple[int, int]) -> Literal[0]:
         """
         Return zero for negative Taylor degrees and raise KeyError otherwise.
