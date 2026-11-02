@@ -386,8 +386,8 @@ class ODELineTaylorLocalExpansion(LocalExpansionBase):
         taylor_coeffs = []
         for tgt_mi_idx, tgt_mi in enumerate(self.target_stored_identifiers):
             taylor_coeffs_per_tgt_mi = [0]*(self.order+1)
+            c = defaultdict(int)
             for src_knl_idx, src_knl_mi_weights in enumerate(src_derivatives):
-                c = defaultdict(int)
                 for src_mi, src_knl_weight in src_knl_mi_weights.items():
                     mi = add_mi(src_mi, tgt_mi)
 
@@ -400,18 +400,18 @@ class ODELineTaylorLocalExpansion(LocalExpansionBase):
 
                     for (i, k), cik in self._line_chain_rule_weights(
                             mi, avec, bvec).items():
-                        # Scale each coefficient by src_knl_weight.
-                        c[i, k] += src_knl_weight*cik
+                        # Scale each coefficient by src_knl_weight and
+                        # the input weight (quadrature weight, etc.).
+                        c[i, k] += src_knl_weight*cik * weights[src_knl_idx]
 
-                for (i, k), cik in sorted(c.items()):
-                    if cik == 0:
-                        continue
-                    assigned_cik = sp.Symbol(sac.assign_unique(
-                        f"ct{tgt_mi_idx}s{src_knl_idx}i{i}k{k}", cik))
-                    # [tau^j] c[i,k]*tau^k*g^(i)(q(tau)) = c[i,k]*U[i,j-k].
-                    for j in range(k, self.order+1):
-                        taylor_coeffs_per_tgt_mi[j] += (
-                            weights[src_knl_idx]*assigned_cik*uij_table[i, j-k])
+            for (i, k), cik in sorted(c.items()):
+                if cik == 0:
+                    continue
+                assigned_cik = sp.Symbol(sac.assign_unique(
+                    f"ct{tgt_mi_idx}i{i}k{k}", cik))
+                # [tau^j] \partial_z^{mi} source kernels = sum_{i,k} c[i,k]*U[i,j-k].
+                for j in range(k, self.order+1):
+                    taylor_coeffs_per_tgt_mi[j] += assigned_cik*uij_table[i, j-k]
             taylor_coeffs.extend(taylor_coeffs_per_tgt_mi)
         return taylor_coeffs
 
