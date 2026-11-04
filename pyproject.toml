@@ -158,6 +158,9 @@ extend-exclude = [
 markers = [
     "mpi: tests distributed FMM",
 ]
+filterwarnings = [
+    "ignore:bitcount function is deprecated:DeprecationWarning:mpmath.libmp.libintmath",
+]
 
 [tool.basedpyright]
 reportImplicitStringConcatenation = "none"
