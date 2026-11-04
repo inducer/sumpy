@@ -50,6 +50,7 @@ from sumpy.expansion.local import (
     H2DLocalExpansion,
     LinearPDEConformingVolumeTaylorLocalExpansion,
     LineTaylorLocalExpansion,
+    ODELineTaylorLocalExpansion,
     VolumeTaylorLocalExpansion,
 )
 from sumpy.expansion.m2l import (
@@ -845,11 +846,16 @@ def test_m2m_compressed_error_helmholtz(actx_factory: ArrayContextFactory, dim, 
                          (YukawaKernel, {"lam": 1})
                      ])
 @pytest.mark.parametrize("dim", [2, 3])
+@pytest.mark.parametrize("expn_class", [
+                         LineTaylorLocalExpansion,
+                         ODELineTaylorLocalExpansion,
+                     ])
 def test_jump(
             actx_factory: ArrayContextFactory,
             kernel_cls: type[ScalarKernel],
             kernel_kwargs: dict[str, float],
             dim: int,
+            expn_class: type[LineTaylorLocalExpansion | ODELineTaylorLocalExpansion],
             order: int = 3,
         ):
     # x-ref https://github.com/inducer/sumpy/pull/224
@@ -885,7 +891,7 @@ def test_jump(
 
     from sumpy.qbx import LayerPotential
     lpot = LayerPotential(
-            expansion=LineTaylorLocalExpansion(kernel, order=order),
+            expansion=expn_class(kernel, order=order),
             source_kernels=(dlp_knl,),
             target_kernels=(kernel,),
             value_dtypes=np.complex128,)
