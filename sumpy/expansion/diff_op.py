@@ -41,7 +41,7 @@ import sumpy.symbolic as sym
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from sympy.polys.agca.modules import FreeModuleElement, SubModulePolyRing
+    from sympy.polys.agca.modules import SubModulePolyRing
 
     from pymbolic.typing import Number
 
@@ -264,48 +264,38 @@ class LinearPDESystemOperator:
         return res
 
 
-def convert_module_to_matrix(
-            module: Sequence[FreeModuleElement],
-            generators: Sequence[sym.Expr]
-        ) -> sym.Matrix:
-    import sympy as sp
-
-    # poly is a sympy DMP (dense multi-variate polynomial)
-    # type and we convert it to a sympy expression because
-    # sympy matrices with polynomial entries are not supported.
-    # see https://github.com/sympy/sympy/issues/21497
-    return sp.Matrix([
-        [sp.Poly(poly.to_dict(), *generators, domain=sp.EX).as_expr()
-            for poly in ideal.data]
-        for ideal in module])
-
-
 @memoize
-def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> list[LinearPDESystemOperator]:
+def _get_all_scalar_pdes(
+        pde: LinearPDESystemOperator
+    ) -> tuple[LinearPDESystemOperator, ...]:
     import sympy as sp
     from sympy.polys.orderings import grevlex
 
-    gens = [sp.Symbol(f"_x{i}") for i in range(pde.spatial_dim)]
-    gens += [sp.Symbol(f"_t{i}") for i in range(pde.total_dims - pde.spatial_dim)]
+    generators = tuple(
+        [sp.Symbol(f"_x{i}") for i in range(pde.spatial_dim)]
+        + [sp.Symbol(f"_t{i}") for i in range(pde.total_dims - pde.spatial_dim)])
 
-    max_vec_idx = max(deriv_ident.vec_idx for eq in pde.eqs
-                      for deriv_ident in eq)
+    from sumpy.tools import mi_power
 
-    pde_system_mat = sp.zeros(len(pde.eqs), max_vec_idx + 1)
-    for row, eq in enumerate(pde.eqs):
-        for deriv_ident, coeff in eq.items():
-            deriv_as_poly = 1
-            for i, val in enumerate(deriv_ident.mi):
-                deriv_as_poly *= gens[i]**val
-            pde_system_mat[row, deriv_ident.vec_idx] += coeff * deriv_as_poly
+    # NOTE: `sp.EX.poly_ring` (the new one) does not implement `ring.free_module`
+    # and other module functionality, so we cannot use it yet (as of sympy 1.14.0)
+    ring = sp.EX.old_poly_ring(*generators, order=grevlex)
+    nrows = len(pde.eqs)
+    ncols = pde.nvariables
 
-    ring = sp.EX.old_poly_ring(*gens, order=grevlex)
+    # Convert the LinearPDESystemOperator to a matrix of polynomials (column-major)
+    pde_system_mat = [[ring.zero] * nrows for _ in range(ncols)]
+    for i, eq in enumerate(pde.eqs):
+        for deriv, coeff in eq.items():
+            pde_system_mat[deriv.vec_idx][i] += (
+                ring.convert(coeff * mi_power(generators, deriv.mi))
+            )
+
     column_ideals = [
-        ring.free_module(1).submodule(*pde_system_mat[:, i].tolist(), order=grevlex)
-        for i in range(pde_system_mat.shape[1])
+        ring.free_module(1).submodule(*[[poly] for poly in column], order=grevlex)
+        for column in pde_system_mat
     ]
     column_syzygy_modules = [ideal.syzygy_module() for ideal in column_ideals]
-    ncols = len(column_syzygy_modules)
 
     # For each column i, we need to get the intersection of all the syzygy modules
     # except for the ith module. For n number of modules, this is $n*(n-2)$ work.
@@ -323,38 +313,36 @@ def _get_all_scalar_pdes(pde: LinearPDESystemOperator) -> list[LinearPDESystemOp
     right_intersections = list(reversed(list(
         accumulate(reversed(column_syzygy_modules), func=intersect))))
 
-    # At the end, calculate the intersection of the left modules and right modules
-    # and calculate a groebner basis for it.
     module_intersections = [right_intersections[1]] + [
         intersect(left_intersections[i - 1], right_intersections[i + 1])
         for i in range(1, ncols - 1)
     ] + [left_intersections[ncols - 2]]
 
-    # For each column in the PDE system matrix, we multiply that column by
-    # the syzygy module intersection to get a set of scalar PDEs for that
-    # column.
+    # For each column in the PDE system matrix, we multiply that column by the
+    # syzygy module intersection to get a set of scalar PDEs.
     scalar_pdes_vec = [
-        (convert_module_to_matrix(module_intersections[i]._groebner_vec(),
-                                  gens) * pde_system_mat)[:, i]
-        for i in range(ncols)
+        [
+            sum((syzygy.data[row] * col[row] for row in range(nrows)), ring.zero)
+            # NOTE: there's no public _groebner_vec() (as of sympy 1.14.0)
+            for syzygy in intersection._groebner_vec()
+        ]
+        for col, intersection in zip(pde_system_mat, module_intersections, strict=True)
     ]
 
+    # Convert the result back to LinearPDESystemOperators
     results: list[LinearPDESystemOperator] = []
     for col in range(ncols):
-        scalar_pde_polys = [sp.Poly(pde, *gens, domain=sp.EX)
-                            for pde in scalar_pdes_vec[col]]
-        scalar_pdes = [pde for pde in scalar_pde_polys if pde.degree() > 0]
+        scalar_pdes = [poly for poly in scalar_pdes_vec[col] if poly.degree() > 0]
         scalar_pde = min(scalar_pdes, key=lambda x: x.degree()).monic()
 
-        pde_dict = {
+        eqs = {
             DerivativeIdentifier(mi, 0): sym.sympify(coeff.as_expr().simplify())
             for (mi, coeff) in zip(scalar_pde.monoms(),
                                    scalar_pde.coeffs(), strict=True)
         }
-        results.append(LinearPDESystemOperator(pde.spatial_dim,
-                                               (constantdict(pde_dict),)))
+        results.append(LinearPDESystemOperator(pde.spatial_dim, (constantdict(eqs),)))
 
-    return results
+    return tuple(results)
 
 
 def as_scalar_pde(
