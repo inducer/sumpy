@@ -62,7 +62,7 @@ if TYPE_CHECKING:
     import sympy as sp
 
     from sumpy.assignment_collection import SymbolicAssignmentCollection
-    from sumpy.expansion.diff_op import LinearPDESystemOperator
+    from sumpy.diff_op import LinearPDESystemOperator
 
 __doc__ = """
 Kernel interface
@@ -356,7 +356,7 @@ class ScalarKernel(ABC):
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
         r"""
         :returns: the PDE for the kernel as a
-            :class:`sumpy.expansion.diff_op.LinearPDESystemOperator` object
+            :class:`sumpy.diff_op.LinearPDESystemOperator` object
             :math:`\mathcal{L}`, where :math:`\mathcal{L}(u) = 0` is the PDE.
         """
 
@@ -686,7 +686,7 @@ class LaplaceKernel(ExpressionKernel):
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
-        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
+        from sumpy.diff_op import laplacian, make_identity_diff_op
         w = make_identity_diff_op(self.dim)
         return laplacian(w)
 
@@ -746,7 +746,7 @@ class BiharmonicKernel(ExpressionKernel):
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
-        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
+        from sumpy.diff_op import laplacian, make_identity_diff_op
         w = make_identity_diff_op(self.dim)
         return laplacian(laplacian(w))
 
@@ -837,7 +837,7 @@ class HelmholtzKernel(ExpressionKernel):
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
-        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
+        from sumpy.diff_op import laplacian, make_identity_diff_op
 
         w = make_identity_diff_op(self.dim)
         k = sym.SpatialConstant(self.helmholtz_k_name).as_sympy()
@@ -933,7 +933,7 @@ class YukawaKernel(ExpressionKernel):
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
-        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
+        from sumpy.diff_op import laplacian, make_identity_diff_op
 
         w = make_identity_diff_op(self.dim)
         lam = sym.SpatialConstant(self.yukawa_lambda_name).as_sympy()
@@ -973,7 +973,7 @@ class ElasticityComponentKernelBase(ExpressionKernel):
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
-        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
+        from sumpy.diff_op import laplacian, make_identity_diff_op
 
         w = make_identity_diff_op(self.dim)
         return laplacian(laplacian(w))
@@ -1190,7 +1190,7 @@ class StokesComponentKernelBase(ExpressionKernel):
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
-        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
+        from sumpy.diff_op import laplacian, make_identity_diff_op
 
         w = make_identity_diff_op(self.dim)
         return laplacian(laplacian(w))
@@ -1451,7 +1451,7 @@ class LineOfCompressionKernel(ExpressionKernel):
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
-        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
+        from sumpy.diff_op import laplacian, make_identity_diff_op
 
         w = make_identity_diff_op(self.dim)
         return laplacian(w)
@@ -1495,7 +1495,7 @@ class BrinkmanComponentKernelBase(ExpressionKernel):
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
-        from sumpy.expansion.diff_op import laplacian, make_identity_diff_op
+        from sumpy.diff_op import laplacian, make_identity_diff_op
 
         w = make_identity_diff_op(self.dim)
         k = sym.SpatialConstant(self.darcy_impermeability_name).as_sympy()
@@ -1770,7 +1770,7 @@ class HeatKernel(ExpressionKernel):
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
-        from sumpy.expansion.diff_op import diff, laplacian, make_identity_diff_op
+        from sumpy.diff_op import diff, laplacian, make_identity_diff_op
 
         alpha = sym.SpatialConstant(self.heat_alpha_name).as_sympy()
         w = make_identity_diff_op(self.dim - 1, time_dependent=True)
@@ -1838,7 +1838,7 @@ class ElasticitySystemKernel(SystemKernel):
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
-        from sumpy.expansion.diff_op import (
+        from sumpy.diff_op import (
             divergence,
             gradient,
             laplacian,
@@ -1951,7 +1951,7 @@ class StokesletSystemKernel(SystemKernel):
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
-        from sumpy.expansion.diff_op import (
+        from sumpy.diff_op import (
             concat,
             divergence,
             gradient,
@@ -2065,7 +2065,7 @@ class BrinkmanletSystemKernel(SystemKernel):
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
-        from sumpy.expansion.diff_op import (
+        from sumpy.diff_op import (
             concat,
             divergence,
             gradient,

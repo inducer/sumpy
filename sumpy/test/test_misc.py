@@ -44,11 +44,7 @@ from sumpy.array_context import (  # ruff:ignore[unused-import]
     PytestPyOpenCLArrayContextFactory,
     _acf,
 )
-from sumpy.expansion import (
-    FullExpansionTermsWrangler,
-    LinearPDEBasedExpansionTermsWrangler,
-)
-from sumpy.expansion.diff_op import (
+from sumpy.diff_op import (
     as_scalar_pde,
     concat,
     curl,
@@ -58,6 +54,10 @@ from sumpy.expansion.diff_op import (
     laplacian,
     make_identity_diff_op,
     to_fourier_matrix,
+)
+from sumpy.expansion import (
+    FullExpansionTermsWrangler,
+    LinearPDEBasedExpansionTermsWrangler,
 )
 from sumpy.kernel import (
     BiharmonicKernel,

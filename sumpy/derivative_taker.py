@@ -57,7 +57,7 @@ if TYPE_CHECKING:
     import sympy as sp
 
     from sumpy.assignment_collection import SymbolicAssignmentCollection
-    from sumpy.expansion.diff_op import MultiIndex
+    from sumpy.diff_op import MultiIndex
 
 
 logger = logging.getLogger(__name__)

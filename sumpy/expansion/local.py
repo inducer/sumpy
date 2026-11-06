@@ -50,7 +50,7 @@ if TYPE_CHECKING:
     import loopy as lp
 
     from sumpy.assignment_collection import SymbolicAssignmentCollection
-    from sumpy.expansion.diff_op import MultiIndex
+    from sumpy.diff_op import MultiIndex
     from sumpy.expansion.m2l import M2LTranslationBase, TranslationClassesDepData
     from sumpy.expansion.multipole import (
         HankelBased2DMultipoleExpansion,

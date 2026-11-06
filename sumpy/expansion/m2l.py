@@ -58,7 +58,7 @@ if TYPE_CHECKING:
     from pytools.persistent_dict import KeyBuilder
 
     from sumpy.assignment_collection import SymbolicAssignmentCollection
-    from sumpy.expansion.diff_op import MultiIndex
+    from sumpy.diff_op import MultiIndex
     from sumpy.kernel import ScalarKernel
 
 
