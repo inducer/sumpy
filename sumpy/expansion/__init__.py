@@ -34,7 +34,7 @@ import pymbolic.primitives as prim
 from pytools import memoize_method
 
 import sumpy.symbolic as sym
-from sumpy.expansion.diff_op import DerivativeIdentifier
+from sumpy.diff_op import DerivativeIdentifier
 from sumpy.tools import add_mi
 
 
@@ -45,7 +45,7 @@ if TYPE_CHECKING:
     from pymbolic.typing import Expression
 
     from sumpy.assignment_collection import SymbolicAssignmentCollection
-    from sumpy.expansion.diff_op import MultiIndex
+    from sumpy.diff_op import MultiIndex
     from sumpy.expansion.local import LocalExpansionBase
     from sumpy.expansion.multipole import MultipoleExpansionBase
     from sumpy.kernel import KernelArgument, ScalarKernel
@@ -638,7 +638,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         axis_permutation[0], axis_permutation[slowest_varying_index] = \
                 slowest_varying_index, 0
 
-        from sumpy.expansion.diff_op import DerivativeIdentifier
+        from sumpy.diff_op import DerivativeIdentifier
 
         def mi_key(ident: MultiIndex | DerivativeIdentifier) -> tuple[int, ...]:
             if isinstance(ident, DerivativeIdentifier):  # ruff:ignore[if-else-block-instead-of-if-exp]

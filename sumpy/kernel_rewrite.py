@@ -48,7 +48,7 @@ if TYPE_CHECKING:
 
     from pymbolic.typing import ArithmeticExpression
 
-    from sumpy.expansion.diff_op import MultiIndex
+    from sumpy.diff_op import MultiIndex
 
 logger = logging.getLogger(__name__)
 
@@ -284,7 +284,7 @@ def rewrite_using_base_kernel_fourier(
     assert not isinstance(kernel, KernelWrapper)
     assert not isinstance(base_kernel, KernelWrapper)
 
-    from sumpy.expansion.diff_op import to_fourier_matrix
+    from sumpy.diff_op import to_fourier_matrix
 
     # {{{ get Fourier symbols
 

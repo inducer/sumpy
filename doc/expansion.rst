@@ -6,7 +6,7 @@ Expansions
 Differential Operators
 ----------------------
 
-.. automodule:: sumpy.expansion.diff_op
+.. automodule:: sumpy.diff_op
 
 Local Expansions
 ----------------
