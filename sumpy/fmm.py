@@ -130,6 +130,8 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
     use_rscale: bool | None
     strength_usage: Sequence[int] | None
     fft_backend: FFTBackend | None
+    p2m_work_items_per_group: int | None
+    p2l_work_items_per_group: int | None
 
     def __init__(self,
                  array_context: ArrayContext,
@@ -141,6 +143,8 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
                  strength_usage: Sequence[int] | None = None,
                  source_kernels: Sequence[ScalarKernel] | None = None,
                  fft_backend: FFTBackend | None = None,
+                 p2m_work_items_per_group: int | None = None,
+                 p2l_work_items_per_group: int | None = None,
                  ) -> None:
         """
         :arg multipole_expansion_factory: a callable of a single argument (order)
@@ -154,6 +158,10 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
         :arg fft_backend: the FFT backend used for compressing M2L interactions.
             If not provided, it will be determined at runtime for the given
             array context.
+        :arg p2m_work_items_per_group: work items per source box for P2M,
+            or *None* for the default schedule.
+        :arg p2l_work_items_per_group: work items per target box for P2L,
+            or *None* for the default schedule.
         """
         super().__init__()
 
@@ -170,6 +178,8 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
         self.use_rscale = use_rscale
         self.strength_usage = strength_usage
         self.fft_backend = fft_backend
+        self.p2m_work_items_per_group = p2m_work_items_per_group
+        self.p2l_work_items_per_group = p2l_work_items_per_group
 
     @memoize_method
     def get_base_kernel(self) -> ScalarKernel:
@@ -199,14 +209,16 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
         return P2EFromSingleBox(
                 kernels=self.source_kernels,
                 expansion=self.multipole_expansion(tgt_order),
-                strength_usage=self.strength_usage, name="p2m")
+                strength_usage=self.strength_usage, name="p2m",
+                work_items_per_group=self.p2m_work_items_per_group)
 
     @memoize_method
     def p2l(self, tgt_order: int) -> P2EBase:
         return P2EFromCSR(
                 kernels=self.source_kernels,
                 expansion=self.local_expansion(tgt_order),
-                strength_usage=self.strength_usage, name="p2l")
+                strength_usage=self.strength_usage, name="p2l",
+                work_items_per_group=self.p2l_work_items_per_group)
 
     @memoize_method
     def m2m(self, src_order: int, tgt_order: int) -> E2EBase:
