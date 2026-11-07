@@ -130,6 +130,7 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
     use_rscale: bool | None
     strength_usage: Sequence[int] | None
     fft_backend: FFTBackend | None
+    l2p_work_items_per_group: int | None
 
     def __init__(self,
                  array_context: ArrayContext,
@@ -141,6 +142,7 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
                  strength_usage: Sequence[int] | None = None,
                  source_kernels: Sequence[ScalarKernel] | None = None,
                  fft_backend: FFTBackend | None = None,
+                 l2p_work_items_per_group: int | None = 64,
                  ) -> None:
         """
         :arg multipole_expansion_factory: a callable of a single argument (order)
@@ -154,6 +156,9 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
         :arg fft_backend: the FFT backend used for compressing M2L interactions.
             If not provided, it will be determined at runtime for the given
             array context.
+        :arg l2p_work_items_per_group: L2P workgroup size, with one group per
+            target box. The default workgroup size is 64. Pass *None* to disable
+            parallelization and keep target processing serial within the box.
         """
         super().__init__()
 
@@ -170,6 +175,8 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
         self.use_rscale = use_rscale
         self.strength_usage = strength_usage
         self.fft_backend = fft_backend
+
+        self.l2p_work_items_per_group = l2p_work_items_per_group
 
     @memoize_method
     def get_base_kernel(self) -> ScalarKernel:
@@ -263,7 +270,8 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
     def l2p(self, src_order: int) -> E2PBase:
         return E2PFromSingleBox(
                 self.local_expansion(src_order),
-                self.target_kernels, name="l2p")
+                self.target_kernels, name="l2p",
+                work_items_per_group=self.l2p_work_items_per_group)
 
     @memoize_method
     def p2p(self) -> P2PBase:
