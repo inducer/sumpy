@@ -160,14 +160,14 @@ def test_against_single_rank(
     pytest.importorskip("mpi4py")
 
     from boxtree.tools import run_mpi
-    run_mpi(__file__, num_processes, {
+    run_mpi(__file__, num_processes, env={
         "OMP_NUM_THREADS": 1,
         "_SUMPY_TEST_NAME": "against_single_rank",
         "_SUMPY_TEST_DIMS": dims,
         "_SUMPY_TEST_NSOURCES": nsources,
         "_SUMPY_TEST_NTARGETS": ntargets,
         "_SUMPY_TEST_MPOLES_ALLREDUCE": communicate_mpoles_via_allreduce
-        })
+        }, timeout=600, debug=True)
 
 # }}}
 
