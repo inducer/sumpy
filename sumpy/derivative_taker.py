@@ -85,18 +85,20 @@ class ExprDerivativeTaker:
 
     Now suppose we would like to use a scaled version :math:`g` of the
     kernel :math:`f`:
+
     .. math::
 
-        \begin{eqnarray*}
-        f (x) & = & g (x / \alpha),\\
-        f^{(i)} (x) & = & \frac{1}{\alpha^i} g^{(i)} (x / \alpha) .
-        \end{eqnarray*}
+        \begin{aligned}
+        f (x) & = g (x / \alpha),\\
+        f^{(i)} (x) & = \frac{1}{\alpha^i} g^{(i)} (x / \alpha) .
+        \end{aligned}
 
     where :math:`\alpha` is chosen to be on a length scale similar to
-    :math:`x` (for example by choosing :math:`\alpha` proporitional to the
+    :math:`x` (for example by choosing :math:`\alpha` proportional to the
     size of the box for which the expansion is intended) so that :math:`x /
     \alpha` is roughly of unit magnitude, to avoid arithmetic issues with
     small arguments. This yields
+
     .. math::
 
         f (x - y) = \sum_{i = 0}^{\infty} (\partial_y^i g)
@@ -107,12 +109,13 @@ class ExprDerivativeTaker:
     Observe that the :math:`(y - c)` term is now scaled to unit magnitude,
     as is the argument of :math:`g`.
     With :math:`\xi = x / \alpha`, we find
+
     .. math::
 
-        \begin{eqnarray*}
-        g (\xi) & = & f (\alpha \xi),\\
-        g^{(i)} (\xi) & = & \alpha^i f^{(i)} (\alpha \xi) .
-        \end{eqnarray*}
+        \begin{aligned}
+        g (\xi) & = f (\alpha \xi),\\
+        g^{(i)} (\xi) & = \alpha^i f^{(i)} (\alpha \xi) .
+        \end{aligned}
 
     Generically for all kernels, :math:`f^{(i)} (\alpha \xi)` is computable
     by taking a sufficient number of symbolic derivatives of :math:`f` and
@@ -120,6 +123,7 @@ class ExprDerivativeTaker:
     Now, for some kernels, like :math:`f (x) = C \log x`, the powers of
     :math:`\alpha^i` from the chain rule cancel with the ones from the
     argument substituted into the kernel derivatives:
+
     .. math::
 
         g^{(i)} (\xi) = \alpha^i f^{(i)} (\alpha \xi) = C' \cdot \alpha^i \cdot
@@ -154,6 +158,7 @@ class ExprDerivativeTaker:
     def diff(self, mi: MultiIndex) -> sym.Expr:
         """Take the derivative of the expression represented by
         :class:`ExprDerivativeTaker`.
+
         :param mi: multi-index representing the derivative
         """
         try:
@@ -397,9 +402,11 @@ class DifferentiatedExprDerivativeTaker:
     it makes use of an underlying derivative taker *taker*.
 
     .. attribute:: taker
+
         A :class:`ExprDerivativeTaker` for the base expression.
 
     .. attribute:: derivative_coeff_dict
+
         A dictionary mapping a derivative multi-index to a coefficient.
         The expression represented by this derivative taker is the linear
         combination of the derivatives of the expression for the
