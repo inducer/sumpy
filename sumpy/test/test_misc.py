@@ -29,6 +29,7 @@ THE SOFTWARE.
 import logging
 import sys
 from dataclasses import dataclass
+from itertools import product
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -44,6 +45,7 @@ from sumpy.array_context import (  # ruff:ignore[unused-import]
     PytestPyOpenCLArrayContextFactory,
     _acf,
 )
+from sumpy.derivative_taker import ExprDerivativeTaker, RadialDerivativeTaker
 from sumpy.diff_op import (
     as_scalar_pde,
     concat,
@@ -1157,6 +1159,30 @@ def test_symbolic_bessel_hankel_evalf(name: str, nderivs: int) -> None:
     zvalue = sp.I * sp.Float(1.5)
     expected = complex(ref(0, zz).diff(zz, nderivs).subs(zz, zvalue).evalf(prec))
     assert abs(got - expected) < 1.0e-12 * max(1.0, abs(expected))
+
+# }}}
+
+
+# {{{ test_radial_derivative_taker
+
+def test_radial_derivative_taker() -> None:
+    # Test Tausch's recurrence for a radial expression and the fallback for
+    # a non-radial expression.
+    dvec = sym.make_sym_vector("d", 3)
+    rscale = sym.Symbol("rscale")
+    r = sym.sqrt(sum(d**2 for d in dvec))
+    point = dict(zip(dvec, (0.4, 0.7, 1.1), strict=True))
+    point[rscale] = 0.7
+    for expr, radial in ((sym.exp(-r)/r, True), (dvec[0]*dvec[1]/r**3, False)):
+        taker = RadialDerivativeTaker(expr, dvec, rscale)
+        assert taker.is_radial == radial
+        reference = ExprDerivativeTaker(expr, dvec, rscale)
+        for mi in product(range(4), repeat=3):
+            if sum(mi) > 3:
+                continue
+            expected = complex(reference.diff(mi).subs(point))
+            got = complex(taker.diff(mi).subs(point))
+            assert abs(got - expected) < 1e-12 * max(1.0, abs(expected))
 
 # }}}
 
