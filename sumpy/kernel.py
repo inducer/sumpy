@@ -52,6 +52,8 @@ from sumpy.derivative_taker import (
     DerivativeCoeffDict,
     DifferentiatedExprDerivativeTaker,
     ExprDerivativeTaker,
+    ODEDerivativeTaker,
+    RadialDerivativeTaker,
     diff_derivative_coeff_dict,
 )
 
@@ -603,7 +605,13 @@ class ExpressionKernel(ScalarKernel, ABC):
             rscale: sym.Expr,
             sac: SymbolicAssignmentCollection | None,
         ) -> ExprDerivativeTaker:
-        return ExprDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
+        from sumpy.expansion.kernel_ode import kernel_ode
+        try:
+            ode_coeffs, init_conds = kernel_ode(self, dvec.dot(dvec))
+        except NotImplementedError:
+            return RadialDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
+        return ODEDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac,
+                                  ode_coeffs, init_conds)
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
@@ -675,16 +683,6 @@ class LaplaceKernel(ExpressionKernel):
         return f"LapKnl{self.dim}D"
 
     @override
-    def get_derivative_taker(
-            self,
-            dvec: sym.Matrix,
-            rscale: sym.Expr,
-            sac: SymbolicAssignmentCollection | None,
-        ) -> ExprDerivativeTaker:
-        from sumpy.derivative_taker import LaplaceDerivativeTaker
-        return LaplaceDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
-
-    @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
         from sumpy.diff_op import laplacian, make_identity_diff_op
         w = make_identity_diff_op(self.dim)
@@ -733,16 +731,6 @@ class BiharmonicKernel(ExpressionKernel):
     @override
     def __str__(self) -> str:
         return f"BiharmKnl{self.dim}D"
-
-    @override
-    def get_derivative_taker(
-            self,
-            dvec: sp.Matrix,
-            rscale: sym.Expr,
-            sac: SymbolicAssignmentCollection | None,
-        ) -> ExprDerivativeTaker:
-        from sumpy.derivative_taker import RadialDerivativeTaker
-        return RadialDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
@@ -824,16 +812,6 @@ class HelmholtzKernel(ExpressionKernel):
         return [
             KernelArgument(loopy_arg=lp.ValueArg(self.helmholtz_k_name, k_dtype)),
         ]
-
-    @override
-    def get_derivative_taker(
-            self,
-            dvec: sym.Matrix,
-            rscale: sym.Expr,
-            sac: SymbolicAssignmentCollection | None,
-        ) -> ExprDerivativeTaker:
-        from sumpy.derivative_taker import HelmholtzDerivativeTaker
-        return HelmholtzDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:
@@ -920,16 +898,6 @@ class YukawaKernel(ExpressionKernel):
         return [
             KernelArgument(loopy_arg=lp.ValueArg(self.yukawa_lambda_name, np.float64)),
         ]
-
-    @override
-    def get_derivative_taker(
-            self,
-            dvec: sym.Matrix,
-            rscale: sym.Expr,
-            sac: SymbolicAssignmentCollection | None,
-        ) -> ExprDerivativeTaker:
-        from sumpy.derivative_taker import HelmholtzDerivativeTaker
-        return HelmholtzDerivativeTaker(self.get_expression(dvec), dvec, rscale, sac)
 
     @override
     def get_pde_as_diff_op(self) -> LinearPDESystemOperator:

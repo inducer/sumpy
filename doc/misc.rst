@@ -3,6 +3,10 @@ Misc Tools
 
 .. automodule:: sumpy.derivative_taker
 
+.. automodule:: sumpy.derivative_recurrence
+
+.. automodule:: sumpy.expansion.kernel_ode
+
 .. automodule:: sumpy.symbolic
 
 .. automodule:: sumpy.tools
