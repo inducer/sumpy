@@ -166,8 +166,8 @@ def _test_sumpy_fmm(
         from pyopencl.characterize import get_pocl_version
         pocl_version = get_pocl_version(actx.queue.device.platform)
 
-        if pocl_version and pocl_version >= (7,):
-            pytest.skip("pocl 7 and pyvkfft don't get along: "
+        if pocl_version and (7,) <= pocl_version < (7, 2):
+            pytest.skip("pocl 7.0/7.1 and pyvkfft don't get along: "
                         "https://github.com/pocl/pocl/issues/2069")
 
     rng = np.random.default_rng(44)
