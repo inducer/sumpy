@@ -25,6 +25,7 @@ THE SOFTWARE.
 
 import logging
 from abc import ABC, abstractmethod
+from functools import cache
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -45,6 +46,7 @@ if TYPE_CHECKING:
     from arraycontext import ArrayContext
 
     from sumpy.expansion import ExpansionBase
+    from sumpy.kernel import ScalarKernel
 
 
 logger = logging.getLogger(__name__)
@@ -705,6 +707,374 @@ class M2LGenerateTranslationClassesDependentData(E2EBase):
             m2l_translation_classes_dependent_data=(
                 m2l_translation_classes_dependent_data),
             **kwargs)
+
+        return result["m2l_translation_classes_dependent_data"]
+
+# }}}
+
+
+# {{{ M2LGenerateTranslationClassesDependentDataWithODE
+
+@cache
+def _recurrence_stencils_at_axis(kernel: ScalarKernel, axis: int):
+    r"""
+    Return the symbolic initial conditions and update formulas for
+    :math:`U[i, \mathrm{mi}]` along *axis*.
+    """
+    z = sym.Matrix(sym.symbols(f"z0:{kernel.dim}"))
+    from sumpy.expansion.kernel_ode import kernel_ode
+    ode_coeffs, init_conds = kernel_ode(kernel, z.dot(z))
+    from sumpy.derivative_recurrence import derivative_recurrence
+    state_mi_stencils = derivative_recurrence(
+        ode_coeffs, kernel.dim, axis=axis, rscale=sym.Symbol("src_rscale"))
+    return init_conds, [sorted(stencil.items()) for stencil in state_mi_stencils]
+
+
+class M2LGenerateTranslationClassesDependentDataWithODE(
+        M2LGenerateTranslationClassesDependentData):
+    """
+    Compute the data of :class:`M2LGenerateTranslationClassesDependentData`
+    with the kernel's ODE recurrence.
+    """
+
+    @property
+    @override
+    def default_name(self) -> str:
+        return "m2l_generate_translation_classes_dependent_data_with_ode"
+
+    @memoize_method
+    def data_info(self) -> dict[str, np.ndarray]:
+        r"""
+        Return M2L precomputation maps and factorials.
+        """
+        src_expansion, tgt_expansion = self.src_expansion, self.tgt_expansion
+
+        translation = tgt_expansion.m2l_translation
+        # circulant_matrix_mis preserves natural axis order:
+        # axis 0 varies slowest, and the last axis varies fastest.
+        circulant_matrix_mis, mis, _ = (
+            translation._translation_classes_dependent_data_mis(
+                tgt_expansion, src_expansion))
+
+        if translation.use_fft:
+            circulant_matrix_mis = circulant_matrix_mis[::-1]
+
+        mis = sorted(mis, key=lambda mi: (sum(mi), mi))
+        mis_count = len(mis)
+        mi_to_index = {mi: mi_idx for mi_idx, mi in enumerate(mis)}
+
+        init_conds, state_mi_stencils = _recurrence_stencils_at_axis(
+            src_expansion.kernel, axis=0)
+
+        # The i-th stencil is a list of ((state_j, shift), weight) tuples
+        # representing the update terms for U[i, mi].
+        # state_term_offsets[i] is where state i's update terms start in the
+        # flattened list, and state_term_offsets[i+1] is where they end.
+        state_term_offsets = [0]
+        for stencil in state_mi_stencils:
+            state_term_offsets.append(state_term_offsets[-1] + len(stencil))
+
+        # The keys in states_mis represent the required subset of
+        # {U[i, mi] : 0 <= i < len(init_conds), mi in mis}
+        # needed to compute {U[0, mi] : mi in mis}.
+        # We will preallocate an array for these keys, whose values
+        # are their array indices.
+        states_mis = {}
+
+        # Initialize indices for U[0, mi] at every needed mi.
+        for mi_idx, mi in enumerate(mis):
+            states_mis[0, mi] = mi_idx
+
+        # Initialize indices for the higher states' initial conditions at mi = 0.
+        for i in range(1, len(init_conds)):
+            states_mis[i, mis[0]] = len(states_mis)
+
+        mi_dim = len(mis[0])
+
+        # For example, in 2D Helmholtz, updating U[0, (0, 2)] along axis-1
+        # requires U[1, (0, 1)] and U[1, (0, 0)].
+        # A direct approach is to generate a formula for each axis. Instead, we
+        # apply axis permutation to mi and z, and reuse the axis-0 formula.
+        mis_permuted = np.empty((mis_count, mi_dim), np.int32)
+        axis_perms = np.empty((mis_count, mi_dim), np.int32)
+
+        # dependencies[:, mi_idx] represents all update terms for U[:, mi],
+        # ordered by state.
+        # If U[i, mi] is in states_mis (i.e., it is needed), the slice
+        # dependencies[state_term_offsets[i]:state_term_offsets[i+1], mi_idx]
+        # maps needed terms to storage array indices.
+        #
+        # Unused terms are left as -1. This could happen when U[i, mi] is not needed,
+        # when mi = 0 is initialized directly, or when a parent multi-index has
+        # a negative component.
+        dependencies = np.full((state_term_offsets[-1], mis_count), -1, np.int32)
+
+        # Parents have lower degree, so visit each value before its parents.
+        for mi_idx in reversed(range(mis_count)):
+            mi = mis[mi_idx]
+            # To obtain U[i, mi], we choose to step along axis 0 when possible,
+            # otherwise along a largest index.
+            axis = 0 if mi[0] else mi.index(max(mi))
+            axis_perms[mi_idx] = range(mi_dim)
+            axis_perms[mi_idx, [0, axis]] = axis, 0
+            mis_permuted[mi_idx] = [mi[coord] for coord in axis_perms[mi_idx]]
+
+            # Skip initial conditions U[:, 0].
+            if mi == (0,)*mi_dim:
+                continue
+
+            for i, stencil in enumerate(state_mi_stencils):
+                if (i, mi) not in states_mis:
+                    continue
+                for term_idx, ((state_j, axis0_shift), _) in enumerate(
+                        stencil, start=state_term_offsets[i]):
+                    axis0_prev_mi = mis_permuted[mi_idx] + axis0_shift
+                    prev_mi = tuple(axis0_prev_mi[axis_perms[mi_idx]].tolist())
+                    # prev_mi is obtained by lowering coordinates of (unpermuted) mi.
+                    # Stored sets (t: chosen leading PDE multi-index as in
+                    # Proposition 13 of https://arxiv.org/abs/2305.17867):
+                    #   full:           {mi : |mi| <= p}
+                    #   PDE-compressed: {mi : |mi| <= p, some k has mi_k < t_k}
+                    # Both are closed under lowering, and so is their sum mis.
+                    # Thus every nonnegative prev_mi belongs to mis.
+                    # Ignore prev_mi if it has any negative indices.
+                    if min(prev_mi) >= 0:
+                        dependencies[term_idx, mi_idx] = states_mis.setdefault(
+                            (state_j, prev_mi), len(states_mis))
+
+        # Total number of {U[i, mi]} needed for computing {U[0, mi] : mi in mis}.
+        states_mis_count = len(states_mis)
+
+        # M2LGenerateTranslationClassesDependentDataWithODE.__call__ initializes
+        # states_mis_data with zeros. Each column stores the numerical U[i, mi]
+        # values for one translation class (one source-target center offset),
+        # at the indices assigned by states_mis.
+        #
+        # Unused update terms read the extra entry at index states_mis_count,
+        # which holds zero.
+        dependencies[dependencies < 0] = states_mis_count
+
+        # state_mi_idx[i, mi_idx] is the position of U[i, mi] in
+        # states_mis_data, or -1 if U[i, mi] is unneeded for computing
+        # {U[0, mi] : mi in mis}.
+        state_mi_idx = np.full((len(init_conds), mis_count), -1, np.int32)
+        for (i, mi), idx in states_mis.items():
+            state_mi_idx[i, mi_to_index[mi]] = idx
+
+        # The position of U[0, mi] for each output entry; padding reads the zero entry.
+        circulant_matrix_mi_idx = np.array(
+            [states_mis.get((0, mi), states_mis_count) for mi in circulant_matrix_mis],
+            np.int32)
+
+        # U[0, mi] = rscale^|mi| d^mi G / mi!. To match Sumpy's expected output,
+        # we need to track the factorial term.
+        from math import factorial, prod
+        factorials = np.array([prod(map(factorial, mi)) if mi in mi_to_index else 0
+                               for mi in circulant_matrix_mis], np.float64)
+
+        # The keys are the Loopy argument names of _build_kernel.
+        return {
+            "mis_permuted": mis_permuted,
+            "axis_perms": axis_perms,
+            "dependencies": dependencies,
+            "state_mi_idx": state_mi_idx,
+            "circulant_matrix_mi_idx": circulant_matrix_mi_idx,
+            "factorials": factorials,
+        }
+
+    @staticmethod
+    @cache
+    def _build_kernel(
+            kernel: ScalarKernel, result_dtype: np.dtype) -> lp.TranslationUnit:
+        """
+        Return an order-independent Loopy M2L data generator from the ODE updates.
+        """
+        init_conds, state_mi_stencils = _recurrence_stencils_at_axis(kernel, axis=0)
+        # Total number of terms for updating all U[:, mi].
+        nupdate_terms = sum(len(stencil) for stencil in state_mi_stencils)
+
+        # ===== initial conditions =====
+        init_conds_assignments = []
+        for i, value in enumerate(init_conds):
+            init_conds_assignments.append((f"init_cond_{i}", value))
+
+        from sumpy.codegen import to_loopy_insns
+        init_insns = [
+            """
+            <> z[idim] = m2l_translation_vectors[idim, \
+                    translation_classes_level_start+itr_class] \
+                    {dup=idim}
+            """,
+            *to_loopy_insns(init_conds_assignments, vector_names={"z"}),
+        ]
+
+        ode_order = len(init_conds)
+        for i in range(ode_order):
+            init_insns.append(
+                f"states_mis_data[state_mi_idx[{i}, 0], itr_class] = init_cond_{i} "
+                f"{{id=write_init_{i}}}")
+
+        # ===== recurrence updates =====
+        import pymbolic.primitives as p
+        states_mis_data = p.Variable("states_mis_data")
+        dependencies = p.Variable("dependencies")
+        itr_class = p.Variable("itr_class")
+        imi = p.Variable("imi")
+
+        replacements = {}
+        for idim in range(kernel.dim):
+            replacements[sym.Symbol(f"z{idim}")] = sym.Symbol(f"zp{idim}")
+        from sumpy.codegen import VectorComponentRewriter
+        vector_components = VectorComponentRewriter(frozenset({"mi", "zp"}))
+
+        update_insns = []
+        term_idx = 0
+
+        # mi will be dispatched in total degree order:
+        #   update and store U[0, mi], U[1, mi], U[2, mi], ... (if needed)
+        #   using the formulas built by the loop below.
+        for state_i, stencil_for_i_mi in enumerate(state_mi_stencils):
+            # stencil_for_i_mi is a list of ((state_j, shift), weight) tuples.
+            # U[state_i, mi] = sum(terms), where each term is
+            # weight*U[state_j, mi+shift] (along axis 0, after the axis permutation).
+            terms = []
+            for _, weight in stencil_for_i_mi:
+                weight = weight.xreplace(replacements)
+                weight = vector_components(sym.to_pymbolic(weight))
+                value_idx = dependencies[term_idx, imi]
+                term_value = states_mis_data[value_idx, itr_class]
+                terms.append(weight*term_value)
+                term_idx += 1
+
+            # If state_mi_idx[state_i, imi] < 0, then U[state_i, mi] is not needed
+            # in the computation of {U[0, mi]}_{mi in mis}.
+            if state_i > 0:
+                update_insns.append(f"if state_mi_idx[{state_i}, imi] >= 0")
+            value_instruction = lp.Assignment(
+                assignee=p.Variable(f"value_{state_i}"),
+                expression=p.flattened_sum(terms),
+                id=f"value_{state_i}",
+                temp_var_type=lp.Optional(result_dtype))
+
+            # Write back the computed value to the storage array states_mis_data
+            write_instruction = (
+                f"states_mis_data[state_mi_idx[{state_i}, imi], itr_class] = "
+                f"value_{state_i} {{id=write_value_{state_i}, dep=value_{state_i}}}")
+            update_insns.extend([value_instruction, write_instruction])
+            if state_i > 0:
+                update_insns.append("end")
+
+        # ===== loop domains and instructions =====
+        domains = [
+            "{[itr_class]: 0<=itr_class<ntranslation_classes}",
+            # No recurrence update is needed for the initial conditions U[i, 0].
+            "{[imi]: 1<=imi<nmis}",
+            "{[idata]: 0<=idata<ndata}",
+            "{[idim]: 0<=idim<dim}",
+        ]
+
+        instructions = [
+            """
+            for itr_class
+            """,
+                *init_insns,
+            """
+                with {dep=write_init_*}
+                    for imi
+                        <> mi[idim] = mis_permuted[imi, idim]
+                        <> zp[idim] = m2l_translation_vectors[ \
+                            axis_perms[imi, idim], \
+                            translation_classes_level_start+itr_class]
+            """,
+                        *update_insns,
+            """
+                    end
+                end
+                with {dep=write_value_*}
+                    for idata
+                        m2l_translation_classes_dependent_data[itr_class, idata] = \
+                            factorials[idata] * states_mis_data[ \
+                                circulant_matrix_mi_idx[idata], itr_class]
+                    end
+                end
+            end
+            """,
+        ]
+
+        # ===== Loopy kernel =====
+        from sumpy.tools import gather_loopy_arguments
+        loopy_knl = make_loopy_program(
+            domains, instructions,
+            kernel_data=[
+                lp.GlobalArg("states_mis_data", None,
+                             shape=("nstates_mis+1", "ntranslation_classes")),
+                lp.ValueArg("nstates_mis", np.int32),
+                lp.GlobalArg("state_mi_idx", None, shape=(len(init_conds), "nmis")),
+                lp.GlobalArg("mis_permuted", None, shape=("nmis", "dim")),
+                lp.GlobalArg("axis_perms", None, shape=("nmis", "dim")),
+                lp.GlobalArg("dependencies", None,
+                             shape=(nupdate_terms, "nmis")),
+                lp.GlobalArg("m2l_translation_classes_dependent_data", None,
+                             shape=("ntranslation_classes", "ndata"), offset=lp.auto),
+                lp.GlobalArg("circulant_matrix_mi_idx", None, shape=("ndata",)),
+                lp.GlobalArg("factorials", None, shape=("ndata",)),
+                lp.ValueArg("ndata", np.int32),
+                lp.GlobalArg("m2l_translation_vectors", None,
+                             shape=("dim", "ntranslation_vectors")),
+                lp.ValueArg("ntranslation_vectors", np.int32),
+                lp.ValueArg("translation_classes_level_start", np.int32),
+                lp.ValueArg("ntranslation_classes", np.int32),
+                lp.ValueArg("nmis", np.int32),
+                lp.ValueArg("src_rscale", None),
+                *gather_loopy_arguments([kernel]),
+            ],
+            fixed_parameters={"dim": kernel.dim},
+            assumptions=(
+                "nmis>=1 and nstates_mis>=1 and "
+                "translation_classes_level_start>=0 and "
+                "translation_classes_level_start + ntranslation_classes "
+                "<= ntranslation_vectors"),
+            name="m2l_generate_translation_classes_dependent_data_with_ode")
+
+        # Each source-target center offset runs in parallel; imi and idata stay serial.
+        loopy_knl = lp.tag_inames(loopy_knl, {"itr_class": "g.0"})
+
+        # Degree order ensures parents are computed before they are read.
+        # Each translation class has separate storage, so no global barrier is needed.
+        loopy_knl = lp.set_options(
+            loopy_knl,
+            enforce_variable_access_ordered="no_check",
+            disable_global_barriers=True)
+
+        return kernel.prepare_loopy_kernel(loopy_knl)
+
+    @override
+    def get_optimized_kernel(self, result_dtype: np.dtype) -> lp.TranslationUnit:
+        return self._build_kernel(self.src_expansion.kernel, result_dtype)
+
+    @override
+    def __call__(self, actx: ArrayContext, **kwargs):
+        if not self.tgt_expansion.use_rscale:
+            kwargs["src_rscale"] = np.float64(1)
+        info = self.data_info()
+        result_dtype = np.dtype(
+            np.complex128 if self.src_expansion.kernel.is_complex_valued
+            else np.float64)
+        knl = self.get_cached_kernel(result_dtype=result_dtype)
+        device_info = {name: actx.from_numpy(array) for name, array in info.items()}
+
+        # Total number of {U[i, mi]} needed for computing {U[0, mi] : mi in mis}.
+        nstates_mis = int(info["dependencies"].max())
+
+        # One extra entry holds zero for padding and unused update terms.
+        states_mis_data = actx.np.zeros(
+            (nstates_mis+1, kwargs["ntranslation_classes"]), result_dtype)
+
+        result = actx.call_loopy(
+            knl, **kwargs, **device_info,
+            nmis=len(info["mis_permuted"]), nstates_mis=nstates_mis,
+            ndata=len(info["circulant_matrix_mi_idx"]),
+            states_mis_data=states_mis_data)
 
         return result["m2l_translation_classes_dependent_data"]
 
