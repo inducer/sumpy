@@ -1040,9 +1040,9 @@ def _get_fft_backend(queue: pyopencl.CommandQueue) -> FFTBackend:
         import platform
         import sys
 
-        if pocl_ver >= (7,):
+        if (7,) <= pocl_ver < (7, 2):
             warnings.warn(
-                "PoCL>=7 miscompiles VkFFT. "
+                "PoCL 7.0/7.1 miscompiles VkFFT. "
                 "See https://github.com/pocl/pocl/issues/2069 for details. "
                 "Falling back to a slower built-in backend.", stacklevel=3)
             return FFTBackend.LOOPY
