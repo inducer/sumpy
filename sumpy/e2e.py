@@ -37,7 +37,7 @@ from pytools import memoize_method
 
 import sumpy.symbolic as sym
 from sumpy.array_context import make_loopy_program
-from sumpy.tools import KernelCacheMixin, to_complex_dtype
+from sumpy.tools import KernelCacheMixin, add_mi, to_complex_dtype
 
 
 if TYPE_CHECKING:
@@ -791,13 +791,6 @@ class M2LGenerateTranslationClassesDependentDataWithODE(
 
         mi_dim = len(mis[0])
 
-        # For example, in 2D Helmholtz, updating U[0, (0, 2)] along axis-1
-        # requires U[1, (0, 1)] and U[1, (0, 0)].
-        # A direct approach is to generate a formula for each axis. Instead, we
-        # apply axis permutation to mi and z, and reuse the axis-0 formula.
-        mis_permuted = np.empty((mis_count, mi_dim), np.int32)
-        axis_perms = np.empty((mis_count, mi_dim), np.int32)
-
         # dependencies[:, mi_idx] represents all update terms for U[:, mi],
         # ordered by state.
         # If U[i, mi] is in states_mis (i.e., it is needed), the slice
@@ -809,27 +802,29 @@ class M2LGenerateTranslationClassesDependentDataWithODE(
         # a negative component.
         dependencies = np.full((state_term_offsets[-1], mis_count), -1, np.int32)
 
+        # To obtain U[i, mi], we choose to step along axis 0 when possible,
+        # otherwise along a largest index.
+        step_axes = [0 if mi[0] else mi.index(max(mi)) for mi in mis]
+
         # Parents have lower degree, so visit each value before its parents.
         for mi_idx in reversed(range(mis_count)):
             mi = mis[mi_idx]
-            # To obtain U[i, mi], we choose to step along axis 0 when possible,
-            # otherwise along a largest index.
-            axis = 0 if mi[0] else mi.index(max(mi))
-            axis_perms[mi_idx] = range(mi_dim)
-            axis_perms[mi_idx, [0, axis]] = axis, 0
-            mis_permuted[mi_idx] = [mi[coord] for coord in axis_perms[mi_idx]]
 
             # Skip initial conditions U[:, 0].
             if mi == (0,)*mi_dim:
                 continue
 
+            axis = step_axes[mi_idx]
             for i, stencil in enumerate(state_mi_stencils):
                 if (i, mi) not in states_mis:
                     continue
                 for term_idx, ((state_j, axis0_shift), _) in enumerate(
                         stencil, start=state_term_offsets[i]):
-                    axis0_prev_mi = mis_permuted[mi_idx] + axis0_shift
-                    prev_mi = tuple(axis0_prev_mi[axis_perms[mi_idx]].tolist())
+                    # Move the axis-0 shift onto the stepping axis
+                    # (the same swap as axis_perms below).
+                    shift = list(axis0_shift)
+                    shift[0], shift[axis] = shift[axis], shift[0]
+                    prev_mi = add_mi(mi, shift)
                     # prev_mi is obtained by lowering coordinates of (unpermuted) mi.
                     # Stored sets (t: chosen leading PDE multi-index as in
                     # Proposition 13 of https://arxiv.org/abs/2305.17867):
@@ -841,6 +836,17 @@ class M2LGenerateTranslationClassesDependentDataWithODE(
                     if min(prev_mi) >= 0:
                         dependencies[term_idx, mi_idx] = states_mis.setdefault(
                             (state_j, prev_mi), len(states_mis))
+
+        # For example, in 2D Helmholtz, updating U[0, (0, 2)] along axis-1
+        # requires U[1, (0, 1)] and U[1, (0, 0)].
+        # A direct approach is to generate a formula for each axis. Instead, we
+        # apply axis permutation to mi and z, and reuse the axis-0 formula.
+        mis_permuted = np.empty((mis_count, mi_dim), np.int32)
+        axis_perms = np.empty((mis_count, mi_dim), np.int32)
+        for mi_idx, (mi, axis) in enumerate(zip(mis, step_axes, strict=True)):
+            axis_perms[mi_idx] = range(mi_dim)
+            axis_perms[mi_idx, [0, axis]] = axis, 0
+            mis_permuted[mi_idx] = [mi[coord] for coord in axis_perms[mi_idx]]
 
         # Total number of {U[i, mi]} needed for computing {U[0, mi] : mi in mis}.
         states_mis_count = len(states_mis)
@@ -921,22 +927,22 @@ class M2LGenerateTranslationClassesDependentDataWithODE(
         itr_class = p.Variable("itr_class")
         imi = p.Variable("imi")
 
+        # Evaluate the axis-0 weights at the permuted mip and zp.
         replacements = {}
         for idim in range(kernel.dim):
             replacements[sym.Symbol(f"z{idim}")] = sym.Symbol(f"zp{idim}")
+            replacements[sym.Symbol(f"mi{idim}")] = sym.Symbol(f"mip{idim}")
         from sumpy.codegen import VectorComponentRewriter
-        vector_components = VectorComponentRewriter(frozenset({"mi", "zp"}))
+        vector_components = VectorComponentRewriter(frozenset({"mip", "zp"}))
 
         update_insns = []
         term_idx = 0
 
-        # mi will be dispatched in total degree order:
-        #   update and store U[0, mi], U[1, mi], U[2, mi], ... (if needed)
-        #   using the formulas built by the loop below.
+        # Dispatch mi in increasing total degree:
+        #   compute and store each needed U[0, mi], U[1, mi], U[2, mi], ...
+        #   using the recurrence formulas constructed below.
         for state_i, stencil_for_i_mi in enumerate(state_mi_stencils):
-            # stencil_for_i_mi is a list of ((state_j, shift), weight) tuples.
-            # U[state_i, mi] = sum(terms), where each term is
-            # weight*U[state_j, mi+shift] (along axis 0, after the axis permutation).
+            # Each entry is ((state_j, shift), weight) in the axis-0 formula.
             terms = []
             for _, weight in stencil_for_i_mi:
                 weight = weight.xreplace(replacements)
@@ -956,7 +962,7 @@ class M2LGenerateTranslationClassesDependentDataWithODE(
                 id=f"value_{state_i}",
                 temp_var_type=lp.Optional(result_dtype))
 
-            # Write back the computed value to the storage array states_mis_data
+            # Store U[i, mi] at the index for the (unpermutated) mi.
             write_instruction = (
                 f"states_mis_data[state_mi_idx[{state_i}, imi], itr_class] = "
                 f"value_{state_i} {{id=write_value_{state_i}, dep=value_{state_i}}}")
@@ -981,7 +987,7 @@ class M2LGenerateTranslationClassesDependentDataWithODE(
             """
                 with {dep=write_init_*}
                     for imi
-                        <> mi[idim] = mis_permuted[imi, idim]
+                        <> mip[idim] = mis_permuted[imi, idim]
                         <> zp[idim] = m2l_translation_vectors[ \
                             axis_perms[imi, idim], \
                             translation_classes_level_start+itr_class]
