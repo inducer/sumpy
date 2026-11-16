@@ -231,9 +231,32 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
     def m2l_translation_class_dependent_data_kernel(
             self, src_order: int, tgt_order: int
         ) -> E2EBase:
-        return M2LGenerateTranslationClassesDependentData(
-                self.multipole_expansion(src_order),
-                self.local_expansion(tgt_order))
+        from sumpy.e2e import (
+            M2LGenerateTranslationClassesDependentDataWithODE,
+            _recurrence_stencils_at_axis,
+        )
+        from sumpy.expansion.m2l import (
+            VolumeTaylorM2LTranslation,
+            VolumeTaylorM2LWithFFT,
+            VolumeTaylorM2LWithPreprocessedMultipoles,
+        )
+        from sumpy.expansion.multipole import VolumeTaylorMultipoleExpansionBase
+
+        src_expansion = self.multipole_expansion(src_order)
+        tgt_expansion = self.local_expansion(tgt_order)
+        if (isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase)
+                and type(tgt_expansion.m2l_translation) in (
+                    VolumeTaylorM2LTranslation,
+                    VolumeTaylorM2LWithPreprocessedMultipoles,
+                    VolumeTaylorM2LWithFFT)):
+            try:
+                _recurrence_stencils_at_axis(src_expansion.kernel, axis=0)
+            except NotImplementedError:
+                pass
+            else:
+                return M2LGenerateTranslationClassesDependentDataWithODE(
+                    src_expansion, tgt_expansion)
+        return M2LGenerateTranslationClassesDependentData(src_expansion, tgt_expansion)
 
     @memoize_method
     def m2l_preprocess_mpole_kernel(self, src_order: int, tgt_order: int) -> E2EBase:
