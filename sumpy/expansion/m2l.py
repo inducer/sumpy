@@ -600,8 +600,10 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         assert isinstance(wrangler, (FullExpansionTermsWrangler,
                                      LinearPDEBasedExpansionTermsWrangler))
 
-        _, axis_permutation = wrangler._get_mi_ordering_key_and_axis_permutation()
-        slowest_idx = axis_permutation[0]
+        slowest_idx = dim - 1
+        if isinstance(wrangler, LinearPDEBasedExpansionTermsWrangler):
+            t = wrangler._leading_pde_mi
+            slowest_idx = t.index(max(t))
 
         # max_mi[slowest_idx] = 2*(c - 1)
         c = max_mi[slowest_idx] // 2 + 1
