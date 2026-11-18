@@ -577,7 +577,8 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         _, _, max_mi = self._translation_classes_dependent_data_mis(
             tgt_expansion, src_expansion)
 
-        ncoeff_src = len(src_expansion.get_coefficient_identifiers())
+        src_coeff_ids = src_expansion.get_coefficient_identifiers()
+        ncoeff_src = len(src_coeff_ids)
         ncoeff_preprocessed = self.preprocess_multipole_nexprs(
             tgt_expansion, src_expansion)
         order = src_expansion.order
@@ -600,14 +601,13 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         assert isinstance(wrangler, (FullExpansionTermsWrangler,
                                      LinearPDEBasedExpansionTermsWrangler))
 
-        slowest_idx = dim - 1
-        if isinstance(wrangler, LinearPDEBasedExpansionTermsWrangler):
-            t = wrangler._leading_pde_mi
-            slowest_idx = t.index(max(t))
-
-        # max_mi[slowest_idx] = 2*(c - 1)
-        c = max_mi[slowest_idx] // 2 + 1
-        noutput_coeffs = cast("int", c * (2*order + 1) ** (dim - 1))
+        # We compute the flat index of the last source multi-index using the
+        # lexicographic order of the padded layout.
+        last_src_mi = max(src_coeff_ids)
+        last_slot = 0
+        for index, axis_max in zip(last_src_mi, max_mi, strict=True):
+            last_slot = last_slot * (axis_max + 1) + index
+        noutput_coeffs = last_slot + 1
 
         domains = [
             "{[output_icoeff]: 0<=output_icoeff<noutput_coeffs}",
@@ -635,6 +635,14 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
             idx = idx // (max_mi[i] + 1)
 
         input_idx = wrangler.get_storage_index(v)
+        predicates = [p.Comparison(sum(v), "<=", order)]
+        if isinstance(wrangler, LinearPDEBasedExpansionTermsWrangler):
+            # get_storage_index requires a pure leading term t = c*e_k.
+            t = wrangler._leading_pde_mi
+            c = sum(t)
+            k = t.index(c)
+            predicates.append(p.Comparison(v[k], "<", c))
+
         output_idx = 0
         mult = 1
         for i in range(dim - 1, -1, -1):
@@ -645,10 +653,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
             lp.Assignment(
                 assignee=output_coeffs[output_icoeff],
                 expression=input_coeffs_copy[input_idx],
-                predicates=frozenset([
-                    p.Comparison(sum(v), "<=", order),
-                    p.Comparison(v[slowest_idx], "<", c),
-                ]),
+                predicates=frozenset(predicates),
                 happens_after=frozenset(
                     [f"set_x{i}" for i in range(dim)] + ["input_copy"]
                 ),
