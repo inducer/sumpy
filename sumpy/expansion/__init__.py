@@ -641,6 +641,25 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         ordering_key = self._get_mi_ordering_key()
         return max(self._pde_coeffs, key=ordering_key)
 
+    @property
+    @memoize_method
+    def pde_order(self) -> int:
+        return max(map(sum, self._pde_coeffs))
+
+    @property
+    @memoize_method
+    def compression_axis(self) -> int:
+        r"""
+        Return the smallest axis :math:`k` for which :math:`c \cdot e_k` occurs
+        as a derivative multi-index in the PDE, or 0 if no such axis exists.
+
+        Here :math:`c` is :attr:`pde_order`.
+        """
+        for axis in range(self.dim):
+            if mi_set_axis((0,)*self.dim, axis, self.pde_order) in self._pde_coeffs:
+                return axis
+        return 0
+
     @memoize_method
     def _get_mi_ordering_key(
                 self
@@ -649,17 +668,7 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         :returns: a ``sort`` key for multi-indices. Sorted by total degree
             first, then lexicographically with axis *k* first.
         """
-        dim = self.dim
-        pde_order = max(map(sum, self._pde_coeffs))
-
-        # If possible, choose the smallest axis-k such
-        # that pde_order*e_k exists. Otherwise, choose axis-0.
-        k = 0
-        for axis in range(dim):
-            pure_mi = mi_set_axis((0,)*dim, axis, pde_order)
-            if pure_mi in self._pde_coeffs:
-                k = axis
-                break
+        k = self.compression_axis
 
         from sumpy.diff_op import DerivativeIdentifier
 
@@ -703,11 +712,9 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
     @override
     def get_storage_index(self, mi: Sequence[Expression]) -> Expression:
-        t = self._leading_pde_mi
-        if max(t) < sum(t):
+        c = self.pde_order
+        if self._leading_pde_mi[self.compression_axis] != c:
             raise NotImplementedError("pde needs a pure leading term")
-        # c is the PDE order.
-        c = sum(t)
         dim = self.dim
         n = sum(mi)
 
