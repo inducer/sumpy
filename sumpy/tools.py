@@ -79,6 +79,7 @@ Multi-index Helpers
 
 .. autofunction:: add_mi
 .. autofunction:: mi_factorial
+.. autofunction:: binomial
 .. autofunction:: mi_increment_axis
 .. autofunction:: mi_set_axis
 .. autofunction:: mi_power
@@ -165,6 +166,11 @@ def mi_factorial(mi: Sequence[int]) -> int:
     for mi_i in mi:
         result *= math.factorial(mi_i)
     return result
+
+
+def binomial(n: Expression, k: int) -> Expression:
+    import math
+    return math.prod(n-j for j in range(k)) // math.factorial(k)
 
 
 def mi_increment_axis(

@@ -570,26 +570,9 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
                 tgt_expansion: LocalExpansionBase,
                 src_expansion: MultipoleExpansionBase,
                 result_dtype: DTypeLike,
-            ) -> tuple[lp.TranslationUnit, Sequence[OptimizationCallable]]:
+            ) -> lp.TranslationUnit:
         assert isinstance(tgt_expansion, VolumeTaylorLocalExpansionBase)
         assert isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase)
-
-        _, _, max_mi = self._translation_classes_dependent_data_mis(
-            tgt_expansion, src_expansion)
-
-        ncoeff_src = len(src_expansion.get_coefficient_identifiers())
-        ncoeff_preprocessed = self.preprocess_multipole_nexprs(
-            tgt_expansion, src_expansion)
-        order = src_expansion.order
-
-        output_coeffs = p.Variable("output_coeffs")
-        input_coeffs = p.Variable("input_coeffs")
-        output_icoeff = p.Variable("output_icoeff")
-        input_icoeff = p.Variable("input_icoeff")
-        input_coeffs_copy = p.Variable("input_coeffs_copy")
-
-        dim = tgt_expansion.dim
-        v = tuple(p.Variable(f"x{i}") for i in range(dim))
 
         from sumpy.expansion import (
             FullExpansionTermsWrangler,
@@ -600,81 +583,59 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         assert isinstance(wrangler, (FullExpansionTermsWrangler,
                                      LinearPDEBasedExpansionTermsWrangler))
 
-        _, axis_permutation = wrangler._get_mi_ordering_key_and_axis_permutation()
-        slowest_idx = axis_permutation[0]
+        mi = tuple(p.Variable(f"mi{i}") for i in range(src_expansion.dim))
+        # Position of mi in the stored source coefficient identifiers.
+        input_idx = wrangler.get_storage_index(mi)
 
-        # max_mi[slowest_idx] = 2*(c - 1)
-        c = max_mi[slowest_idx] // 2 + 1
-        noutput_coeffs = cast("int", c * (2*order + 1) ** (dim - 1))
+        # ===== loop domain =====
+        mi_names = ", ".join(component.name for component in mi)
+        # mi has no negative indices, and |mi| <= src_expansion.order.
+        constraints = f"0 <= {mi_names} and {sum(mi)} <= {src_expansion.order}"
+        if isinstance(wrangler, LinearPDEBasedExpansionTermsWrangler):
+            k = wrangler.compression_axis
+            c = wrangler.pde_order
+            constraints += f" and {mi[k]} < {c}"
 
-        domains = [
-            "{[output_icoeff]: 0<=output_icoeff<noutput_coeffs}",
-            "{[input_icoeff]: 0<=input_icoeff<ninput_coeffs}",
-        ]
+        domain = f"{{[{mi_names}]: {constraints}}}"
 
-        insns = [
-            lp.Assignment(
-                assignee=input_coeffs_copy[input_icoeff],
-                expression=input_coeffs[input_icoeff],
-                id="input_copy",
-                temp_var_type=lp.Optional(None),
-            ),
-        ]
-
-        idx = output_icoeff
-        for i in range(dim - 1, -1, -1):
-            new_idx = idx % (max_mi[i] + 1) if i > 0 else idx
-            insns.append(lp.Assignment(
-                    assignee=v[i],
-                    expression=new_idx,
-                    id=f"set_x{i}",
-                    temp_var_type=lp.Optional(None),
-            ))
-            idx = idx // (max_mi[i] + 1)
-
-        input_idx = wrangler.get_storage_index(v)
+        # ===== padded output index =====
+        # The source wrangler's get_storage_index uses total degree first,
+        # then lexicographic order.
+        # In contrast, we choose to flatten the FFT grid with axes varying from
+        # fastest to slowest in decreasing axis order.
+        _, _, max_mi = self._translation_classes_dependent_data_mis(
+            tgt_expansion, src_expansion)
         output_idx = 0
-        mult = 1
-        for i in range(dim - 1, -1, -1):
-            output_idx += mult*v[i]
-            mult *= (max_mi[i] + 1)
+        for component, axis_max in zip(mi, max_mi, strict=True):
+            output_idx = output_idx * (axis_max + 1) + component
 
-        insns += [
-            lp.Assignment(
-                assignee=output_coeffs[output_icoeff],
-                expression=input_coeffs_copy[input_idx],
-                predicates=frozenset([
-                    p.Comparison(sum(v), "<=", order),
-                    p.Comparison(v[slowest_idx], "<", c),
-                ]),
-                happens_after=frozenset(
-                    [f"set_x{i}" for i in range(dim)] + ["input_copy"]
-                ),
-            )
-        ]
-
-        knl = lp.make_function(domains, insns,
+        # ===== Loopy kernel =====
+        ncoeff_preprocessed = self.preprocess_multipole_nexprs(
+            tgt_expansion, src_expansion)
+        knl = lp.make_function(domain, [
+                lp.Assignment(
+                    assignee=p.Variable("preprocessed_src_coeffs")[output_idx],
+                    expression=p.Variable("input_coeffs")[input_idx]),
+            ],
             kernel_data=[
-                lp.ValueArg("src_rscale", None),
-                lp.GlobalArg("output_coeffs", result_dtype, shape=ncoeff_preprocessed,
-                    is_input=False, is_output=True),
-                lp.GlobalArg("input_coeffs", None, shape=ncoeff_src),
-                ...],
+                lp.ValueArg("src_rscale", None, is_input=True),
+                lp.GlobalArg("preprocessed_src_coeffs", result_dtype,
+                    shape=ncoeff_preprocessed, is_input=False, is_output=True),
+                lp.GlobalArg("input_coeffs", None,
+                    shape=len(src_expansion), is_input=True, is_output=False),
+            ],
             name="m2l_preprocess_inner",
             lang_version=lp.MOST_RECENT_LANGUAGE_VERSION,
-            fixed_parameters={"noutput_coeffs": noutput_coeffs,
-                              "ninput_coeffs": ncoeff_src},
         )
 
-        from functools import partial
-        optimizations = [
-            partial(lp.split_iname, split_iname="m2l__input_icoeff",
-                    inner_length=32, inner_tag="l.0"),
-            partial(lp.split_iname, split_iname="m2l__output_icoeff",
-                    inner_length=32, inner_tag="l.0"),
-        ]
-
-        return knl, optimizations
+        # ===== work-group scheduling =====
+        # The FFT grid is row-major, so the last coordinate of mi is contiguous.
+        # In 3D, mi2 = 32 * mi2_outer + mi2_inner.
+        last = mi[-1].name
+        knl = lp.split_iname(knl, last, 32,
+            outer_iname=f"{last}_outer", inner_iname=f"{last}_inner",
+            inner_tag="l.0")
+        return knl
 
     @override
     def postprocess_local_exprs(self,
