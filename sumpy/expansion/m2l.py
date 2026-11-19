@@ -570,7 +570,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
                 tgt_expansion: LocalExpansionBase,
                 src_expansion: MultipoleExpansionBase,
                 result_dtype: DTypeLike,
-            ) -> tuple[lp.TranslationUnit, Sequence[OptimizationCallable]]:
+            ) -> lp.TranslationUnit:
         assert isinstance(tgt_expansion, VolumeTaylorLocalExpansionBase)
         assert isinstance(src_expansion, VolumeTaylorMultipoleExpansionBase)
 
@@ -635,7 +635,7 @@ class VolumeTaylorM2LTranslation(M2LTranslationBase):
         knl = lp.split_iname(knl, last, 32,
             outer_iname=f"{last}_outer", inner_iname=f"{last}_inner",
             inner_tag="l.0")
-        return knl, []
+        return knl
 
     @override
     def postprocess_local_exprs(self,
