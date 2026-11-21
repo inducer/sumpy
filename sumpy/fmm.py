@@ -218,12 +218,15 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
     def m2l(self,
             src_order: int,
             tgt_order: int,
-            m2l_use_translation_classes_dependent_data: bool = False) -> E2EBase:
+            m2l_use_translation_classes_dependent_data: bool = False,
+            m2l_use_real_fft: bool = False) -> E2EBase:
         if m2l_use_translation_classes_dependent_data:
-            m2l_class = M2LUsingTranslationClassesDependentData
-        else:
-            m2l_class = E2EFromCSR
-        return m2l_class(
+            return M2LUsingTranslationClassesDependentData(
+                    self.multipole_expansion(src_order),
+                    self.local_expansion(tgt_order), name="m2l",
+                    use_real_fft=m2l_use_real_fft)
+
+        return E2EFromCSR(
                 self.multipole_expansion(src_order),
                 self.local_expansion(tgt_order), name="m2l")
 
