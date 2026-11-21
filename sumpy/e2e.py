@@ -312,6 +312,21 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
     list using M2L translation classes dependent data
     """
 
+    use_real_fft: bool
+
+    def __init__(self,
+            src_expansion: ExpansionBase,
+            tgt_expansion: ExpansionBase,
+            name: str | None = None,
+            *,
+            use_real_fft: bool = False):
+        super().__init__(src_expansion, tgt_expansion, name)
+        self.use_real_fft = use_real_fft
+
+    @override
+    def get_cache_key(self):
+        return (*super().get_cache_key(), self.use_real_fft)
+
     @property
     def default_name(self):
         return "m2l_using_translation_classes_dependent_data"
@@ -368,6 +383,21 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
                 )
 
     def get_inner_loopy_kernel(self, result_dtype):
+        """
+        Return the M2L translation for one (target box, source box) pair, as a
+        Loopy kernel function named ``e2e``.
+
+        The kernel function adds the source box's contribution to ``tgt_coeffs``,
+        using the source box's ``src_coeffs`` and ``data``.
+
+        For example, in FFT M2L, ``src_coeffs`` and ``data`` are
+        FFT(preprocessed source_coeffs) and FFT(padded kernel_derivatives),
+        respectively.
+        """
+        if self.use_real_fft:
+            return self.tgt_expansion.m2l_translation.loopy_translate(
+                self.tgt_expansion, self.src_expansion, use_real_fft=True)
+
         try:
             return self.tgt_expansion.loopy_translate_from(
                 self.src_expansion)
@@ -424,6 +454,10 @@ class M2LUsingTranslationClassesDependentData(E2EFromCSR):
         else:
             ncoeff_src = len(self.src_expansion)
             ncoeff_tgt = len(self.tgt_expansion)
+
+        if self.use_real_fft:
+            ncoeff_src = ncoeff_tgt = m2l_translation_classes_dependent_ndata = (
+                ncoeff_src // 2 + 1)
 
         # To clarify terminology:
         #
