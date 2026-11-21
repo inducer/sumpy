@@ -903,8 +903,8 @@ class YukawaKernel(ExpressionKernel):
     @property
     @override
     def is_complex_valued(self) -> bool:
-        # FIXME: 2D uses Hankel functions (complex-valued); 3D uses real exp
-        return True
+        # FIXME: 2D uses Hankel functions (nominally complex-valued); 3D uses real exp
+        return self.dim == 2
 
     @override
     def __str__(self) -> str:

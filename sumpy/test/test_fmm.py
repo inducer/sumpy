@@ -110,6 +110,10 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts([
             (HelmholtzKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
                 LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
             (YukawaKernel(2), Y2DLocalExpansion, Y2DMultipoleExpansion, False),
+            (YukawaKernel(3), VolumeTaylorLocalExpansion,
+                VolumeTaylorMultipoleExpansion, False),
+            (YukawaKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
+                LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
     ])
 def test_sumpy_fmm(
             actx_factory: ArrayContextFactory,
@@ -244,7 +248,7 @@ def _test_sumpy_fmm(
 
     elif isinstance(knl, YukawaKernel):
         extra_kwargs["lam"] = 2
-        dtype = np.complex128
+        dtype = np.complex128 if knl.is_complex_valued else np.float64
 
         if knl.dim == 3:
             order_values = [1, 2]
