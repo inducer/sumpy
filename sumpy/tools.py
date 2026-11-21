@@ -1087,7 +1087,7 @@ def get_opencl_fft_app(
         from pyvkfft.opencl import VkFFTApp
         app = VkFFTApp(
             shape=shape, dtype=dtype,  # pyright: ignore[reportArgumentType]
-            queue=actx.queue, ndim=1, inplace=False)
+            queue=actx.queue, ndim=1, inplace=False, r2c=dtype.kind == "f")
         return app
     else:
         raise RuntimeError(f"Unsupported FFT backend {backend}")
@@ -1099,12 +1099,18 @@ def run_opencl_fft(
         input_array: CLArray,
         *,
         inverse: bool = False,
-        wait_for: WaitList | None = None
+        wait_for: WaitList | None = None,
+        n: int | None = None,
     ) -> tuple[pyopencl.Event | MarkerBasedProfilingEvent, CLArray]:
     """Runs an FFT on input_array and returns a :class:`MarkerBasedProfilingEvent`
     that indicate the end and start of the operations carried out and the output
     vector.
     Only supports in-order queues.
+
+    A real-to-complex FFT returns shape
+    ``(*input_array.shape[:-1], input_array.shape[-1] // 2 + 1)``, and its
+    complex-to-real inverse returns ``(*input_array.shape[:-1], n)``, where *n*
+    is the length of the forward FFT's input.
     """
     assert isinstance(actx, PyOpenCLArrayContext)
     if wait_for is None:
@@ -1133,6 +1139,14 @@ def run_opencl_fft(
 
         if app.inplace:
             raise RuntimeError("inplace FFT is not supported by pyvkfft")
+        elif app.r2c and inverse:
+            output_array = actx.np.zeros(
+                (*input_array.shape[:-1], n),
+                dtype=np.finfo(input_array.dtype).dtype)
+        elif app.r2c:
+            output_array = actx.np.zeros(
+                (*input_array.shape[:-1], input_array.shape[-1] // 2 + 1),
+                dtype=to_complex_dtype(input_array.dtype))
         else:
             # FIXME: All very imperative. FFT functionality should move into the actx?
             output_array = actx.np.zeros_like(input_array)
