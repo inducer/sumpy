@@ -860,9 +860,17 @@ class VolumeTaylorM2LWithPreprocessedMultipoles(VolumeTaylorM2LTranslation):
     @override
     def loopy_translate(self,
                         tgt_expansion: LocalExpansionBase,
-                        src_expansion: MultipoleExpansionBase) -> lp.TranslationUnit:
+                        src_expansion: MultipoleExpansionBase,
+                        *,
+                        use_real_fft: bool = False) -> lp.TranslationUnit:
         ncoeff_src = self.preprocess_multipole_nexprs(tgt_expansion, src_expansion)
+        # ncoeff_tgt here is the number of coefficients in the local expansion
+        # before postprocessing.
         ncoeff_tgt = self.postprocess_local_nexprs(tgt_expansion, src_expansion)
+        if use_real_fft:
+            # If real FFT is used, for each target/source offset, we only need to
+            # compute half of the ncoeff_tgt as above.
+            ncoeff_tgt = ncoeff_tgt // 2 + 1
 
         icoeff_src = p.Variable("icoeff_src")
         icoeff_tgt = p.Variable("icoeff_tgt")
