@@ -527,6 +527,17 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
         return result
 
+    @memoize_method
+    def _m2l_ncoeff_preprocessed(self, order: int) -> int:
+        """
+        Return the number of multipole coefficients after preprocessing
+        (e.g. after padding for FFTs).
+        """
+        mpole_expn = self.tree_indep.multipole_expansion(order)
+        local_expn = self.tree_indep.local_expansion(order)
+        return local_expn.m2l_translation.preprocess_multipole_nexprs(
+            local_expn, mpole_expn)
+
     @override
     def multipole_expansions_view(
             self, mpole_exps: Array, level: int,
@@ -560,13 +571,12 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
     @memoize_method
     def m2l_preproc_mpole_expansions_level_starts(self) -> Sequence[int]:
-        def order_to_size(order: int) -> int:
-            mpole_expn = self.tree_indep.multipole_expansion(order)
-            local_expn = self.tree_indep.local_expansion(order)
-            return local_expn.m2l_translation.preprocess_multipole_nexprs(
-                local_expn, mpole_expn)
-
-        return build_csr_level_starts(self.level_orders, order_to_size,
+        """
+        Each level needs ``_m2l_ncoeff_preprocessed(order) * nboxes`` entries:
+        preprocessed coefficients per box times the number of boxes at that level.
+        """
+        return build_csr_level_starts(self.level_orders,
+                self._m2l_ncoeff_preprocessed,
                 level_starts=self.tree_level_start_box_nrs)
 
     def m2l_preproc_mpole_expansion_zeros(
