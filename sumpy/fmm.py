@@ -272,6 +272,14 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
                           exclude_self=self.exclude_self,
                           strength_usage=self.strength_usage, name="p2p")
 
+    @memoize_method
+    def get_fft_backend(self) -> FFTBackend:
+        if self.fft_backend is not None:
+            return self.fft_backend
+
+        from sumpy.tools import _get_fft_backend
+        return _get_fft_backend(self._setup_actx.queue)
+
     def opencl_fft_app(
             self,
             *,
@@ -279,10 +287,7 @@ class SumpyTreeIndependentDataForWrangler(TreeIndependentDataForWrangler):
             dtype: np.dtype[Any],
             inverse: bool,
         ) -> lp.TranslationUnit | VkFFTApp:
-        backend = self.fft_backend
-        if backend is None:
-            from sumpy.tools import _get_fft_backend
-            backend = _get_fft_backend(self._setup_actx.queue)
+        backend = self.get_fft_backend()
 
         @memoize_in(self._setup_actx, (
             SumpyTreeIndependentDataForWrangler.opencl_fft_app,
