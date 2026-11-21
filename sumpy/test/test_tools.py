@@ -37,10 +37,13 @@ from sumpy.array_context import (  # ruff:ignore[unused-import]
     _acf,
 )
 from sumpy.tools import (
+    FFTBackend,
     fft,
     fft_toeplitz_upper_triangular,
+    get_opencl_fft_app,
     loopy_fft,
     matvec_toeplitz_upper_triangular,
+    run_opencl_fft,
 )
 
 
@@ -104,6 +107,40 @@ def test_fft(actx_factory: ArrayContextFactory, size: int):
     out_dev = actx.call_loopy(fft_func, y=inp_dev)["x"]
 
     assert np.allclose(actx.to_numpy(out_dev), out)
+
+# }}}
+
+
+# {{{ test_real_fft
+
+@pytest.mark.parametrize("size", [2, 7, 10, 15, 16])
+def test_real_fft(actx_factory: ArrayContextFactory, size: int):
+    pytest.importorskip("pyvkfft")
+
+    actx = actx_factory()
+
+    from pyopencl.characterize import get_pocl_version
+    pocl_version = get_pocl_version(actx.queue.device.platform)
+    if pocl_version and (7,) <= pocl_version < (7, 2):
+        pytest.skip("pocl 7.0/7.1 and pyvkfft don't get along: "
+                    "https://github.com/pocl/pocl/issues/2069")
+
+    rng = np.random.default_rng(42)
+    # We run one 1D FFT on each row of the data.
+    data = rng.standard_normal((3, size))
+
+    forward_app = get_opencl_fft_app(actx, shape=data.shape,
+            dtype=data.dtype, inverse=False, backend=FFTBackend.PYVKFFT)
+    inverse_app = get_opencl_fft_app(actx, shape=data.shape,
+            dtype=data.dtype, inverse=True, backend=FFTBackend.PYVKFFT)
+
+    _, spectrum = run_opencl_fft(actx, forward_app, actx.from_numpy(data))
+    _, result = run_opencl_fft(actx, inverse_app, spectrum, inverse=True,
+            n=size)
+
+    assert np.max(np.abs(
+        actx.to_numpy(spectrum) - np.fft.rfft(data, axis=-1))) < 1e-13
+    assert np.max(np.abs(actx.to_numpy(result) - data)) < 1e-13
 
 # }}}
 
