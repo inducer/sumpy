@@ -336,6 +336,10 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     .. attribute:: preprocessed_mpole_dtype
 
         Type for the preprocessed multipole expansion if used for M2L.
+
+    .. attribute:: m2l_use_real_fft
+
+        True if the FFT M2L can use real-to-complex transforms.
     """
 
     tree_indep: SumpyTreeIndependentDataForWrangler  # pyright: ignore[reportIncompatibleVariableOverride]
@@ -350,6 +354,7 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     supports_translation_classes: bool
     translation_classes_data: TranslationClassesInfo | None
     preprocessed_mpole_dtype: np.dtype[Any]
+    m2l_use_real_fft: bool
 
     level_orders: Sequence[int]
 
@@ -372,8 +377,15 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
         self.dtype = np.dtype(dtype)
 
+        self.m2l_use_real_fft = (
+            self.tree_indep.m2l_translation.use_fft
+            and self.dtype.kind == "f"
+            and self.tree_indep.get_fft_backend() == FFTBackend.PYVKFFT)
+
         if not self.tree_indep.m2l_translation.use_fft:
             # If not FFT, we don't need complex dtypes
+            self.preprocessed_mpole_dtype = self.dtype
+        elif self.m2l_use_real_fft:
             self.preprocessed_mpole_dtype = self.dtype
         elif preprocessed_mpole_dtype is not None:
             self.preprocessed_mpole_dtype = np.dtype(preprocessed_mpole_dtype)
@@ -629,10 +641,33 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     def m2l_work_array_zeros(
             self, actx: ArrayContext, template_ary: Array, /
         ) -> Sequence[Array]:
-        return self.m2l_preproc_mpole_expansion_zeros(actx, template_ary)
+        """
+        Return a list of zeroed arrays, one per tree level, for the M2L results
+        before postprocessing.
+
+        Each array has one row for each box on that level, including boxes not
+        used as M2L target boxes. If the M2L translation uses FFT, each row
+        represents the aggregated M2L contributions from source boxes in its
+        list 2, using ``FFT(preprocessed multipole expansion)``.
+        """
+        dtype = self.preprocessed_mpole_dtype
+        if self.tree_indep.m2l_translation.use_fft:
+            dtype = to_complex_dtype(dtype)
+        return self._level_zeros(actx, self.m2l_work_array_level_starts(), dtype)
 
     def m2l_work_array_level_starts(self) -> Sequence[int]:
-        return self.m2l_preproc_mpole_expansions_level_starts()
+        """
+        Each level needs ``_m2l_ncoeff_preprocessed * nboxes`` entries, or
+        ``(_m2l_ncoeff_preprocessed // 2 + 1) * nboxes`` with real FFT.
+        """
+        def order_to_size(order: int) -> int:
+            size = self._m2l_ncoeff_preprocessed(order)
+            if self.m2l_use_real_fft:
+                size = size // 2 + 1
+            return size
+
+        return build_csr_level_starts(self.level_orders, order_to_size,
+                level_starts=self.tree_level_start_box_nrs)
 
     def output_zeros(
             self, actx: ArrayContext
@@ -705,11 +740,16 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
             actx: ArrayContext,
             input_array: Array, *,
             inverse: bool,
-            wait_for: WaitList | None = None) -> Array:
+            wait_for: WaitList | None = None,
+            n: int | None = None) -> Array:
+        shape, dtype = input_array.shape, input_array.dtype
+        if inverse and self.m2l_use_real_fft:
+            shape, dtype = (*shape[:-1], n), self.preprocessed_mpole_dtype
+
         app = self.tree_indep.opencl_fft_app(
-            shape=input_array.shape, dtype=input_array.dtype, inverse=inverse)
+            shape=shape, dtype=dtype, inverse=inverse)
         evt, result = run_opencl_fft(
-            actx, app, input_array, inverse=inverse, wait_for=wait_for)
+            actx, app, input_array, inverse=inverse, wait_for=wait_for, n=n)
 
         from sumpy.tools import get_native_event
         input_array.add_event(get_native_event(evt))
@@ -980,7 +1020,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                             inverse=False, wait_for=wait_for)
 
             order = self.level_orders[lev]
-            m2l = self.tree_indep.m2l(order, order, self.supports_translation_classes)
+            m2l = self.tree_indep.m2l(order, order, self.supports_translation_classes,
+                                      self.m2l_use_real_fft)
 
             source_level_start_ibox, source_mpoles_view = \
                     mpole_exps_view_func(preprocessed_mpole_exps, lev)
@@ -1031,7 +1072,8 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                     target_locals_before_postprocessing_view = \
                         self.run_opencl_fft(actx,
                             target_locals_before_postprocessing_view,
-                            inverse=True, wait_for=wait_for)
+                            inverse=True, wait_for=wait_for,
+                            n=self._m2l_ncoeff_preprocessed(order))
 
                 postprocess_local_kernel(
                     actx,
