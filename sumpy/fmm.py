@@ -579,11 +579,12 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
                 self._m2l_ncoeff_preprocessed,
                 level_starts=self.tree_level_start_box_nrs)
 
-    def m2l_preproc_mpole_expansion_zeros(
-            self, actx: ArrayContext, template_ary: Array, /
-        ) -> Sequence[Array]:
+    def _level_zeros(self, actx: ArrayContext,
+            level_starts: Sequence[int], dtype: np.dtype[Any]) -> Sequence[Array]:
+        """
+        Return one zero array per tree level, sized from *level_starts*.
+        """
         tree_level_start_box_nrs = self.tree_level_start_box_nrs
-        level_starts = self.m2l_preproc_mpole_expansions_level_starts()
 
         result: list[Array] = []
         for level in range(self.tree.nlevels):
@@ -592,11 +593,24 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
 
             exprs_level = actx.np.zeros(
                 expn_stop - expn_start,
-                dtype=self.preprocessed_mpole_dtype,
+                dtype=dtype,
                 ).reshape(box_stop - box_start, -1)
             result.append(exprs_level)
 
         return result
+
+    def m2l_preproc_mpole_expansion_zeros(
+            self, actx: ArrayContext, template_ary: Array, /
+        ) -> Sequence[Array]:
+        """
+        Return a list of zeroed arrays, one per tree level.
+
+        Each array has one row for every box at that level, including boxes
+        not used as M2L sources, and one column per preprocessed coefficient.
+        """
+        return self._level_zeros(actx,
+                self.m2l_preproc_mpole_expansions_level_starts(),
+                self.preprocessed_mpole_dtype)
 
     def m2l_preproc_mpole_expansions_view(
             self, mpole_exps: Sequence[Array], level: int, /
