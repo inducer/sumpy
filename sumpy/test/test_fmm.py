@@ -95,6 +95,8 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts([
                 VolumeTaylorMultipoleExpansion, False),
             (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
                 LinearPDEConformingVolumeTaylorMultipoleExpansion, False),
+            (LaplaceKernel(2), LinearPDEConformingVolumeTaylorLocalExpansion,
+                LinearPDEConformingVolumeTaylorMultipoleExpansion, True),
             (LaplaceKernel(3), VolumeTaylorLocalExpansion,
                 VolumeTaylorMultipoleExpansion, False),
             (LaplaceKernel(3), LinearPDEConformingVolumeTaylorLocalExpansion,
