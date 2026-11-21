@@ -1096,12 +1096,12 @@ def get_opencl_fft_app(
 def run_opencl_fft(
         actx: ArrayContext,
         app: lp.TranslationUnit | VkFFTApp,
-        input_vec: CLArray,
+        input_array: CLArray,
         *,
         inverse: bool = False,
         wait_for: WaitList | None = None
     ) -> tuple[pyopencl.Event | MarkerBasedProfilingEvent, CLArray]:
-    """Runs an FFT on input_vec and returns a :class:`MarkerBasedProfilingEvent`
+    """Runs an FFT on input_array and returns a :class:`MarkerBasedProfilingEvent`
     that indicate the end and start of the operations carried out and the output
     vector.
     Only supports in-order queues.
@@ -1111,8 +1111,8 @@ def run_opencl_fft(
         wait_for = []
 
     if isinstance(app, lp.TranslationUnit):
-        evt, output_vec = app(actx.queue, y=input_vec, wait_for=wait_for)
-        return (evt, output_vec["x"])
+        evt, outputs = app(actx.queue, y=input_array, wait_for=wait_for)
+        return (evt, outputs["x"])
 
     from pyvkfft.opencl import VkFFTApp
     if isinstance(app, VkFFTApp):
@@ -1135,20 +1135,20 @@ def run_opencl_fft(
             raise RuntimeError("inplace FFT is not supported by pyvkfft")
         else:
             # FIXME: All very imperative. FFT functionality should move into the actx?
-            output_vec = actx.np.zeros_like(input_vec)
+            output_array = actx.np.zeros_like(input_array)
 
         meth = app.ifft if inverse else app.fft
-        meth(input_vec, output_vec, queue=queue)
+        meth(input_array, output_array, queue=queue)
 
         if queue.device.platform.name == "NVIDIA CUDA":
             end_evt = cl.enqueue_marker(queue)
         else:
             end_evt = cl.enqueue_marker(queue, wait_for=[start_evt])
-        output_vec.add_event(end_evt)
+        output_array.add_event(end_evt)
 
         return (
             MarkerBasedProfilingEvent(end_event=end_evt, start_event=start_evt),
-            output_vec)
+            output_array)
 
     raise RuntimeError(f"unsupported FFT backend: {type(app)}")
 

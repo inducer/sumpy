@@ -700,16 +700,16 @@ class SumpyExpansionWrangler(ExpansionWranglerInterface):
     def run_opencl_fft(
             self,
             actx: ArrayContext,
-            input_vec: Array, *,
+            input_array: Array, *,
             inverse: bool,
             wait_for: WaitList | None = None) -> Array:
         app = self.tree_indep.opencl_fft_app(
-            shape=input_vec.shape, dtype=input_vec.dtype, inverse=inverse)
+            shape=input_array.shape, dtype=input_array.dtype, inverse=inverse)
         evt, result = run_opencl_fft(
-            actx, app, input_vec, inverse=inverse, wait_for=wait_for)
+            actx, app, input_array, inverse=inverse, wait_for=wait_for)
 
         from sumpy.tools import get_native_event
-        input_vec.add_event(get_native_event(evt))
+        input_array.add_event(get_native_event(evt))
         result.add_event(get_native_event(evt))
 
         return result
