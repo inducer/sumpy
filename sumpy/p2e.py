@@ -60,7 +60,8 @@ class P2EBase(KernelCacheMixin, KernelComputation):
     .. automethod:: __init__
     """
 
-    def __init__(self, expansion, kernels=None, name=None, strength_usage=None):
+    def __init__(self, expansion, kernels=None, name=None, strength_usage=None,
+                 *, work_items_per_group: int | None = None):
         """
         :arg expansion: a subclass of :class:`sumpy.expansion.ExpansionBase`
         :arg kernels: if not provided, the kernel of the *expansion* is used.
@@ -71,6 +72,10 @@ class P2EBase(KernelCacheMixin, KernelComputation):
             uses which source strength indicator. This implicitly specifies the
             number of strength arrays that need to be passed in.
             By default all kernels use the same strength.
+        :arg work_items_per_group: OpenCL work-group size, with one group per
+            expansion and source particles distributed across its work items.
+            *None* selects the default schedule. Must fit the device's work-group
+            limit and local memory (one coefficient vector per work item).
         """
         from sumpy.kernel import (
             SourceTransformationRemover,
@@ -93,6 +98,7 @@ class P2EBase(KernelCacheMixin, KernelComputation):
 
         self.expansion = expansion
         self.dim = expansion.dim
+        self.work_items_per_group = work_items_per_group
 
     def add_loopy_form_callable(
             self, loopy_knl: lp.TranslationUnit) -> lp.TranslationUnit:
@@ -112,10 +118,14 @@ class P2EBase(KernelCacheMixin, KernelComputation):
 
     def get_cache_key(self):
         return (type(self).__name__, self.name, self.expansion,
-                tuple(self.source_kernels), tuple(self.strength_usage))
+                tuple(self.source_kernels), tuple(self.strength_usage),
+                self.work_items_per_group)
 
     def get_optimized_kernel(self, sources_is_obj_array, centers_is_obj_array):
-        knl = self.get_kernel()
+        if self.work_items_per_group is None:
+            knl = self.get_kernel()
+        else:
+            knl = self.get_kernel(work_items_per_group=self.work_items_per_group)
 
         if sources_is_obj_array:
             knl = lp.tag_array_axes(knl, "sources", "sep,C")
@@ -125,6 +135,153 @@ class P2EBase(KernelCacheMixin, KernelComputation):
         knl = self._allow_redundant_execution_of_knl_scaling(knl)
         return lp.set_options(knl,
                 enforce_variable_access_ordered="no_check")
+
+    def _get_source_parallel_kernel(
+            self, work_items_per_group: int, *, from_csr: bool) -> lp.TranslationUnit:
+        ncoeffs = len(self.expansion)
+        loopy_args = self.get_loopy_args()
+
+        if from_csr:
+            box_iname, box_count = "itgt_box", "ntgt_boxes"
+            box_ibox = "tgt_ibox"
+            nboxes, aligned_nboxes = "ntgt_level_boxes", "naligned_boxes"
+            box_setup = """
+                <> tgt_ibox = target_boxes[itgt_box]
+                <> isrc_box_start = source_box_starts[itgt_box]
+                <> isrc_box_stop = source_box_starts[itgt_box + 1]
+                """
+            source_loop = """
+                for isrc_box
+                    <> src_ibox = source_box_lists[isrc_box]
+                    <> isrc_start = box_source_starts[src_ibox]
+                    <> nsrc_in_box = box_source_counts_nonchild[src_ibox]
+                """
+            source_loop_end = "end"
+        else:
+            box_iname, box_count = "isrc_box", "nsrc_boxes"
+            box_ibox = "src_ibox"
+            nboxes, aligned_nboxes = "nboxes", "aligned_nboxes"
+            box_setup = """
+                <> src_ibox = source_boxes[isrc_box]
+                <> isrc_start = box_source_starts[src_ibox]
+                <> nsrc_in_box = box_source_counts_nonchild[src_ibox]
+                """
+            source_loop = source_loop_end = ""
+
+        domains = [f"{{[{box_iname}]: 0 <= {box_iname} < {box_count}}}"]
+        csr_args = []
+        if from_csr:
+            domains.append(
+                "{[isrc_box]: isrc_box_start <= isrc_box < isrc_box_stop}")
+            csr_args.append(lp.GlobalArg(
+                "source_box_starts,source_box_lists",
+                None, shape=None, offset=lp.auto))
+
+        domains.extend([
+            "{[iwork_item]: 0 <= iwork_item < work_items_per_group}",
+            (f"{{[isrc_outer]: 0 <= isrc_outer and "
+             f"iwork_item + {work_items_per_group}*isrc_outer < nsrc_in_box}}"),
+            "{[idim]: 0 <= idim < dim}",
+            "{[icoeff]: 0 <= icoeff < ncoeffs}",
+            "{[istrength]: 0 <= istrength < nstrengths}",
+            "{[ireduce]: 0 <= ireduce < work_items_per_group}",
+            (f"{{[icoeff_outer]: 0 <= icoeff_outer and "
+             f"iwork_item + {work_items_per_group}*icoeff_outer < ncoeffs}}"),
+            ])
+
+        loopy_knl = make_loopy_program(
+                domains,
+                [f"""
+                for {box_iname}
+                    {box_setup}
+                    for iwork_item
+                        <> center[idim] = centers[idim, {box_ibox}] \
+                                {{id=fetch_center,dup=idim}}
+                        <> work_item_coeffs[icoeff] = 0 \
+                                {{id=init_coeffs,dup=icoeff}}
+                        {source_loop}
+                            for isrc_outer
+                                <> isrc = isrc_start + iwork_item \
+                                        + work_items_per_group*isrc_outer
+                                <> source[idim] = sources[idim, isrc] \
+                                        {{id=fetch_src,dup=idim}}
+                                <> strength[istrength] = strengths[istrength, isrc] \
+                                        {{id=fetch_strength,dup=istrength}}
+                                [icoeff]: work_item_coeffs[icoeff] = p2e(
+                                        [icoeff]: work_item_coeffs[icoeff],
+                                        [idim]: center[idim],
+                                        [idim]: source[idim],
+                                        [istrength]: strength[istrength],
+                                        rscale,
+                                        isrc,
+                                        nsources,
+                                        sources,
+                                        {",".join(arg.name for arg in loopy_args)}
+                                    ) {{id=update_result, \
+                                       dep=fetch_center:fetch_src:init_coeffs}}
+                            end
+                        {source_loop_end}
+                        partial[icoeff, iwork_item] = \
+                                work_item_coeffs[icoeff] \
+                                {{id=store_partial,dup=icoeff, \
+                                  dep=update_result:init_coeffs}}
+                    end
+
+                    # After processing all source particles for the target box (P2L)
+                    # or source box (P2M), each work item sums partial contributions
+                    # from all work items for its assigned coefficients.
+                    for iwork_item
+                        for icoeff_outer
+                            <> icoeff_write = iwork_item \
+                                    + work_items_per_group*icoeff_outer
+                            tgt_expansions[
+                                {box_ibox} - tgt_base_ibox, icoeff_write] = \
+                                sum(ireduce, partial[icoeff_write, ireduce]) \
+                                {{id=write_expn,dep=store_partial}}
+                        end
+                    end
+                end
+                """],
+                [
+                    lp.GlobalArg("sources", None,
+                        shape=(self.dim, "nsources"), order="C"),
+                    lp.GlobalArg("strengths", None,
+                        shape=(self.strength_count, "nsources")),
+                    *csr_args,
+                    lp.GlobalArg("box_source_starts,box_source_counts_nonchild",
+                        None, shape=None),
+                    lp.GlobalArg("centers", None,
+                        shape=f"dim, {aligned_nboxes}"),
+                    lp.GlobalArg("tgt_expansions", None,
+                        shape=(nboxes, ncoeffs), offset=lp.auto),
+                    lp.TemporaryVariable(
+                        "partial", dtype=None, shape=(ncoeffs, work_items_per_group),
+                        address_space=lp.AddressSpace.LOCAL),
+                    lp.ValueArg(f"{nboxes},{aligned_nboxes},tgt_base_ibox", np.int32),
+                    lp.ValueArg("nsources", np.int32),
+                    *loopy_args,
+                    ...
+                    ],
+                name=self.name,
+                assumptions=f"{box_count}>=1",
+                silenced_warnings="write_race(write_expn*)",
+                fixed_parameters={
+                    "dim": self.dim,
+                    "nstrengths": self.strength_count,
+                    "ncoeffs": ncoeffs,
+                    "work_items_per_group": work_items_per_group,
+                    })
+
+        loopy_knl = lp.tag_inames(loopy_knl, "idim*:unr")
+        loopy_knl = lp.tag_inames(loopy_knl, "istrength*:unr")
+        loopy_knl = self.add_loopy_form_callable(loopy_knl)
+        return lp.add_barrier(
+            loopy_knl,
+            "id:store_partial",
+            "id:write_expn",
+            synchronization_kind="local",
+            within_inames=frozenset({box_iname}),
+            )
 
     def __call__(self, actx: ArrayContext, **kwargs):
         from sumpy.tools import is_obj_array_like
@@ -161,7 +318,11 @@ class P2EFromSingleBox(P2EBase):
     def default_name(self):
         return "p2e_from_single_box"
 
-    def get_kernel(self):
+    def get_kernel(self, *, work_items_per_group: int | None = None):
+        if work_items_per_group is not None:
+            return self._get_source_parallel_kernel(
+                work_items_per_group, from_csr=False)
+
         ncoeffs = len(self.expansion)
         loopy_args = self.get_loopy_args()
 
@@ -235,6 +396,13 @@ class P2EFromSingleBox(P2EBase):
                 sources_is_obj_array=sources_is_obj_array,
                 centers_is_obj_array=centers_is_obj_array)
 
+        if self.work_items_per_group is not None:
+            knl = lp.tag_inames(knl, {
+                "isrc_box": "g.0",
+                "iwork_item": "l.0",
+                })
+            return lp.add_inames_for_unused_hw_axes(knl)
+
         # FIXME
         return lp.split_iname(knl, "isrc_box", 16, outer_tag="g.0")
 
@@ -274,7 +442,11 @@ class P2EFromCSR(P2EBase):
     def default_name(self):
         return "p2e_from_csr"
 
-    def get_kernel(self):
+    def get_kernel(self, *, work_items_per_group: int | None = None):
+        if work_items_per_group is not None:
+            return self._get_source_parallel_kernel(
+                work_items_per_group, from_csr=True)
+
         ncoeffs = len(self.expansion)
         loopy_args = self.get_loopy_args()
 
@@ -362,6 +534,13 @@ class P2EFromCSR(P2EBase):
         knl = super().get_optimized_kernel(
                 sources_is_obj_array=sources_is_obj_array,
                 centers_is_obj_array=centers_is_obj_array)
+
+        if self.work_items_per_group is not None:
+            knl = lp.tag_inames(knl, {
+                "itgt_box": "g.0",
+                "iwork_item": "l.0",
+                })
+            return lp.add_inames_for_unused_hw_axes(knl)
 
         # FIXME
         return lp.split_iname(knl, "itgt_box", 16, outer_tag="g.0")
