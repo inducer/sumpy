@@ -40,6 +40,8 @@ from sumpy.tools import KernelCacheMixin, to_complex_dtype
 
 
 if TYPE_CHECKING:
+    from collections.abc import Hashable
+
     from arraycontext import ArrayContext
 
     from sumpy.expansion import ExpansionBase
@@ -142,7 +144,8 @@ class E2EBase(KernelCacheMixin, ABC):
                 retain_names=tgt_coeff_names,
                 )
 
-    def get_cache_key(self):
+    @override
+    def get_cache_key(self) -> tuple[Hashable, ...]:
         return (type(self).__name__, self.src_expansion, self.tgt_expansion)
 
     @abstractmethod
