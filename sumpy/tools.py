@@ -1122,6 +1122,7 @@ def run_opencl_fft(
 
     from pyvkfft.opencl import VkFFTApp
     if isinstance(app, VkFFTApp):
+        import arraycontext.impl.pyopencl.taggable_cl_array as tga
         import pyopencl as cl
 
         queue = actx.queue
@@ -1137,19 +1138,24 @@ def run_opencl_fft(
         else:
             start_evt = cl.enqueue_marker(queue, wait_for=wait_for[:])
 
+        # VkFFT writes every entry of its output, so zero-filled arrays are not needed.
         if app.inplace:
             raise RuntimeError("inplace FFT is not supported by pyvkfft")
         elif app.r2c and inverse:
-            output_array = actx.np.zeros(
-                (*input_array.shape[:-1], n),
-                dtype=np.finfo(input_array.dtype).dtype)
+            output_array = tga.empty(
+                queue, (*input_array.shape[:-1], n),
+                dtype=np.finfo(input_array.dtype).dtype,
+                allocator=actx.allocator)
         elif app.r2c:
-            output_array = actx.np.zeros(
-                (*input_array.shape[:-1], input_array.shape[-1] // 2 + 1),
-                dtype=to_complex_dtype(input_array.dtype))
+            output_array = tga.empty(
+                queue, (*input_array.shape[:-1], input_array.shape[-1] // 2 + 1),
+                dtype=to_complex_dtype(input_array.dtype),
+                allocator=actx.allocator)
         else:
             # FIXME: All very imperative. FFT functionality should move into the actx?
-            output_array = actx.np.zeros_like(input_array)
+            output_array = tga.empty(
+                queue, input_array.shape, input_array.dtype,
+                allocator=actx.allocator)
 
         meth = app.ifft if inverse else app.fft
         meth(input_array, output_array, queue=queue)
