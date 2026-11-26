@@ -618,12 +618,6 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
     @property
     @memoize_method
-    def _leading_pde_mi(self) -> MultiIndex:
-        ordering_key = self._get_mi_ordering_key()
-        return max(self._pde_coeffs, key=ordering_key)
-
-    @property
-    @memoize_method
     def pde_order(self) -> int:
         return max(map(sum, self._pde_coeffs))
 
@@ -638,6 +632,35 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
             if mi_set_axis((0,)*self.dim, axis, self.pde_order) in self._pde_coeffs:
                 return axis
         raise NotImplementedError("pde needs a pure leading term")
+
+    @property
+    @memoize_method
+    def leading_mi_representation(self) -> Sequence[tuple[MultiIndex, sym.Expr]]:
+        r"""
+        Return the representation of the PDE's leading differentiation operator
+        :math:`\partial^{c \cdot e_k}` as pairs
+        :math:`(\mathrm{mi}', \mathrm{weight}_{\mathrm{mi}'})`,
+
+        .. math::
+
+            \partial^{c \cdot e_k} u =
+            \sum_{\mathrm{mi}' \ne c \cdot e_k}
+            \mathrm{weight}_{\mathrm{mi}'} \cdot \partial^{\mathrm{mi}'} u,
+            \qquad
+            \mathrm{weight}_{\mathrm{mi}'} = -\frac{a_{\mathrm{mi}'}}{a_{c \cdot e_k}},
+
+        where :math:`\mathrm{mi}'` is from ``_pde_coeffs``.
+
+        For 2D Laplace, :math:`u_{xx} = -u_{yy}`, so it returns
+        ``(((0, 2), -1),)``.
+        """
+        k = self.compression_axis
+        c = self.pde_order
+        leading_mi = mi_set_axis((0,)*self.dim, k, c)
+        leading_mult = -1/sym.sympify(self._pde_coeffs[leading_mi])
+        return tuple((other_mi, coeff*leading_mult)
+                     for other_mi, coeff in self._pde_coeffs.items()
+                     if other_mi != leading_mi)
 
     @memoize_method
     def _get_mi_ordering_key(
@@ -727,75 +750,48 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     def get_stored_ids_and_unscaled_projection_matrix(
                 self
             ) -> tuple[Sequence[MultiIndex], CSEMatVecOperator]:
-        from pytools import ProcessLogger
-        plog = ProcessLogger(logger, "compute PDE for Taylor coefficients")
+        r"""
+        Return the stored multi-indices :math:`J` and the unscaled
+        decompression operator :math:`M`.
 
+        For :math:`\mathrm{mi} \in \mathcal{M}(p) \setminus J`,
+        it can be recovered from
+
+        .. math::
+
+            \partial^{\mathrm{mi}} u
+            &= \partial^{\mathrm{mi} - c \cdot e_k} \partial^{c \cdot e_k} u \\
+            &= -\frac{1}{a_{c \cdot e_k}}
+            \sum_{\mathrm{mi}' \ne c \cdot e_k} a_{\mathrm{mi}'}
+            \partial^{\mathrm{mi}' + \mathrm{mi} - c \cdot e_k} u,
+
+        where :math:`\mathrm{mi}'` is from ``_pde_coeffs``.
+        """
         mis = self.get_full_coefficient_identifiers()
-        coeff_ident_enumerate_dict = {tuple(mi): i for (i, mi) in enumerate(mis)}
+        mi_to_index = {mi: i for i, mi in enumerate(mis)}
 
-        mi_to_coeff = self._pde_coeffs
-        for ident in mi_to_coeff:
-            if ident not in coeff_ident_enumerate_dict:
-                # Order of the expansion is less than the order of the PDE.
-                # In that case, the compression matrix is the identity matrix
-                # and there's nothing to project
-                from_input_coeffs_by_row: LinearCombinationCoefficients = [
-                    [(i, sym.sympify(1))] for i in range(len(mis))]
-                from_output_coeffs_by_row: LinearCombinationCoefficients = [
-                    [] for _ in range(len(mis))]
-
-                shape = (len(mis), len(mis))
-                op = CSEMatVecOperator(from_input_coeffs_by_row,
-                                       from_output_coeffs_by_row, shape)
-                plog.done()
-
-                return mis, op
-
-        max_mi = self._leading_pde_mi
-        max_mi_coeff = mi_to_coeff[max_mi]
-        max_mi_mult = -1/sym.sympify(max_mi_coeff)
-
-        def is_stored(mi: MultiIndex) -> bool:
-            """
-            A multi_index mi is not stored if mi >= max_mi
-            """
-            return any(mi[d] < max_mi[d] for d in range(self.dim))
+        k = self.compression_axis
+        c = self.pde_order
 
         stored_identifiers: list[MultiIndex] = []
 
-        from_input_coeffs_by_row = []
-        from_output_coeffs_by_row = []
-        for i, mi in enumerate(mis):
-            # If the multi-index is to be stored, keep the projection matrix
-            # entry empty
-            if is_stored(mi):
-                idx = len(stored_identifiers)
-                stored_identifiers.append(mi)
-                from_input_coeffs_by_row.append([(idx, sym.sympify(1))])
+        from_input_coeffs_by_row: LinearCombinationCoefficients = []
+        from_output_coeffs_by_row: LinearCombinationCoefficients = []
+        for mi in mis:
+            if mi[k] < c:
+                from_input_coeffs_by_row.append(
+                    [(len(stored_identifiers), sym.sympify(1))])
                 from_output_coeffs_by_row.append([])
-                continue
-            diff = [mi[d] - max_mi[d] for d in range(self.dim)]
-
-            # eg: u_xx + u_yy + u_zz is represented as
-            # [((2, 0, 0), 1), ((0, 2, 0), 1), ((0, 0, 2), 1)]
-            assignment: list[tuple[int, sym.Expr]] = []
-            for other_mi, coeff in mi_to_coeff.items():
-                j = coeff_ident_enumerate_dict[add_mi(other_mi, diff)]
-                if i == j:
-                    # Skip the u_zz part here.
-                    continue
-
-                # PDE might not have max_mi_coeff = -1, divide by -max_mi_coeff
-                # to get a relation of the form, u_zz = - u_xx - u_yy for Laplace 3D.
-                assignment.append((j, coeff*max_mi_mult))
-
-            from_input_coeffs_by_row.append([])
-            from_output_coeffs_by_row.append(assignment)
-
-        plog.done()
+                stored_identifiers.append(mi)
+            else:
+                shift = mi_set_axis(mi, k, mi[k] - c)
+                from_input_coeffs_by_row.append([])
+                from_output_coeffs_by_row.append(
+                    [(mi_to_index[add_mi(other_mi, shift)], weight)
+                     for other_mi, weight in self.leading_mi_representation])
 
         logger.debug("number of Taylor coefficients was reduced from %d to %d",
-                     len(self.get_full_coefficient_identifiers()),
+                     len(mis),
                      len(stored_identifiers))
 
         shape = (len(mis), len(stored_identifiers))
