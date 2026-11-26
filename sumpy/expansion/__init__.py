@@ -322,11 +322,13 @@ class ExpansionTermsWrangler(ABC):
         # We assume mis are ordered by total degree first, then lexicographically.
         d = len(mi)
         n = sum(mi)
-        # There are binomial(n+d, d) multi-indices of total degree <= n.
-        # Start at the last position, then subtract degree-n indices after mi.
+        # There are binomial(n+d, d) multi-indices of total degree <= n. In order
+        # to determine the position of mi in get_coefficient_identifiers, it suffices
+        # to know how many multi-indices are of order |mi| but larger than mi:
+        # pos(mi) = binomial(n+d, d) - 1 - |{mi' : |mi'| = |mi|, mi' > mi}|
         index = binomial(n+d, d) - 1
 
-        # Assume mi = (mi0, mi1, mi2) with |mi| = n.
+        # Assume mi = (mi0, mi1, mi2).
         # Suppose (x,y,z) is in {terms with order n after mi}.
         # 1. If x > mi0, then y+z < mi1 + mi2, i.e., y+z <= mi1 + mi2 - 1.
         #       |{(x,y,z): x > mi0, x+y+z = n}| = binomial(mi1+mi2-1 + 2, 2).
