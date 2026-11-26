@@ -546,46 +546,25 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     of :math:`\mathcal{M}(p) = \{\mathrm{mi} : |\mathrm{mi}| \le p\}` and
     recover others using PDE relations (see [Fernando2023]_).
 
-    Suppose the PDE has order :math:`c`. We first choose an axis :math:`k`.
-
-    - If the PDE satisfies Property 17 in [Fernando2023]_, then it contains a
-      pure leading term :math:`\partial_{x}^{c \cdot e_k}` along axis-k. We
-      choose the smallest such :math:`k` as the compression axis.
-    - Otherwise, as in :class:`FullExpansionTermsWrangler`, we choose
-      :math:`k = 0`.
+    Suppose the linear constant-coefficient PDE :math:`\sum_{\mathrm{mi}}
+    a_{\mathrm{mi}} \partial^{\mathrm{mi}} u = 0` has order :math:`c`.
+    It satisfies Property 17 in [Fernando2023]_, that is, it contains a pure
+    leading term :math:`\partial^{c \cdot e_k}` along axis-k. We choose the
+    smallest such :math:`k` as the compression axis. A PDE without a pure
+    leading term, such as :math:`u_{xy} = 0`, raises ``NotImplementedError``.
 
     We sort multi-indices by total degree first, then lexicographically with
     axis :math:`k` first, followed by the other axes in increasing axis number.
 
     Let :math:`t` be the largest PDE multi-index under this ordering, as in
-    Proposition 13 in [Fernando2023]_. Then, we store
+    Proposition 13 in [Fernando2023]_. Then :math:`t = c \cdot e_k`, and we store
 
     .. math::
 
-        J = \{\mathrm{mi} \in \mathcal{M}(p) :
-        \mathrm{mi}_i < t_i \text{ for some } i\}.
+        J = \{\mathrm{mi} \in \mathcal{M}(p) : \mathrm{mi}_k < c\}.
 
-    - If the PDE has a pure leading term along the chosen axis :math:`k`,
-      :math:`t = c \cdot e_k` and
-
-      .. math::
-
-          J = \{\mathrm{mi} \in \mathcal{M}(p) : \mathrm{mi}_k < c\}.
-
-      For example, for Laplace 2D, :math:`u_{xx} + u_{yy} = 0`,
-
-      .. math::
-
-          J = \{\mathrm{mi} \in \mathcal{M}(p) : \mathrm{mi}_0 < 2\}.
-
-    - Otherwise, consider :math:`u_{xy} = 0`. Here :math:`t = (1, 1)` and
-
-      .. math::
-
-          J = \{\mathrm{mi} \in \mathcal{M}(p) :
-          \mathrm{mi}_0 < 1 \text{ or } \mathrm{mi}_1 < 1\}.
-
-      In this case, ``get_storage_index`` raises ``NotImplementedError``.
+    For 2D Laplace, :math:`u_{xx} + u_{yy} = 0` gives
+    :math:`J = \{\mathrm{mi} \in \mathcal{M}(p) : \mathrm{mi}_0 < 2\}`.
 
     .. [Fernando2023] I. Fernando, C. Lin, A. Klöckner (2023).
         *Automatic Synthesis of Low-Complexity Translation Operators for the
@@ -653,14 +632,12 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     def compression_axis(self) -> int:
         r"""
         Return the smallest axis :math:`k` for which :math:`c \cdot e_k` occurs
-        as a derivative multi-index in the PDE, or 0 if no such axis exists.
-
-        Here :math:`c` is :attr:`pde_order`.
+        as a derivative multi-index in the PDE, where :math:`c` is :attr:`pde_order`.
         """
         for axis in range(self.dim):
             if mi_set_axis((0,)*self.dim, axis, self.pde_order) in self._pde_coeffs:
                 return axis
-        return 0
+        raise NotImplementedError("pde needs a pure leading term")
 
     @memoize_method
     def _get_mi_ordering_key(
@@ -715,8 +692,6 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
     @override
     def get_storage_index(self, mi: Sequence[Expression]) -> Expression:
         c = self.pde_order
-        if self._leading_pde_mi[self.compression_axis] != c:
-            raise NotImplementedError("pde needs a pure leading term")
         dim = self.dim
         n = sum(mi)
 
