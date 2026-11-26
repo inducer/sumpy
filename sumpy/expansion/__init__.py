@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Hashable, Sequence
 
     import loopy as lp
+    from pymbolic.primitives import ExpressionNode
     from pymbolic.typing import Expression
 
     from sumpy.assignment_collection import SymbolicAssignmentCollection
@@ -314,7 +315,9 @@ class ExpansionTermsWrangler(ABC):
         return [mi for mi in res if
             all(mi[i] <= self.max_mi[i] for i in range(self.dim))]
 
-    def get_storage_index(self, mi: Sequence[Expression]) -> Expression:
+    def get_storage_index(self,
+                mi: Sequence[int | ExpressionNode]
+            ) -> int | ExpressionNode:
         """
         :returns: the position of *mi* in :meth:`get_coefficient_identifiers`
             when :attr:`max_mi` is *None*.
@@ -702,7 +705,9 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         return sorted(identifiers, key=key)
 
     @override
-    def get_storage_index(self, mi: Sequence[Expression]) -> Expression:
+    def get_storage_index(self,
+                mi: Sequence[int | ExpressionNode]
+            ) -> int | ExpressionNode:
         c = self.pde_order
         dim = self.dim
         n = sum(mi)
@@ -729,11 +734,8 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 excluded = 0
         else:
             excluded = prim.If(prim.Comparison(n-c+dim-1, "<", 0), 0, excluded)
-        key = self._get_mi_ordering_key()
-        # key(mi)[1:] = (mi_k, *mi[:k], *mi[k+1:]) moves the axis-k coordinate
-        # before axis-0, so it varies the slowest in super().get_storage_index,
-        # while the other axes keep their order.
-        return super().get_storage_index(key(mi)[1:]) - excluded
+        k = self.compression_axis
+        return super().get_storage_index((mi[k], *mi[:k], *mi[k+1:])) - excluded
 
     @memoize_method
     def get_stored_ids_and_unscaled_projection_matrix(
