@@ -345,67 +345,55 @@ class ExpansionTermsWrangler(ABC):
 
     def _get_mi_hyperplanes(self) -> list[tuple[int, int]]:
         r"""
-        Coefficient storage is organized into "hyperplanes" in multi-index
-        space. Potentially only a subset of these hyperplanes contain
-        coefficients that need to be stored. This routine returns that
-        subset, which is then used in :meth:`_split_coeffs_into_hyperplanes`
-        to appropriately partition the coefficients into segments corresponding
-        to the hyperplanes, settling any overlap in the process.
+        Return the (disjoint) hyperplane decomposition of an order :math:`p`
+        full Taylor expansion.
 
-        Returns a list of hyperplane where each hyperplane is represented by
-        a tuple of integers. The first integer `d` is the axis number that the
-        hyperplane is orthogonal to and the second integer is the `d`-th
-        component of the lattice point where the hyperplane intersects the
-        axis `d`.
+        .. math::
+
+            \{\mathrm{mi} \in \mathbb{N}_0^d : |\mathrm{mi}| \le p\}
+            = \bigcup_{\mathrm{value}=0}^{p}
+            \{\mathrm{mi} \in \mathbb{N}_0^d : |\mathrm{mi}| \le p,
+            \mathrm{mi}_{\mathrm{axis}} = \mathrm{value}\}
+
+        with :math:`\mathrm{axis} = d - 1`. Each hyperplane is
+        returned as the pair ``(axis, value)``.
         """
-        d = self.dim - 1
-        return [(d, const) for const in range(self.order + 1)]
+        axis = self.dim - 1
+        return [(axis, value) for value in range(self.order + 1)]
 
     @memoize_method
     def _split_coeffs_into_hyperplanes(
                 self
             ) -> list[tuple[int, list[MultiIndex]]]:
         r"""
-        This splits the coefficients into :math:`O(p)` disjoint sets
-        so that for each set, all the identifiers have the form,
-        :math:`(m_1, m_2, ..., m_{j-1}, c, m_{j+1}, ... , m_{\text{dim}})`
-        where :math:`c` is a constant. Geometrically, each set is an axis-aligned
-        hyperplane.
+        Group the multi-indices :math:`S` from
+        :meth:`get_coefficient_identifiers` by hyperplane.
 
-        If this is an instance of :class:`LinearPDEBasedExpansionTermsWrangler`,
-        then the number of sets will be :math:`O(1)`.
+        The result is a list of tuples ``(axis, mis)``, one for each
+        ``(axis, value)`` from :meth:`_get_mi_hyperplanes`. Here ``mis`` is
+        the list of
 
-        In the returned object ``[(axis, [mi_1, mi2, ...]), ...]``,
-        each element in the outer list represents a hyperplane. Each element
-        is a 2-tuple where the first element in the tuple is the axis number *axis*
-        to which the hyperplane is orthogonal. The second element in the tuple
-        is a list of multi-indices in the hyperplane corresponding to the stored
-        coefficients.
+        .. math::
 
-        E.g. for Laplace 3D order 4, the result could be::
-        [
-          (2, [(0, 0, 0), (1, 0, 0), (2, 0, 0), (3, 0, 0), (0, 1, 0), (1, 1, 0),
-               (2, 1, 0), (0, 2, 0), (1, 2, 0), (0, 3, 0)]),
-          (2, [(0, 0, 1), (1, 0, 1), (2, 0, 1), (0, 1, 1), (1, 1, 1), (0, 2, 1)]),
-        ]
+            \{\mathrm{mi} \in S : \mathrm{mi}_{\mathrm{axis}} = \mathrm{value}\}
+
+        in storage order. This holds for full and PDE-conforming expansions.
+
+        For a PDE-conforming 3D Laplace expansion of order 4::
+
+            [
+              (0, [(0, 0, 0), (0, 0, 1), (0, 1, 0), (0, 0, 2), (0, 1, 1),
+                   (0, 2, 0), (0, 0, 3), (0, 1, 2), (0, 2, 1), (0, 3, 0),
+                   (0, 0, 4), (0, 1, 3), (0, 2, 2), (0, 3, 1), (0, 4, 0)]),
+              (0, [(1, 0, 0), (1, 0, 1), (1, 1, 0), (1, 0, 2), (1, 1, 1),
+                   (1, 2, 0), (1, 0, 3), (1, 1, 2), (1, 2, 1), (1, 3, 0)]),
+            ]
         """
-        hyperplanes = self._get_mi_hyperplanes()
-
         res: list[tuple[int, list[MultiIndex]]] = []
-        seen_mis: set[MultiIndex] = set()
-
-        for d, const in hyperplanes:
-            coeffs_in_hyperplane: list[MultiIndex] = []
-            for mi in self.get_coefficient_identifiers():
-                # Check if the multi-index is in this hyperplane and
-                # if it is not in any of the hyperplanes we saw before
-                # (This rejects coefficients that might be in multiple
-                # hyperplanes, such as near the origin.)
-                if mi[d] == const and mi not in seen_mis:
-                    coeffs_in_hyperplane.append(mi)
-                    seen_mis.add(mi)
-
-            res.append((d, coeffs_in_hyperplane))
+        for axis, value in self._get_mi_hyperplanes():
+            coeffs_in_hyperplane = [
+                mi for mi in self.get_coefficient_identifiers() if mi[axis] == value]
+            res.append((axis, coeffs_in_hyperplane))
 
         return res
 
@@ -685,26 +673,27 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
 
     @override
     def _get_mi_hyperplanes(self) -> list[tuple[int, int]]:
-        mis = self.get_full_coefficient_identifiers()
-        mi_to_index = {mi: i for i, mi in enumerate(mis)}
+        r"""
+        Return the (disjoint) hyperplane decomposition of a PDE-conforming expansion.
 
-        hyperplanes = []
-        deriv_id_to_coeff, = self.knl.get_pde_as_diff_op().eqs
+        For :math:`p \geq c`, the stored multi-indices :math:`J` have the
+        decomposition
 
-        if not all(ident.mi in mi_to_index for ident in deriv_id_to_coeff):
-            # The order of the expansion is less than the order of the PDE.
-            # Treat as if full expansion.
-            hyperplanes = super()._get_mi_hyperplanes()
-        else:
-            # Calculate the multi-index that appears last in in the PDE in
-            # the degree lexicographic order given by _get_mi_ordering_key.
-            ordering_key = self._get_mi_ordering_key()
-            max_mi = max(deriv_id_to_coeff, key=ordering_key).mi
-            hyperplanes = [(d, const)
-                for d in range(self.dim)
-                for const in range(max_mi[d])]
+        .. math::
 
-        return hyperplanes
+            J = \bigcup_{\mathrm{value}=0}^{c-1}
+            \{\mathrm{mi} \in \mathcal{M}(p) :
+            \mathrm{mi}_{\mathrm{axis}} = \mathrm{value}\}
+
+        where :math:`\mathrm{axis} = k` is the compression axis.
+        """
+        # If the expansion order is smaller than the PDE order, we need to
+        # store all coefficients.
+        if self.order < self.pde_order:
+            return super()._get_mi_hyperplanes()
+
+        axis = self.compression_axis
+        return [(axis, value) for value in range(self.pde_order)]
 
     @override
     def get_full_coefficient_identifiers(self) -> Sequence[MultiIndex]:
