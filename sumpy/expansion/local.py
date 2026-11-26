@@ -30,7 +30,6 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, NoReturn, cast
 
-import sympy as sp
 from typing_extensions import override
 
 from pytools import memoize_method, single_valued
@@ -54,7 +53,6 @@ if TYPE_CHECKING:
     from sumpy.assignment_collection import SymbolicAssignmentCollection
     from sumpy.derivative_taker import DerivativeCoeffDict
     from sumpy.diff_op import MultiIndex
-    from sumpy.expansion.line_recurrence import _LineRecurrenceTable
     from sumpy.expansion.m2l import M2LTranslationBase, TranslationClassesDepData
     from sumpy.expansion.multipole import (
         HankelBased2DMultipoleExpansion,
@@ -205,7 +203,8 @@ class LineTaylorLocalExpansion(LocalExpansionBase, ABC):
 
 @dataclass(frozen=True)
 class ODELineTaylorLocalExpansion(LocalExpansionBase):
-    r"""Compute direct-QBX line Taylor expansions from the kernel's ODE.
+    r"""
+    Compute direct-QBX line Taylor expansions from the kernel's ODE.
 
     The base kernel is :math:`G(z) = g(q)`, with :math:`q = |z|^2`,
     and its PDE gives a polynomial-coefficient ODE for :math:`g`.
@@ -247,19 +246,19 @@ class ODELineTaylorLocalExpansion(LocalExpansionBase):
     def _assign_states_to_sac(
             self, max_derivative_order: int, avec: sym.Matrix, bvec: sym.Matrix,
             sac: SymbolicAssignmentCollection,
-    ) -> _LineRecurrenceTable[sp.Symbol]:
+    ) -> dict[tuple[int, int], sym.Symbol]:
         r"""
-        Assign :math:`U_{i,j} = [\tau^j]g^{(i)}(q(\tau))` in ``sac`` and return
+        Assign :math:`U[i, j] = [\tau^j]g^{(i)}(q(\tau))` in ``sac`` and return
         the table of assigned symbols.
         """
         # q(tau) = |avec + tau*bvec|^2 = q0 + q1*tau + q2*tau^2
         # Component-style names such as q2 are rewritten as vector accesses.
-        q0 = sp.Symbol(sac.assign_unique("q0_line", avec.dot(avec)))
-        q1 = sp.Symbol(sac.assign_unique("q1_line", 2*avec.dot(bvec)))
-        q2 = sp.Symbol(sac.assign_unique("q2_line", bvec.dot(bvec)))
+        q0 = sym.Symbol(sac.assign_unique("q0_line", avec.dot(avec)))
+        q1 = sym.Symbol(sac.assign_unique("q1_line", 2*avec.dot(bvec)))
+        q2 = sym.Symbol(sac.assign_unique("q2_line", bvec.dot(bvec)))
 
-        from sumpy.expansion import line_recurrence
         from sumpy.expansion.kernel_ode import kernel_ode
+        from sumpy.expansion.line_recurrence import recurrence
 
         # kernel_ode returns the ODE coefficients and
         # initial conditions g^(i)(q0) for i = 0, ..., ode_order-1.
@@ -268,55 +267,39 @@ class ODELineTaylorLocalExpansion(LocalExpansionBase):
         # If max_derivative_order >= ode_order, we need to differentiate the ODE
         # and extend the initial conditions to get g^(i)(q0)
         # for i <= max_derivative_order.
-        init_cond_exprs, uij_update_exprs = line_recurrence.recurrence(
+        init_cond_exprs, uij_updates = recurrence(
             ode_coeffs, max_derivative_order, init_conds=init_cond_exprs,
             q0=q0, q1=q1, q2=q2)
+        ordered_updates = [sorted(update.items()) for update in uij_updates]
 
-        assigned_init_conds = [
-            sp.Symbol(sac.assign_unique(f"U{i}j0", value))
-            for i, value in enumerate(init_cond_exprs)]
+        states = {
+            (i, 0): sym.Symbol(sac.assign_unique(f"U{i}j0", value))
+            for i, value in enumerate(init_cond_exprs)}
 
         # Example: 3D Laplace with M = 1, at i = 0 and j = 2. Starting from
-        #     uij_update_exprs[0] = (q1*U[1, j-1] + 2*q2*U[1, j-2])/j,
+        #     uij_updates[0] = {(1, -1): q1/j, (1, -2): 2*q2/j},
         # set j = 2 and read the assigned states from the table:
-        #     (q1*U1j1 + 2*q2*U1j0)/2.
-        # Collect by state, then assign the coefficients and the new state:
+        #     (q1/2)*U1j1 + q2*U1j0.
+        # Assign the coefficients and the new state:
         #     c0j2 = q2, c0j2_0 = q1/2,
         #     U0j2 = U1j0*c0j2 + U1j1*c0j2_0.
-        def assign_uij_update(
-                j: int, states: _LineRecurrenceTable[sp.Symbol],
-        ) -> list[sp.Symbol]:
-            r"""
-            Return the assigned state symbols :math:`U_{i,j}`.
-            """
-            assigned_states = []
-            for i, update_expr in enumerate(uij_update_exprs):
-                update_expr = update_expr.xreplace({line_recurrence.j: j})
-                state_substitutions = {}
-                for state in update_expr.atoms(sp.Indexed):
-                    state_i, state_j = state.indices
-                    state_substitutions[state] = states[int(state_i), int(state_j)]
-                update_expr = update_expr.xreplace(state_substitutions)
-
-                state_coeffs = sp.collect(
-                    sp.expand(update_expr), states.values(), evaluate=False)
-
+        for j in range(1, self.order+1):
+            subst = {sym.Symbol("j"): j}
+            for i, update in enumerate(ordered_updates):
                 terms = []
-                for state in sorted(state_coeffs, key=str):
-                    name = sac.assign_unique(f"c{i}j{j}", state_coeffs[state])
-                    terms.append(sp.Symbol(name)*state)
-                name = sac.assign_unique(f"U{i}j{j}", sp.Add(*terms))
-                assigned_states.append(sp.Symbol(name))
-            return assigned_states
-
-        from sumpy.expansion.line_recurrence import line_recurrence_table
-
-        return line_recurrence_table(
-            assigned_init_conds, assign_uij_update, expansion_order=self.order)
+                for (prev_state, shift), weight in update:
+                    if j+shift < 0:
+                        continue
+                    name = sac.assign_unique(
+                        f"c{i}j{j}", weight.xreplace(subst))
+                    terms.append(sym.Symbol(name)*states[prev_state, j+shift])
+                name = sac.assign_unique(f"U{i}j{j}", sym.Add(*terms))
+                states[i, j] = sym.Symbol(name)
+        return states
 
     def _line_chain_rule_weights(
             self, mi: tuple[int, ...], avec: sym.Matrix, bvec: sym.Matrix,
-    ) -> dict[tuple[int, int], sp.Expr]:
+    ) -> dict[tuple[int, int], sym.Expr]:
         r"""
         Return the chain-rule weights :math:`\{(i,k): c_{i,k}\}` of
         :math:`(\partial_z^{\mathrm{mi}}G)(z)\big|_{z=z(\tau)}
@@ -326,15 +309,16 @@ class ODELineTaylorLocalExpansion(LocalExpansionBase):
         Only terms with :math:`k \le p` are returned, where :math:`p` is the
         expansion order.
         """
+        from sumpy.derivative_recurrence import _polynomial_coeffs
         from sumpy.expansion.kernel_ode import chain_rule_weights
 
-        tau = sp.Symbol("tau")
-        z = sp.Matrix(sp.symbols(f"z0:{self.dim}"))
+        tau = sym.Symbol("tau")
+        z = sym.Matrix(sym.symbols(f"z0:{self.dim}"))
         z_tau = dict(zip(z, avec + tau*bvec, strict=False))
         c = {}
         for i, weight in chain_rule_weights(mi, z).items():
-            polynomial = sp.Poly(weight.xreplace(z_tau), tau)
-            for (k,), cik in polynomial.terms():
+            coeffs = _polynomial_coeffs(weight.xreplace(z_tau), sym.Matrix([tau]))
+            for (k,), cik in coeffs.items():
                 if k <= self.order:
                     c[i, k] = cik
         return c
@@ -345,7 +329,7 @@ class ODELineTaylorLocalExpansion(LocalExpansionBase):
             avec: sym.Matrix, bvec: sym.Matrix | None,
             rscale: sym.Expr, weights: Sequence[sym.Expr],
             sac: SymbolicAssignmentCollection | None = None,
-    ) -> list[sp.Expr]:
+    ) -> list[sym.Expr]:
         r"""
         Return the weighted line Taylor coefficients around :math:`\tau=0`,
         ordered by :meth:`get_coefficient_identifiers`.
@@ -407,7 +391,7 @@ class ODELineTaylorLocalExpansion(LocalExpansionBase):
             for (i, k), cik in sorted(c.items()):
                 if cik == 0:
                     continue
-                assigned_cik = sp.Symbol(sac.assign_unique(
+                assigned_cik = sym.Symbol(sac.assign_unique(
                     f"ct{tgt_mi_idx}i{i}k{k}", cik))
                 # [tau^j] \partial_z^{mi} source kernels = sum_{i,k} c[i,k]*U[i,j-k].
                 for j in range(k, self.order+1):
@@ -419,16 +403,16 @@ class ODELineTaylorLocalExpansion(LocalExpansionBase):
     def coefficients_from_source(
             self, kernel: ScalarKernel, avec: sym.Matrix, bvec: sym.Matrix | None,
             rscale: sym.Expr, sac: SymbolicAssignmentCollection | None = None,
-    ) -> list[sp.Expr]:
+    ) -> list[sym.Expr]:
         return self.coefficients_from_source_vec(
             (kernel,), avec, bvec, rscale, (1,), sac=sac)
 
     @override
     def evaluate(
-            self, kernel: ScalarKernel, coeffs: Sequence[sp.Expr], bvec: sym.Matrix,
+            self, kernel: ScalarKernel, coeffs: Sequence[sym.Expr], bvec: sym.Matrix,
             rscale: sym.Expr, sac: SymbolicAssignmentCollection | None = None,
             *, tau: sym.Expr | float = 1,
-    ) -> sp.Expr:
+    ) -> sym.Expr:
         r"""
         Return the Taylor expansion for the target kernel and related source
         kernels at :math:`\tau`.

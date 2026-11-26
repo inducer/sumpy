@@ -1,74 +1,92 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, TypeVar
+from collections import defaultdict
+from typing import TYPE_CHECKING
 
-import sympy as sp
+import sumpy.symbolic as sym
+from sumpy.derivative_recurrence import _polynomial_coeffs
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Sequence
+    from collections.abc import Sequence
 
-__doc__ = r"""Derive recurrences for Taylor coefficients along a line.
+__doc__ = r"""
+Line Recurrence
+===============
+
+Derive recurrences for Taylor coefficients along a line.
+
+Notation:
+
+- The kernel is :math:`G(z) = g(q)`, with :math:`q = |z|^2`.
+- Along a line, :math:`q(\tau) = q_0 + q_1\tau + q_2\tau^2`.
+- :math:`U[i, j] = [\tau^j]g^{(i)}(q(\tau))`, where :math:`i` is the
+  :math:`q`-derivative order and :math:`j` is the Taylor degree.
+- The ODE is :math:`\sum_{i=0}^{\mathrm{ode\_order}} a_i(q)g^{(i)}(q) = 0`,
+  with ascending coefficients :math:`[a_0, \dots, a_{\mathrm{ode\_order}}]`.
 
 Assumptions:
 
-- Linear ODE with polynomial coefficients in :math:`q`.
-- Along a line, :math:`q(\tau) = q_0 + q_1\tau + q_2\tau^2`.
+- The ODE has positive order and polynomial coefficients in :math:`q`.
 - The ODE's leading coefficient is nonzero at :math:`q_0`.
 
 .. autofunction:: recurrence
-.. autofunction:: line_recurrence_table
 """
-
-q = sp.Symbol("q")
-q0, q1, q2 = sp.symbols("q0:3")
-tau = sp.Symbol("tau")
-
-# U[i, j]: [tau^j] g^(i)(q(tau)).
-j = sp.Symbol("j", integer=True, nonnegative=True)
-U = sp.IndexedBase("U")
 
 
 def _ode_differentiation(
-        ode_coeffs: Sequence[sp.Expr], order: int,
-) -> tuple[sp.Expr, ...]:
+        ode_coeffs: Sequence[sym.Expr], order: int,
+) -> tuple[sym.Expr, ...]:
     r"""
     Return the coefficients after differentiating the ODE in :math:`q`
     until its order is at least ``order``.
     """
+    q = sym.Symbol("q")
     ode_coeffs = tuple(ode_coeffs)
     # [0, a_0, a_1, a_2] + d/dq [a_0, a_1, a_2, 0]
     #     = [a_0', a_0 + a_1', a_1 + a_2', a_2].
     for _ in range(len(ode_coeffs)-1, order):
         ode_coeffs = tuple(
-            sp.expand(sp.diff(coeff, q) + previous)
+            (coeff.diff(q) + previous).expand()
             for coeff, previous in zip(
-                (*ode_coeffs, 0), (0, *ode_coeffs), strict=False))
+                (*ode_coeffs, sym.Integer(0)), (0, *ode_coeffs), strict=True))
     return ode_coeffs
 
 
 def recurrence(
-        ode_coeffs: Sequence[sp.Expr],
+        ode_coeffs: Sequence[sym.Expr],
         max_derivative_order: int,
-        *, init_conds: Sequence[sp.Expr] | None = None,
-        q0: sp.Expr = q0, q1: sp.Expr = q1, q2: sp.Expr = q2,
-) -> tuple[tuple[sp.Expr, ...], tuple[sp.Expr, ...]]:
+        *, init_conds: Sequence[sym.Expr],
+        q0: sym.Expr, q1: sym.Expr, q2: sym.Expr,
+) -> tuple[tuple[sym.Expr, ...], tuple[dict[tuple[int, int], sym.Expr], ...]]:
     r"""
-    Return extended initial conditions and update expressions for the states
-    :math:`U_{i,j} = [\tau^j]g^{(i)}(q(\tau))`.
-    """
-    ode_order = len(ode_coeffs)-1
-    if ode_order < 1:
-        raise ValueError("the ODE must have positive order")
-    if ode_coeffs[-1] == 0:
-        raise ValueError("the ODE needs a nonzero leading coefficient")
+    Return extended initial conditions and the update formulas for
+    :math:`U[i, j] = [\tau^j]g^{(i)}(q(\tau))` with :math:`j \ge 1`.
 
+    Let :math:`M = \max(\mathrm{max\_derivative\_order}, \mathrm{ode\_order}-1)`.
+    For :math:`0 \le i < M`, the chain rule gives
+
+    .. math::
+
+        U[i, j] = \frac{q_1 U[i+1, j-1] + 2 q_2 U[i+1, j-2]}{j}.
+
+    For :math:`i = M`, the ODE gives
+
+    .. math::
+
+        U[M, j] = \sum_{(i',\mathrm{shift})} c_{i',\mathrm{shift}}(j)
+            U[i', j+\mathrm{shift}],
+
+    where :math:`\mathrm{shift} < 0`. Each formula is returned as
+    ``{(i', shift): weight}``, with weights in the symbol ``j``.
+    """
+    q = sym.Symbol("q")
+    tau = sym.Symbol("tau")
+    j = sym.Symbol("j")
+    ode_order = len(ode_coeffs)-1
     M = max(max_derivative_order, ode_order-1)  # ruff:ignore[non-lowercase-variable-in-function]
 
-    if init_conds is None:
-        init_conds = [sp.Symbol(f"s{i}") for i in range(ode_order)]
-    else:
-        init_conds = list(init_conds)
+    init_conds = list(init_conds)
     leading_coeff_at_q0 = ode_coeffs[-1].subs(q, q0)
     # For i >= ode_order, we use the initial conditions
     # {g^(0)(q0), g^(1)(q0), ..., g^(ode_order-1)(q0)} to obtain
@@ -78,78 +96,68 @@ def recurrence(
         ode_coeffs = _ode_differentiation(ode_coeffs, i)
         # g^(i)(q0) = -(a_0*g^(0)(q0) + ... + a_{i-1}*g^(i-1)(q0))/a_i.
         g_derivative = (
-            -sp.Add(*(
+            -sym.Add(*(
                 coeff.subs(q, q0)*init_cond
-                for coeff, init_cond in zip(ode_coeffs, init_conds, strict=False)))
+                for coeff, init_cond in zip(ode_coeffs[:-1], init_conds, strict=True)))
             / leading_coeff_at_q0)
         init_conds.append(g_derivative)
 
     ode_coeffs = _ode_differentiation(ode_coeffs, M+1)
 
-    # Example: 2D Laplace, q*g^(2)(q) + g^(1)(q) = 0, with M = 1.
-    # Let U_1(tau) = g^(1)(q(tau)). Then,
-    # d/dtau U_1(tau) = q'(tau)*g^(2)(q(tau)) = -q'(tau)*U_1(tau)/q(tau).
-    # The ODE in tau is
-    #     q(tau)*(d/dtau)U_1(tau) + q'(tau)*U_1(tau) = 0,
-    # where q(tau) = q0 + q1*tau + q2*tau^2.
-    #
-    # Therefore, the coefficient of tau^(j-1) in the LHS is
-    #  q0*j*U[M, j]                                     (unknown)
-    #  + q1*(j-1)*U[M, j-1] + q2*(j-2)*U[M, j-2]        (rest = sum(...))
-    #  + q1*U[M, j-1] + 2*q2*U[M, j-2]                  (rest += sum(...))
-    #
-    # Hence, U[M, j] = -(q1*U[M, j-1] + q2*U[M, j-2])/q0.
-
     q_tau = q0 + q1*tau + q2*tau**2
-    dq_tau = sp.diff(q_tau, tau)
-    leading_coeffs = sp.Poly(ode_coeffs[-1].subs(q, q_tau), tau).terms()
-    rest = sum(weight*(j-k)*U[M, j-k]
-               for (k,), weight in leading_coeffs if k != 0)
+    dq_tau = q_tau.diff(tau)
+
+    # ===== coefficient matching for the top state i = M =====
+    # a_{M+1}(q(tau)) * \partial_tau g^{(M)}(q(tau))
+    #   = -\partial_tau q(tau) * \sum_{i=0}^{M} a_i(q(tau)) * g^{(i)}(q(tau)).
+    #
+    # LHS:
+    # a_{M+1}(q(tau)) * \partial_tau (\sum_{j >= 0} U[M, j] * tau^j)
+    #   = a_{M+1}(q(tau)) * \sum_{j >= 1} j * U[M, j] * tau^{j-1}.
+    #
+    # RHS:
+    # -(q1 + 2*q2*tau) * \sum_{i=0}^{M} a_i(q(tau))
+    #   * \sum_{j >= 0} U[i, j] * tau^j.
+    #
+    # Match the coefficients of tau^{j-1}, j >= 1.
+
+    leading_coeffs = _polynomial_coeffs(
+        ode_coeffs[-1].subs(q, q_tau), sym.Matrix([tau]))
+    rest = defaultdict(lambda: 0)
+    for (k,), weight in leading_coeffs.items():
+        if k != 0:
+            # tau^k * \partial_tau (U[M, j-k] * tau^{j-k})
+            #   = (j-k) * U[M, j-k] * tau^{j-1}.
+            rest[M, -k] += weight*(j-k)
 
     for i, coeff in enumerate(ode_coeffs[:-1]):
-        lower_coeffs = sp.Poly(dq_tau*coeff.subs(q, q_tau), tau).terms()
-        rest += sum(weight*U[i, j-1-k] for (k,), weight in lower_coeffs)
+        lower_coeffs = _polynomial_coeffs(
+            dq_tau*coeff.subs(q, q_tau), sym.Matrix([tau]))
+        for (k,), weight in lower_coeffs.items():
+            # tau^k * U[i, j-1-k] * tau^{j-1-k}
+            #   = U[i, j-1-k] * tau^{j-1}.
+            rest[i, -1-k] += weight
 
-    # i = M: solve the differentiated ODE in tau for U[M, j].
-    umj_update_expr = -rest/(leading_coeff_at_q0*j)
+    # a_{M+1}(q0) * j * U[M, j]
+    #   = -\sum_{(i, shift)} rest[i, shift] * U[i, j+shift].
+    top_state_update = {key: -weight/(leading_coeff_at_q0*j)
+                        for key, weight in rest.items() if weight != 0}
 
-    # i < M: (d/dtau)U_i(tau) = q'(tau)*U_{i+1}(tau).
-    # [tau^(j-1)] (d/dtau)U_i(tau): j*U[i, j].
-    # [tau^(j-1)] q'(tau)*U_{i+1}(tau): q1*U[i+1, j-1] + 2*q2*U[i+1, j-2].
-    uij_update_exprs = [
-        (q1*U[i+1, j-1] + 2*q2*U[i+1, j-2])/j for i in range(M)]
-    uij_update_exprs.append(umj_update_expr)
-    return tuple(init_conds), tuple(uij_update_exprs)
+    # ===== coefficient matching for the lower states, i < M =====
+    #
+    # \partial_tau g^{(i)}(q(tau))
+    #   = g^{(i+1)}(q(tau)) * \partial_tau q(tau)
+    #   = (q1 + 2*q2*tau) * g^{(i+1)}(q(tau)).
+    #
+    # LHS term contributing to tau^{j-1}:
+    #   \partial_tau (U[i, j] * tau^j) = j * U[i, j] * tau^{j-1}.
+    #
+    # RHS terms contributing to tau^{j-1}:
+    #     q1 * U[i+1, j-1]
+    #   + 2*q2 * U[i+1, j-2].
+    #
+    # Hence,
+    #   U[i, j] = (q1 * U[i+1, j-1] + 2*q2 * U[i+1, j-2]) / j.
 
-
-_ValueT = TypeVar("_ValueT")
-
-
-class _LineRecurrenceTable(dict[tuple[int, int], _ValueT | Literal[0]]):  # ruff:ignore[subclass-builtin]
-    def __missing__(self, key: tuple[int, int]) -> Literal[0]:
-        """
-        Return zero for negative Taylor degrees and raise KeyError otherwise.
-        """
-        _, j = key
-        if j < 0:
-            return 0
-        raise KeyError(key)
-
-
-def line_recurrence_table(
-        init_conds: Sequence[_ValueT],
-        uij_update: Callable[[int, _LineRecurrenceTable[_ValueT]], Iterable[_ValueT]],
-        expansion_order: int,
-) -> _LineRecurrenceTable[_ValueT]:
-    r"""
-    Return the state table :math:`U_{i,j} = [\tau^j]g^{(i)}(q(\tau))`
-    through Taylor degree ``expansion_order``.
-    """
-    states = _LineRecurrenceTable()
-    for i, value in enumerate(init_conds):
-        states[i, 0] = value
-
-    for j in range(1, expansion_order+1):
-        for i, value in enumerate(uij_update(j, states)):
-            states[i, j] = value
-    return states
+    lower_state_updates = [{(i+1, -1): q1/j, (i+1, -2): 2*q2/j} for i in range(M)]
+    return tuple(init_conds), (*lower_state_updates, top_state_update)

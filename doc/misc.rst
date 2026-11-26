@@ -7,6 +7,8 @@ Misc Tools
 
 .. automodule:: sumpy.expansion.kernel_ode
 
+.. automodule:: sumpy.expansion.line_recurrence
+
 .. automodule:: sumpy.symbolic
 
 .. automodule:: sumpy.tools
