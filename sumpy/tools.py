@@ -54,7 +54,7 @@ if TYPE_CHECKING:
 
     import pyopencl
     from arraycontext import ArrayContext
-    from pymbolic.primitives import Variable
+    from pymbolic.primitives import ExpressionNode, Variable
     from pymbolic.typing import Expression
     from pyopencl.array import Array as CLArray
     from pyopencl.typing import WaitList
@@ -79,6 +79,7 @@ Multi-index Helpers
 
 .. autofunction:: add_mi
 .. autofunction:: mi_factorial
+.. autofunction:: binomial
 .. autofunction:: mi_increment_axis
 .. autofunction:: mi_set_axis
 .. autofunction:: mi_power
@@ -165,6 +166,11 @@ def mi_factorial(mi: Sequence[int]) -> int:
     for mi_i in mi:
         result *= math.factorial(mi_i)
     return result
+
+
+def binomial(n: int | ExpressionNode, k: int) -> int | ExpressionNode:
+    import math
+    return math.prod(n-j for j in range(k)) // math.factorial(k)
 
 
 def mi_increment_axis(

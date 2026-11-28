@@ -721,7 +721,7 @@ class M2LPreprocessMultipole(E2EBase):
         return "m2l_preprocess_multipole"
 
     @memoize_method
-    def get_inner_knl_and_optimizations(self, result_dtype):
+    def get_inner_knl(self, result_dtype):
         m2l_translation = self.tgt_expansion.m2l_translation
         return m2l_translation.loopy_preprocess_multipole(
             self.tgt_expansion, self.src_expansion, result_dtype)
@@ -732,8 +732,7 @@ class M2LPreprocessMultipole(E2EBase):
         npreprocessed_src_coeffs = \
             m2l_translation.preprocess_multipole_nexprs(self.tgt_expansion,
                 self.src_expansion)
-        single_box_preprocess_knl, _ = self.get_inner_knl_and_optimizations(
-                result_dtype)
+        single_box_preprocess_knl = self.get_inner_knl(result_dtype)
 
         from sumpy.tools import gather_loopy_arguments
         loopy_knl = make_loopy_program(
@@ -776,12 +775,7 @@ class M2LPreprocessMultipole(E2EBase):
         return lp.inline_callable_kernel(loopy_knl, "m2l_preprocess_inner")
 
     def get_optimized_kernel(self, result_dtype):
-        knl = self.get_kernel(result_dtype)
-        knl = lp.tag_inames(knl, "isrc_box:g.0")
-        _, optimizations = self.get_inner_knl_and_optimizations(result_dtype)
-        for optimization in optimizations:
-            knl = optimization(knl)
-        return knl
+        return lp.tag_inames(self.get_kernel(result_dtype), "isrc_box:g.0")
 
     def __call__(self, actx: ArrayContext, **kwargs):
         """

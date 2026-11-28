@@ -58,6 +58,7 @@ sphinxconfig_missing_reference_aliases = {
     # pymbolic
     "ArithmeticExpression": "obj:pymbolic.ArithmeticExpression",
     "Expression": "obj:pymbolic.typing.Expression",
+    "ExpressionNode": "class:pymbolic.primitives.ExpressionNode",
     # pyopencl
     "CLArray": "class:pyopencl.array.Array",
     "WaitList": "obj:pyopencl.WaitList",

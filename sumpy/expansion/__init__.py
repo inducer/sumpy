@@ -25,7 +25,7 @@ THE SOFTWARE.
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Any, ClassVar, Protocol, TypeAlias, overload
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, TypeAlias
 from warnings import warn
 
 from typing_extensions import Self, override
@@ -34,18 +34,18 @@ import pymbolic.primitives as prim
 from pytools import memoize_method
 
 import sumpy.symbolic as sym
-from sumpy.diff_op import DerivativeIdentifier
-from sumpy.tools import add_mi
+from sumpy.tools import add_mi, binomial, mi_set_axis
 
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Hashable, Sequence
 
     import loopy as lp
+    from pymbolic.primitives import ExpressionNode
     from pymbolic.typing import Expression
 
     from sumpy.assignment_collection import SymbolicAssignmentCollection
-    from sumpy.diff_op import MultiIndex
+    from sumpy.diff_op import DerivativeIdentifier, MultiIndex
     from sumpy.expansion.local import LocalExpansionBase
     from sumpy.expansion.multipole import MultipoleExpansionBase
     from sumpy.kernel import KernelArgument, ScalarKernel
@@ -261,6 +261,7 @@ class ExpansionTermsWrangler(ABC):
 
     .. automethod:: copy
     .. automethod:: get_coefficient_identifiers
+    .. automethod:: get_storage_index
     .. automethod:: get_full_kernel_derivatives_from_stored
     .. automethod:: get_stored_mpole_coefficients_from_full
 
@@ -304,13 +305,41 @@ class ExpansionTermsWrangler(ABC):
             generate_nonnegative_integer_tuples_summing_to_at_most as gnitstam,
         )
 
-        res = sorted(gnitstam(self.order, self.dim), key=sum)
+        # Sorted by total degree, then lexicographically. get_storage_index will
+        # depend on this assumption.
+        res = sorted(gnitstam(self.order, self.dim), key=lambda mi: (sum(mi), *mi))
 
         if self.max_mi is None:
             return res
 
         return [mi for mi in res if
             all(mi[i] <= self.max_mi[i] for i in range(self.dim))]
+
+    def get_storage_index(self,
+                mi: Sequence[int | ExpressionNode]
+            ) -> int | ExpressionNode:
+        """
+        :returns: the position of *mi* in :meth:`get_coefficient_identifiers`
+            when :attr:`max_mi` is *None*.
+        """
+        # We assume mis are ordered by total degree first, then lexicographically.
+        d = len(mi)
+        n = sum(mi)
+        # There are binomial(n+d, d) multi-indices of total degree <= n. In order
+        # to determine the position of mi in get_coefficient_identifiers, it suffices
+        # to know how many multi-indices are of order |mi| but larger than mi:
+        # pos(mi) = binomial(n+d, d) - 1 - |{mi' : |mi'| = |mi|, mi' > mi}|
+        index = binomial(n+d, d) - 1
+
+        # Assume mi = (mi0, mi1, mi2).
+        # Suppose (x,y,z) is in {terms with order n after mi}.
+        # 1. If x > mi0, then y+z < mi1 + mi2, i.e., y+z <= mi1 + mi2 - 1.
+        #       |{(x,y,z): x > mi0, x+y+z = n}| = binomial(mi1+mi2-1 + 2, 2).
+        # 2. If x = mi0, y > mi1, then z <= (n-mi0-mi1) - 1 = mi2 - 1.
+        #       |{(x,y,z): x = mi0, y > mi1, x+y+z = n}| = binomial(mi2-1 + 1, 1).
+        for i in range(1, d):
+            index -= binomial(sum(mi[i:])-1+d-i, d-i)
+        return index
 
     def copy(self, **kwargs: Any) -> Self:
         return replace(self, **kwargs)
@@ -319,67 +348,55 @@ class ExpansionTermsWrangler(ABC):
 
     def _get_mi_hyperplanes(self) -> list[tuple[int, int]]:
         r"""
-        Coefficient storage is organized into "hyperplanes" in multi-index
-        space. Potentially only a subset of these hyperplanes contain
-        coefficients that need to be stored. This routine returns that
-        subset, which is then used in :meth:`_split_coeffs_into_hyperplanes`
-        to appropriately partition the coefficients into segments corresponding
-        to the hyperplanes, settling any overlap in the process.
+        Return the (disjoint) hyperplane decomposition of an order :math:`p`
+        full Taylor expansion.
 
-        Returns a list of hyperplane where each hyperplane is represented by
-        a tuple of integers. The first integer `d` is the axis number that the
-        hyperplane is orthogonal to and the second integer is the `d`-th
-        component of the lattice point where the hyperplane intersects the
-        axis `d`.
+        .. math::
+
+            \{\mathrm{mi} \in \mathbb{N}_0^d : |\mathrm{mi}| \le p\}
+            = \bigcup_{\mathrm{value}=0}^{p}
+            \{\mathrm{mi} \in \mathbb{N}_0^d : |\mathrm{mi}| \le p,
+            \mathrm{mi}_{\mathrm{axis}} = \mathrm{value}\}
+
+        with :math:`\mathrm{axis} = d - 1`. Each hyperplane is
+        returned as the pair ``(axis, value)``.
         """
-        d = self.dim - 1
-        return [(d, const) for const in range(self.order + 1)]
+        axis = self.dim - 1
+        return [(axis, value) for value in range(self.order + 1)]
 
     @memoize_method
     def _split_coeffs_into_hyperplanes(
                 self
             ) -> list[tuple[int, list[MultiIndex]]]:
         r"""
-        This splits the coefficients into :math:`O(p)` disjoint sets
-        so that for each set, all the identifiers have the form,
-        :math:`(m_1, m_2, ..., m_{j-1}, c, m_{j+1}, ... , m_{\text{dim}})`
-        where :math:`c` is a constant. Geometrically, each set is an axis-aligned
-        hyperplane.
+        Group the multi-indices :math:`S` from
+        :meth:`get_coefficient_identifiers` by hyperplane.
 
-        If this is an instance of :class:`LinearPDEBasedExpansionTermsWrangler`,
-        then the number of sets will be :math:`O(1)`.
+        The result is a list of tuples ``(axis, mis)``, one for each
+        ``(axis, value)`` from :meth:`_get_mi_hyperplanes`. Here ``mis`` is
+        the list of
 
-        In the returned object ``[(axis, [mi_1, mi2, ...]), ...]``,
-        each element in the outer list represents a hyperplane. Each element
-        is a 2-tuple where the first element in the tuple is the axis number *axis*
-        to which the hyperplane is orthogonal. The second element in the tuple
-        is a list of multi-indices in the hyperplane corresponding to the stored
-        coefficients.
+        .. math::
 
-        E.g. for Laplace 3D order 4, the result could be::
-        [
-          (2, [(0, 0, 0), (1, 0, 0), (2, 0, 0), (3, 0, 0), (0, 1, 0), (1, 1, 0),
-               (2, 1, 0), (0, 2, 0), (1, 2, 0), (0, 3, 0)]),
-          (2, [(0, 0, 1), (1, 0, 1), (2, 0, 1), (0, 1, 1), (1, 1, 1), (0, 2, 1)]),
-        ]
+            \{\mathrm{mi} \in S : \mathrm{mi}_{\mathrm{axis}} = \mathrm{value}\}
+
+        in storage order. This holds for full and PDE-conforming expansions.
+
+        For a PDE-conforming 3D Laplace expansion of order 4::
+
+            [
+              (0, [(0, 0, 0), (0, 0, 1), (0, 1, 0), (0, 0, 2), (0, 1, 1),
+                   (0, 2, 0), (0, 0, 3), (0, 1, 2), (0, 2, 1), (0, 3, 0),
+                   (0, 0, 4), (0, 1, 3), (0, 2, 2), (0, 3, 1), (0, 4, 0)]),
+              (0, [(1, 0, 0), (1, 0, 1), (1, 1, 0), (1, 0, 2), (1, 1, 1),
+                   (1, 2, 0), (1, 0, 3), (1, 1, 2), (1, 2, 1), (1, 3, 0)]),
+            ]
         """
-        hyperplanes = self._get_mi_hyperplanes()
-
         res: list[tuple[int, list[MultiIndex]]] = []
-        seen_mis: set[MultiIndex] = set()
-
-        for d, const in hyperplanes:
-            coeffs_in_hyperplane: list[MultiIndex] = []
-            for mi in self.get_coefficient_identifiers():
-                # Check if the multi-index is in this hyperplane and
-                # if it is not in any of the hyperplanes we saw before
-                # (This rejects coefficients that might be in multiple
-                # hyperplanes, such as near the origin.)
-                if mi[d] == const and mi not in seen_mis:
-                    coeffs_in_hyperplane.append(mi)
-                    seen_mis.add(mi)
-
-            res.append((d, coeffs_in_hyperplane))
+        for axis, value in self._get_mi_hyperplanes():
+            coeffs_in_hyperplane = [
+                mi for mi in self.get_coefficient_identifiers() if mi[axis] == value]
+            res.append((axis, coeffs_in_hyperplane))
 
         return res
 
@@ -387,32 +404,6 @@ class ExpansionTermsWrangler(ABC):
 
 
 class FullExpansionTermsWrangler(ExpansionTermsWrangler):
-    @overload
-    def get_storage_index(self,
-                          mi: MultiIndex,
-                          order: int | None = None) -> int: ...
-
-    @overload
-    def get_storage_index(self,
-                          mi: tuple[prim.ExpressionNode, ...],
-                          order: int | prim.ExpressionNode | None = None,
-                          ) -> prim.ExpressionNode: ...
-
-    def get_storage_index(self,
-                          mi: MultiIndex | tuple[prim.ExpressionNode, ...],
-                          order: int | prim.ExpressionNode | None = None,
-                          ) -> int | prim.ExpressionNode:
-        if not order:
-            order = sum(mi)
-
-        if self.dim == 3:
-            return (order*(order + 1)*(order + 2))//6 + \
-                    (order + 2)*mi[2] - (mi[2]*(mi[2] + 1))//2 + mi[1]
-        elif self.dim == 2:
-            return (order*(order + 1))//2 + mi[1]
-        else:
-            raise NotImplementedError
-
     @override
     def get_coefficient_identifiers(self) -> Sequence[MultiIndex]:
         return super().get_full_coefficient_identifiers()
@@ -435,28 +426,7 @@ class FullExpansionTermsWrangler(ExpansionTermsWrangler):
         return self.get_full_kernel_derivatives_from_stored(
             full_mpole_coefficients, rscale, sac=sac)
 
-    @memoize_method
-    def _get_mi_ordering_key_and_axis_permutation(
-                self
-            ) -> tuple[Callable[[MultiIndex | DerivativeIdentifier], tuple[int, ...]],
-                       Sequence[int]]:
-        """
-        Returns a degree lexicographic order as a callable that can be used as a
-        ``sort`` key on multi-indices and a permutation of the axis ordered
-        from the slowest varying axis to the fastest varying axis of the
-        multi-indices when sorted.
-        """
-        axis_permutation = list(reversed(range(self.dim)))
 
-        def mi_key(ident: MultiIndex | DerivativeIdentifier) -> tuple[int, ...]:
-            if isinstance(ident, DerivativeIdentifier):  # ruff:ignore[if-else-block-instead-of-if-exp]
-                mi = ident.mi
-            else:
-                mi = ident
-
-            return (sum(mi), *list(reversed(mi)))
-
-        return mi_key, axis_permutation
 # }}}
 
 
@@ -562,7 +532,36 @@ class CSEMatVecOperator:
 
 @dataclass(frozen=True)
 class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
-    """
+    r"""
+    Given an expansion order :math:`p`, we only store a compressed subset
+    of :math:`\mathcal{M}(p) = \{\mathrm{mi} : |\mathrm{mi}| \le p\}` and
+    recover others using PDE relations (see [Fernando2023]_).
+
+    Suppose the linear constant-coefficient PDE :math:`\sum_{\mathrm{mi}}
+    a_{\mathrm{mi}} \partial^{\mathrm{mi}} u = 0` has order :math:`c`.
+    It satisfies Property 17 in [Fernando2023]_, that is, it contains a pure
+    leading term :math:`\partial^{c \cdot e_k}` along axis-k. We choose the
+    smallest such :math:`k` as the compression axis. A PDE without a pure
+    leading term, such as :math:`u_{xy} = 0`, raises ``NotImplementedError``.
+
+    We sort multi-indices by total degree first, then lexicographically with
+    axis :math:`k` first, followed by the other axes in increasing axis number.
+
+    Let :math:`t` be the largest PDE multi-index under this ordering, as in
+    Proposition 13 in [Fernando2023]_. Then :math:`t = c \cdot e_k`, and we store
+
+    .. math::
+
+        J = \{\mathrm{mi} \in \mathcal{M}(p) : \mathrm{mi}_k < c\}.
+
+    For 2D Laplace, :math:`u_{xx} + u_{yy} = 0` gives
+    :math:`J = \{\mathrm{mi} \in \mathcal{M}(p) : \mathrm{mi}_0 < 2\}`.
+
+    .. [Fernando2023] I. Fernando, C. Lin, A. Klöckner (2023).
+        *Automatic Synthesis of Low-Complexity Translation Operators for the
+        Fast Multipole Method*.
+        `arXiv:2305.17867 <https://arxiv.org/abs/2305.17867>`__.
+
     .. automethod:: __init__
     """
 
@@ -601,42 +600,68 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
         stored_identifiers, _ = self.get_stored_ids_and_unscaled_projection_matrix()
         return stored_identifiers
 
-    # If there exists an axis-normal hyperplane without a PDE (derivative)
-    # multi-index on it, then the coefficients on that hyperplane *must* be
-    # stored (because it cannot be reached by any PDE identities). To find
-    # storage hyperplanes that reach a maximal (-ish?) number of coefficients,
-    # look for on-axis PDE coefficient multi-indices, and start enumerating
-    # hyperplanes normal to that axis.  Practically, this is done by reordering
-    # the axes so that the axis with the on-axis coefficient comes first in the
-    # multi-index tuple.
+    @property
     @memoize_method
-    def _get_mi_ordering_key_and_axis_permutation(
+    def _pde_coeffs(self) -> dict[MultiIndex, sym.Expr]:
+        pde_eq, = self.knl.get_pde_as_diff_op().eqs
+        return {ident.mi: sym.sympify(coeff)
+                for ident, coeff in pde_eq.items() if coeff != 0}
+
+    @property
+    @memoize_method
+    def pde_order(self) -> int:
+        return max(map(sum, self._pde_coeffs))
+
+    @property
+    @memoize_method
+    def compression_axis(self) -> int:
+        r"""
+        Return the smallest axis :math:`k` for which :math:`c \cdot e_k` occurs
+        as a derivative multi-index in the PDE, where :math:`c` is :attr:`pde_order`.
+        """
+        for axis in range(self.dim):
+            if mi_set_axis((0,)*self.dim, axis, self.pde_order) in self._pde_coeffs:
+                return axis
+        raise NotImplementedError("pde needs a pure leading term")
+
+    @property
+    @memoize_method
+    def leading_mi_representation(self) -> Sequence[tuple[MultiIndex, sym.Expr]]:
+        r"""
+        Return the representation of the PDE's leading differentiation operator
+        :math:`\partial^{c \cdot e_k}` as pairs
+        :math:`(\mathrm{mi}', \mathrm{weight}_{\mathrm{mi}'})`,
+
+        .. math::
+
+            \partial^{c \cdot e_k} u =
+            \sum_{\mathrm{mi}' \ne c \cdot e_k}
+            \mathrm{weight}_{\mathrm{mi}'} \cdot \partial^{\mathrm{mi}'} u,
+            \qquad
+            \mathrm{weight}_{\mathrm{mi}'} = -\frac{a_{\mathrm{mi}'}}{a_{c \cdot e_k}},
+
+        where :math:`\mathrm{mi}'` is from ``_pde_coeffs``.
+
+        For 2D Laplace, :math:`u_{xx} = -u_{yy}`, so it returns
+        ``(((0, 2), -1),)``.
+        """
+        k = self.compression_axis
+        c = self.pde_order
+        leading_mi = mi_set_axis((0,)*self.dim, k, c)
+        leading_mult = -1/sym.sympify(self._pde_coeffs[leading_mi])
+        return tuple((other_mi, coeff*leading_mult)
+                     for other_mi, coeff in self._pde_coeffs.items()
+                     if other_mi != leading_mi)
+
+    @memoize_method
+    def _get_mi_ordering_key(
                 self
-            ) -> tuple[Callable[[MultiIndex | DerivativeIdentifier], tuple[int, ...]],
-                       Sequence[int]]:
+            ) -> Callable[[MultiIndex | DerivativeIdentifier], tuple[int, ...]]:
         """
-        A degree lexicographic order with the slowest varying index depending on
-        the PDE is used, returned as a callable that can be used as a
-        ``sort`` key on multi-indices.
-        A degree lexicographic ordering is needed for
-        multipole-to-multipole translation to get lower error bounds.
-        The slowest varying index is chosen such that the multipole-to-local
-        translation cost is optimized.
-
-        Also returns a permutation of the axis ordered from the slowest varying
-        axis to the fastest varying axis of the multi-indices when sorted.
+        :returns: a ``sort`` key for multi-indices. Sorted by total degree
+            first, then lexicographically with axis *k* first.
         """
-        dim = self.dim
-        deriv_id_to_coeff, = self.knl.get_pde_as_diff_op().eqs
-        slowest_varying_index = dim - 1
-        for ident in deriv_id_to_coeff:
-            if ident.mi.count(0) == dim - 1:
-                non_zero_index = next(i for i in range(self.dim) if ident.mi[i] != 0)
-                slowest_varying_index = min(slowest_varying_index, non_zero_index)
-
-        axis_permutation = list(range(self.dim))
-        axis_permutation[0], axis_permutation[slowest_varying_index] = \
-                slowest_varying_index, 0
+        k = self.compression_axis
 
         from sumpy.diff_op import DerivativeIdentifier
 
@@ -645,188 +670,119 @@ class LinearPDEBasedExpansionTermsWrangler(ExpansionTermsWrangler):
                 mi = ident.mi
             else:
                 mi = ident
-            key = [sum(mi)]
+            return (sum(mi), mi[k], *mi[:k], *mi[k+1:])
 
-            key.extend(mi[axis_permutation[i]] for i in range(dim))
-
-            return tuple(key)
-
-        return mi_key, axis_permutation
+        return mi_key
 
     @override
     def _get_mi_hyperplanes(self) -> list[tuple[int, int]]:
-        mis = self.get_full_coefficient_identifiers()
-        mi_to_index = {mi: i for i, mi in enumerate(mis)}
+        r"""
+        Return the (disjoint) hyperplane decomposition of a PDE-conforming expansion.
 
-        hyperplanes = []
-        deriv_id_to_coeff, = self.knl.get_pde_as_diff_op().eqs
+        For :math:`p \geq c`, the stored multi-indices :math:`J` have the
+        decomposition
 
-        if not all(ident.mi in mi_to_index for ident in deriv_id_to_coeff):
-            # The order of the expansion is less than the order of the PDE.
-            # Treat as if full expansion.
-            hyperplanes = super()._get_mi_hyperplanes()
-        else:
-            # Calculate the multi-index that appears last in in the PDE in
-            # the degree lexicographic order given by
-            # _get_mi_ordering_key_and_axis_permutation.
-            ordering_key, _ = self._get_mi_ordering_key_and_axis_permutation()
-            max_mi = max(deriv_id_to_coeff, key=ordering_key).mi
-            hyperplanes = [(d, const)
-                for d in range(self.dim)
-                for const in range(max_mi[d])]
+        .. math::
 
-        return hyperplanes
+            J = \bigcup_{\mathrm{value}=0}^{c-1}
+            \{\mathrm{mi} \in \mathcal{M}(p) :
+            \mathrm{mi}_{\mathrm{axis}} = \mathrm{value}\}
+
+        where :math:`\mathrm{axis} = k` is the compression axis.
+        """
+        # If the expansion order is smaller than the PDE order, we need to
+        # store all coefficients.
+        if self.order < self.pde_order:
+            return super()._get_mi_hyperplanes()
+
+        axis = self.compression_axis
+        return [(axis, value) for value in range(self.pde_order)]
 
     @override
     def get_full_coefficient_identifiers(self) -> Sequence[MultiIndex]:
         identifiers = super().get_full_coefficient_identifiers()
-        key, _ = self._get_mi_ordering_key_and_axis_permutation()
+        key = self._get_mi_ordering_key()
         return sorted(identifiers, key=key)
 
-    @overload
+    @override
     def get_storage_index(self,
-                          mi: MultiIndex,
-                          order: int | None = None) -> int: ...
+                mi: Sequence[int | ExpressionNode]
+            ) -> int | ExpressionNode:
+        c = self.pde_order
+        dim = self.dim
+        n = sum(mi)
 
-    @overload
-    def get_storage_index(self,
-                          mi: tuple[prim.ExpressionNode, ...],
-                          order: int | prim.ExpressionNode | None = None,
-                          ) -> prim.ExpressionNode: ...
-
-    def get_storage_index(self,
-                          mi: MultiIndex | tuple[prim.ExpressionNode, ...],
-                          order: int | prim.ExpressionNode | None = None,
-                          ) -> int | prim.ExpressionNode:
-        if order is None:
-            order = sum(mi)
-
-        ordering_key, axis_permutation = \
-                self._get_mi_ordering_key_and_axis_permutation()
-        deriv_id_to_coeff, = self.knl.get_pde_as_diff_op().eqs
-        max_mi = max(deriv_id_to_coeff, key=ordering_key).mi
-
-        if all(m != 0 for m in max_mi):
-            raise NotImplementedError("non-elliptic PDEs")
-
-        c = max_mi[axis_permutation[0]]
-
-        new_mi = list(mi)
-        new_mi[axis_permutation[0]], new_mi[0] = mi[0], mi[axis_permutation[0]]
-        mi = tuple(new_mi)
-
-        if self.dim == 3:
-            if all(isinstance(axis, int) for axis in mi):
-                if order < c - 1:
-                    return (
-                        (order*(order + 1)*(order + 2))//6
-                        + (order + 2)*mi[0]
-                        - (mi[0]*(mi[0] + 1))//2
-                        + mi[1])
-                else:
-                    return (
-                        (c*(c-1)*(c-2))//6
-                        + (c * order * (2 + order - c) + mi[0]*(3 - mi[0]+2*order))//2
-                        + mi[1])
-            else:
-                return prim.If(prim.Comparison(order, "<", c - 1),
-                    (order*(order + 1)*(order + 2))//6
-                        + (order + 2)*mi[0]
-                        - (mi[0]*(mi[0] + 1))//2
-                        + mi[1],
-                    (c*(c-1)*(c-2))//6
-                        + (c * order * (2 + order - c) + mi[0]*(3 - mi[0]+2*order))//2
-                        + mi[1]
-                )
-        elif self.dim == 2:
-            if all(isinstance(axis, int) for axis in mi):
-                if order < c - 1:
-                    return (order*(order + 1))//2 + mi[0]
-                else:
-                    return (c*(c-1))//2 + c*(order - c + 1) + mi[0]
-            else:
-                return prim.If(prim.Comparison(order, "<", c - 1),
-                    (order*(order + 1))//2 + mi[0],
-                    (c*(c-1))//2 + c*(order - c + 1) + mi[0])
+        # Let pos(mi) be the position of mi in get_full_coefficient_identifiers,
+        # and pos_c(mi) its position in the compressed index set J.
+        # Multi-indices of order n before mi have (mi')_k <= mi_k < c, so they
+        # are in J. Thus, it suffices to exclude lower order ones:
+        #       E = {mi': |mi'| <= |mi|-1, (mi')_k >= t_k}.
+        # Then,
+        #       pos_c(mi) = pos(mi) - |E|.
+        #
+        # By definition,
+        #       E = {mi': |mi'| <= |mi|-1, (mi')_k >= t_k}
+        #         = {mi': |mi'| <= n-1, (mi')_k >= c}
+        #         = \cup_{s=c}^{n-1}
+        #               {mi': (mi')_k = s, \sum_{j \neq k} (mi')_j <= n-1-s}.
+        # By the hockey-stick identity,
+        #       |E| = \sum_{s=c}^{n-1} binomial(n-1-s + dim-1, dim-1)
+        #           = binomial(n-1-c + dim, dim).
+        excluded = binomial(n-c+dim-1, dim)
+        if isinstance(n, int):
+            if n-c+dim-1 < 0:
+                excluded = 0
         else:
-            raise NotImplementedError
+            excluded = prim.If(prim.Comparison(n-c+dim-1, "<", 0), 0, excluded)
+        k = self.compression_axis
+        return super().get_storage_index((mi[k], *mi[:k], *mi[k+1:])) - excluded
 
     @memoize_method
     def get_stored_ids_and_unscaled_projection_matrix(
                 self
             ) -> tuple[Sequence[MultiIndex], CSEMatVecOperator]:
-        from pytools import ProcessLogger
-        plog = ProcessLogger(logger, "compute PDE for Taylor coefficients")
+        r"""
+        Return the stored multi-indices :math:`J` and the unscaled
+        decompression operator :math:`M`.
 
+        For :math:`\mathrm{mi} \in \mathcal{M}(p) \setminus J`,
+        it can be recovered from
+
+        .. math::
+
+            \partial^{\mathrm{mi}} u
+            &= \partial^{\mathrm{mi} - c \cdot e_k} \partial^{c \cdot e_k} u \\
+            &= -\frac{1}{a_{c \cdot e_k}}
+            \sum_{\mathrm{mi}' \ne c \cdot e_k} a_{\mathrm{mi}'}
+            \partial^{\mathrm{mi}' + \mathrm{mi} - c \cdot e_k} u,
+
+        where :math:`\mathrm{mi}'` is from ``_pde_coeffs``.
+        """
         mis = self.get_full_coefficient_identifiers()
-        coeff_ident_enumerate_dict = {tuple(mi): i for (i, mi) in enumerate(mis)}
+        mi_to_index = {mi: i for i, mi in enumerate(mis)}
 
-        diff_op = self.knl.get_pde_as_diff_op()
-        assert len(diff_op.eqs) == 1
-        mi_to_coeff = {k.mi: v for k, v in diff_op.eqs[0].items()}
-        for ident in mi_to_coeff:
-            if ident not in coeff_ident_enumerate_dict:
-                # Order of the expansion is less than the order of the PDE.
-                # In that case, the compression matrix is the identity matrix
-                # and there's nothing to project
-                from_input_coeffs_by_row: LinearCombinationCoefficients = [
-                    [(i, sym.sympify(1))] for i in range(len(mis))]
-                from_output_coeffs_by_row: LinearCombinationCoefficients = [
-                    [] for _ in range(len(mis))]
-
-                shape = (len(mis), len(mis))
-                op = CSEMatVecOperator(from_input_coeffs_by_row,
-                                       from_output_coeffs_by_row, shape)
-                plog.done()
-
-                return mis, op
-
-        ordering_key, _ = self._get_mi_ordering_key_and_axis_permutation()
-        max_mi = max((ident for ident in mi_to_coeff), key=ordering_key)
-        max_mi_coeff = mi_to_coeff[max_mi]
-        max_mi_mult = -1/sym.sympify(max_mi_coeff)
-
-        def is_stored(mi: MultiIndex) -> bool:
-            """
-            A multi_index mi is not stored if mi >= max_mi
-            """
-            return any(mi[d] < max_mi[d] for d in range(self.dim))
+        k = self.compression_axis
+        c = self.pde_order
 
         stored_identifiers: list[MultiIndex] = []
 
-        from_input_coeffs_by_row = []
-        from_output_coeffs_by_row = []
-        for i, mi in enumerate(mis):
-            # If the multi-index is to be stored, keep the projection matrix
-            # entry empty
-            if is_stored(mi):
-                idx = len(stored_identifiers)
-                stored_identifiers.append(mi)
-                from_input_coeffs_by_row.append([(idx, sym.sympify(1))])
+        from_input_coeffs_by_row: LinearCombinationCoefficients = []
+        from_output_coeffs_by_row: LinearCombinationCoefficients = []
+        for mi in mis:
+            if mi[k] < c:
+                from_input_coeffs_by_row.append(
+                    [(len(stored_identifiers), sym.sympify(1))])
                 from_output_coeffs_by_row.append([])
-                continue
-            diff = [mi[d] - max_mi[d] for d in range(self.dim)]
-
-            # eg: u_xx + u_yy + u_zz is represented as
-            # [((2, 0, 0), 1), ((0, 2, 0), 1), ((0, 0, 2), 1)]
-            assignment: list[tuple[int, sym.Expr]] = []
-            for other_mi, coeff in mi_to_coeff.items():
-                j = coeff_ident_enumerate_dict[add_mi(other_mi, diff)]
-                if i == j:
-                    # Skip the u_zz part here.
-                    continue
-
-                # PDE might not have max_mi_coeff = -1, divide by -max_mi_coeff
-                # to get a relation of the form, u_zz = - u_xx - u_yy for Laplace 3D.
-                assignment.append((j, coeff*max_mi_mult))
-
-            from_input_coeffs_by_row.append([])
-            from_output_coeffs_by_row.append(assignment)
-
-        plog.done()
+                stored_identifiers.append(mi)
+            else:
+                shift = mi_set_axis(mi, k, mi[k] - c)
+                from_input_coeffs_by_row.append([])
+                from_output_coeffs_by_row.append(
+                    [(mi_to_index[add_mi(other_mi, shift)], weight)
+                     for other_mi, weight in self.leading_mi_representation])
 
         logger.debug("number of Taylor coefficients was reduced from %d to %d",
-                     len(self.get_full_coefficient_identifiers()),
+                     len(mis),
                      len(stored_identifiers))
 
         shape = (len(mis), len(stored_identifiers))

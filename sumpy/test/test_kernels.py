@@ -634,6 +634,35 @@ def test_translations(
 # }}}
 
 
+@pytest.mark.parametrize(("src_order", "tgt_order"), [(2, 8), (8, 2)])
+def test_m2l_preprocess_unequal_orders(actx_factory: ArrayContextFactory,
+                                      src_order: int, tgt_order: int) -> None:
+    from sumpy.e2e import M2LPreprocessMultipole
+
+    actx = actx_factory()
+    knl = BiharmonicKernel(2)
+    src_expansion = LinearPDEConformingVolumeTaylorMultipoleExpansion(knl, src_order)
+    tgt_expansion = LinearPDEConformingVolumeTaylorLocalExpansion(knl, tgt_order)
+
+    src_mis = src_expansion.get_coefficient_identifiers()
+    coeffs = np.arange(1, len(src_mis)+1, dtype=np.float64)
+
+    # For the 2D biharmonic PDE, the stored indices are
+    #     J(p) = {(x, y) : x, y >= 0, x+y <= p, x <= 3}.
+    # For orders 2 and 8, the sums of source and target indices form
+    #     J(2) + J(8) = {(x, y) : x, y >= 0, x+y <= 10, x <= 5}.
+    # The largest x is 2+3 = 5, so the padded FFT grid has shape (6, 11).
+    expected = np.zeros((6, 11))
+    for mi, coeff in zip(src_mis, coeffs, strict=True):
+        expected[mi] = coeff
+
+    result = M2LPreprocessMultipole(src_expansion, tgt_expansion)(
+        actx, nsrc_boxes=1, src_rscale=np.float64(1),
+        src_expansions=actx.from_numpy(coeffs[None, :]),
+        preprocessed_src_expansions=actx.np.zeros((1, expected.size), coeffs.dtype))
+    np.testing.assert_array_equal(actx.to_numpy(result)[0], expected.ravel())
+
+
 # {{{ test_m2m_and_l2l_exprs_simpler
 
 @pytest.mark.parametrize("order", [4])
