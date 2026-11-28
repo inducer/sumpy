@@ -47,8 +47,8 @@ if TYPE_CHECKING:
     from arraycontext import ArrayContext
 
     from sumpy.expansion.local import (
-        LineTaylorLocalExpansion,
         LocalExpansionBase,
+        ODELineTaylorLocalExpansion,
     )
 
 logger = logging.getLogger(__name__)
@@ -83,10 +83,10 @@ def stringify_expn_index(i: tuple[int, ...] | int) -> str:
 # {{{ LayerPotentialBase: base class
 
 class LayerPotentialBase(KernelCacheMixin, KernelComputation, ABC):
-    expansion: LineTaylorLocalExpansion | LocalExpansionBase
+    expansion: LocalExpansionBase | ODELineTaylorLocalExpansion
 
     def __init__(self,
-            expansion: LineTaylorLocalExpansion | LocalExpansionBase,
+            expansion: LocalExpansionBase | ODELineTaylorLocalExpansion,
             strength_usage=None,
             value_dtypes=None,
             name=None,

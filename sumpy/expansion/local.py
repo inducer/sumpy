@@ -26,12 +26,13 @@ THE SOFTWARE.
 import logging
 import math
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast
 
 from typing_extensions import override
 
-from pytools import single_valued
+from pytools import memoize_method, single_valued
 
 import sumpy.symbolic as sym
 from sumpy.expansion import (
@@ -50,6 +51,7 @@ if TYPE_CHECKING:
     import loopy as lp
 
     from sumpy.assignment_collection import SymbolicAssignmentCollection
+    from sumpy.derivative_taker import DerivativeCoeffDict
     from sumpy.diff_op import MultiIndex
     from sumpy.expansion.m2l import M2LTranslationBase, TranslationClassesDepData
     from sumpy.expansion.multipole import (
@@ -67,6 +69,7 @@ __doc__ = """
 .. autoclass:: H2DLocalExpansion
 .. autoclass:: Y2DLocalExpansion
 .. autoclass:: LineTaylorLocalExpansion
+.. autoclass:: ODELineTaylorLocalExpansion
 """
 
 
@@ -196,6 +199,238 @@ class LineTaylorLocalExpansion(LocalExpansionBase, ABC):
                        TranslationClassesDepData | None) = None
             ) -> Sequence[sym.Expr]:
         raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class ODELineTaylorLocalExpansion:
+    r"""
+    Compute the target-specific QBX line expansion from the base kernel's ODE.
+
+    Source and target kernels must share the same base kernel.
+    """
+
+    kernel: ScalarKernel
+    order: int
+    target_kernels: Sequence[ScalarKernel] | None = field(kw_only=True, default=None)
+    target_stored_identifiers: tuple[tuple[int, ...], ...] = field(init=False)
+
+    @memoize_method
+    def _target_kernel_derivatives(self, kernel: ScalarKernel) -> DerivativeCoeffDict:
+        r"""
+        Return ``{mi: w}`` that represents the target kernels.
+        """
+        from sumpy.derivative_taker import (
+            DifferentiatedExprDerivativeTaker,
+            ExprDerivativeTaker,
+        )
+
+        z = sym.make_sym_vector("z", self.kernel.dim)
+        taker = DifferentiatedExprDerivativeTaker(
+            ExprDerivativeTaker(sym.Integer(0), tuple(z)), {(0,)*self.kernel.dim: 1})
+        return kernel.postprocess_at_target(taker, z).derivative_coeff_dict
+
+    def __post_init__(self) -> None:
+        target_stored_identifiers = ((0,)*self.kernel.dim,)
+        if self.target_kernels is not None:
+            object.__setattr__(self, "target_kernels", tuple(self.target_kernels))
+            stored_identifiers = {}
+            for target_kernel in self.target_kernels:
+                stored_identifiers.update(dict.fromkeys(
+                    sorted(self._target_kernel_derivatives(target_kernel))))
+            target_stored_identifiers = tuple(stored_identifiers)
+        object.__setattr__(self, "target_stored_identifiers", target_stored_identifiers)
+
+    def _assign_states_to_sac(
+            self, max_derivative_order: int, avec: sym.Matrix, bvec: sym.Matrix,
+            sac: SymbolicAssignmentCollection,
+    ) -> dict[tuple[int, int], sym.Symbol]:
+        r"""
+        Assign :math:`U[i, j] = [\tau^j]g^{(i)}(q(\tau))` in ``sac``.
+        """
+        # q(tau) = |avec + tau*bvec|^2 = q0 + q1*tau + q2*tau^2.
+        q0, q1, q2 = sym.symbols("q0 q1 q2")
+        qtau = {
+            q0: sym.Symbol(sac.assign_unique("q0_line", avec.dot(avec))),
+            q1: sym.Symbol(sac.assign_unique("q1_line", 2*avec.dot(bvec))),
+            q2: sym.Symbol(sac.assign_unique("q2_line", bvec.dot(bvec))),
+        }
+
+        from sumpy.expansion.kernel_ode import kernel_ode
+        from sumpy.expansion.line_recurrence import ode_differentiation, recurrence
+
+        ode_coeffs, init_cond_exprs = kernel_ode(self.kernel, q0)
+        ode_coeffs, init_cond_exprs = ode_differentiation(
+            ode_coeffs, init_cond_exprs, max_derivative_order)
+        uij_update_rules = [
+            sorted(update.items()) for update in recurrence(ode_coeffs)]
+
+        uij = {}
+        # Assign the initial values in sac.
+        for i, expr in enumerate(init_cond_exprs):
+            initial_value = expr.xreplace(qtau)
+            name = sac.assign_unique(f"U{i}j0", initial_value)
+            uij[i, 0] = sym.Symbol(name)
+
+        # Assign U[i,j] values in sac.
+        for j in range(1, self.order+1):
+            subst = {**qtau, sym.Symbol("j"): j}
+            for i, update in enumerate(uij_update_rules):
+                terms = []
+                # Each term in the update for U[i, j] has the form
+                # weight * U[dep_state, j+shift].
+                for (dep_state, shift), weight in update:
+                    # Skip negative Taylor degrees.
+                    if j+shift < 0:
+                        continue
+                    name = sac.assign_unique(
+                        f"w{i}j{j}", weight.xreplace(subst))
+                    terms.append(
+                        sym.Symbol(name)*uij[dep_state, j+shift])
+                name = sac.assign_unique(f"U{i}j{j}", sym.Add(*terms))
+                uij[i, j] = sym.Symbol(name)
+        return uij
+
+    def _chain_rule_weights(
+            self, mi: tuple[int, ...], avec: sym.Matrix, bvec: sym.Matrix,
+    ) -> dict[tuple[int, int], sym.Expr]:
+        r"""
+        Define :math:`z(\tau) := \mathrm{avec} + \tau\mathrm{bvec}` and
+        :math:`q(\tau) := |z(\tau)|^2`.
+
+        .. math::
+
+            \left.\partial_z^{\mathrm{mi}}G(z)\right|_{z=z(\tau)}
+                = \sum_{i,k} s_{i,k}\tau^k g^{(i)}(q(\tau)).
+
+        Return the chain-rule weights :math:`\{(i,k): s_{i,k}\}` for
+        :math:`k \leq \mathrm{self.order}`.
+        """
+        from sumpy.derivative_recurrence import _polynomial_coeffs
+        from sumpy.expansion.kernel_ode import chain_rule_weights
+
+        tau = sym.Symbol("tau")
+        z = sym.Matrix(sym.symbols(f"z0:{self.kernel.dim}"))
+        z_tau = dict(zip(z, avec + tau*bvec, strict=True))
+        s = {}
+        for i, weight in chain_rule_weights(mi, z).items():
+            coeffs = _polynomial_coeffs(weight.xreplace(z_tau), sym.Matrix([tau]))
+            for (k,), sik in coeffs.items():
+                if k <= self.order:
+                    s[i, k] = sik
+        return s
+
+    def coefficients_from_source_vec(
+            self, kernels: Sequence[ScalarKernel],
+            avec: sym.Matrix, bvec: sym.Matrix,
+            rscale: sym.Expr, weights: Sequence[sym.Expr],
+            sac: SymbolicAssignmentCollection,
+    ) -> list[sym.Expr]:
+        r"""
+        Return the Taylor coefficients around :math:`\tau=0` for each
+        stored target derivative of the weighted sum of source kernels.
+
+        :arg kernels: source kernels sharing the expansion's base kernel.
+        :arg weights: one multiplier per source kernel.
+        """
+        from sumpy.tools import add_mi
+
+        # ===== build U[i, j] for combined source and target derivatives =====
+        #
+        # src_order is the highest |mi| across all source kernels.
+        # tgt_order is the highest |mi| across all target kernels.
+        src_derivatives = []
+        src_order = 0
+        for src_knl, weight in zip(kernels, weights, strict=True):
+            src_knl_mi_weights = src_knl.get_derivative_coeff_dict_at_source(
+                {(0,)*self.kernel.dim: 1})
+            src_derivatives.append((src_knl_mi_weights, weight))
+            src_order = max(src_order, max(sum(mi) for mi in src_knl_mi_weights))
+        tgt_order = max(sum(mi) for mi in self.target_stored_identifiers)
+        uij = self._assign_states_to_sac(
+            src_order+tgt_order, avec, bvec, sac)
+
+        # ===== build Taylor coefficients for each target multi-index =====
+        #
+        # Example: 3D Helmholtz S+D (target_stored_identifiers = ((0, 0, 0),)).
+        # Along z(tau) = avec + tau*bvec, with q(tau) = |z(tau)|^2,
+        #     S(z(tau)) + D(z(tau)) = g(q(tau))
+        #                           - 2*<n, avec>*g^(1)(q(tau))
+        #                           - 2*<n, bvec>*tau*g^(1)(q(tau)).
+        #
+        #     S(z(tau)) + D(z(tau))
+        #         = \sum_{i,k} c[i,k]*tau^k*g^(i)(q(tau))
+        #         = \sum_{i,k} c[i,k]*tau^k*(\sum_{j >= 0} U[i,j]*tau^j).
+
+        taylor_coeffs = []
+        for tgt_mi_idx, tgt_mi in enumerate(self.target_stored_identifiers):
+            taylor_coeffs_per_tgt_mi = [0]*(self.order+1)
+            c = defaultdict(int)
+            for src_knl_mi_weights, weight in src_derivatives:
+                for src_mi, src_knl_weight in src_knl_mi_weights.items():
+                    mi = add_mi(src_mi, tgt_mi)
+
+                    # \partial_z^{mi} G(z(tau))
+                    #     = sum_{i,k} s[i,k]*tau^k*g^(i)(q(tau))
+                    #     = sum_{i,k} s[i,k]*tau^k*(U[i,0] + U[i,1]*tau + ...).
+                    #
+                    # We only need
+                    #   [tau^j] \partial_z^{mi} G(z(tau)) for j = 0, ..., self.order.
+
+                    for (i, k), sik in self._chain_rule_weights(
+                            mi, avec, bvec).items():
+                        # Scale sik by src_knl_weight and
+                        # the input weight (quadrature weight, etc.).
+                        c[i, k] += src_knl_weight*sik*weight
+
+            # \partial_z^{tgt_mi} (weighted sum of source kernels)
+            #     = sum_{i,k} c[i,k]*tau^k*(U[i,0] + U[i,1]*tau + ...).
+            # The coefficient of tau^j is sum_{i,k} c[i,k]*U[i,j-k].
+            for (i, k), cik in sorted(c.items()):
+                if cik == 0:
+                    continue
+                name = sac.assign_unique(f"ct{tgt_mi_idx}i{i}k{k}", cik)
+                cik_symbol = sym.Symbol(name)
+
+                for j in range(k, self.order+1):
+                    taylor_coeffs_per_tgt_mi[j] += cik_symbol*uij[i, j-k]
+            taylor_coeffs.extend(taylor_coeffs_per_tgt_mi)
+        return taylor_coeffs
+
+    def evaluate(
+            self, kernel: ScalarKernel, coeffs: Sequence[sym.Expr], bvec: sym.Matrix,
+            rscale: sym.Expr, sac: SymbolicAssignmentCollection | None = None,
+            *, tau: sym.Expr | float = 1,
+    ) -> sym.Expr:
+        r"""
+        Evaluate the Taylor expansion for the given target kernel at :math:`\tau`.
+
+        :arg kernel: the target kernel.
+        """
+        result = 0
+        for mi, weight in self._target_kernel_derivatives(kernel).items():
+            value = 0
+            # Horner's method
+            for j in range(self.order, -1, -1):
+                value = coeffs[self.get_storage_index((*mi, j))]+tau*value
+            result += weight*value
+        return result
+
+    def get_coefficient_identifiers(self) -> list[tuple[int, ...]]:
+        """
+        Return the coefficient identifiers in storage order.
+
+        Each identifier is ``(*tgt_mi, j)``, where ``tgt_mi`` is the target
+        derivative multi-index and ``j`` is the Taylor degree.
+        """
+        return [(*mi, j) for mi in self.target_stored_identifiers
+                for j in range(self.order+1)]
+
+    def get_storage_index(self, mi_j: tuple[int, ...]) -> int:
+        """
+        Return the storage index of the coefficient identifier ``(*tgt_mi, j)``.
+        """
+        tgt_mi, j = mi_j[:-1], mi_j[-1]
+        return self.target_stored_identifiers.index(tgt_mi)*(self.order+1)+j
 
 # }}}
 
